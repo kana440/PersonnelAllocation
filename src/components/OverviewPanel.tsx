@@ -17,6 +17,9 @@ export function OverviewPanel() {
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(
     new Set(['comp_a', 'comp_b', 'comp_c'])
   )
+  const [isDragActive, setIsDragActive]   = useState(false)
+  const [dragOverOrgId, setDragOverOrgId] = useState<string | null>(null)
+  const [dragAltKey, setDragAltKey]       = useState(false)
 
   const {
     overviewViewMode, setOverviewViewMode,
@@ -80,6 +83,71 @@ export function OverviewPanel() {
   const toggleCompany = (companyId: string) =>
     setExpandedCompanies(prev => { const s = new Set(prev); s.has(companyId) ? s.delete(companyId) : s.add(companyId); return s })
 
+  // ── Drag-and-drop handlers (receive drops from main canvas) ───
+  const handleOrgDragOver = (e: React.DragEvent, orgId: string) => {
+    if (!e.dataTransfer.types.includes('application/json')) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move'
+    setDragOverOrgId(orgId)
+    setDragAltKey(e.altKey)
+  }
+
+  const handleOrgDragLeave = (e: React.DragEvent) => {
+    if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) {
+      setDragOverOrgId(null)
+    }
+  }
+
+  const handleOrgDrop = (e: React.DragEvent, toOrgId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOverOrgId(null)
+    setIsDragActive(false)
+
+    let dragData: { personId: string; fromOrgId: string; fromCompanyId: string }
+    try {
+      dragData = JSON.parse(e.dataTransfer.getData('application/json'))
+    } catch { return }
+
+    const { personId, fromCompanyId } = dragData
+    const toOrg = store.organizations.find(o => o.id === toOrgId)
+    if (!toOrg) return
+
+    // Derive person's current band/title from after state
+    const currentAff = store.afterAffiliations.find(a =>
+      a.personId === personId && a.status === 'active' && a.type === 'primary' &&
+      store.afterPositions.find(p => p.id === a.positionId)?.companyId === fromCompanyId
+    )
+    const currentPos = currentAff ? store.afterPositions.find(p => p.id === currentAff.positionId) : null
+    const band       = currentPos?.band ?? 'B4'
+    const title      = currentPos?.title ?? '担当'
+    const personName = store.persons.find(p => p.id === personId)?.name ?? ''
+
+    if (e.altKey) {
+      store.addOperation({
+        kind: 'AddConcurrent',
+        label: `兼務追加：${toOrg.name} (${personName})`,
+        params: { personId, orgId: toOrgId, companyId: toOrg.companyId, band, title },
+        effectiveDate: store.effectiveDate,
+      })
+    } else if (fromCompanyId !== toOrg.companyId) {
+      store.addOperation({
+        kind: 'SendOnSecondment',
+        label: `出向：${toOrg.name} (${personName})`,
+        params: { personId, toCompanyId: toOrg.companyId, orgId: toOrgId, band, title },
+        effectiveDate: store.effectiveDate,
+      })
+    } else {
+      store.addOperation({
+        kind: 'MoveToOrg',
+        label: `組織異動：${toOrg.name} (${personName})`,
+        params: { personId, toOrgId, companyId: fromCompanyId, band, title },
+        effectiveDate: store.effectiveDate,
+      })
+    }
+  }
+
   // ── Org tree node ─────────────────────────────────────────────
   const renderOrgNode = (org: Organization, depth: number): React.ReactNode => {
     if (searchLower && !orgHasMatch(org.id)) return null
@@ -103,10 +171,23 @@ export function OverviewPanel() {
           : directPeople)
       : []
 
+    const isDropTarget = isDragActive && dragOverOrgId === org.id
+
     return (
       <div key={org.id} style={{ marginLeft: `${depth * 10}px` }}>
-        {/* Org row */}
-        <div className={`flex items-center gap-0.5 rounded py-0.5 px-1 group ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+        {/* Org row — also a drop target */}
+        <div
+          onDragOver={e => handleOrgDragOver(e, org.id)}
+          onDragLeave={handleOrgDragLeave}
+          onDrop={e => handleOrgDrop(e, org.id)}
+          className={`flex items-center gap-0.5 rounded py-0.5 px-1 group transition-colors ${
+            isDropTarget
+              ? (dragAltKey ? 'bg-purple-100 ring-1 ring-purple-400 ring-inset' : 'bg-blue-100 ring-1 ring-blue-400 ring-inset')
+              : isDragActive ? 'hover:bg-blue-50'
+              : isSelected  ? 'bg-blue-50'
+              : 'hover:bg-gray-50'
+          }`}
+        >
           <button
             onClick={() => toggleOrg(org.id)}
             className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs"
@@ -125,12 +206,21 @@ export function OverviewPanel() {
             {org.name}
           </button>
 
-          {/* person count (direct only) */}
-          {directPeople.length > 0 && (
+          {/* drop indicator */}
+          {isDropTarget && (
+            <span className={`text-xs px-1 rounded font-medium flex-shrink-0 ${
+              dragAltKey ? 'text-purple-700 bg-purple-200' : 'text-blue-700 bg-blue-200'
+            }`}>
+              {dragAltKey ? '＋兼務' : '→異動'}
+            </span>
+          )}
+
+          {/* person count (direct only) — hide during drag-over to make room */}
+          {!isDropTarget && directPeople.length > 0 && (
             <span className="text-xs text-gray-400 flex-shrink-0">{directPeople.length}</span>
           )}
 
-          {changeStatus && (
+          {!isDropTarget && changeStatus && (
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${CHANGE_DOT[changeStatus]}`} />
           )}
         </div>
@@ -169,12 +259,19 @@ export function OverviewPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden gap-2">
+    <div
+      className={`flex flex-col h-full overflow-hidden gap-2 transition-colors rounded ${
+        isDragActive ? 'ring-2 ring-blue-200 ring-inset bg-blue-50/30' : ''
+      }`}
+      onDragEnter={e => { if (e.dataTransfer.types.includes('application/json')) setIsDragActive(true) }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setIsDragActive(false); setDragOverOrgId(null) } }}
+      onDrop={() => setIsDragActive(false)}
+    >
 
-      {/* Search */}
+      {/* Search — shows drag hint when active */}
       <input
         type="text"
-        placeholder="組織名・人名で検索"
+        placeholder={isDragActive ? '組織を検索してドロップ…' : '組織名・人名で検索'}
         value={search}
         onChange={e => setSearch(e.target.value)}
         className="w-full border border-gray-200 rounded px-2 py-1 text-xs flex-shrink-0"
@@ -229,13 +326,21 @@ export function OverviewPanel() {
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 flex-shrink-0">
-        <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-0.5 align-middle" />変更</span>
-        <span><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-0.5 align-middle" />新規</span>
-        <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-0.5 align-middle" />終了</span>
-        <span className="ml-auto"><span className="text-blue-300 mr-0.5">—</span>本務 <span className="text-purple-400 ml-1 mr-0.5">兼</span>兼務</span>
-      </div>
+      {/* Legend / drag hint */}
+      {isDragActive ? (
+        <div className="flex gap-2 text-xs flex-shrink-0 bg-blue-50 border border-blue-200 rounded px-2 py-1.5">
+          <span className="text-blue-600 font-medium">ドロップ → 異動</span>
+          <span className="text-gray-400">|</span>
+          <span className="text-purple-600 font-medium">Alt+ドロップ → 兼務</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 flex-shrink-0">
+          <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-0.5 align-middle" />変更</span>
+          <span><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-0.5 align-middle" />新規</span>
+          <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-0.5 align-middle" />終了</span>
+          <span className="ml-auto"><span className="text-blue-300 mr-0.5">—</span>本務 <span className="text-purple-400 ml-1 mr-0.5">兼</span>兼務</span>
+        </div>
+      )}
     </div>
   )
 }

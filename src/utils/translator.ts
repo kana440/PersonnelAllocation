@@ -1,9 +1,10 @@
-import type { ExcelRow, Affiliation, Position, Person, Organization, Company } from '../types/domain'
+import type { ExcelRow, PositionSnapshot, Affiliation, Position, Person, Organization, Company, Operation } from '../types/domain'
 
 interface TranslatorInput {
   persons: Person[]
   companies: Company[]
   organizations: Organization[]
+  operations: Operation[]
   beforeAffiliations: Affiliation[]
   beforePositions: Position[]
   afterAffiliations: Affiliation[]
@@ -11,14 +12,77 @@ interface TranslatorInput {
   effectiveDate: string
 }
 
+function buildSnapshot(
+  aff: Affiliation | undefined,
+  allAffs: Affiliation[],
+  positions: Position[],
+  persons: Person[],
+  companies: Company[],
+  organizations: Organization[],
+): PositionSnapshot | null {
+  if (!aff) return null
+  const pos = positions.find(p => p.id === aff.positionId)
+  if (!pos) return null
+  const org = organizations.find(o => o.id === pos.orgId)
+
+  // Manager info: find manager's active affiliation in same company
+  const managerAff = aff.managerId
+    ? allAffs.find(a =>
+        a.personId === aff.managerId && a.status === 'active' &&
+        positions.find(p => p.id === a.positionId)?.companyId === pos.companyId
+      )
+    : undefined
+  const managerPos = managerAff ? positions.find(p => p.id === managerAff.positionId) : undefined
+  const manager    = aff.managerId ? persons.find(p => p.id === aff.managerId) : undefined
+
+  // 出向先会社: other active companies this person works at
+  const destCompanyIds = allAffs
+    .filter(a => a.personId === aff.personId && a.status === 'active')
+    .map(a => positions.find(p => p.id === a.positionId)?.companyId)
+    .filter((cid): cid is string => !!cid && cid !== pos.companyId)
+  const destCompany = destCompanyIds[0] ? companies.find(c => c.id === destCompanyIds[0]) : undefined
+
+  // 出向元会社
+  const sourceCompany = aff.secondmentSourceCompanyId
+    ? companies.find(c => c.id === aff.secondmentSourceCompanyId)
+    : undefined
+
+  return {
+    employmentType:             aff.employmentType,
+    concurrentType:             aff.type === 'primary' ? '本務' : '兼務',
+    concurrentReason:           aff.concurrentReason,
+    secondmentSourceCompany:    sourceCompany?.name,
+    secondmentSourceEmployeeId: aff.secondmentSourceEmployeeId,
+    isOnLeave:                  aff.isOnLeave,
+    positionCode:               pos.sfPositionId,
+    orgCode:                    org?.id,
+    jobTitle:                   pos.title,
+    freeTitle:                  aff.freeTitle,
+    secondmentDestCompany:      destCompany?.name,
+    workLocation:               pos.workLocation,
+    costCenter:                 pos.costCenter,
+    managerPositionCode:        managerPos?.sfPositionId,
+    managerName:                manager?.name,
+    jobFamily:                  pos.jobFamily,
+    jobType:                    pos.jobType,
+    positionBand:               pos.band,
+    individualBand:             aff.individualBand,
+    salaryGrade:                aff.salaryGrade,
+    isTrainingPosition:         pos.isTrainingPosition,
+    isNonUnionAgreement:        aff.isNonUnionAgreement,
+    isUnionPosition:            pos.isUnionPosition,
+    isUnionMember:              aff.isUnionMember,
+    isDiscretionaryLaborPosition: pos.isDiscretionaryLaborPosition,
+    isDiscretionaryLabor:       aff.isDiscretionaryLabor,
+  }
+}
+
 export function translateToExcel(input: TranslatorInput): ExcelRow[] {
-  const { persons, companies, organizations, beforeAffiliations, beforePositions, afterAffiliations, afterPositions, effectiveDate } = input
+  const { persons, companies, organizations, operations, beforeAffiliations, beforePositions, afterAffiliations, afterPositions, effectiveDate } = input
 
-  const findOrg    = (id: string)  => organizations.find(o => o.id === id)
-  const findPerson = (id?: string) => persons.find(p => p.id === id)
-  const findCompany = (id: string) => companies.find(c => c.id === id)
+  const findPerson  = (id?: string) => persons.find(p => p.id === id)
+  const findCompany = (id: string)  => companies.find(c => c.id === id)
 
-  // All person IDs that appear anywhere (before or after)
   const allPersonIds = new Set<string>([
     ...beforeAffiliations.map(a => a.personId),
     ...afterAffiliations.map(a => a.personId),
@@ -30,18 +94,14 @@ export function translateToExcel(input: TranslatorInput): ExcelRow[] {
     const person = findPerson(personId)
     if (!person) continue
 
-    // All companies this person touches (before or after)
+    const [lastName = person.name, firstName = ''] = person.name.split(' ')
+
+    // Collect all company IDs this person appears in
     const companyIds = new Set<string>()
-    beforeAffiliations
+    ;[...beforeAffiliations, ...afterAffiliations]
       .filter(a => a.personId === personId)
       .forEach(a => {
-        const pos = beforePositions.find(p => p.id === a.positionId)
-        if (pos) companyIds.add(pos.companyId)
-      })
-    afterAffiliations
-      .filter(a => a.personId === personId)
-      .forEach(a => {
-        const pos = afterPositions.find(p => p.id === a.positionId)
+        const pos = [...beforePositions, ...afterPositions].find(p => p.id === a.positionId)
         if (pos) companyIds.add(pos.companyId)
       })
 
@@ -58,47 +118,56 @@ export function translateToExcel(input: TranslatorInput): ExcelRow[] {
         afterPositions.find(p => p.id === a.positionId)?.companyId === companyId
       )
 
+      const beforeSnap = buildSnapshot(beforeAff, beforeAffiliations, beforePositions, persons, companies, organizations)
+      const afterSnap  = buildSnapshot(afterAff,  afterAffiliations,  afterPositions,  persons, companies, organizations)
+
+      // Determine operation type
+      let operationType = '変更なし'
       const beforePos = beforeAff ? beforePositions.find(p => p.id === beforeAff.positionId) : undefined
-      const afterPos  = afterAff  ? afterPositions.find(p  => p.id === afterAff.positionId)  : undefined
+      const afterPos  = afterAff  ? afterPositions.find(p => p.id === afterAff.positionId)   : undefined
+      if      (!beforeAff && afterAff)                               operationType = '出向開始'
+      else if (beforeAff  && !afterAff)                              operationType = '出向解除'
+      else if (beforePos?.orgId !== afterPos?.orgId)                 operationType = '組織異動'
+      else if (beforePos?.band !== afterPos?.band)                   operationType = '昇格'
+      else if (beforePos?.title !== afterPos?.title)                 operationType = '役職変更'
 
-      const beforeOrg     = beforePos ? findOrg(beforePos.orgId)       : undefined
-      const afterOrg      = afterPos  ? findOrg(afterPos.orgId)        : undefined
-      const beforeManager = findPerson(beforeAff?.managerId)
-      const afterManager  = findPerson(afterAff?.managerId)
-
-      let opType = '変更なし'
-      if (!beforeAff && afterAff)                               opType = '出向開始'
-      else if (beforeAff && !afterAff)                          opType = '出向解除'
-      else if (beforePos?.orgId  !== afterPos?.orgId)           opType = '組織異動'
-      else if (beforePos?.band   !== afterPos?.band)            opType = '昇格'
-      else if (beforePos?.title  !== afterPos?.title)           opType = '役職変更'
+      // Find the most relevant operation for this person+company
+      const relevantOps = operations.filter(op => {
+        if (op.params.personId !== personId) return false
+        return (
+          op.params.companyId === companyId ||
+          op.params.toCompanyId === companyId ||
+          (op.params.orgId && organizations.find(o => o.id === op.params.orgId)?.companyId === companyId)
+        )
+      })
+      const primaryOp = relevantOps[0]
 
       rows.push({
-        rowId:             `${personId}_${companyId}`,
+        rowId:         `${personId}_${companyId}`,
         personId,
-        personName:        person.name,
+        personName:    person.name,
         companyId,
-        companyName:       company.name,
-        hasSF:             company.hasSF,
-        operationType:     opType,
+        companyName:   company.name,
+        hasSF:         company.hasSF,
         effectiveDate,
-        beforeOrgName:     beforeOrg?.name,
-        beforeTitle:       beforePos?.title,
-        beforeBand:        beforePos?.band,
-        beforeManagerName: beforeManager?.name,
-        beforePositionId:  beforePos?.sfPositionId,
-        afterOrgName:      afterOrg?.name,
-        afterTitle:        afterPos?.title,
-        afterBand:         afterPos?.band,
-        afterManagerName:  afterManager?.name,
-        afterPositionId:   afterPos?.sfPositionId,
-        sfPersonId:        person.sfPersonId,
-        notes:             !company.hasSF ? 'SF未導入会社' : undefined,
+        operationType,
+        // 本人情報
+        sfPersonId:    person.sfPersonId,
+        lastName,
+        firstName,
+        // 変更区分 (from operation)
+        transferReason:       primaryOp?.transferReason,
+        memo:                 primaryOp?.memo,
+        promotionSign:        primaryOp?.promotionSign,
+        demotionReason:       primaryOp?.demotionReason,
+        salaryGradeChangeSign: primaryOp?.salaryGradeChangeSign,
+        // After / Before
+        after: afterSnap,
+        before: beforeSnap,
       })
     }
   }
 
-  // Sort: changed rows first, then by company, then by person name
   return rows.sort((a, b) => {
     const aChanged = a.operationType !== '変更なし' ? 0 : 1
     const bChanged = b.operationType !== '変更なし' ? 0 : 1

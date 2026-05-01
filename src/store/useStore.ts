@@ -65,9 +65,66 @@ export const useStore = create<AppState>((set, get) => {
     memberPanelOrgId: 'org_a_kikaku',
 
     addOperation: (op) => {
-      const ops = get().operations
+      let ops = get().operations
+
+      // Merge / cancel duplicate or opposing operations
+      if (op.kind === 'MoveToOrg') {
+        // Replace existing MoveToOrg for same person+company
+        ops = ops.filter(o => !(
+          o.kind === 'MoveToOrg' &&
+          o.params.personId === op.params.personId &&
+          o.params.companyId === op.params.companyId
+        ))
+      } else if (op.kind === 'Promote') {
+        // Replace existing Promote for same person+company
+        ops = ops.filter(o => !(
+          o.kind === 'Promote' &&
+          o.params.personId === op.params.personId &&
+          o.params.companyId === op.params.companyId
+        ))
+      } else if (op.kind === 'RecallFromSecondment') {
+        // Cancel the paired SendOnSecondment if present
+        const sendOp = ops.find(o =>
+          o.kind === 'SendOnSecondment' &&
+          o.params.personId === op.params.personId &&
+          o.params.toCompanyId === op.params.companyId
+        )
+        if (sendOp) {
+          const cancelledOps = ops.filter(o => o.id !== sendOp.id).map((o, i) => ({ ...o, order: i + 1 }))
+          const after = computeAfterState(get().beforeAffiliations, get().beforePositions, cancelledOps, get().organizations)
+          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+          return
+        }
+      } else if (op.kind === 'AddConcurrent') {
+        // Cancel RemoveConcurrent for same person+org
+        const removeOp = ops.find(o =>
+          o.kind === 'RemoveConcurrent' &&
+          o.params.personId === op.params.personId &&
+          o.params.orgId === op.params.orgId
+        )
+        if (removeOp) {
+          const cancelledOps = ops.filter(o => o.id !== removeOp.id).map((o, i) => ({ ...o, order: i + 1 }))
+          const after = computeAfterState(get().beforeAffiliations, get().beforePositions, cancelledOps, get().organizations)
+          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+          return
+        }
+      } else if (op.kind === 'RemoveConcurrent') {
+        // Cancel AddConcurrent for same person+org
+        const addOp = ops.find(o =>
+          o.kind === 'AddConcurrent' &&
+          o.params.personId === op.params.personId &&
+          o.params.orgId === op.params.orgId
+        )
+        if (addOp) {
+          const cancelledOps = ops.filter(o => o.id !== addOp.id).map((o, i) => ({ ...o, order: i + 1 }))
+          const after = computeAfterState(get().beforeAffiliations, get().beforePositions, cancelledOps, get().organizations)
+          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+          return
+        }
+      }
+
       const newOp: Operation = { ...op, id: `op_${Date.now()}`, order: ops.length + 1 }
-      const newOps = [...ops, newOp]
+      const newOps = [...ops, newOp].map((o, i) => ({ ...o, order: i + 1 }))
       const after = computeAfterState(get().beforeAffiliations, get().beforePositions, newOps, get().organizations)
       set({ operations: newOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
     },

@@ -1,10 +1,18 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 
+const BAND_ORDER = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
+
 interface DragData {
   personId: string
   fromOrgId: string
   fromCompanyId: string
+  affiliationType: 'primary' | 'concurrent'
+}
+
+interface ReorderData {
+  personId: string
+  orgId: string
 }
 
 interface OrgBoxProps {
@@ -39,11 +47,14 @@ export function OrgOperationView() {
     selectedPersonId, selectPerson,
   } = store
 
-  const [dragOverOrgId, setDragOverOrgId] = useState<string | null>(null)
+  const [dragOverOrgId, setDragOverOrgId]     = useState<string | null>(null)
   const [highlightedOrgId, setHighlightedOrgId] = useState<string | null>(null)
-  const [expandedChipIds, setExpandedChipIds] = useState<Set<string>>(new Set())
-  const [canvasMode, setCanvasMode] = useState<CanvasMode>('組織図')
-  const [diffMode, setDiffMode] = useState(false)
+  const [expandedChipIds, setExpandedChipIds]  = useState<Set<string>>(new Set())
+  const [canvasMode, setCanvasMode]            = useState<CanvasMode>('組織図')
+  const [diffMode, setDiffMode]                = useState(false)
+  const [orgSortModes, setOrgSortModes]        = useState<Record<string, 'band' | 'manual'>>({})
+  const [orgManualOrders, setOrgManualOrders]  = useState<Record<string, string[]>>({})
+  const [reorderDropTarget, setReorderDropTarget] = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
 
   if (!focusedOrgId) {
     return (
@@ -66,9 +77,9 @@ export function OrgOperationView() {
     return path
   }
 
-  const breadcrumb = buildBreadcrumb(focusedOrgId)
-  const parentOrg = focusedOrg.parentId ? organizations.find(o => o.id === focusedOrg.parentId) : null
-  const childOrgs = organizations.filter(o => o.parentId === focusedOrgId)
+  const breadcrumb  = buildBreadcrumb(focusedOrgId)
+  const parentOrg   = focusedOrg.parentId ? organizations.find(o => o.id === focusedOrg.parentId) : null
+  const childOrgs   = organizations.filter(o => o.parentId === focusedOrgId)
 
   const getPersonsInOrg = (orgId: string) =>
     afterAffiliations
@@ -79,7 +90,7 @@ export function OrgOperationView() {
       })
       .map(a => {
         const person = persons.find(p => p.id === a.personId)
-        const pos = afterPositions.find(p => p.id === a.positionId)
+        const pos    = afterPositions.find(p => p.id === a.positionId)
         return { aff: a, person, pos }
       })
       .filter((x): x is { aff: typeof x.aff; person: NonNullable<typeof x.person>; pos: NonNullable<typeof x.pos> } =>
@@ -95,11 +106,9 @@ export function OrgOperationView() {
     if (!bAff) return null
     const bPos = beforePositions.find(p => p.id === bAff.positionId)
     if (!bPos) return null
-    const bOrg = organizations.find(o => o.id === bPos.orgId)
-    return bOrg?.name ?? null
+    return organizations.find(o => o.id === bPos.orgId)?.name ?? null
   }
 
-  // Persons who were in this org before but aren't after (for diff mode)
   const getDepartedPersons = (orgId: string) =>
     beforeAffiliations
       .filter(a => {
@@ -112,11 +121,9 @@ export function OrgOperationView() {
         afterPositions.find(p => p.id === aa.positionId)?.orgId === orgId
       ))
       .map(a => {
-        const person = persons.find(p => p.id === a.personId)
-        const pos = beforePositions.find(p => p.id === a.positionId)
-        const afterAff = afterAffiliations.find(aa =>
-          aa.personId === a.personId && aa.status === 'active'
-        )
+        const person   = persons.find(p => p.id === a.personId)
+        const pos      = beforePositions.find(p => p.id === a.positionId)
+        const afterAff = afterAffiliations.find(aa => aa.personId === a.personId && aa.status === 'active')
         const afterPos = afterAff ? afterPositions.find(p => p.id === afterAff.positionId) : null
         const afterOrg = afterPos ? organizations.find(o => o.id === afterPos.orgId) : null
         return { person, pos, afterOrg }
@@ -125,16 +132,82 @@ export function OrgOperationView() {
         x.person != null && x.pos != null
       )
 
-  const handleDragStart = (e: React.DragEvent, personId: string, fromOrgId: string, fromCompanyId: string) => {
-    const data: DragData = { personId, fromOrgId, fromCompanyId }
+  // ── Sort helpers ──────────────────────────────────────────────
+  const getSortedPersons = (
+    orgId: string,
+    personsList: ReturnType<typeof getPersonsInOrg>,
+    overrideOrders?: Record<string, string[]>
+  ) => {
+    const mode = orgSortModes[orgId] ?? 'band'
+    if (mode === 'band') {
+      return [...personsList].sort((a, b) =>
+        BAND_ORDER.indexOf(b.pos.band ?? 'B4') - BAND_ORDER.indexOf(a.pos.band ?? 'B4')
+      )
+    }
+    const orders = overrideOrders ?? orgManualOrders
+    const order  = orders[orgId]
+    if (!order) return personsList
+    const byId   = new Map(personsList.map(p => [p.person.id, p]))
+    return [
+      ...order.map(id => byId.get(id)).filter((x): x is NonNullable<typeof x> => x != null),
+      ...personsList.filter(p => !order.includes(p.person.id)),
+    ]
+  }
+
+  const toggleSortMode = (orgId: string) => {
+    const current = orgSortModes[orgId] ?? 'band'
+    const next    = current === 'band' ? 'manual' : 'band'
+    if (next === 'manual') {
+      const sorted = getSortedPersons(orgId, getPersonsInOrg(orgId))
+      setOrgManualOrders(prev => ({ ...prev, [orgId]: sorted.map(p => p.person.id) }))
+    }
+    setOrgSortModes(prev => ({ ...prev, [orgId]: next }))
+  }
+
+  const doReorder = (toOrgId: string, beforePersonId: string | null, draggedPersonId: string) => {
+    setOrgManualOrders(prev => {
+      const currentPersons = getPersonsInOrg(toOrgId)
+      const sorted         = getSortedPersons(toOrgId, currentPersons, prev)
+      const currentOrder   = sorted.map(p => p.person.id)
+      const filtered       = currentOrder.filter(id => id !== draggedPersonId)
+      const insertIdx      = beforePersonId !== null ? filtered.indexOf(beforePersonId) : filtered.length
+      filtered.splice(insertIdx >= 0 ? insertIdx : filtered.length, 0, draggedPersonId)
+      return { ...prev, [toOrgId]: filtered }
+    })
+  }
+
+  // ── Drag/drop handlers ────────────────────────────────────────
+  const handleDragStart = (
+    e: React.DragEvent,
+    personId: string,
+    fromOrgId: string,
+    fromCompanyId: string,
+    affiliationType: 'primary' | 'concurrent'
+  ) => {
+    const data: DragData = { personId, fromOrgId, fromCompanyId, affiliationType }
     e.dataTransfer.setData('application/json', JSON.stringify(data))
+    e.dataTransfer.effectAllowed = 'copyMove'
+  }
+
+  const handleReorderDragStart = (e: React.DragEvent, personId: string, orgId: string) => {
+    e.stopPropagation()
+    const data: ReorderData = { personId, orgId }
+    e.dataTransfer.setData('application/reorder', JSON.stringify(data))
     e.dataTransfer.effectAllowed = 'move'
   }
 
   const handleDragOver = (e: React.DragEvent, orgId: string) => {
+    if (!e.dataTransfer.types.includes('application/json')) return
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.dropEffect = e.altKey ? 'copy' : 'move'
     setDragOverOrgId(orgId)
+  }
+
+  const handleReorderDragOver = (e: React.DragEvent, orgId: string, beforePersonId: string | null) => {
+    if (!e.dataTransfer.types.includes('application/reorder')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setReorderDropTarget({ orgId, beforePersonId })
   }
 
   const handleDragLeave = () => setDragOverOrgId(null)
@@ -150,8 +223,28 @@ export function OrgOperationView() {
       return
     }
 
-    const { personId, fromOrgId, fromCompanyId } = data
-    if (fromOrgId === toOrgId) return
+    const { personId, fromOrgId, fromCompanyId, affiliationType } = data
+
+    // Dragging a concurrent card without Alt → move the concurrent affiliation
+    if (affiliationType === 'concurrent' && !e.altKey && fromOrgId !== toOrgId) {
+      const toOrg = organizations.find(o => o.id === toOrgId)
+      if (!toOrg) return
+      const concurrentAff = afterAffiliations.find(a =>
+        a.personId === personId && a.status === 'active' && a.type === 'concurrent' &&
+        afterPositions.find(p => p.id === a.positionId)?.orgId === fromOrgId
+      )
+      const concurrentPos = concurrentAff ? afterPositions.find(p => p.id === concurrentAff.positionId) : null
+      const band       = concurrentPos?.band ?? 'B4'
+      const title      = concurrentPos?.title ?? '兼務'
+      const personName = persons.find(p => p.id === personId)?.name ?? personId
+      addOperation({ kind: 'RemoveConcurrent', label: `兼務解除：${personName}`, params: { personId, orgId: fromOrgId }, effectiveDate })
+      addOperation({ kind: 'AddConcurrent', label: `兼務先変更：${toOrg.name} (${personName})`, params: { personId, orgId: toOrgId, companyId: toOrg.companyId, band, title }, effectiveDate })
+      setHighlightedOrgId(toOrgId)
+      setTimeout(() => setHighlightedOrgId(null), 800)
+      return
+    }
+
+    if (fromOrgId === toOrgId && !e.altKey) return
 
     const toOrg = organizations.find(o => o.id === toOrgId)
     if (!toOrg) return
@@ -162,9 +255,9 @@ export function OrgOperationView() {
       afterPositions.find(p => p.id === a.positionId)?.orgId === fromOrgId
     )
     const currentPos = currentAff ? afterPositions.find(p => p.id === currentAff.positionId) : null
-    const band = currentPos?.band ?? 'B4'
-    const title = currentPos?.title ?? '担当'
-    const toOrgName = toOrg.name
+    const band       = currentPos?.band ?? 'B4'
+    const title      = currentPos?.title ?? '担当'
+    const toOrgName  = toOrg.name
     const personName = persons.find(p => p.id === personId)?.name ?? personId
 
     if (e.altKey) {
@@ -179,21 +272,130 @@ export function OrgOperationView() {
     setTimeout(() => setHighlightedOrgId(null), 800)
   }
 
-  // ── Shared person card ─────────────────────────────────────────
+  // ── Sort toggle button ────────────────────────────────────────
+  const renderSortButton = (orgId: string) => {
+    const sortMode = orgSortModes[orgId] ?? 'band'
+    return (
+      <button
+        onClick={e => { e.stopPropagation(); toggleSortMode(orgId) }}
+        title={sortMode === 'manual' ? '手動並び替え（クリックでバンド順）' : 'バンド順（クリックで手動並び替え）'}
+        className={`text-xs px-1 rounded flex-shrink-0 transition-colors ${
+          sortMode === 'manual' ? 'text-blue-500 hover:text-blue-700' : 'text-gray-400 hover:text-gray-600'
+        }`}
+      >
+        {sortMode === 'manual' ? '⠿' : '⇅'}
+      </button>
+    )
+  }
+
+  // ── Person cards ───────────────────────────────────────────────
   const renderPersonCards = (orgId: string, companyId: string) => {
     const personsInOrg = getPersonsInOrg(orgId)
     if (personsInOrg.length === 0) return null
+    const sortMode = orgSortModes[orgId] ?? 'band'
+    const sorted   = getSortedPersons(orgId, personsInOrg)
+
+    if (sortMode === 'manual') {
+      return (
+        <div className="flex flex-col gap-1 mb-2">
+          {sorted.map(({ aff, person, pos }) => {
+            const fromOrgName  = getBeforeOrgName(person.id, orgId)
+            const isConcurrent = aff.type === 'concurrent'
+            const isSelected   = selectedPersonId === person.id
+            const isDropBefore = reorderDropTarget?.orgId === orgId && reorderDropTarget.beforePersonId === person.id
+            return (
+              <div key={aff.id}>
+                {isDropBefore && <div className="h-0.5 bg-blue-400 rounded mb-0.5 mx-1" />}
+                <div
+                  draggable
+                  onDragStart={e => handleDragStart(e, person.id, orgId, companyId, aff.type)}
+                  onDragOver={e => {
+                    if (e.dataTransfer.types.includes('application/reorder')) {
+                      handleReorderDragOver(e, orgId, person.id)
+                    } else {
+                      handleDragOver(e, orgId)
+                    }
+                  }}
+                  onDrop={e => {
+                    if (e.dataTransfer.types.includes('application/reorder')) {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setReorderDropTarget(null)
+                      try {
+                        const rd: ReorderData = JSON.parse(e.dataTransfer.getData('application/reorder'))
+                        if (rd.orgId === orgId) doReorder(orgId, person.id, rd.personId)
+                      } catch { /* ignore */ }
+                    } else {
+                      handleDrop(e, orgId)
+                    }
+                  }}
+                  onClick={() => selectPerson(person.id)}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs cursor-grab active:cursor-grabbing select-none transition-all hover:shadow-md ${
+                    isConcurrent
+                      ? 'border-2 border-dashed border-purple-400 bg-purple-50'
+                      : 'border-2 border-blue-300 bg-blue-50'
+                  } ${isSelected ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
+                >
+                  {/* Grip handle — initiates intra-org reorder drag */}
+                  <span
+                    draggable
+                    onDragStart={e => handleReorderDragStart(e, person.id, orgId)}
+                    className="text-gray-300 hover:text-gray-500 cursor-grab flex-shrink-0 select-none text-sm leading-none"
+                    title="ドラッグして並び替え"
+                  >
+                    ⠿
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    {fromOrgName && (
+                      <div className="text-gray-400 text-xs leading-tight mb-0.5">← {fromOrgName}</div>
+                    )}
+                    <div className="font-semibold text-gray-800 leading-tight">{person.name}</div>
+                    <div className="text-gray-500 leading-tight">
+                      {pos.title}
+                      {pos.band && <span className={`ml-1 font-medium ${isConcurrent ? 'text-purple-600' : 'text-blue-600'}`}>{pos.band}</span>}
+                    </div>
+                    {isConcurrent && <div className="text-purple-600 text-xs leading-tight">兼務</div>}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          {/* Drop-at-end zone */}
+          <div
+            className={`h-1 rounded mx-1 transition-colors ${
+              reorderDropTarget?.orgId === orgId && reorderDropTarget.beforePersonId === null
+                ? 'bg-blue-400' : ''
+            }`}
+            onDragOver={e => {
+              if (e.dataTransfer.types.includes('application/reorder')) handleReorderDragOver(e, orgId, null)
+            }}
+            onDrop={e => {
+              if (!e.dataTransfer.types.includes('application/reorder')) return
+              e.preventDefault()
+              e.stopPropagation()
+              setReorderDropTarget(null)
+              try {
+                const rd: ReorderData = JSON.parse(e.dataTransfer.getData('application/reorder'))
+                if (rd.orgId === orgId) doReorder(orgId, null, rd.personId)
+              } catch { /* ignore */ }
+            }}
+          />
+        </div>
+      )
+    }
+
+    // Band mode (default): wrapped flex layout
     return (
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {personsInOrg.map(({ aff, person, pos }) => {
-          const fromOrgName = getBeforeOrgName(person.id, orgId)
+        {sorted.map(({ aff, person, pos }) => {
+          const fromOrgName  = getBeforeOrgName(person.id, orgId)
           const isConcurrent = aff.type === 'concurrent'
-          const isSelected = selectedPersonId === person.id
+          const isSelected   = selectedPersonId === person.id
           return (
             <div
               key={aff.id}
               draggable
-              onDragStart={e => handleDragStart(e, person.id, orgId, companyId)}
+              onDragStart={e => handleDragStart(e, person.id, orgId, companyId, aff.type)}
               onClick={() => selectPerson(person.id)}
               className={`relative px-2.5 py-1.5 rounded text-xs cursor-grab active:cursor-grabbing select-none transition-all hover:shadow-md ${
                 isConcurrent
@@ -256,10 +458,10 @@ export function OrgOperationView() {
     if (!org) return null
 
     const personsInOrg = getPersonsInOrg(orgId)
-    const childOrgIds = organizations.filter(o => o.parentId === orgId).map(o => o.id)
-    const isDragOver = dragOverOrgId === orgId
+    const childOrgIds  = organizations.filter(o => o.parentId === orgId).map(o => o.id)
+    const isDragOver   = dragOverOrgId === orgId
     const isHighlighted = highlightedOrgId === orgId
-    const isExpanded = expandedChipIds.has(orgId)
+    const isExpanded   = expandedChipIds.has(orgId)
 
     const toggleExpand = () =>
       setExpandedChipIds(prev => {
@@ -306,7 +508,8 @@ export function OrgOperationView() {
           onClick={toggleExpand}
         >
           <span className="text-gray-400">▾</span>
-          {org.name}
+          <span className="flex-1">{org.name}</span>
+          {renderSortButton(orgId)}
         </div>
         <div className="p-2">
           {renderDepartedCards(orgId)}
@@ -327,8 +530,8 @@ export function OrgOperationView() {
     const org = organizations.find(o => o.id === orgId)
     if (!org) return null
 
-    const childOrgIds = organizations.filter(o => o.parentId === orgId).map(o => o.id)
-    const isDragOver = dragOverOrgId === orgId
+    const childOrgIds   = organizations.filter(o => o.parentId === orgId).map(o => o.id)
+    const isDragOver    = dragOverOrgId === orgId
     const isHighlighted = highlightedOrgId === orgId
 
     return (
@@ -343,12 +546,13 @@ export function OrgOperationView() {
         onDragLeave={handleDragLeave}
         onDrop={e => handleDrop(e, orgId)}
       >
-        <div className={`px-3 py-1.5 border-b text-xs font-semibold ${
+        <div className={`px-3 py-1.5 border-b text-xs font-semibold flex items-center ${
           depth === 0
             ? 'border-gray-300 text-gray-600 bg-gray-100 rounded-t-lg'
             : 'border-gray-200 text-gray-500 bg-gray-50 rounded-t-lg'
         }`}>
-          {org.name}
+          <span className="flex-1">{org.name}</span>
+          {renderSortButton(orgId)}
         </div>
         <div className="p-2">
           {renderDepartedCards(orgId)}
@@ -380,7 +584,6 @@ export function OrgOperationView() {
       orgsInScope.map((id, i) => [id, ORG_PALETTE[i % ORG_PALETTE.length]])
     )
 
-    // Primary affiliation for a person within the scope
     const getPersonScopeAff = (personId: string) => {
       const aff = afterAffiliations.find(a => {
         if (a.personId !== personId || a.status !== 'active') return false
@@ -406,7 +609,7 @@ export function OrgOperationView() {
       personsInScope.filter(pid => getPersonScopeAff(pid)?.aff.managerId === managerId)
 
     const roots = personsInScope.filter(pid => {
-      const sa = getPersonScopeAff(pid)
+      const sa  = getPersonScopeAff(pid)
       if (!sa) return false
       const mgr = sa.aff.managerId
       return !mgr || !personsInScope.includes(mgr)
@@ -414,13 +617,13 @@ export function OrgOperationView() {
 
     const ReportNode = ({ personId, depth = 0 }: { personId: string; depth?: number }) => {
       const person = persons.find(p => p.id === personId)
-      const sa = getPersonScopeAff(personId)
+      const sa     = getPersonScopeAff(personId)
       if (!person || !sa) return null
 
-      const color = orgColorMap[sa.orgId]
-      const org = organizations.find(o => o.id === sa.orgId)
-      const directReports = getDirectReports(personId)
-      const isSelected = selectedPersonId === personId
+      const color          = orgColorMap[sa.orgId]
+      const org            = organizations.find(o => o.id === sa.orgId)
+      const directReports  = getDirectReports(personId)
+      const isSelected     = selectedPersonId === personId
 
       return (
         <div className={depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-3 mt-1.5' : 'mt-1.5'}>
@@ -450,11 +653,10 @@ export function OrgOperationView() {
 
     return (
       <div className="p-4">
-        {/* Org color legend */}
         {orgsWithPersons.length > 1 && (
           <div className="flex flex-wrap gap-2 mb-4">
             {orgsWithPersons.map(orgId => {
-              const org = organizations.find(o => o.id === orgId)
+              const org   = organizations.find(o => o.id === orgId)
               const color = orgColorMap[orgId]
               return org ? (
                 <span key={orgId} className={`px-2 py-0.5 rounded text-xs ${color.tag}`}>
@@ -478,7 +680,10 @@ export function OrgOperationView() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div
+      className="flex flex-col h-full overflow-hidden"
+      onDragEnd={() => { setReorderDropTarget(null); setDragOverOrgId(null) }}
+    >
       {/* Header */}
       <div className="flex-shrink-0 px-4 py-2 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
         {parentOrg && (
@@ -493,7 +698,6 @@ export function OrgOperationView() {
           </>
         )}
 
-        {/* Breadcrumb */}
         <div className="flex items-center gap-1 text-xs">
           {breadcrumb.map((crumb, i) => (
             <span key={crumb.id} className="flex items-center gap-1">
@@ -508,7 +712,6 @@ export function OrgOperationView() {
           ))}
         </div>
 
-        {/* View mode toggle */}
         <div className="ml-auto flex items-center gap-2">
           <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
             {(['組織図', 'レポートライン'] as CanvasMode[]).map(mode => (
@@ -555,8 +758,9 @@ export function OrgOperationView() {
               dragOverOrgId === focusedOrgId ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'
             }`}
           >
-            <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg">
-              <span className="text-sm font-semibold text-gray-700">{focusedOrg.name}</span>
+            <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center">
+              <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
+              {renderSortButton(focusedOrgId)}
             </div>
 
             {/* Focused org's own members + drop zone */}
