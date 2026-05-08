@@ -8,23 +8,49 @@ export function applyOperations(
   beforePositions: Position[],
   operations: Operation[],
   organizations: Organization[],
-): { affiliations: Affiliation[]; positions: Position[] } {
+): { affiliations: Affiliation[]; positions: Position[]; organizations: Organization[] } {
   let affiliations = beforeAffiliations.map(a => ({ ...a }))
   let positions = beforePositions.map(p => ({ ...p }))
+  let orgs = organizations.map(o => ({ ...o }))
 
   const sorted = [...operations].sort((a, b) => a.order - b.order)
 
   for (const op of sorted) {
-    if (op.kind === 'RecallFromSecondment') {
+    if (op.kind === 'CreateOrg') {
+      const { id, name, companyId, parentId, level } = op.params
+      if (!orgs.find(o => o.id === id)) {
+        orgs = [...orgs, { id, name, companyId, parentId: parentId || null, level: parseInt(level) || 3 }]
+      }
+    } else if (op.kind === 'AbolishOrg') {
+      const { orgId } = op.params
+      orgs = orgs.map(o => o.id === orgId ? { ...o, isAbandoned: true } : o)
+    } else if (op.kind === 'Hire') {
+      const { personId, orgId, companyId, band, title } = op.params
+      const newPosId = `pos_new_${posCounter++}`
+      positions = [
+        ...positions,
+        { id: newPosId, orgId, companyId, title: title || '担当', band: band || 'B4', isVacant: false },
+      ]
+      affiliations = [
+        ...affiliations,
+        {
+          id: `aff_new_${affCounter++}`,
+          personId,
+          positionId: newPosId,
+          type: 'primary' as const,
+          status: 'active' as const,
+          startDate: op.effectiveDate,
+          employmentType: '正社員',
+        },
+      ]
+    } else if (op.kind === 'RecallFromSecondment') {
       const { personId, companyId } = op.params
-      // End affiliations in this company for this person
       affiliations = affiliations.map(a => {
         if (a.personId !== personId || a.status !== 'active') return a
         const pos = positions.find(p => p.id === a.positionId)
         if (!pos || pos.companyId !== companyId) return a
         return { ...a, status: 'ended' as const, endDate: op.effectiveDate }
       })
-      // Mark positions vacant
       positions = positions.map(p => {
         if (p.companyId !== companyId) return p
         const wasOccupied = beforeAffiliations.some(
@@ -34,10 +60,9 @@ export function applyOperations(
       })
     } else if (op.kind === 'SendOnSecondment') {
       const { personId, toCompanyId, orgId, band, title } = op.params
-      void organizations.find(o => o.id === orgId)
+      void orgs.find(o => o.id === orgId)
       const hasSF = toCompanyId !== 'comp_c'
       const newPosId = `pos_new_${posCounter++}`
-      // Find home company to record as secondment source
       const homeAff = affiliations.find(a =>
         a.personId === personId && a.status === 'active' && a.type === 'primary' &&
         positions.find(p => p.id === a.positionId)?.companyId !== toCompanyId
@@ -71,7 +96,6 @@ export function applyOperations(
       ]
     } else if (op.kind === 'MoveToOrg') {
       const { personId, toOrgId, band, title, companyId } = op.params
-      // Carry individual fields from the affiliation being ended
       const prevAff = affiliations.find(a =>
         a.personId === personId && a.status === 'active' && a.type === 'primary' &&
         positions.find(p => p.id === a.positionId)?.companyId === companyId
@@ -153,7 +177,6 @@ export function applyOperations(
         )
         return isOccupied ? { ...p, band } : p
       })
-      // Update salary grade in affiliation to match new band
       const bandGradeMap: Record<string, string> = {
         B7: '7等級', B6: '6等級', B5: '5等級', B4: '4等級', B3: '3等級', B2: '2等級', B1: '1等級',
       }
@@ -166,5 +189,5 @@ export function applyOperations(
     }
   }
 
-  return { affiliations, positions }
+  return { affiliations, positions, organizations: orgs }
 }

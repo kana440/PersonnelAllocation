@@ -79,6 +79,8 @@ export const persons: Person[] = [
   { id: 'p_suzuki',    name: '鈴木 次郎' },
   { id: 'p_takahashi', name: '高橋 幸子' },
   { id: 'p_okamoto',   name: '岡本 明' },
+  // 新入社員（発令後に採用）
+  { id: 'p_tamura',    name: '田村 翔太', sfPersonId: 'SF038' },
 ]
 
 // ── Before Positions ──────────────────────────────────────────
@@ -299,32 +301,69 @@ export const beforeAffiliations: Affiliation[] = [
 
 // ── Initial Operations ─────────────────────────────────────────
 export const initialOperations: Operation[] = [
+  // ── 組織改編 ──
+  {
+    id: 'op_create_strategy', kind: 'CreateOrg',
+    label: '新設：事業戦略部',
+    params: { id: 'org_a_jigyou_strategy', name: '事業戦略部', companyId: 'comp_a', parentId: 'org_a_keiei', level: '3' },
+    effectiveDate: '2025-04-01', order: 1,
+  },
+  {
+    id: 'op_abolish_gyomu', kind: 'AbolishOrg',
+    label: '廃止：業務推進課',
+    params: { orgId: 'org_a_gyomu' },
+    effectiveDate: '2025-04-01', order: 2,
+  },
+  // ── 廃止組織からの異動 ──
+  {
+    id: 'op_yamaguchi_move', kind: 'MoveToOrg',
+    label: '組織異動：経営企画部 (山口)',
+    params: { personId: 'p_yamaguchi', toOrgId: 'org_a_kikaku', companyId: 'comp_a', band: 'B4', title: '課長' },
+    effectiveDate: '2025-04-01', order: 3,
+    transferReason: '組織異動',
+  },
+  {
+    id: 'op_matsumoto_move', kind: 'MoveToOrg',
+    label: '組織異動：事業戦略部 (松本)',
+    params: { personId: 'p_matsumoto', toOrgId: 'org_a_jigyou_strategy', companyId: 'comp_a', band: 'B3', title: '担当' },
+    effectiveDate: '2025-04-01', order: 4,
+    transferReason: '組織異動',
+  },
+  // ── 採用 ──
+  {
+    id: 'op_hire_tamura', kind: 'Hire',
+    label: '採用：事業戦略部 (田村)',
+    params: { personId: 'p_tamura', orgId: 'org_a_jigyou_strategy', companyId: 'comp_a', band: 'B3', title: '担当' },
+    effectiveDate: '2025-04-01', order: 5,
+    transferReason: '採用',
+  },
+  // ── 既存の発令 ──
   {
     id: 'op1', kind: 'RecallFromSecondment',
     label: '出向解除：B社 (岡田)',
     params: { personId: 'p_okada', companyId: 'comp_b' },
-    effectiveDate: '2025-04-01', order: 1,
+    effectiveDate: '2025-04-01', order: 6,
     transferReason: '出向解除',
   },
   {
     id: 'op2', kind: 'SendOnSecondment',
     label: '出向：C社/事業部 (岡田)',
     params: { personId: 'p_okada', toCompanyId: 'comp_c', orgId: 'org_c_jigyou', band: 'B4', title: '担当' },
-    effectiveDate: '2025-04-01', order: 2,
+    effectiveDate: '2025-04-01', order: 7,
     transferReason: '出向',
   },
   {
     id: 'op3', kind: 'Promote',
     label: '昇格：B2→B3 (石川)',
     params: { personId: 'p_ishikawa', companyId: 'comp_a', band: 'B3' },
-    effectiveDate: '2025-04-01', order: 3,
+    effectiveDate: '2025-04-01', order: 8,
     transferReason: '昇格', promotionSign: true, salaryGradeChangeSign: true,
   },
   {
     id: 'op4', kind: 'MoveToOrg',
     label: '組織異動：営業企画部 (近藤)',
     params: { personId: 'p_kondo', toOrgId: 'org_a_eigyo_kikaku', companyId: 'comp_a', band: 'B2', title: '担当' },
-    effectiveDate: '2025-04-01', order: 4,
+    effectiveDate: '2025-04-01', order: 9,
     transferReason: '組織異動',
   },
 ]

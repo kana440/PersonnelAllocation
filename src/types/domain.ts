@@ -10,6 +10,7 @@ export interface Organization {
   companyId: string
   parentId: string | null
   level: number
+  isAbandoned?: boolean
 }
 
 export interface Person {
@@ -74,6 +75,8 @@ export type OperationKind =
   | 'Retire'
   | 'CreateVacantPosition'
   | 'FillVacantPosition'
+  | 'CreateOrg'
+  | 'AbolishOrg'
 
 export interface Operation {
   id: string

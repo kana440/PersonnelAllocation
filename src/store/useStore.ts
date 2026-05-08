@@ -16,20 +16,26 @@ interface AppState {
   // Derived after state
   afterPositions: Position[]
   afterAffiliations: Affiliation[]
+  afterOrganizations: Organization[]
   // UI state
   effectiveDate: string
   overviewViewMode: 'before' | 'after'
   workspaceMode: 'empty' | 'org' | 'person'
   focusedOrgId: string | null
+  beforeFocusedOrgId: string | null
   selectedPersonId: string | null
   personPickupViewMode: 'before' | 'after'
   memberPanelOrgId: string | null
+  // Confirmation tracking (Before panel)
+  confirmedNoChangeKeys: Set<string>   // `${personId}_${companyId}`
   // Actions
   addOperation: (op: Omit<Operation, 'id' | 'order'>) => void
   removeOperation: (id: string) => void
+  confirmNoChange: (personId: string, companyId: string) => void
   setEffectiveDate: (date: string) => void
   setOverviewViewMode: (mode: 'before' | 'after') => void
   focusOrg: (orgId: string) => void
+  focusBefore: (orgId: string) => void
   selectPerson: (personId: string) => void
   clearPersonSelection: () => void
   setPersonPickupViewMode: (mode: 'before' | 'after') => void
@@ -56,34 +62,33 @@ export const useStore = create<AppState>((set, get) => {
     operations: initialOperations,
     afterPositions: initial.positions,
     afterAffiliations: initial.affiliations,
+    afterOrganizations: initial.organizations,
     effectiveDate: '2025-04-01',
     overviewViewMode: 'before',
     workspaceMode: 'org',
     focusedOrgId: 'org_a_keiei',
+    beforeFocusedOrgId: 'org_a_keiei',
     selectedPersonId: 'p_yamada',
     personPickupViewMode: 'before',
     memberPanelOrgId: 'org_a_kikaku',
+    confirmedNoChangeKeys: new Set<string>(),
 
     addOperation: (op) => {
       let ops = get().operations
 
-      // Merge / cancel duplicate or opposing operations
       if (op.kind === 'MoveToOrg') {
-        // Replace existing MoveToOrg for same person+company
         ops = ops.filter(o => !(
           o.kind === 'MoveToOrg' &&
           o.params.personId === op.params.personId &&
           o.params.companyId === op.params.companyId
         ))
       } else if (op.kind === 'Promote') {
-        // Replace existing Promote for same person+company
         ops = ops.filter(o => !(
           o.kind === 'Promote' &&
           o.params.personId === op.params.personId &&
           o.params.companyId === op.params.companyId
         ))
       } else if (op.kind === 'RecallFromSecondment') {
-        // Cancel the paired SendOnSecondment if present
         const sendOp = ops.find(o =>
           o.kind === 'SendOnSecondment' &&
           o.params.personId === op.params.personId &&
@@ -92,11 +97,10 @@ export const useStore = create<AppState>((set, get) => {
         if (sendOp) {
           const cancelledOps = ops.filter(o => o.id !== sendOp.id).map((o, i) => ({ ...o, order: i + 1 }))
           const after = computeAfterState(get().beforeAffiliations, get().beforePositions, cancelledOps, get().organizations)
-          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations, afterOrganizations: after.organizations })
           return
         }
       } else if (op.kind === 'AddConcurrent') {
-        // Cancel RemoveConcurrent for same person+org
         const removeOp = ops.find(o =>
           o.kind === 'RemoveConcurrent' &&
           o.params.personId === op.params.personId &&
@@ -105,11 +109,10 @@ export const useStore = create<AppState>((set, get) => {
         if (removeOp) {
           const cancelledOps = ops.filter(o => o.id !== removeOp.id).map((o, i) => ({ ...o, order: i + 1 }))
           const after = computeAfterState(get().beforeAffiliations, get().beforePositions, cancelledOps, get().organizations)
-          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations, afterOrganizations: after.organizations })
           return
         }
       } else if (op.kind === 'RemoveConcurrent') {
-        // Cancel AddConcurrent for same person+org
         const addOp = ops.find(o =>
           o.kind === 'AddConcurrent' &&
           o.params.personId === op.params.personId &&
@@ -118,7 +121,7 @@ export const useStore = create<AppState>((set, get) => {
         if (addOp) {
           const cancelledOps = ops.filter(o => o.id !== addOp.id).map((o, i) => ({ ...o, order: i + 1 }))
           const after = computeAfterState(get().beforeAffiliations, get().beforePositions, cancelledOps, get().organizations)
-          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+          set({ operations: cancelledOps, afterPositions: after.positions, afterAffiliations: after.affiliations, afterOrganizations: after.organizations })
           return
         }
       }
@@ -126,18 +129,27 @@ export const useStore = create<AppState>((set, get) => {
       const newOp: Operation = { ...op, id: `op_${Date.now()}`, order: ops.length + 1 }
       const newOps = [...ops, newOp].map((o, i) => ({ ...o, order: i + 1 }))
       const after = computeAfterState(get().beforeAffiliations, get().beforePositions, newOps, get().organizations)
-      set({ operations: newOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+      const personId  = op.params.personId
+      const companyId = op.params.companyId ?? op.params.toCompanyId ?? ''
+      const newConfirmed = personId
+        ? new Set([...get().confirmedNoChangeKeys, `${personId}_${companyId}`])
+        : get().confirmedNoChangeKeys
+      set({ operations: newOps, afterPositions: after.positions, afterAffiliations: after.affiliations, afterOrganizations: after.organizations, confirmedNoChangeKeys: newConfirmed })
     },
 
     removeOperation: (id) => {
       const newOps = get().operations.filter(o => o.id !== id).map((o, i) => ({ ...o, order: i + 1 }))
       const after = computeAfterState(get().beforeAffiliations, get().beforePositions, newOps, get().organizations)
-      set({ operations: newOps, afterPositions: after.positions, afterAffiliations: after.affiliations })
+      set({ operations: newOps, afterPositions: after.positions, afterAffiliations: after.affiliations, afterOrganizations: after.organizations })
     },
+
+    confirmNoChange: (personId, companyId) =>
+      set(state => ({ confirmedNoChangeKeys: new Set([...state.confirmedNoChangeKeys, `${personId}_${companyId}`]) })),
 
     setEffectiveDate: (date) => set({ effectiveDate: date }),
     setOverviewViewMode: (mode) => set({ overviewViewMode: mode }),
     focusOrg: (orgId) => set({ focusedOrgId: orgId, workspaceMode: 'org' }),
+    focusBefore: (orgId) => set({ beforeFocusedOrgId: orgId }),
     selectPerson: (personId) => set({ selectedPersonId: personId }),
     clearPersonSelection: () => set({ selectedPersonId: null }),
     setPersonPickupViewMode: (mode) => set({ personPickupViewMode: mode }),

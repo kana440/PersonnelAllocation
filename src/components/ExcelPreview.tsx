@@ -44,17 +44,20 @@ function SnapCell({ snap, field, bg }: { snap: PositionSnapshot | null; field: k
 
 export function ExcelPreview() {
   const store = useStore()
+  // Use afterOrganizations so new orgs created by CreateOrg are included
+  const allOrgs = [...store.organizations, ...store.afterOrganizations.filter(o => !store.organizations.find(b => b.id === o.id))]
   const rows = useMemo(() => translateToExcel({
     persons:           store.persons,
     companies:         store.companies,
-    organizations:     store.organizations,
+    organizations:     allOrgs,
     operations:        store.operations,
     beforeAffiliations: store.beforeAffiliations,
     beforePositions:   store.beforePositions,
     afterAffiliations: store.afterAffiliations,
     afterPositions:    store.afterPositions,
     effectiveDate:     store.effectiveDate,
-  }), [store.beforeAffiliations, store.beforePositions, store.afterAffiliations, store.afterPositions, store.effectiveDate, store.operations])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [store.beforeAffiliations, store.beforePositions, store.afterAffiliations, store.afterPositions, store.effectiveDate, store.operations, store.afterOrganizations])
 
   const thPerson = 'px-2 py-2 text-left whitespace-nowrap bg-gray-700 text-white'
   const thChange = 'px-2 py-2 text-left whitespace-nowrap bg-orange-800 text-white'

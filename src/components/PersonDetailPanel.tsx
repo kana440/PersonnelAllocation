@@ -40,7 +40,7 @@ const OP_COLORS: Partial<Record<OperationKind, string>> = {
 
 export function PersonDetailPanel() {
   const {
-    persons, companies, organizations,
+    persons, companies, organizations, afterOrganizations,
     beforeAffiliations, beforePositions,
     afterAffiliations, afterPositions,
     selectedPersonId, operations,
@@ -66,12 +66,16 @@ export function PersonDetailPanel() {
     ? persons.filter(p => p.name.toLowerCase().includes(searchLower) && p.id !== selectedPersonId)
     : []
 
+  // Look up org from either static (before) or derived (after) orgs
+  const findOrg = (orgId: string | undefined) =>
+    orgId ? (afterOrganizations.find(o => o.id === orgId) ?? organizations.find(o => o.id === orgId)) : undefined
+
   const getAffDetails = (personId: string, affs: typeof beforeAffiliations, positions: typeof beforePositions) =>
     affs
       .filter(a => a.personId === personId && a.status === 'active')
       .flatMap(a => {
         const pos     = positions.find(p => p.id === a.positionId)
-        const org     = organizations.find(o => o.id === pos?.orgId)
+        const org     = findOrg(pos?.orgId)
         const company = companies.find(c => c.id === pos?.companyId)
         if (!pos || !org || !company) return []
         return [{ aff: a, pos, org, company }]
@@ -133,7 +137,7 @@ export function PersonDetailPanel() {
     let params: Record<string, string> = { personId: selectedPersonId }
 
     const cName = companies.find(c => c.id === targetCompanyId)?.name ?? ''
-    const oName = organizations.find(o => o.id === targetOrgId)?.name ?? ''
+    const oName = findOrg(targetOrgId)?.name ?? ''
 
     switch (selectedAction) {
       case 'RecallFromSecondment':
@@ -153,7 +157,7 @@ export function PersonDetailPanel() {
         break
       }
       case 'AddConcurrent': {
-        const companyId = organizations.find(o => o.id === targetOrgId)?.companyId ?? targetCompanyId
+        const companyId = findOrg(targetOrgId)?.companyId ?? targetCompanyId
         params = { personId: selectedPersonId, orgId: targetOrgId, companyId, band: targetBand, title: targetTitle,
           ...(targetConcurrentReason && { concurrentReason: targetConcurrentReason }),
           ...(targetFreeTitle && { freeTitle: targetFreeTitle }) }
@@ -161,7 +165,7 @@ export function PersonDetailPanel() {
         break
       }
       case 'RemoveConcurrent': {
-        const companyId = organizations.find(o => o.id === targetOrgId)?.companyId ?? ''
+        const companyId = findOrg(targetOrgId)?.companyId ?? ''
         params = { personId: selectedPersonId, orgId: targetOrgId, companyId }
         label = `兼務解除：${oName}`
         break
@@ -180,7 +184,7 @@ export function PersonDetailPanel() {
   }
 
   // ── form sub-components ────────────────────────────────────
-  const targetCompanyOrgs = organizations.filter(o => o.companyId === targetCompanyId && o.parentId !== null)
+  const targetCompanyOrgs = afterOrganizations.filter(o => o.companyId === targetCompanyId && o.parentId !== null && !o.isAbandoned)
 
   // Shows a person's current affiliation state
   const FromCard = ({ title, items }: { title: string; items: AffDetail[] }) => (

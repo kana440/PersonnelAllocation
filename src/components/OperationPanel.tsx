@@ -14,6 +14,8 @@ const OPERATION_LABELS: Record<OperationKind, string> = {
   Retire: '退職',
   CreateVacantPosition: '空席ポジション作成',
   FillVacantPosition: '空席ポジション配置',
+  CreateOrg: '組織新設',
+  AbolishOrg: '組織廃止',
 }
 
 const OPERATION_COLORS: Partial<Record<OperationKind, string>> & { default: string } = {
