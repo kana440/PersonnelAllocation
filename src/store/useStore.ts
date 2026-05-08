@@ -40,6 +40,13 @@ interface AppState {
   clearPersonSelection: () => void
   setPersonPickupViewMode: (mode: 'before' | 'after') => void
   setMemberPanelOrgId: (orgId: string | null) => void
+  loadBaseState: (data: {
+    persons: Person[]
+    companies: Company[]
+    organizations: Organization[]
+    affiliations: Affiliation[]
+    positions: Position[]
+  }) => void
 }
 
 function computeAfterState(
@@ -154,5 +161,23 @@ export const useStore = create<AppState>((set, get) => {
     clearPersonSelection: () => set({ selectedPersonId: null }),
     setPersonPickupViewMode: (mode) => set({ personPickupViewMode: mode }),
     setMemberPanelOrgId: (orgId) => set({ memberPanelOrgId: orgId }),
+
+    loadBaseState: (data) => {
+      const after = computeAfterState(data.affiliations, data.positions, [], data.organizations)
+      set({
+        persons:            data.persons,
+        companies:          data.companies,
+        organizations:      data.organizations,
+        beforeAffiliations: data.affiliations,
+        beforePositions:    data.positions,
+        operations:         [],
+        afterPositions:     after.positions,
+        afterAffiliations:  after.affiliations,
+        afterOrganizations: after.organizations,
+        confirmedNoChangeKeys: new Set(),
+        selectedPersonId:   null,
+        focusedOrgId:       null,
+      })
+    },
   }
 })

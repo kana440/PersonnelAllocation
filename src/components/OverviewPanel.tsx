@@ -58,6 +58,9 @@ export function OverviewPanel() {
     return null
   }
 
+  const [orgSearch, setOrgSearch] = useState('')
+  const orgSearchLower = orgSearch.toLowerCase().trim()
+
   const toggleOrg     = (id: string) => setExpandedOrgs(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const toggleCompany = (id: string) => setExpandedCompanies(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
@@ -173,6 +176,21 @@ export function OverviewPanel() {
     )
   }
 
+  const searchResults = orgSearchLower ? [
+    ...viewOrgs
+      .filter(o => o.name.toLowerCase().includes(orgSearchLower))
+      .map(o => ({ type: 'org' as const, id: o.id, label: o.name, sub: store.companies.find(c => c.id === o.companyId)?.name ?? '' })),
+    ...store.persons
+      .filter(p => p.name.toLowerCase().includes(orgSearchLower))
+      .flatMap(p => {
+        const aff = viewAffs.find(a => a.personId === p.id && a.status === 'active' && a.type === 'primary')
+        const pos = aff ? viewPos.find(pp => pp.id === aff.positionId) : null
+        const org = pos ? viewOrgs.find(o => o.id === pos.orgId) : null
+        if (!org) return []
+        return [{ type: 'person' as const, id: p.id, label: p.name, sub: org.name }]
+      }),
+  ] : []
+
   return (
     <div
       className={`flex flex-col h-full overflow-hidden transition-colors rounded ${isDragActive ? 'ring-2 ring-blue-200 ring-inset bg-blue-50/30' : ''}`}
@@ -180,43 +198,77 @@ export function OverviewPanel() {
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setIsDragActive(false); setDragOverOrgId(null) } }}
       onDrop={() => setIsDragActive(false)}
     >
-      <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
-        {store.companies.map(company => {
-          const rootOrgs = viewOrgs.filter(o => o.companyId === company.id && o.parentId === null)
-          if (rootOrgs.length === 0) return null
-          const isOpen = expandedCompanies.has(company.id)
-          return (
-            <div key={company.id} className="border border-gray-200 rounded">
-              <button
-                onClick={() => toggleCompany(company.id)}
-                className="w-full flex items-center justify-between px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded transition-colors"
-              >
-                <span>{company.name}{!company.hasSF && <span className="ml-1 font-normal text-gray-400">(SF外)</span>}</span>
-                <span className="text-gray-400">{isOpen ? '▾' : '▸'}</span>
-              </button>
-              {isOpen && (
-                <div className="px-1 py-1">
-                  {rootOrgs.map(org => renderOrgNode(org, 0))}
-                </div>
-              )}
-            </div>
-          )
-        })}
+      {/* Search */}
+      <div className="flex-shrink-0 pb-1">
+        <input
+          type="text"
+          value={orgSearch}
+          onChange={e => setOrgSearch(e.target.value)}
+          placeholder="🔍 組織・人名"
+          className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+        />
       </div>
 
-      {isDragActive && (
-        <div className="flex gap-2 text-xs flex-shrink-0 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mt-1">
-          <span className="text-blue-600 font-medium">ドロップ → 異動</span>
-          <span className="text-gray-400">|</span>
-          <span className="text-purple-600 font-medium">Alt+ドロップ → 兼務</span>
+      {orgSearchLower ? (
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {searchResults.length === 0 && (
+            <div className="text-xs text-gray-400 text-center py-3">該当なし</div>
+          )}
+          {searchResults.map(r => (
+            <button
+              key={`${r.type}-${r.id}`}
+              onClick={() => {
+                if (r.type === 'org') { focusOrg(r.id) } else { selectPerson(r.id) }
+                setOrgSearch('')
+              }}
+              className="w-full text-left flex items-center gap-1.5 px-1 py-1 rounded hover:bg-blue-50 transition-colors"
+            >
+              <span className="text-gray-400 text-xs flex-shrink-0">{r.type === 'org' ? '🏢' : '👤'}</span>
+              <span className="text-xs font-medium text-gray-700 truncate flex-1">{r.label}</span>
+              <span className="text-xs text-gray-400 truncate flex-shrink-0">{r.sub}</span>
+            </button>
+          ))}
         </div>
-      )}
-      {!isDragActive && (
-        <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 flex-shrink-0 pt-1 border-t border-gray-100 mt-1">
-          <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-0.5 align-middle" />変更</span>
-          <span><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-0.5 align-middle" />新規</span>
-          <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-0.5 align-middle" />終了</span>
-        </div>
+      ) : (
+        <>
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+            {store.companies.map(company => {
+              const rootOrgs = viewOrgs.filter(o => o.companyId === company.id && o.parentId === null)
+              if (rootOrgs.length === 0) return null
+              const isOpen = expandedCompanies.has(company.id)
+              return (
+                <div key={company.id} className="border border-gray-200 rounded">
+                  <button
+                    onClick={() => toggleCompany(company.id)}
+                    className="w-full flex items-center justify-between px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded transition-colors"
+                  >
+                    <span>{company.name}{!company.hasSF && <span className="ml-1 font-normal text-gray-400">(SF外)</span>}</span>
+                    <span className="text-gray-400">{isOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-1 py-1">
+                      {rootOrgs.map(org => renderOrgNode(org, 0))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {isDragActive && (
+            <div className="flex gap-2 text-xs flex-shrink-0 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mt-1">
+              <span className="text-blue-600 font-medium">ドロップ → 異動</span>
+              <span className="text-gray-400">|</span>
+              <span className="text-purple-600 font-medium">Alt+ドロップ → 兼務</span>
+            </div>
+          )}
+          {!isDragActive && (
+            <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 flex-shrink-0 pt-1 border-t border-gray-100 mt-1">
+              <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-0.5 align-middle" />変更</span>
+              <span><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-0.5 align-middle" />新規</span>
+              <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-0.5 align-middle" />終了</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
