@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { BaseFormProps } from './types'
-import { BAND_GRADE, BandSelector, CompanyBtn, FormFooter, MetaSection } from './parts'
+import { BandSelector, CompanyBtn, FormFooter, MetaSection } from './parts'
 
 export function PromoteForm({
-  person, afterDetails, activeCompanyIds, companies, onSubmit, onCancel,
+  person, afterDetails, activeCompanyIds, companies,
+  bands, transferReasons, onSubmit, onCancel,
 }: BaseFormProps) {
   const [targetCompanyId, setTargetCompanyId] = useState('')
   const [targetBand,      setTargetBand]      = useState('B4')
@@ -13,6 +14,10 @@ export function PromoteForm({
 
   const currD    = afterDetails.find(d => d.company.id === targetCompanyId && d.aff.type === 'primary')
   const currBand = currD ? (currD.aff.individualBand ?? currD.pos.band) : undefined
+
+  // バンドの等級ラベルをマスタから引く
+  const gradeLabel = (bandId: string) =>
+    bands.find(b => b.id === bandId)?.grade ?? ''
 
   const handleSubmit = () => {
     const cmp = companies.find(c => c.id === targetCompanyId)
@@ -56,7 +61,7 @@ export function PromoteForm({
                   <span className={`font-mono font-semibold ${
                     targetBand > (currBand ?? '') ? 'text-green-600' : 'text-red-600'
                   }`}>{targetBand}</span>
-                  <span className="text-gray-500">({BAND_GRADE[targetBand] ?? ''})</span>
+                  <span className="text-gray-500">({gradeLabel(targetBand)})</span>
                 </>
               ) : (
                 <span className="text-gray-400 italic">変更なし</span>
@@ -73,6 +78,7 @@ export function PromoteForm({
                   value={targetBand} onChange={setTargetBand}
                   activeColor="border-yellow-400 bg-yellow-100 text-yellow-700"
                   currentBand={currBand}
+                  bands={bands}
                 />
               </div>
               {targetBand < (currBand ?? 'B8') && (
@@ -94,11 +100,9 @@ export function PromoteForm({
         transferReason={transferReason} onTransferReason={setTransferReason}
         memo={memo} onMemo={setMemo}
         promotionSign={promotionSign} onPromotionSign={setPromotionSign}
+        transferReasons={transferReasons}
       />
-      <FormFooter
-        onCancel={onCancel} onSubmit={handleSubmit}
-        disabled={!targetCompanyId || !targetBand}
-      />
+      <FormFooter onCancel={onCancel} onSubmit={handleSubmit} disabled={!targetCompanyId || !targetBand} />
     </div>
   )
 }

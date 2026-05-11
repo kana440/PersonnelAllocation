@@ -3,19 +3,18 @@ import type { BaseFormProps } from './types'
 import { FormFooter, MetaSection } from './parts'
 
 export function RemoveConcurrentForm({
-  person, concurrentAft, afterOrganizations, onSubmit, onCancel,
+  person, concurrentAft, afterOrganizations, transferReasons, onSubmit, onCancel,
 }: BaseFormProps) {
-  const [targetOrgId,   setTargetOrgId]   = useState('')
+  const [targetOrgId,    setTargetOrgId]    = useState('')
   const [transferReason, setTransferReason] = useState('')
   const [memo,           setMemo]           = useState('')
 
   const handleSubmit = () => {
     const org = afterOrganizations.find(o => o.id === targetOrgId)
-    const companyId = org?.companyId ?? ''
     onSubmit({
       kind: 'RemoveConcurrent',
       label: `兼務解除：${org?.name ?? ''}`,
-      params: { personId: person.id, orgId: targetOrgId, companyId },
+      params: { personId: person.id, orgId: targetOrgId, companyId: org?.companyId ?? '' },
       transferReason: transferReason || undefined,
       memo: memo || undefined,
     })
@@ -66,6 +65,7 @@ export function RemoveConcurrentForm({
         transferReason={transferReason} onTransferReason={setTransferReason}
         memo={memo} onMemo={setMemo}
         promotionSign={false} onPromotionSign={() => {}}
+        transferReasons={transferReasons}
       />
       <FormFooter onCancel={onCancel} onSubmit={handleSubmit} disabled={!targetOrgId} />
     </div>

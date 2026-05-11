@@ -1,4 +1,4 @@
-import type { Affiliation, Company, Organization, Person, Position, OperationKind } from '../../types/domain'
+import type { Affiliation, BandOption, Company, Organization, Person, Position, OperationKind } from '../../domain/schemas'
 
 export interface AffDetail {
   aff: Affiliation
@@ -17,6 +17,7 @@ export interface FormSubmitPayload {
 }
 
 export interface BaseFormProps {
+  // エンティティ
   person: Person
   primaryAft: AffDetail | undefined
   concurrentAft: AffDetail[]
@@ -24,6 +25,10 @@ export interface BaseFormProps {
   activeCompanyIds: string[]
   companies: Company[]
   afterOrganizations: Organization[]
+  // マスタ（リポジトリから取得）
+  bands: BandOption[]
+  transferReasons: string[]
+  // コールバック
   onSubmit: (payload: FormSubmitPayload) => void
   onCancel: () => void
 }

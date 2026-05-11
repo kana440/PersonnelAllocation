@@ -3,7 +3,7 @@ import type { BaseFormProps } from './types'
 import { BandSelector, FormFooter, FromCard, MetaSection, OrgSelect, TitleRow } from './parts'
 
 export function MoveToOrgForm({
-  person, primaryAft, afterOrganizations, onSubmit, onCancel,
+  person, primaryAft, afterOrganizations, bands, transferReasons, onSubmit, onCancel,
 }: BaseFormProps) {
   const companyId = primaryAft?.company.id ?? ''
   const [targetOrgId,    setTargetOrgId]    = useState('')
@@ -64,6 +64,7 @@ export function MoveToOrgForm({
                   value={targetBand} onChange={setTargetBand}
                   activeColor="border-blue-400 bg-blue-100 text-blue-700"
                   currentBand={currentBand}
+                  bands={bands}
                 />
               </div>
             </>
@@ -76,6 +77,7 @@ export function MoveToOrgForm({
         transferReason={transferReason} onTransferReason={setTransferReason}
         memo={memo} onMemo={setMemo}
         promotionSign={promotionSign} onPromotionSign={setPromotionSign}
+        transferReasons={transferReasons}
       />
       <FormFooter onCancel={onCancel} onSubmit={handleSubmit} disabled={!targetOrgId} />
     </div>

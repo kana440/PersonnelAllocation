@@ -3,7 +3,7 @@ import type { BaseFormProps } from './types'
 import { CompanyBtn, FormFooter, FromCard, MetaSection } from './parts'
 
 export function RecallFromSecondmentForm({
-  person, afterDetails, activeCompanyIds, companies, onSubmit, onCancel,
+  person, afterDetails, activeCompanyIds, companies, transferReasons, onSubmit, onCancel,
 }: BaseFormProps) {
   const [targetCompanyId, setTargetCompanyId] = useState('')
   const [transferReason,  setTransferReason]  = useState('')
@@ -12,7 +12,9 @@ export function RecallFromSecondmentForm({
   const secondments = afterDetails.filter(d =>
     d.aff.employmentType === '出向' || d.aff.secondmentSourceCompanyId
   )
-  const displayItems = secondments.length ? secondments : afterDetails.filter(d => d.aff.type === 'primary')
+  const displayItems = secondments.length
+    ? secondments
+    : afterDetails.filter(d => d.aff.type === 'primary')
 
   const handleSubmit = () => {
     const cmp = companies.find(c => c.id === targetCompanyId)
@@ -55,6 +57,7 @@ export function RecallFromSecondmentForm({
         transferReason={transferReason} onTransferReason={setTransferReason}
         memo={memo} onMemo={setMemo}
         promotionSign={false} onPromotionSign={() => {}}
+        transferReasons={transferReasons}
       />
       <FormFooter onCancel={onCancel} onSubmit={handleSubmit} disabled={!targetCompanyId} />
     </div>

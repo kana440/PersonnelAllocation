@@ -3,16 +3,17 @@ import type { BaseFormProps } from './types'
 import { BandSelector, CompanyBtn, FormFooter, FromCard, MetaSection, OrgSelect, TitleRow } from './parts'
 
 export function AddConcurrentForm({
-  person, primaryAft, concurrentAft, companies, afterOrganizations, onSubmit, onCancel,
+  person, primaryAft, concurrentAft, companies, afterOrganizations,
+  bands, transferReasons, onSubmit, onCancel,
 }: BaseFormProps) {
-  const [targetCompanyId,       setTargetCompanyId]       = useState(primaryAft?.company.id ?? '')
-  const [targetOrgId,           setTargetOrgId]           = useState('')
-  const [targetBand,            setTargetBand]            = useState(primaryAft?.aff.individualBand ?? primaryAft?.pos.band ?? 'B4')
-  const [targetTitle,           setTargetTitle]           = useState('兼務')
-  const [targetFreeTitle,       setTargetFreeTitle]       = useState('')
+  const [targetCompanyId,        setTargetCompanyId]        = useState(primaryAft?.company.id ?? '')
+  const [targetOrgId,            setTargetOrgId]            = useState('')
+  const [targetBand,             setTargetBand]             = useState(primaryAft?.aff.individualBand ?? primaryAft?.pos.band ?? 'B4')
+  const [targetTitle,            setTargetTitle]            = useState('兼務')
+  const [targetFreeTitle,        setTargetFreeTitle]        = useState('')
   const [targetConcurrentReason, setTargetConcurrentReason] = useState('')
-  const [transferReason,        setTransferReason]        = useState('')
-  const [memo,                  setMemo]                  = useState('')
+  const [transferReason,         setTransferReason]         = useState('')
+  const [memo,                   setMemo]                   = useState('')
 
   const currentBand = primaryAft?.aff.individualBand ?? primaryAft?.pos.band
   const orgs = afterOrganizations.filter(o =>
@@ -43,9 +44,7 @@ export function AddConcurrentForm({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <FromCard title="本務（引継元）" items={primaryAft ? [primaryAft] : []} />
-          {concurrentAft.length > 0 && (
-            <FromCard title="既存兼務" items={concurrentAft} />
-          )}
+          {concurrentAft.length > 0 && <FromCard title="既存兼務" items={concurrentAft} />}
           <div>
             <div className="text-gray-500 mb-1 text-xs">+ 兼務先会社</div>
             <div className="flex flex-wrap gap-1">
@@ -77,6 +76,7 @@ export function AddConcurrentForm({
                   value={targetBand} onChange={setTargetBand}
                   activeColor="border-purple-400 bg-purple-100 text-purple-700"
                   currentBand={currentBand}
+                  bands={bands}
                 />
               </div>
               <div>
@@ -98,11 +98,9 @@ export function AddConcurrentForm({
         transferReason={transferReason} onTransferReason={setTransferReason}
         memo={memo} onMemo={setMemo}
         promotionSign={false} onPromotionSign={() => {}}
+        transferReasons={transferReasons}
       />
-      <FormFooter
-        onCancel={onCancel} onSubmit={handleSubmit}
-        disabled={!targetCompanyId || !targetOrgId}
-      />
+      <FormFooter onCancel={onCancel} onSubmit={handleSubmit} disabled={!targetCompanyId || !targetOrgId} />
     </div>
   )
 }

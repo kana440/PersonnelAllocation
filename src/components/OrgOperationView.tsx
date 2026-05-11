@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
+import type { Position } from '../types/domain'
 
 const BAND_ORDER  = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
 const TITLE_ORDER = [
@@ -7,9 +8,9 @@ const TITLE_ORDER = [
   '本部長', '副本部長', '部長', '副部長', '課長', '副課長', '係長', '主任', '担当', '',
 ]
 
-type SortMode     = 'band' | 'title' | 'manual'
-type CanvasMode   = '組織図' | 'レポートライン'
-type ViewState    = 'after' | 'after-diff' | 'before'
+type SortMode   = 'band' | 'title' | 'manual'
+type CanvasMode = '組織図' | 'レポートライン'
+type ViewState  = 'after' | 'after-diff' | 'before'
 
 interface DragData {
   personId: string
@@ -19,7 +20,17 @@ interface DragData {
   source?: 'before' | 'after'
 }
 
-interface OrgBoxProps        { orgId: string; depth?: number }
+interface PendingFill {
+  personId:          string
+  personName:        string
+  positionId:        string
+  positionTitle:     string
+  positionBand:      string
+  orgName:           string
+  positionCompanyId: string
+}
+
+interface OrgBoxProps           { orgId: string; depth?: number }
 interface CollapsedOrgChipProps { orgId: string }
 
 const ORG_PALETTE = [
@@ -45,22 +56,22 @@ export function OrgOperationView() {
     selectedPersonId, selectPerson,
   } = store
 
-  const [dragOverOrgId, setDragOverOrgId]       = useState<string | null>(null)
-  const [highlightedOrgId, setHighlightedOrgId] = useState<string | null>(null)
-  const [expandedChipIds, setExpandedChipIds]   = useState<Set<string>>(new Set())
-  const [canvasMode, setCanvasMode]             = useState<CanvasMode>('組織図')
-  const [viewState, setViewState]               = useState<ViewState>('after')
-  const [orgSortModes, setOrgSortModes]         = useState<Record<string, SortMode>>({})
-  const [orgManualOrders, setOrgManualOrders]   = useState<Record<string, string[]>>({})
-  const [reorderDropTarget, setReorderDropTarget] = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
-  const [openSortDropdown, setOpenSortDropdown] = useState<string | null>(null)
+  const [dragOverOrgId,      setDragOverOrgId]      = useState<string | null>(null)
+  const [dragOverVacantPosId, setDragOverVacantPosId] = useState<string | null>(null)
+  const [pendingFill,         setPendingFill]         = useState<PendingFill | null>(null)
+  const [highlightedOrgId,   setHighlightedOrgId]   = useState<string | null>(null)
+  const [expandedChipIds,    setExpandedChipIds]    = useState<Set<string>>(new Set())
+  const [canvasMode,         setCanvasMode]         = useState<CanvasMode>('組織図')
+  const [viewState,          setViewState]          = useState<ViewState>('after')
+  const [orgSortModes,       setOrgSortModes]       = useState<Record<string, SortMode>>({})
+  const [orgManualOrders,    setOrgManualOrders]    = useState<Record<string, string[]>>({})
+  const [reorderDropTarget,  setReorderDropTarget]  = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
+  const [openSortDropdown,   setOpenSortDropdown]   = useState<string | null>(null)
 
-  // Derive data based on viewState
-  const isBefore  = viewState === 'before'
+  const isBefore    = viewState === 'before'
   const isAfterDiff = viewState === 'after-diff'
-  const viewAffs  = isBefore ? beforeAffiliations : afterAffiliations
-  const viewPos   = isBefore ? beforePositions    : afterPositions
-  // Navigation orgs: before uses static (includes soon-abolished), after uses derived (excludes abandoned)
+  const viewAffs    = isBefore ? beforeAffiliations : afterAffiliations
+  const viewPos     = isBefore ? beforePositions    : afterPositions
   const organizations = isBefore ? staticOrgs : allAfterOrgs.filter(o => !o.isAbandoned)
 
   if (!focusedOrgId) {
@@ -73,7 +84,6 @@ export function OrgOperationView() {
 
   const focusedOrg = organizations.find(o => o.id === focusedOrgId)
 
-  // Handle case: focused on a new org that doesn't exist in before state
   if (!focusedOrg && isBefore) {
     const afterOrg = allAfterOrgs.find(o => o.id === focusedOrgId)
     const parentId = afterOrg?.parentId
@@ -117,7 +127,14 @@ export function OrgOperationView() {
         x.person != null && x.pos != null
       )
 
-  // Origin org name (shown in after view to indicate where person came from)
+  // 空席ポジション（発令後ビューのみ）
+  const getVacantPositionsInOrg = (orgId: string): Position[] => {
+    if (isBefore) return []
+    return viewPos
+      .filter(p => p.orgId === orgId)
+      .filter(p => !viewAffs.some(a => a.positionId === p.id && a.status === 'active'))
+  }
+
   const getBeforeOrgName = (personId: string, currentOrgId: string): string | null => {
     if (isBefore) return null
     const bAff = beforeAffiliations.find(a => {
@@ -130,7 +147,6 @@ export function OrgOperationView() {
     return bPos ? (staticOrgs.find(o => o.id === bPos.orgId)?.name ?? null) : null
   }
 
-  // Departed persons (for diff view)
   const getDepartedPersons = (orgId: string) => {
     if (!isAfterDiff) return []
     return beforeAffiliations
@@ -152,7 +168,6 @@ export function OrgOperationView() {
       )
   }
 
-  // Confirmation status (for before view)
   const getConfirmStatus = (personId: string, companyId: string): 'changed' | 'no-change' | 'unconfirmed' => {
     const hasOp = operations.some(o =>
       o.params.personId === personId && (
@@ -167,7 +182,7 @@ export function OrgOperationView() {
     return 'unconfirmed'
   }
 
-  // ── Sort helpers ───────────────────────────────────────────────
+  // ── Sort helpers ──────────────────────────────────────────────
   const getSortedPersons = (orgId: string, list: ReturnType<typeof getPersonsInOrg>, overrideOrders?: Record<string, string[]>) => {
     const mode = orgSortModes[orgId] ?? 'band'
     if (mode === 'band') return [...list].sort((a, b) => BAND_ORDER.indexOf(b.pos.band ?? 'B4') - BAND_ORDER.indexOf(a.pos.band ?? 'B4'))
@@ -204,7 +219,7 @@ export function OrgOperationView() {
     })
   }
 
-  // ── Drag handlers ──────────────────────────────────────────────
+  // ── Drag handlers (person ↔ org) ──────────────────────────────
   const handleDragStart = (e: React.DragEvent, personId: string, fromOrgId: string, fromCompanyId: string, affiliationType: 'primary' | 'concurrent') => {
     const data: DragData = { personId, fromOrgId, fromCompanyId, affiliationType, source: 'after' }
     e.dataTransfer.setData('application/json', JSON.stringify(data))
@@ -259,7 +274,26 @@ export function OrgOperationView() {
     setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
   }
 
-  // ── Sort button ────────────────────────────────────────────────
+  // ── Drop on vacant position → show confirmation ───────────────
+  const handleDropOnVacantPosition = (e: React.DragEvent, pos: Position) => {
+    let data: DragData
+    try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+    const { personId } = data
+    const person = persons.find(p => p.id === personId)
+    const org    = organizations.find(o => o.id === pos.orgId)
+    if (!person || !org) return
+    setPendingFill({
+      personId,
+      personName:        person.name,
+      positionId:        pos.id,
+      positionTitle:     pos.title ?? '担当',
+      positionBand:      pos.band  ?? 'B4',
+      orgName:           org.name,
+      positionCompanyId: pos.companyId,
+    })
+  }
+
+  // ── Sort button ───────────────────────────────────────────────
   const renderSortButton = (orgId: string) => {
     if (isBefore) return null
     const mode  = orgSortModes[orgId] ?? 'band'
@@ -287,7 +321,7 @@ export function OrgOperationView() {
     )
   }
 
-  // ── Person cards ───────────────────────────────────────────────
+  // ── Person cards ──────────────────────────────────────────────
   const renderPersonCards = (orgId: string, companyId: string) => {
     const list     = getPersonsInOrg(orgId)
     if (list.length === 0) return null
@@ -379,6 +413,57 @@ export function OrgOperationView() {
     )
   }
 
+  // ── Vacant position cards (drop targets) ─────────────────────
+  const renderVacantCards = (orgId: string) => {
+    const vacants = getVacantPositionsInOrg(orgId)
+    if (vacants.length === 0) return null
+    return (
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {vacants.map(pos => {
+          const isOver = dragOverVacantPosId === pos.id
+          return (
+            <div
+              key={pos.id}
+              onDragOver={e => {
+                if (!e.dataTransfer.types.includes('application/json')) return
+                e.preventDefault(); e.stopPropagation()
+                setDragOverVacantPosId(pos.id)
+              }}
+              onDragLeave={e => {
+                if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
+                  setDragOverVacantPosId(null)
+              }}
+              onDrop={e => {
+                e.preventDefault(); e.stopPropagation()
+                setDragOverVacantPosId(null)
+                handleDropOnVacantPosition(e, pos)
+              }}
+              className={`relative px-2.5 py-1.5 rounded text-xs select-none border-2 border-dashed min-w-[60px] transition-all ${
+                isOver
+                  ? 'border-green-400 bg-green-50 shadow-md scale-105'
+                  : 'border-gray-300 bg-white hover:border-blue-300 hover:bg-blue-50/30'
+              }`}
+            >
+              {isOver ? (
+                <div className="text-green-600 font-semibold text-center leading-tight py-0.5">
+                  ↓ 割り当て
+                </div>
+              ) : (
+                <>
+                  <div className="text-gray-400 font-medium leading-tight">{pos.title ?? '担当'}</div>
+                  <div className="leading-tight flex items-center gap-1">
+                    <span className="font-medium text-gray-400">{pos.band}</span>
+                    <span className="text-gray-300 text-xs">空席</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   const renderDepartedCards = (orgId: string) => {
     const departed = getDepartedPersons(orgId)
     if (departed.length === 0) return null
@@ -401,17 +486,18 @@ export function OrgOperationView() {
       <div className={`${compact ? 'min-h-6 py-1' : 'min-h-8 py-1.5'} rounded border border-dashed text-xs text-center transition-colors ${
         dragOverOrgId === orgId ? 'border-blue-400 bg-blue-100 text-blue-600' : 'border-gray-300 text-gray-300'
       }`}>
-        {dragOverOrgId === orgId ? 'ここにドロップ' : getPersonsInOrg(orgId).length === 0 && !compact ? 'ドロップで異動' : ''}
+        {dragOverOrgId === orgId ? 'ここにドロップ（新規ポジション作成）' : getPersonsInOrg(orgId).length === 0 && getVacantPositionsInOrg(orgId).length === 0 && !compact ? 'ドロップで異動' : ''}
       </div>
     )
   }
 
-  // ── CollapsedOrgChip ───────────────────────────────────────────
+  // ── CollapsedOrgChip ──────────────────────────────────────────
   const CollapsedOrgChip = ({ orgId }: CollapsedOrgChipProps) => {
     const org = organizations.find(o => o.id === orgId)
     if (!org) return null
     const personsInOrg = getPersonsInOrg(orgId)
     const childOrgIds  = organizations.filter(o => o.parentId === orgId).map(o => o.id)
+    const vacantCount  = getVacantPositionsInOrg(orgId).length
     const isDragOver   = dragOverOrgId === orgId
     const isHighlighted = highlightedOrgId === orgId
     const isExpanded   = expandedChipIds.has(orgId)
@@ -431,6 +517,7 @@ export function OrgOperationView() {
           <span className="text-gray-400">▸</span>
           <span className="font-medium text-gray-700 truncate flex-1">{org.name}</span>
           {personsInOrg.length > 0 && <span className="text-gray-400">{personsInOrg.length}名</span>}
+          {vacantCount > 0 && <span className="text-gray-300 border border-dashed border-gray-300 rounded px-1">{vacantCount}空席</span>}
           {childOrgIds.length > 0 && <span className="text-gray-400">{childOrgIds.length}組織</span>}
           {isDragOver && !isBefore && <span className="text-blue-500">← ドロップ</span>}
         </div>
@@ -454,6 +541,7 @@ export function OrgOperationView() {
         <div className="p-2">
           {renderDepartedCards(orgId)}
           {renderPersonCards(orgId, org.companyId)}
+          {renderVacantCards(orgId)}
           {renderDropZone(orgId)}
           {childOrgIds.length > 0 && <div className="mt-2 space-y-1">{childOrgIds.map(id => <CollapsedOrgChip key={id} orgId={id} />)}</div>}
         </div>
@@ -461,7 +549,7 @@ export function OrgOperationView() {
     )
   }
 
-  // ── OrgBox ─────────────────────────────────────────────────────
+  // ── OrgBox ────────────────────────────────────────────────────
   const OrgBox = ({ orgId, depth = 0 }: OrgBoxProps) => {
     const org = organizations.find(o => o.id === orgId)
     if (!org) return null
@@ -488,6 +576,7 @@ export function OrgOperationView() {
         <div className="p-2">
           {renderDepartedCards(orgId)}
           {renderPersonCards(orgId, org.companyId)}
+          {renderVacantCards(orgId)}
           {renderDropZone(orgId)}
           {childOrgIds.length > 0 && <div className="mt-2 space-y-1">{childOrgIds.map(id => <CollapsedOrgChip key={id} orgId={id} />)}</div>}
         </div>
@@ -495,15 +584,15 @@ export function OrgOperationView() {
     )
   }
 
-  // ── Report line view ───────────────────────────────────────────
+  // ── Report line view ──────────────────────────────────────────
   const ReportLineView = () => {
     const getAllOrgsInTree = (rootId: string): string[] => {
       const result = [rootId]
       organizations.filter(o => o.parentId === rootId).forEach(c => result.push(...getAllOrgsInTree(c.id)))
       return result
     }
-    const orgsInScope  = getAllOrgsInTree(focusedOrgId)
-    const orgColorMap  = Object.fromEntries(orgsInScope.map((id, i) => [id, ORG_PALETTE[i % ORG_PALETTE.length]]))
+    const orgsInScope = getAllOrgsInTree(focusedOrgId)
+    const orgColorMap = Object.fromEntries(orgsInScope.map((id, i) => [id, ORG_PALETTE[i % ORG_PALETTE.length]]))
 
     const getPersonScopeAff = (personId: string) => {
       const aff = viewAffs.find(a => {
@@ -552,12 +641,65 @@ export function OrgOperationView() {
       )
     }
 
+    // 空席ポジション（スコープ内）
+    const vacantPositions = !isBefore
+      ? viewPos
+          .filter(p => orgsInScope.includes(p.orgId))
+          .filter(p => !viewAffs.some(a => a.positionId === p.id && a.status === 'active'))
+      : []
+
     return (
       <div className="p-4">
         {roots.length === 0
           ? <div className="text-gray-400 text-sm text-center py-12">上司情報が設定されていません</div>
           : roots.map(pid => <ReportNode key={pid} personId={pid} />)
         }
+
+        {vacantPositions.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">空席ポジション</div>
+            <div className="flex flex-wrap gap-1.5">
+              {vacantPositions.map(pos => {
+                const org    = organizations.find(o => o.id === pos.orgId)
+                const isOver = dragOverVacantPosId === pos.id
+                return (
+                  <div
+                    key={pos.id}
+                    onDragOver={e => {
+                      if (!e.dataTransfer.types.includes('application/json')) return
+                      e.preventDefault(); e.stopPropagation()
+                      setDragOverVacantPosId(pos.id)
+                    }}
+                    onDragLeave={e => {
+                      if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
+                        setDragOverVacantPosId(null)
+                    }}
+                    onDrop={e => {
+                      e.preventDefault(); e.stopPropagation()
+                      setDragOverVacantPosId(null)
+                      handleDropOnVacantPosition(e, pos)
+                    }}
+                    className={`px-2.5 py-1.5 rounded text-xs border-2 border-dashed transition-all ${
+                      isOver ? 'border-green-400 bg-green-50 scale-105' : 'border-gray-300 bg-white hover:border-blue-300'
+                    }`}
+                  >
+                    {isOver ? (
+                      <div className="text-green-600 font-semibold">↓ 割り当て</div>
+                    ) : (
+                      <>
+                        <div className="text-gray-400 font-medium leading-tight">{pos.title ?? '担当'}</div>
+                        <div className="text-gray-300 leading-tight">
+                          {pos.band}
+                          {org && <span className="ml-1 text-gray-300">{org.name}</span>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -565,7 +707,10 @@ export function OrgOperationView() {
   const VIEW_STATE_LABELS: Record<ViewState, string> = { after: '発令後', 'after-diff': '差分ON', before: '発令前' }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" onDragEnd={() => { setReorderDropTarget(null); setDragOverOrgId(null) }}>
+    <div
+      className="flex flex-col h-full overflow-hidden"
+      onDragEnd={() => { setReorderDropTarget(null); setDragOverOrgId(null); setDragOverVacantPosId(null) }}
+    >
       {/* Header */}
       <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
         {parentOrg && (
@@ -585,7 +730,6 @@ export function OrgOperationView() {
           ))}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Canvas mode */}
           <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
             {(['組織図', 'レポートライン'] as CanvasMode[]).map(mode => (
               <button key={mode} onClick={() => setCanvasMode(mode)}
@@ -594,7 +738,6 @@ export function OrgOperationView() {
               </button>
             ))}
           </div>
-          {/* View state */}
           <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
             {(['after', 'after-diff', 'before'] as ViewState[]).map(vs => (
               <button key={vs} onClick={() => setViewState(vs)}
@@ -607,11 +750,12 @@ export function OrgOperationView() {
               </button>
             ))}
           </div>
-          {!isBefore && canvasMode === '組織図' && <span className="text-xs text-gray-400">Alt+ドロップ=兼務</span>}
+          {!isBefore && canvasMode === '組織図' && (
+            <span className="text-xs text-gray-400">Alt+ドロップ=兼務 / 空席カード⬇=割り当て</span>
+          )}
         </div>
       </div>
 
-      {/* Before view legend */}
       {isBefore && (
         <div className="flex-shrink-0 px-3 py-1 bg-amber-50 border-b border-amber-200 flex items-center gap-3 text-xs">
           <span className="text-amber-700 font-medium">発令前の状態（参照）</span>
@@ -636,6 +780,7 @@ export function OrgOperationView() {
             <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
               {renderDepartedCards(focusedOrgId)}
               {renderPersonCards(focusedOrgId, focusedOrg.companyId)}
+              {renderVacantCards(focusedOrgId)}
               {renderDropZone(focusedOrgId, true)}
             </div>
             <div className="px-3 pb-3 grid grid-cols-2 gap-3">
@@ -644,6 +789,76 @@ export function OrgOperationView() {
           </div>
         )}
       </div>
+
+      {/* ── 空席割り当て確認ダイアログ ─────────────────────────── */}
+      {pendingFill && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
+          onClick={() => setPendingFill(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl border border-gray-200 p-5 w-80"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-sm font-semibold text-gray-800 mb-1">ポジションへ割り当て</div>
+            <div className="text-xs text-gray-500 mb-4 leading-relaxed">
+              <span className="font-medium text-gray-700">{pendingFill.personName}</span> を{' '}
+              <span className="font-medium text-gray-700">{pendingFill.orgName}</span> の{' '}
+              <span className="font-medium text-gray-700">{pendingFill.positionTitle}（{pendingFill.positionBand}）</span>{' '}
+              に割り当てます。どちらの方法で割り当てますか？
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  addOperation({
+                    kind:  'FillVacantPosition',
+                    label: `異動・割り当て：${pendingFill.personName} → ${pendingFill.positionTitle}（${pendingFill.orgName}）`,
+                    params: {
+                      positionId:     pendingFill.positionId,
+                      personId:       pendingFill.personId,
+                      employmentType: '正社員',
+                    },
+                    effectiveDate,
+                  })
+                  setPendingFill(null)
+                  selectPerson(pendingFill.personId)
+                }}
+                className="w-full text-left px-3 py-2.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                <div className="text-xs font-semibold text-blue-700">🔄 異動して割り当て</div>
+                <div className="text-xs text-blue-500 mt-0.5">元のポジションが空席になります</div>
+              </button>
+              <button
+                onClick={() => {
+                  addOperation({
+                    kind:  'FillVacantPosition',
+                    label: `兼務・割り当て：${pendingFill.personName} → ${pendingFill.positionTitle}（${pendingFill.orgName}）`,
+                    params: {
+                      positionId:     pendingFill.positionId,
+                      personId:       pendingFill.personId,
+                      employmentType: '兼務',
+                      asConcurrent:   'true',
+                    },
+                    effectiveDate,
+                  })
+                  setPendingFill(null)
+                  selectPerson(pendingFill.personId)
+                }}
+                className="w-full text-left px-3 py-2.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors"
+              >
+                <div className="text-xs font-semibold text-purple-700">＋ 兼務として割り当て</div>
+                <div className="text-xs text-purple-500 mt-0.5">元のポジションはそのまま残ります</div>
+              </button>
+              <button
+                onClick={() => setPendingFill(null)}
+                className="w-full text-center py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

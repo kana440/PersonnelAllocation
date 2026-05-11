@@ -5,6 +5,7 @@ import { ExcelPreview } from './components/ExcelPreview'
 import { AIChatDrawer } from './components/AIChatDrawer'
 import { SearchPersonPanel } from './components/SearchPersonPanel'
 import { useStore } from './store/useStore'
+import { createMockContainer } from './infrastructure/container'
 
 type BottomTab = 'search' | 'excel'
 
@@ -13,7 +14,9 @@ const BOTTOM_MAX_RATIO = 0.65
 const BOTTOM_DEFAULT = 220
 
 export default function App() {
-  const { effectiveDate, setEffectiveDate, operations, selectedPersonId } = useStore()
+  const { effectiveDate, setEffectiveDate, operations, selectedPersonId, isLoading, loadData } = useStore()
+
+  useEffect(() => { loadData(createMockContainer()) }, [loadData])
 
   const [isTreeOpen, setIsTreeOpen]     = useState(true)
   const [isChatOpen, setIsChatOpen]     = useState(false)
@@ -47,6 +50,10 @@ export default function App() {
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }, [bottomHeight])
+
+  if (isLoading) return (
+    <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
+  )
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
@@ -86,7 +93,7 @@ export default function App() {
         {isTreeOpen ? (
           <div className="flex-shrink-0 w-44 bg-white rounded-lg shadow overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-200 flex-shrink-0">
-              <span className="text-xs font-semibold text-blue-600">組織ツリー</span>
+              <span className="text-xs font-semibold text-blue-600">組織・職務・人物</span>
               <button onClick={() => setIsTreeOpen(false)} title="折りたたむ" className="text-gray-400 hover:text-gray-600 text-xs w-4 h-4 flex items-center justify-center">◀</button>
             </div>
             <div className="flex-1 overflow-hidden p-1.5">
@@ -100,7 +107,7 @@ export default function App() {
             title="ツリーを展開"
           >
             <span className="text-gray-400 text-xs">▶</span>
-            <span className="text-xs font-semibold text-blue-600" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', letterSpacing: '0.08em' }}>ツリー</span>
+            <span className="text-xs font-semibold text-blue-600" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', letterSpacing: '0.08em' }}>組織</span>
           </div>
         )}
 
@@ -140,7 +147,7 @@ export default function App() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            🔍 検索・個人情報
+            💼 ポジション・個人情報
           </button>
           <button
             onClick={() => setBottomTab('excel')}

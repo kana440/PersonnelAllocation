@@ -179,7 +179,11 @@ export function OverviewPanel() {
   const searchResults = orgSearchLower ? [
     ...viewOrgs
       .filter(o => o.name.toLowerCase().includes(orgSearchLower))
-      .map(o => ({ type: 'org' as const, id: o.id, label: o.name, sub: store.companies.find(c => c.id === o.companyId)?.name ?? '' })),
+      .map(o => ({
+        type: 'org' as const, id: o.id, label: o.name,
+        sub: store.companies.find(c => c.id === o.companyId)?.name ?? '',
+        orgId: o.id, personId: undefined as string | undefined,
+      })),
     ...store.persons
       .filter(p => p.name.toLowerCase().includes(orgSearchLower))
       .flatMap(p => {
@@ -187,7 +191,22 @@ export function OverviewPanel() {
         const pos = aff ? viewPos.find(pp => pp.id === aff.positionId) : null
         const org = pos ? viewOrgs.find(o => o.id === pos.orgId) : null
         if (!org) return []
-        return [{ type: 'person' as const, id: p.id, label: p.name, sub: org.name }]
+        return [{ type: 'person' as const, id: p.id, label: p.name, sub: org.name, orgId: org.id, personId: p.id }]
+      }),
+    ...viewPos
+      .filter(p => p.title && p.title.toLowerCase().includes(orgSearchLower))
+      .slice(0, 6)
+      .flatMap(p => {
+        const org = viewOrgs.find(o => o.id === p.orgId)
+        if (!org) return []
+        const aff = viewAffs.find(a => a.positionId === p.id && a.status === 'active')
+        const person = aff ? store.persons.find(pe => pe.id === aff.personId) : undefined
+        return [{
+          type: 'position' as const, id: p.id,
+          label: `${p.title} (${p.band})`,
+          sub: `${org.name}${person ? ` • ${person.name}` : ' • 空席'}`,
+          orgId: org.id, personId: person?.id,
+        }]
       }),
   ] : []
 
@@ -218,12 +237,16 @@ export function OverviewPanel() {
             <button
               key={`${r.type}-${r.id}`}
               onClick={() => {
-                if (r.type === 'org') { focusOrg(r.id) } else { selectPerson(r.id) }
+                focusOrg(r.orgId)
+                if (r.type === 'person') selectPerson(r.id)
+                if (r.type === 'position' && r.personId) selectPerson(r.personId)
                 setOrgSearch('')
               }}
               className="w-full text-left flex items-center gap-1.5 px-1 py-1 rounded hover:bg-blue-50 transition-colors"
             >
-              <span className="text-gray-400 text-xs flex-shrink-0">{r.type === 'org' ? '🏢' : '👤'}</span>
+              <span className="text-gray-400 text-xs flex-shrink-0">
+                {r.type === 'org' ? '🏢' : r.type === 'person' ? '👤' : '💼'}
+              </span>
               <span className="text-xs font-medium text-gray-700 truncate flex-1">{r.label}</span>
               <span className="text-xs text-gray-400 truncate flex-shrink-0">{r.sub}</span>
             </button>

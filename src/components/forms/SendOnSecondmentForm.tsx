@@ -3,7 +3,7 @@ import type { BaseFormProps } from './types'
 import { BandSelector, CompanyBtn, FormFooter, FromCard, MetaSection, OrgSelect, TitleRow } from './parts'
 
 export function SendOnSecondmentForm({
-  person, primaryAft, companies, afterOrganizations, onSubmit, onCancel,
+  person, primaryAft, companies, afterOrganizations, bands, transferReasons, onSubmit, onCancel,
 }: BaseFormProps) {
   const [targetCompanyId, setTargetCompanyId] = useState('')
   const [targetOrgId,     setTargetOrgId]     = useState('')
@@ -72,6 +72,7 @@ export function SendOnSecondmentForm({
                   value={targetBand} onChange={setTargetBand}
                   activeColor="border-green-400 bg-green-100 text-green-700"
                   currentBand={currentBand}
+                  bands={bands}
                 />
               </div>
             </>
@@ -84,11 +85,9 @@ export function SendOnSecondmentForm({
         transferReason={transferReason} onTransferReason={setTransferReason}
         memo={memo} onMemo={setMemo}
         promotionSign={false} onPromotionSign={() => {}}
+        transferReasons={transferReasons}
       />
-      <FormFooter
-        onCancel={onCancel} onSubmit={handleSubmit}
-        disabled={!targetCompanyId || !targetOrgId}
-      />
+      <FormFooter onCancel={onCancel} onSubmit={handleSubmit} disabled={!targetCompanyId || !targetOrgId} />
     </div>
   )
 }

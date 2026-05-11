@@ -26,7 +26,7 @@ const ACTIONS: { kind: ActionKind; label: string; desc: string; symbol: string; 
 const OP_LABELS: Partial<Record<OperationKind, string>> = {
   MoveToOrg: '分掌異動', AddConcurrent: '兼務追加', RemoveConcurrent: '兼務解除',
   SetManager: '上司変更', Promote: '昇降格', SendOnSecondment: '出向',
-  RecallFromSecondment: '出向解除',
+  RecallFromSecondment: '出向解除', FillVacantPosition: '担当者割り当て',
 }
 const OP_COLORS: Partial<Record<OperationKind, string>> = {
   RecallFromSecondment: 'bg-red-50 border-red-200 text-red-800',
@@ -35,8 +35,24 @@ const OP_COLORS: Partial<Record<OperationKind, string>> = {
   AddConcurrent:        'bg-purple-50 border-purple-200 text-purple-800',
   RemoveConcurrent:     'bg-orange-50 border-orange-200 text-orange-800',
   Promote:              'bg-yellow-50 border-yellow-200 text-yellow-800',
+  FillVacantPosition:   'bg-teal-50 border-teal-200 text-teal-800',
 }
 
+// ── ヘルパーコンポーネント ────────────────────────────────────────
+const SecHeader = ({ children }: { children: React.ReactNode }) => (
+  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+    {children}
+  </div>
+)
+
+const InfoRow = ({ label, value }: { label: string; value: string }) => (
+  <div className="flex items-start gap-1.5 text-xs">
+    <span className="text-gray-400 flex-shrink-0 w-20 leading-4">{label}</span>
+    <span className="text-gray-700 leading-4 flex-1">{value}</span>
+  </div>
+)
+
+// ── メインコンポーネント ──────────────────────────────────────────
 export function PersonDetailPanel() {
   const {
     persons, companies, organizations, afterOrganizations,
@@ -45,6 +61,7 @@ export function PersonDetailPanel() {
     selectedPersonId, operations,
     effectiveDate, addOperation, removeOperation,
     focusOrg, clearPersonSelection,
+    bands, transferReasons,
   } = useStore()
 
   const [selectedAction, setSelectedAction] = useState<ActionKind | null>(null)
@@ -68,14 +85,18 @@ export function PersonDetailPanel() {
   const beforeDetails = person ? getAffDetails(person.id, beforeAffiliations, beforePositions) : []
   const afterDetails  = person ? getAffDetails(person.id, afterAffiliations,  afterPositions)  : []
 
-  const allCompanyIds    = [...new Set([...beforeDetails.map(d => d.company.id), ...afterDetails.map(d => d.company.id)])]
-  const activeCompanyIds = afterDetails.map(d => d.company.id)
-
   const primaryAft    = afterDetails.find(d => d.aff.type === 'primary')
   const concurrentAft = afterDetails.filter(d => d.aff.type === 'concurrent')
 
+  const allCompanyIds = [...new Set([...beforeDetails.map(d => d.company.id), ...afterDetails.map(d => d.company.id)])]
+
   const personOps = operations
-    .filter(op => op.params.personId === selectedPersonId)
+    .filter(op => op.params.personId === selectedPersonId || op.params.positionId !== undefined && (() => {
+      // FillVacantPosition は personId でなく positionId から追跡
+      if (op.kind !== 'FillVacantPosition') return false
+      const pos = afterPositions.find(p => p.id === op.params.positionId)
+      return pos && afterAffiliations.some(a => a.positionId === pos.id && a.personId === selectedPersonId)
+    })())
     .sort((a, b) => a.order - b.order)
 
   const handleSubmit = (payload: FormSubmitPayload) => {
@@ -88,40 +109,62 @@ export function PersonDetailPanel() {
     primaryAft,
     concurrentAft,
     afterDetails,
-    activeCompanyIds,
+    activeCompanyIds: afterDetails.map(d => d.company.id),
     companies,
     afterOrganizations,
+    bands,
+    transferReasons,
     onSubmit: handleSubmit,
     onCancel: () => setSelectedAction(null),
   }
 
-  const AffLine = ({ d }: { d: AffDetail }) => (
-    <div className="text-xs">
-      <span className="text-gray-400 mr-1">{d.company.name}</span>
-      <button
-        onClick={() => focusOrg(d.org.id)}
-        className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-      >
-        {d.org.name}
-      </button>
-      <span className="text-gray-500 ml-1">{d.aff.freeTitle ?? d.pos.title}</span>
-      <span className={`ml-1 font-medium ${d.aff.type === 'primary' ? 'text-blue-600' : 'text-green-600'}`}>
-        {d.aff.individualBand ?? d.pos.band}
-      </span>
-      {d.aff.salaryGrade && <span className="text-gray-400 ml-0.5">({d.aff.salaryGrade})</span>}
-      {d.aff.type === 'concurrent' && <span className="ml-1 text-purple-500">兼務</span>}
-      {d.aff.employmentType && d.aff.employmentType !== '正社員' && (
-        <span className="ml-1 text-orange-500">{d.aff.employmentType}</span>
-      )}
+  const activeAction = selectedAction ? ACTIONS.find(a => a.kind === selectedAction) : null
+
+  // ポジション情報カード（primary / concurrent 共通）
+  const PositionCard = ({ d, isBefore = false }: { d: AffDetail; isBefore?: boolean }) => (
+    <div className={`rounded px-2 py-1.5 border ${
+      isBefore     ? 'bg-gray-50 border-gray-200 opacity-60' :
+      d.aff.type === 'primary'    ? 'bg-blue-50 border-blue-100' :
+                                    'bg-purple-50 border-purple-100'
+    }`}>
+      <div className="flex items-center gap-1 text-xs text-gray-500 mb-0.5">
+        {d.aff.type === 'concurrent' && !isBefore && (
+          <span className="text-purple-600 font-semibold">兼</span>
+        )}
+        <span>{d.company.name}</span>
+        <span className="text-gray-300">›</span>
+        <button
+          onClick={() => !isBefore && focusOrg(d.org.id)}
+          className={`font-medium truncate max-w-[80px] ${
+            isBefore ? 'text-gray-500 cursor-default' :
+            d.aff.type === 'primary' ? 'text-blue-600 hover:underline' : 'text-purple-600 hover:underline'
+          }`}
+          title={d.org.name}
+        >
+          {d.org.name}
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-gray-700 truncate flex-1">
+          {d.aff.freeTitle ?? d.pos.title ?? '担当'}
+        </span>
+        <span className={`text-sm font-bold flex-shrink-0 ${
+          isBefore     ? 'text-gray-500' :
+          d.aff.type === 'primary' ? 'text-blue-700' : 'text-purple-700'
+        }`}>
+          {d.aff.individualBand ?? d.pos.band}
+        </span>
+        {d.aff.salaryGrade && (
+          <span className="text-xs text-gray-400 flex-shrink-0">({d.aff.salaryGrade})</span>
+        )}
+      </div>
     </div>
   )
-
-  const activeAction = selectedAction ? ACTIONS.find(a => a.kind === selectedAction) : null
 
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Left: person info + operations list ─────────────── */}
+      {/* ── Left: SF 順 詳細 + 手順 ─────────────────────────────── */}
       <div className="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col overflow-hidden">
 
         {/* Header */}
@@ -147,84 +190,123 @@ export function PersonDetailPanel() {
 
         {!person ? (
           <div className="flex-1 flex items-center justify-center text-gray-400 text-xs text-center px-4">
-            組織図の人カードをクリックするか<br />左の検索欄で人名を入力してください
+            組織図の人カードをクリックするか<br />ポジション一覧から選択してください
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto min-h-0">
 
-            {/* Before / After affiliations */}
-            <div className="px-3 pt-3 space-y-2">
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-blue-300 inline-block" />発令前
-                </div>
-                {beforeDetails.length === 0
-                  ? <div className="text-xs text-gray-400 pl-3">所属なし</div>
-                  : <div className="space-y-0.5 pl-3">{beforeDetails.map(d => <AffLine key={d.aff.id} d={d} />)}</div>
-                }
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />発令後
-                </div>
-                {afterDetails.length === 0
-                  ? <div className="text-xs text-gray-400 pl-3">所属なし</div>
-                  : <div className="space-y-0.5 pl-3">{afterDetails.map(d => <AffLine key={d.aff.id} d={d} />)}</div>
-                }
-              </div>
-
-              {/* Diff summary */}
-              {allCompanyIds.length > 0 && (
-                <div className="border-t border-gray-100 pt-2">
-                  {allCompanyIds.map(cid => {
-                    const company = companies.find(c => c.id === cid)
-                    const before  = beforeDetails.find(d => d.company.id === cid)
-                    const after   = afterDetails.find(d => d.company.id === cid)
-                    const isNew     = !before && !!after
-                    const isEnded   = !!before && !after
-                    const isChanged = !!before && !!after && (
-                      before.org.id !== after.org.id ||
-                      before.pos.band !== after.pos.band ||
-                      before.pos.title !== after.pos.title
-                    )
-                    if (!isNew && !isEnded && !isChanged) return null
-                    return (
-                      <div key={cid} className={`flex items-center gap-2 text-xs rounded px-2 py-1 mb-1 ${
-                        isNew ? 'bg-green-50' : isEnded ? 'bg-red-50' : 'bg-yellow-50'
-                      }`}>
-                        <span className="text-gray-500 flex-shrink-0">{company?.name}</span>
-                        <div className="flex-1 min-w-0">
-                          {before && (
-                            <span className={isEnded || isChanged ? 'line-through text-gray-400' : ''}>
-                              {before.org.name} {before.aff.individualBand ?? before.pos.band}
-                            </span>
-                          )}
-                          {(isChanged || isNew) && after && (
-                            <>
-                              {isChanged && <span className="mx-1 text-gray-400">→</span>}
-                              <span className={isNew ? 'text-green-700 font-medium' : 'text-yellow-700 font-medium'}>
-                                {after.org.name} {after.aff.individualBand ?? after.pos.band}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        <span className={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${
-                          isNew ? 'bg-green-100 text-green-700' : isEnded ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>{isNew ? '新規' : isEnded ? '終了' : '変更'}</span>
-                      </div>
-                    )
-                  })}
+            {/* ── 1. ポジション情報 ── */}
+            <div className="px-3 pt-3">
+              <SecHeader>ポジション情報</SecHeader>
+              {afterDetails.length === 0 ? (
+                <div className="text-xs text-gray-400">発令後のポジションなし</div>
+              ) : (
+                <div className="space-y-1">
+                  {afterDetails.map(d => <PositionCard key={d.aff.id} d={d} />)}
                 </div>
               )}
             </div>
 
-            {/* This person's operations */}
-            <div className="px-3 pt-3 pb-3">
-              <div className="text-xs font-semibold text-gray-500 mb-1.5">
-                積み重ね手順 <span className="text-gray-300 font-normal">({personOps.length}件)</span>
+            {/* ── 2. 職務情報 ── */}
+            {primaryAft && (
+              <div className="px-3 pt-3">
+                <SecHeader>職務情報</SecHeader>
+                <div className="space-y-0.5">
+                  <InfoRow label="雇用形態" value={primaryAft.aff.employmentType ?? '正社員'} />
+                  <InfoRow label="開始日"   value={primaryAft.aff.startDate} />
+                  {primaryAft.aff.isOnLeave && (
+                    <div className="text-xs text-orange-600 font-medium">休職中</div>
+                  )}
+                  {primaryAft.aff.secondmentSourceCompanyId && (
+                    <InfoRow
+                      label="出向元"
+                      value={companies.find(c => c.id === primaryAft.aff.secondmentSourceCompanyId)?.name
+                        ?? primaryAft.aff.secondmentSourceCompanyId}
+                    />
+                  )}
+                  {primaryAft.aff.secondmentSourceEmployeeId && (
+                    <InfoRow label="出向元番号" value={primaryAft.aff.secondmentSourceEmployeeId} />
+                  )}
+                </div>
+                {concurrentAft.filter(d => d.aff.concurrentReason).map(d => (
+                  <div key={d.aff.id} className="mt-0.5">
+                    <InfoRow label="兼務理由" value={d.aff.concurrentReason!} />
+                  </div>
+                ))}
               </div>
+            )}
+
+            {/* ── 3. 個人情報 ── */}
+            <div className="px-3 pt-3">
+              <SecHeader>個人情報</SecHeader>
+              <div className="space-y-0.5">
+                <InfoRow label="氏名" value={person.name} />
+                {person.sfPersonId && <InfoRow label="SF社員番号" value={person.sfPersonId} />}
+              </div>
+            </div>
+
+            {/* ── 4. 発令による変更 ── */}
+            {allCompanyIds.some(cid => {
+              const bef = beforeDetails.find(d => d.company.id === cid)
+              const aft = afterDetails.find(d => d.company.id === cid)
+              return !bef || !aft || bef.org.id !== aft.org.id
+                || (bef.aff.individualBand ?? bef.pos.band) !== (aft.aff.individualBand ?? aft.pos.band)
+            }) && (
+              <div className="px-3 pt-3">
+                <SecHeader>発令による変更</SecHeader>
+                <div className="space-y-1">
+                  {allCompanyIds.map(cid => {
+                    const company = companies.find(c => c.id === cid)
+                    const bef = beforeDetails.find(d => d.company.id === cid)
+                    const aft = afterDetails.find(d => d.company.id === cid)
+                    const isNew     = !bef && !!aft
+                    const isEnded   = !!bef && !aft
+                    const isChanged = !!bef && !!aft && (
+                      bef.org.id !== aft.org.id ||
+                      (bef.aff.individualBand ?? bef.pos.band) !== (aft.aff.individualBand ?? aft.pos.band)
+                    )
+                    if (!isNew && !isEnded && !isChanged) return null
+                    return (
+                      <div key={cid} className={`text-xs rounded px-2 py-1 border ${
+                        isNew   ? 'bg-green-50 border-green-200' :
+                        isEnded ? 'bg-red-50 border-red-200'     : 'bg-yellow-50 border-yellow-200'
+                      }`}>
+                        <div className="text-gray-500 mb-0.5 truncate">{company?.name}</div>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {bef && (
+                            <span className={`truncate max-w-[70px] ${isEnded || isChanged ? 'line-through text-gray-400' : ''}`}>
+                              {bef.org.name} {bef.aff.individualBand ?? bef.pos.band}
+                            </span>
+                          )}
+                          {(isChanged || isNew) && aft && (
+                            <>
+                              {isChanged && <span className="text-gray-400 flex-shrink-0">→</span>}
+                              <span className={`truncate max-w-[80px] font-medium ${isNew ? 'text-green-700' : 'text-yellow-700'}`}>
+                                {aft.org.name} {aft.aff.individualBand ?? aft.pos.band}
+                              </span>
+                            </>
+                          )}
+                          <span className={`ml-auto flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${
+                            isNew   ? 'bg-green-100 text-green-700' :
+                            isEnded ? 'bg-red-100 text-red-700'     : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {isNew ? '新規' : isEnded ? '終了' : '変更'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── 5. 積み重ね手順 ── */}
+            <div className="px-3 pt-3 pb-3">
+              <SecHeader>
+                積み重ね手順 <span className="text-gray-300 font-normal normal-case tracking-normal">({personOps.length}件)</span>
+              </SecHeader>
               {personOps.length === 0 ? (
-                <div className="text-xs text-gray-400 pl-3">手順なし</div>
+                <div className="text-xs text-gray-400">手順なし</div>
               ) : (
                 <div className="space-y-1">
                   {personOps.map((op, idx) => {
@@ -254,11 +336,12 @@ export function PersonDetailPanel() {
                 </div>
               )}
             </div>
+
           </div>
         )}
       </div>
 
-      {/* ── Right: form panel ───────────────────────────────── */}
+      {/* ── Right: form panel (unchanged) ───────────────────────── */}
       <div className="flex-1 overflow-y-auto min-w-0 p-3">
         {!person ? (
           <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400">
@@ -286,7 +369,6 @@ export function PersonDetailPanel() {
           </>
         ) : (
           <div className="border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
-            {/* Form header */}
             <div className="flex items-center gap-2 pb-2 mb-2 border-b border-gray-100">
               <span className={`px-2 py-0.5 rounded text-xs font-semibold ${activeAction?.color ?? ''}`}>
                 {activeAction?.symbol} {activeAction?.label}
@@ -294,12 +376,11 @@ export function PersonDetailPanel() {
               <span className="text-gray-500 text-xs truncate flex-1">{person.name}</span>
             </div>
 
-            {/* Render the appropriate form component */}
-            {selectedAction === 'MoveToOrg'            && <MoveToOrgForm           key="move"   {...formProps} />}
-            {selectedAction === 'SendOnSecondment'      && <SendOnSecondmentForm     key="send"   {...formProps} />}
-            {selectedAction === 'RecallFromSecondment'  && <RecallFromSecondmentForm key="recall" {...formProps} />}
-            {selectedAction === 'AddConcurrent'         && <AddConcurrentForm        key="add"    {...formProps} />}
-            {selectedAction === 'RemoveConcurrent'      && <RemoveConcurrentForm     key="remove" {...formProps} />}
+            {selectedAction === 'MoveToOrg'            && <MoveToOrgForm           key="move"    {...formProps} />}
+            {selectedAction === 'SendOnSecondment'      && <SendOnSecondmentForm     key="send"    {...formProps} />}
+            {selectedAction === 'RecallFromSecondment'  && <RecallFromSecondmentForm key="recall"  {...formProps} />}
+            {selectedAction === 'AddConcurrent'         && <AddConcurrentForm        key="add"     {...formProps} />}
+            {selectedAction === 'RemoveConcurrent'      && <RemoveConcurrentForm     key="remove"  {...formProps} />}
             {selectedAction === 'Promote'               && <PromoteForm              key="promote" {...formProps} />}
           </div>
         )}

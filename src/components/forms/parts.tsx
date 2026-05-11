@@ -1,17 +1,24 @@
 import type { AffDetail } from './types'
-import type { Company, Organization } from '../../types/domain'
+import type { BandOption, Company, Organization } from '../../domain/schemas'
 
-export const BANDS = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
+// ── デフォルト値（マスタ未ロード時のフォールバック） ──────────
+// ロード後は store の bands / transferReasons が使われる
+export const DEFAULT_BANDS: BandOption[] = [
+  { id: 'B1', label: 'B1', grade: '1等級', sortOrder: 1 },
+  { id: 'B2', label: 'B2', grade: '2等級', sortOrder: 2 },
+  { id: 'B3', label: 'B3', grade: '3等級', sortOrder: 3 },
+  { id: 'B4', label: 'B4', grade: '4等級', sortOrder: 4 },
+  { id: 'B5', label: 'B5', grade: '5等級', sortOrder: 5 },
+  { id: 'B6', label: 'B6', grade: '6等級', sortOrder: 6 },
+  { id: 'B7', label: 'B7', grade: '7等級', sortOrder: 7 },
+]
 
-export const BAND_GRADE: Record<string, string> = {
-  B7: '7等級', B6: '6等級', B5: '5等級', B4: '4等級',
-  B3: '3等級', B2: '2等級', B1: '1等級',
-}
-
-export const TRANSFER_REASONS = [
+export const DEFAULT_TRANSFER_REASONS = [
   '組織異動', '昇格', '降格', '出向', '出向解除',
   '兼務追加', '兼務解除', '採用', '退職', 'その他',
 ]
+
+// ── 共通サブコンポーネント ─────────────────────────────────────
 
 export function FromCard({ title, items }: { title: string; items: AffDetail[] }) {
   return (
@@ -78,26 +85,28 @@ export function OrgSelect({ label, value, onChange, orgs }: {
   )
 }
 
-export function BandSelector({ value, onChange, currentBand, activeColor }: {
+// bands: リポジトリから取得したマスタ。未提供時はデフォルトにフォールバック。
+export function BandSelector({ value, onChange, currentBand, activeColor, bands = DEFAULT_BANDS }: {
   value: string
   onChange: (b: string) => void
   currentBand?: string
   activeColor: string
+  bands?: BandOption[]
 }) {
   return (
     <div className="flex gap-1 flex-wrap">
-      {BANDS.map(b => (
+      {bands.map(b => (
         <button
-          key={b}
-          onClick={() => onChange(b)}
+          key={b.id}
+          onClick={() => onChange(b.id)}
           className={`px-2 py-0.5 border rounded text-xs font-medium transition-colors leading-none ${
-            value === b ? activeColor
-            : b === currentBand ? 'border-gray-400 bg-gray-100 text-gray-500'
+            value === b.id ? activeColor
+            : b.id === currentBand ? 'border-gray-400 bg-gray-100 text-gray-500'
             : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
           }`}
         >
-          {b}
-          {b === currentBand && (
+          {b.label}
+          {b.id === currentBand && (
             <span className="block text-xs text-gray-400 leading-none">現在</span>
           )}
         </button>
@@ -138,13 +147,20 @@ export function TitleRow({ title, onTitle, freeTitle, onFreeTitle, showFree = fa
   )
 }
 
-export function MetaSection({ transferReason, onTransferReason, memo, onMemo, promotionSign, onPromotionSign }: {
+// transferReasons: リポジトリから取得したマスタ。未提供時はデフォルトにフォールバック。
+export function MetaSection({
+  transferReason, onTransferReason,
+  memo, onMemo,
+  promotionSign, onPromotionSign,
+  transferReasons = DEFAULT_TRANSFER_REASONS,
+}: {
   transferReason: string
   onTransferReason: (v: string) => void
   memo: string
   onMemo: (v: string) => void
   promotionSign: boolean
   onPromotionSign: (v: boolean) => void
+  transferReasons?: string[]
 }) {
   return (
     <div className="border-t border-gray-100 pt-2 space-y-1.5">
@@ -157,7 +173,7 @@ export function MetaSection({ transferReason, onTransferReason, memo, onMemo, pr
             className="w-full border rounded px-2 py-1 text-xs"
           >
             <option value="">— 自動判定 —</option>
-            {TRANSFER_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            {transferReasons.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
         <div className="flex items-end pb-1">
