@@ -16,12 +16,13 @@ export const CompanySchema = z.object({
 })
 
 export const OrganizationSchema = z.object({
-  id:          z.string(),
-  name:        z.string(),
-  companyId:   z.string(),
-  parentId:    z.string().nullable(),
-  level:       z.number().int().min(1),
-  isAbandoned: z.boolean().optional(),
+  id:           z.string(),
+  name:         z.string(),
+  companyId:    z.string(),
+  parentId:     z.string().nullable(),
+  level:        z.number().int().min(1),
+  externalCode: z.string().optional(), // SF department code (= departmentCode in AllocationList)
+  isAbandoned:  z.boolean().optional(),
 })
 
 export const PersonSchema = z.object({
@@ -45,6 +46,7 @@ export const PositionSchema = z.object({
   isTrainingPosition:           z.boolean().optional(),
   isUnionPosition:              z.boolean().optional(),
   isDiscretionaryLaborPosition: z.boolean().optional(),
+  managerPositionCode:          z.string().optional(),  // 上司ポジションコード (SF position code)
 })
 
 export const AffiliationTypeSchema = z.enum(['primary', 'concurrent'])
@@ -62,6 +64,7 @@ export const AffiliationSchema = z.object({
   concurrentReason:            z.string().optional(),
   secondmentSourceCompanyId:   z.string().optional(),
   secondmentSourceEmployeeId:  z.string().optional(),
+  secondmentDestCompanyId:     z.string().optional(),  // 出向先会社
   isOnLeave:                   z.boolean().optional(),
   individualBand:              z.string().optional(),
   salaryGrade:                 z.string().optional(),
