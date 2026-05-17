@@ -3,6 +3,7 @@
 export const CONCURRENT_TYPE = {
   PRIMARY:    '本務',
   CONCURRENT: '兼務',
+  SECONDARY: '出向箱',
 } as const
 
 export type ConcurrentType = typeof CONCURRENT_TYPE[keyof typeof CONCURRENT_TYPE]

@@ -2,6 +2,6 @@
 import type { CodeEntry } from './types'
 
 export interface OfficialPositionEntry extends CodeEntry {
-  isManager?: boolean   // 管理職フラグ: affects HR approval rules
-  rankLevel?: number    // relative rank for promotion/demotion comparison logic
+  isFreeTitle:           boolean  // フリータイトル (役職名を自由入力可)
+  isDiscretionaryTarget: boolean  // 裁量対象サイン
 }

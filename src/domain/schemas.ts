@@ -26,9 +26,11 @@ export const OrganizationSchema = z.object({
 })
 
 export const PersonSchema = z.object({
-  id:          z.string(),
-  name:        z.string(),
-  sfPersonId:  z.string().optional(),
+  id:              z.string(),
+  name:            z.string(),
+  sfPersonId:      z.string().optional(),
+  employeeNumber:  z.string().optional(),
+  groupEmployeeId: z.string().optional(),
 })
 
 export const PositionSchema = z.object({

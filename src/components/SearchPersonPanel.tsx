@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '../store/useStore'
-import { PersonDetailPanel } from './PersonDetailPanel'
 
 const EMP_TYPES = ['正社員', '契約社員', 'パート・アルバイト', '派遣社員', '嘱託']
 
@@ -11,8 +10,31 @@ export function SearchPersonPanel() {
     beforeAffiliations, beforePositions,
     operations, confirmedNoChangeKeys,
     focusedOrgId, selectedPersonId, selectPerson,
-    bands, positionTitles, effectiveDate, addOperation,
+    bands, positionTitles, effectiveDate, addOperation, addNewHire,
   } = useStore()
+
+  // 配置先として選べる組織（未設定・level99 を除く）
+  const selectableOrgs = afterOrganizations.filter(o => o.level < 99 && !o.id.startsWith('unassigned_'))
+
+  // ── 人物追加フォーム ─────────────────────────────────────────
+  const [addPersonOpen, setAddPersonOpen]   = useState(false)
+  const [addPersonName, setAddPersonName]   = useState('')
+  const [addPersonEmp,  setAddPersonEmp]    = useState('')
+  const [addPersonOrg,  setAddPersonOrg]    = useState('')
+  const addPersonNameRef = useRef<HTMLInputElement>(null)
+
+  const handleAddPerson = () => {
+    const name = addPersonName.trim()
+    if (!name) return
+    const org = selectableOrgs.find(o => o.id === addPersonOrg)
+    addNewHire({
+      name,
+      employeeNumber: addPersonEmp.trim() || undefined,
+      orgId:          org?.id,
+      companyId:      org?.companyId,
+    })
+    setAddPersonName(''); setAddPersonEmp(''); setAddPersonOrg(''); setAddPersonOpen(false)
+  }
 
   // ── フォーム状態 ─────────────────────────────────────────────
   const [createFormOpen, setCreateFormOpen] = useState(false)
@@ -106,10 +128,7 @@ export function SearchPersonPanel() {
 
   // ── レンダリング ─────────────────────────────────────────────
   return (
-    <div className="flex h-full overflow-hidden">
-
-      {/* ── Left: position list or summary ──────────────────────── */}
-      <div className="w-64 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50">
+    <div className="flex-shrink-0 w-56 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
         {focusedOrg ? (
           <>
             {/* Org header */}
@@ -272,6 +291,66 @@ export function SearchPersonPanel() {
         ) : (
           /* Summary when no org focused */
           <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-2">
+
+            {/* ── 人物追加 ── */}
+            <div className="rounded border border-gray-200 bg-white p-2.5 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 font-medium">人物追加</span>
+                <button
+                  onClick={() => { setAddPersonOpen(o => !o); setTimeout(() => addPersonNameRef.current?.focus(), 50) }}
+                  className="text-xs px-2 py-0.5 rounded border border-dashed border-blue-400 text-blue-600 hover:bg-blue-50"
+                >
+                  ＋ 追加
+                </button>
+              </div>
+              {addPersonOpen && (
+                <div className="space-y-1.5 pt-1 border-t border-gray-100">
+                  <input
+                    ref={addPersonNameRef}
+                    value={addPersonName}
+                    onChange={e => setAddPersonName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddPerson()}
+                    placeholder="氏名（必須）"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+                  />
+                  <input
+                    value={addPersonEmp}
+                    onChange={e => setAddPersonEmp(e.target.value)}
+                    placeholder="社員番号（任意・SF登録後に付番）"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+                  />
+                  <select
+                    value={addPersonOrg}
+                    onChange={e => setAddPersonOrg(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:border-blue-400"
+                  >
+                    <option value="">配属先組織（任意）</option>
+                    {selectableOrgs.map(o => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-gray-400 leading-relaxed">
+                    組織を選ぶと発令一覧に行が追加されます。
+                  </p>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={handleAddPerson}
+                      disabled={!addPersonName.trim()}
+                      className="flex-1 bg-blue-600 text-white text-xs py-1 rounded hover:bg-blue-700 disabled:opacity-40"
+                    >
+                      追加
+                    </button>
+                    <button
+                      onClick={() => { setAddPersonOpen(false); setAddPersonName(''); setAddPersonEmp(''); setAddPersonOrg('') }}
+                      className="px-2 text-xs text-gray-500 border border-gray-300 rounded bg-white hover:text-gray-700"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="rounded border border-gray-200 bg-white p-2.5 text-xs space-y-1.5">
               <div className="text-gray-500 font-medium">発令サマリー</div>
               <div className="flex items-center justify-between">
@@ -315,20 +394,6 @@ export function SearchPersonPanel() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* ── Right: person detail or placeholder ─────────────────── */}
-      <div className="flex-1 overflow-hidden min-w-0">
-        {selectedPersonId ? (
-          <PersonDetailPanel />
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-gray-400">
-            <span className="text-3xl">👤</span>
-            <span className="text-sm">人物を選択してください</span>
-            <span className="text-xs">組織図または左のポジション一覧から選択</span>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

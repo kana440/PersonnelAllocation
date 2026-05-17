@@ -2,9 +2,12 @@ import type { Repositories } from '../ports'
 import type {
   Person, Company, Organization, Position, Affiliation, Operation, BandOption,
 } from '../domain/schemas'
+import type { AllCodeLists } from '../domain/codeLists/aggregate'
+import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
 import { applyOperations } from '../domain/applyOperations'
 import type { AfterState } from '../domain/applyOperations'
 import { operationRegistry } from '../domain/operations'
+import type { AllocationList } from '../domain/csvImport/allocationList/schema'
 
 // ── ドメインスナップショット ─────────────────────────────────────
 // Zustand・AIどちらもこの型で状態を受け取る
@@ -21,21 +24,25 @@ export interface DomainSnapshot {
   bands:              BandOption[]
   transferReasons:    string[]
   positionTitles:     string[]
+  codeLists:          AllCodeLists
+  rawImportedRows:    AllocationList[]
 }
 
 // ── HRApplicationService ─────────────────────────────────────────
 // Source of Truth。業務状態とロジックをここに集約する。
 // Zustand（UI表示）・AIアダプター（推論・シミュレーション）の両方から参照する。
 export class HRApplicationService {
-  private persons:            Person[]       = []
-  private companies:          Company[]      = []
-  private organizations:      Organization[] = []
-  private beforePositions:    Position[]     = []
-  private beforeAffiliations: Affiliation[]  = []
-  private operations:         Operation[]    = []
-  private bands:              BandOption[]   = []
-  private transferReasons:    string[]       = []
-  private positionTitles:     string[]       = []
+  private persons:            Person[]         = []
+  private companies:          Company[]        = []
+  private organizations:      Organization[]   = []
+  private beforePositions:    Position[]       = []
+  private beforeAffiliations: Affiliation[]    = []
+  private operations:         Operation[]      = []
+  private bands:              BandOption[]     = []
+  private transferReasons:    string[]         = []
+  private positionTitles:     string[]         = []
+  private codeLists:          AllCodeLists     = EMPTY_CODE_LISTS
+  private rawImportedRows:    AllocationList[] = []
 
   private listeners = new Set<() => void>()
 
@@ -69,6 +76,8 @@ export class HRApplicationService {
       bands:              this.bands,
       transferReasons:    this.transferReasons,
       positionTitles:     this.positionTitles,
+      codeLists:          this.codeLists,
+      rawImportedRows:    this.rawImportedRows,
     }
   }
 
@@ -78,6 +87,7 @@ export class HRApplicationService {
       persons, companies, organizations,
       positions, affiliations, operations,
       bands, transferReasons, positionTitles,
+      codeLists,
     ] = await Promise.all([
       repos.persons.getAll(),
       repos.companies.getAll(),
@@ -88,6 +98,7 @@ export class HRApplicationService {
       repos.masters.getBands(),
       repos.masters.getTransferReasons(),
       repos.masters.getPositionTitles(),
+      repos.codeLists.load(),
     ])
 
     this.persons            = persons
@@ -99,6 +110,19 @@ export class HRApplicationService {
     this.bands              = bands
     this.transferReasons    = transferReasons
     this.positionTitles     = positionTitles
+    this.codeLists          = codeLists ?? EMPTY_CODE_LISTS
+
+    console.group('[HRApplicationService] initialize')
+    console.log('persons:', persons.length)
+    console.log('companies:', companies.length, companies)
+    console.log('organizations:', organizations.length, organizations.slice(0,5))
+    console.log('positions:', positions.length)
+    console.log('affiliations:', affiliations.length)
+    const after = this.getSnapshot()
+    console.log('afterPositions:', after.afterPositions.length)
+    console.log('afterAffiliations:', after.afterAffiliations.length)
+    console.log('afterOrganizations:', after.afterOrganizations.length, after.afterOrganizations.slice(0,5))
+    console.groupEnd()
 
     this.emit()
   }
@@ -140,6 +164,59 @@ export class HRApplicationService {
       this.beforeAffiliations, this.beforePositions,
       [...this.operations, tempOp], this.organizations,
     )
+  }
+
+  // ── 人物追加（新規採用など）──────────────────────────────────────
+  // orgId/companyId を指定すると、ポジション＋アフィリエーションも同時に作成し
+  // 発令一覧に行として現れるようにする。省略時は人物のみ追加。
+  addNewHire(data: {
+    name:            string
+    employeeNumber?: string
+    sfPersonId?:     string
+    orgId?:          string
+    companyId?:      string
+  }): void {
+    const personId = `person_${Date.now()}_${this.persons.length}`
+    const person: Person = {
+      id:             personId,
+      name:           data.name,
+      sfPersonId:     data.sfPersonId || undefined,
+      employeeNumber: data.employeeNumber || undefined,
+    }
+    this.persons = [...this.persons, person]
+
+    if (data.orgId && data.companyId) {
+      const posId = `pos_newhire_${personId}`
+      const position: Position = {
+        id: posId, orgId: data.orgId, companyId: data.companyId, isVacant: false,
+      }
+      const aff: Affiliation = {
+        id: `aff_newhire_${personId}`, personId, positionId: posId,
+        type: 'primary', status: 'active', startDate: '',
+      }
+      this.beforePositions    = [...this.beforePositions, position]
+      this.beforeAffiliations = [...this.beforeAffiliations, aff]
+    }
+    this.emit()
+  }
+
+  // ── セッションリセット（MasterSetup に戻るときに呼ぶ）──────────
+  reset(): void {
+    this.persons            = []
+    this.companies          = []
+    this.organizations      = []
+    this.beforeAffiliations = []
+    this.beforePositions    = []
+    this.operations         = []
+    this.codeLists          = EMPTY_CODE_LISTS
+    this.rawImportedRows    = []
+    this.emit()
+  }
+
+  // ── 元 Excel から読み込んだ全行を保存（エクスポートのベースに使用）──
+  setRawImportedRows(rows: AllocationList[]): void {
+    this.rawImportedRows = rows
+    this.emit()
   }
 
   // ── Excelインポート時などに使う状態リセット ──────────────────────

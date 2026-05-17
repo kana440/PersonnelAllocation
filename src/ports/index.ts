@@ -7,6 +7,7 @@ import type {
   Affiliation,
   Operation,
 } from '../domain/schemas'
+import type { AllCodeLists } from '../domain/codeLists/aggregate'
 
 // ── 読み取り専用マスタ ────────────────────────────────────────
 // SF では picklist values / カスタムオブジェクト から取得
@@ -15,6 +16,13 @@ export interface IMasterRepository {
   getBands(): Promise<BandOption[]>
   getTransferReasons(): Promise<string[]>
   getPositionTitles(): Promise<string[]>
+}
+
+// ── コードリスト（参照テーブル）───────────────────────────────
+// IN専用（書き込みはセットアップフローが担う）。
+// 差し替え実装例: LocalStorageCodeListRepository / ApiCodeListRepository / SFPicklistRepository
+export interface ICodeListSource {
+  load(): Promise<AllCodeLists | null>
 }
 
 // ── エンティティ ─────────────────────────────────────────────
@@ -58,4 +66,5 @@ export interface Repositories {
   positions:     IPositionRepository
   affiliations:  IAffiliationRepository
   operations:    IOperationRepository
+  codeLists:     ICodeListSource
 }

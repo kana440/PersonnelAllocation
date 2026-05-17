@@ -25,6 +25,7 @@ export interface MapperInput {
   afterAffiliations:  Affiliation[]
   afterPositions:     Position[]
   effectiveDate:      string
+  rawImportedRows?:   AllocationList[]
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
@@ -195,6 +196,7 @@ export function toAllocationRows(input: MapperInput): AllocationRow[] {
     beforeAffiliations, beforePositions,
     afterAffiliations,  afterPositions,
     effectiveDate,
+    rawImportedRows,
   } = input
 
   const allPersonIds = new Set<string>([
@@ -202,7 +204,7 @@ export function toAllocationRows(input: MapperInput): AllocationRow[] {
     ...afterAffiliations.map(a => a.personId),
   ])
 
-  const rows: AllocationRow[] = []
+  const domainRows: AllocationRow[] = []
   let no = 1
 
   for (const personId of allPersonIds) {
@@ -211,7 +213,6 @@ export function toAllocationRows(input: MapperInput): AllocationRow[] {
 
     const [lastName = person.name, firstName = ''] = person.name.split(' ')
 
-    // Collect all company IDs this person appears in
     const companyIds = new Set<string>();
     [...beforeAffiliations, ...afterAffiliations]
       .filter(a => a.personId === personId)
@@ -233,7 +234,6 @@ export function toAllocationRows(input: MapperInput): AllocationRow[] {
         afterPositions.find(p => p.id === a.positionId)?.companyId === companyId
       )
 
-      // Primary operation for this person/company
       const primaryOp = operations.find((op: Operation) => {
         if (op.params.personId !== personId) return false
         return (
@@ -258,11 +258,11 @@ export function toAllocationRows(input: MapperInput): AllocationRow[] {
           ? 'SFユーザーID未設定'
           : undefined
 
-      rows.push({
+      domainRows.push({
         no:                 String(no++),
         userId:             person.sfPersonId ?? person.id,
-        groupEmployeeId:    undefined,
-        employeeNumber:     undefined,
+        groupEmployeeId:    person.groupEmployeeId,
+        employeeNumber:     person.employeeNumber,
         lastName,
         firstName,
         transferReason:     primaryOp?.transferReason,
@@ -285,12 +285,59 @@ export function toAllocationRows(input: MapperInput): AllocationRow[] {
     }
   }
 
-  return rows.sort((a, b) => {
-    // Changed rows first, then by company, then by name
-    const aChanged = a._meta.operationType !== '変更なし' ? 0 : 1
-    const bChanged = b._meta.operationType !== '変更なし' ? 0 : 1
-    if (aChanged !== bChanged) return aChanged - bChanged
-    if (a._meta.companyId !== b._meta.companyId) return a._meta.companyId.localeCompare(b._meta.companyId)
-    return (a.lastName ?? '').localeCompare(b.lastName ?? '')
+  // rawImportedRows がなければ既存の domain-driven ソートで返す
+  if (!rawImportedRows || rawImportedRows.length === 0) {
+    return domainRows.sort((a, b) => {
+      const aChanged = a._meta.operationType !== '変更なし' ? 0 : 1
+      const bChanged = b._meta.operationType !== '変更なし' ? 0 : 1
+      if (aChanged !== bChanged) return aChanged - bChanged
+      if (a._meta.companyId !== b._meta.companyId) return a._meta.companyId.localeCompare(b._meta.companyId)
+      return (a.lastName ?? '').localeCompare(b.lastName ?? '')
+    })
+  }
+
+  // rawImportedRows を順序のベースとしてマージする
+  // domain 行を userId でキュー化（同一 userId に複数行ある兼務ケースも対応）
+  const byUserId = new Map<string, AllocationRow[]>()
+  domainRows.forEach(r => {
+    const k = r.userId ?? ''
+    if (!byUserId.has(k)) byUserId.set(k, [])
+    byUserId.get(k)!.push(r)
   })
+
+  const result: AllocationRow[] = []
+  let mergedNo = 1
+
+  for (const raw of rawImportedRows) {
+    const k = raw.userId ?? ''
+    const queue = k ? byUserId.get(k) : undefined
+
+    if (queue && queue.length > 0) {
+      // domain 行が存在 → 計算済み状態を使用（FIFO で 1 件消費）
+      result.push({ ...queue.shift()!, no: String(mergedNo++) })
+    } else {
+      // domain に取り込まれなかった行（スキップ行）→ raw データをそのまま出力
+      result.push({
+        ...raw,
+        no: String(mergedNo++),
+        _meta: {
+          personId:      k,
+          companyId:     '',
+          companyName:   '',
+          hasSF:         true,
+          operationType: '変更なし',
+          hasOperation:  false,
+        },
+      })
+    }
+  }
+
+  // raw に存在しない domain 行（UI で追加した新規採用・余剰兼務行）を末尾に追加
+  for (const queue of byUserId.values()) {
+    for (const r of queue) {
+      result.push({ ...r, no: String(mergedNo++) })
+    }
+  }
+
+  return result
 }

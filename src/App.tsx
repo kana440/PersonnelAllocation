@@ -4,29 +4,29 @@ import { OrgOperationView } from './components/OrgOperationView'
 import { ExcelPreview } from './components/ExcelPreview'
 import { AIChatDrawer } from './components/AIChatDrawer'
 import { SearchPersonPanel } from './components/SearchPersonPanel'
+import { PersonDrawer } from './components/PersonDrawer'
+import { MasterSetup } from './components/MasterSetup'
+import { ClearSessionDialog } from './components/ClearSessionDialog'
 import { useStore } from './store/useStore'
-import { createMockContainer } from './infrastructure/container'
-
-type BottomTab = 'search' | 'excel'
+import { useCodeListStore } from './store/codeListStore'
 
 const BOTTOM_MIN = 80
 const BOTTOM_MAX_RATIO = 0.65
 const BOTTOM_DEFAULT = 220
 
 export default function App() {
-  const { effectiveDate, setEffectiveDate, operations, selectedPersonId, isLoading, loadData } = useStore()
+  const { effectiveDate, setEffectiveDate, operations, isLoading } = useStore()
+  const { isChecked, checkStorage } = useCodeListStore()
 
-  useEffect(() => { loadData(createMockContainer()) }, [loadData])
+  // セッション限りのフラグ — MasterSetup が完了したら true になる
+  const [sessionReady, setSessionReady] = useState(false)
 
-  const [isTreeOpen, setIsTreeOpen]     = useState(true)
-  const [isChatOpen, setIsChatOpen]     = useState(false)
-  const [bottomTab, setBottomTab]       = useState<BottomTab>('search')
-  const [bottomHeight, setBottomHeight] = useState(BOTTOM_DEFAULT)
+  useEffect(() => { checkStorage() }, [checkStorage])
 
-  // Auto-switch to search tab when a person is selected
-  useEffect(() => {
-    if (selectedPersonId) setBottomTab('search')
-  }, [selectedPersonId])
+  const [isTreeOpen,      setIsTreeOpen]      = useState(true)
+  const [isChatOpen,      setIsChatOpen]      = useState(false)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_DEFAULT)
 
   // ── Drag-to-resize ────────────────────────────────────────────
   const dragState = useRef<{ startY: number; startH: number } | null>(null)
@@ -50,6 +50,12 @@ export default function App() {
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }, [bottomHeight])
+
+  if (!isChecked) return (
+    <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
+  )
+
+  if (!sessionReady) return <MasterSetup onReady={() => setSessionReady(true)} />
 
   if (isLoading) return (
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
@@ -83,8 +89,22 @@ export default function App() {
             <span>💬</span>
             <span>AI アシスタント</span>
           </button>
+          <button
+            onClick={() => setClearDialogOpen(true)}
+            className="flex items-center gap-1 px-3 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-red-700 hover:text-white transition-colors"
+            title="セッションをクリアして最初から始める"
+          >
+            ↺ クリア
+          </button>
         </div>
       </header>
+
+      {clearDialogOpen && (
+        <ClearSessionDialog
+          onCleared={() => { setClearDialogOpen(false); setSessionReady(false) }}
+          onCancel={() => setClearDialogOpen(false)}
+        />
+      )}
 
       {/* ── Upper area: tree + canvas + chat drawer ───────────────── */}
       <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5 pb-0">
@@ -134,47 +154,14 @@ export default function App() {
 
       {/* ── Bottom panel (full width) ────────────────────────────── */}
       <div
-        className="flex-shrink-0 bg-white rounded-lg shadow mx-1.5 mb-1.5 flex flex-col overflow-hidden"
+        className="flex-shrink-0 bg-white rounded-lg shadow mx-1.5 mb-1.5 flex overflow-hidden"
         style={{ height: bottomHeight }}
       >
-        {/* Tab bar */}
-        <div className="flex-shrink-0 flex items-center border-b border-gray-200 bg-gray-50 px-1">
-          <button
-            onClick={() => setBottomTab('search')}
-            className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors -mb-px ${
-              bottomTab === 'search'
-                ? 'border-blue-500 text-blue-700 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            💼 ポジション・個人情報
-          </button>
-          <button
-            onClick={() => setBottomTab('excel')}
-            className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors -mb-px ${
-              bottomTab === 'excel'
-                ? 'border-blue-500 text-blue-700 bg-white'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            📋 Excel申請書プレビュー
-          </button>
-          <div className="ml-auto pr-2 text-xs text-gray-400">
-            高さ: {Math.round(bottomHeight)}px
-            <button onClick={() => setBottomHeight(BOTTOM_DEFAULT)} className="ml-1 hover:text-gray-600">↺</button>
-          </div>
+        <SearchPersonPanel />
+        <div className="flex-1 overflow-hidden min-w-0">
+          <ExcelPreview />
         </div>
-
-        {/* Tab content */}
-        <div className="flex-1 overflow-hidden min-h-0">
-          {bottomTab === 'search' ? (
-            <SearchPersonPanel />
-          ) : (
-            <div className="h-full overflow-auto">
-              <ExcelPreview />
-            </div>
-          )}
-        </div>
+        <PersonDrawer />
       </div>
 
     </div>

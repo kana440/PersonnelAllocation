@@ -3,6 +3,7 @@ import type { Operation } from '../domain/schemas'
 import type { Repositories } from '../ports'
 import { appService } from '../application/HRApplicationService'
 import type { DomainSnapshot } from '../application/HRApplicationService'
+import type { AllocationList } from '../domain/csvImport/allocationList/schema'
 
 // ── UI専用状態 ───────────────────────────────────────────────────
 interface UIState {
@@ -24,6 +25,9 @@ interface Actions {
   addOperation:    (op: Omit<Operation, 'id' | 'order'>) => void
   removeOperation: (id: string) => void
   confirmNoChange: (personId: string, companyId: string) => void
+  addNewHire: (data: { name: string; employeeNumber?: string; sfPersonId?: string; orgId?: string; companyId?: string }) => void
+  setRawImportedRows: (rows: AllocationList[]) => void
+  reset: () => void
   setEffectiveDate:        (date: string) => void
   setOverviewViewMode:     (mode: 'before' | 'after') => void
   focusOrg:                (orgId: string) => void
@@ -57,11 +61,11 @@ export const useStore = create<AppState>((set) => {
     effectiveDate:         '2025-04-01',
     overviewViewMode:      'before',
     workspaceMode:         'org',
-    focusedOrgId:          'org_a_keiei',
-    beforeFocusedOrgId:    'org_a_keiei',
-    selectedPersonId:      'p_yamada',
+    focusedOrgId:          null,
+    beforeFocusedOrgId:    null,
+    selectedPersonId:      null,
     personPickupViewMode:  'before',
-    memberPanelOrgId:      'org_a_kikaku',
+    memberPanelOrgId:      null,
     confirmedNoChangeKeys: new Set<string>(),
 
     // ── アクション ───────────────────────────────────────────────
@@ -83,6 +87,15 @@ export const useStore = create<AppState>((set) => {
     },
 
     removeOperation: (id) => appService.removeOperation(id),
+
+    addNewHire: (data) => appService.addNewHire(data),
+
+    setRawImportedRows: (rows) => appService.setRawImportedRows(rows),
+
+    reset: () => {
+      appService.reset()
+      set({ confirmedNoChangeKeys: new Set(), selectedPersonId: null, focusedOrgId: null, isLoading: false })
+    },
 
     confirmNoChange: (personId, companyId) =>
       set(state => ({

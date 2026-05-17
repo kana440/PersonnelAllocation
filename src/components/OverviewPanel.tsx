@@ -10,11 +10,19 @@ const CHANGE_DOT: Record<string, string> = {
 
 export function OverviewPanel() {
   const store = useStore()
-  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(
-    new Set(['org_a', 'org_a_keiei', 'org_a_eigyo', 'org_b', 'org_c'])
-  )
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(() => {
+    // ルートおよびその直下まで展開した状態で開始
+    const viewOrgs = store.afterOrganizations.filter(o => !o.isAbandoned)
+    const expanded = new Set<string>()
+    const roots = viewOrgs.filter(o => o.parentId === null)
+    roots.forEach(o => {
+      expanded.add(o.id)
+      viewOrgs.filter(c => c.parentId === o.id).forEach(c => expanded.add(c.id))
+    })
+    return expanded
+  })
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(
-    new Set(['comp_a', 'comp_b', 'comp_c'])
+    () => new Set(store.companies.map(c => c.id))
   )
   const [isDragActive, setIsDragActive]   = useState(false)
   const [dragOverOrgId, setDragOverOrgId] = useState<string | null>(null)
@@ -24,6 +32,7 @@ export function OverviewPanel() {
 
   // Always show after state (non-abandoned orgs)
   const viewOrgs = afterOrganizations.filter(o => !o.isAbandoned)
+
   const viewAffs = store.afterAffiliations
   const viewPos  = store.afterPositions
 
@@ -186,12 +195,15 @@ export function OverviewPanel() {
       })),
     ...store.persons
       .filter(p => p.name.toLowerCase().includes(orgSearchLower))
-      .flatMap(p => {
+      .map(p => {
         const aff = viewAffs.find(a => a.personId === p.id && a.status === 'active' && a.type === 'primary')
         const pos = aff ? viewPos.find(pp => pp.id === aff.positionId) : null
         const org = pos ? viewOrgs.find(o => o.id === pos.orgId) : null
-        if (!org) return []
-        return [{ type: 'person' as const, id: p.id, label: p.name, sub: org.name, orgId: org.id, personId: p.id }]
+        return {
+          type: 'person' as const, id: p.id, label: p.name,
+          sub: org?.name ?? '所属なし',
+          orgId: org?.id ?? '', personId: p.id,
+        }
       }),
     ...viewPos
       .filter(p => p.title && p.title.toLowerCase().includes(orgSearchLower))
@@ -237,7 +249,7 @@ export function OverviewPanel() {
             <button
               key={`${r.type}-${r.id}`}
               onClick={() => {
-                focusOrg(r.orgId)
+                if (r.orgId) focusOrg(r.orgId)
                 if (r.type === 'person') selectPerson(r.id)
                 if (r.type === 'position' && r.personId) selectPerson(r.personId)
                 setOrgSearch('')
@@ -255,27 +267,66 @@ export function OverviewPanel() {
       ) : (
         <>
           <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
-            {store.companies.map(company => {
-              const rootOrgs = viewOrgs.filter(o => o.companyId === company.id && o.parentId === null)
-              if (rootOrgs.length === 0) return null
-              const isOpen = expandedCompanies.has(company.id)
+            {(() => {
+              const knownCompanyIds = new Set(store.companies.map(c => c.id))
+              const extraIds = [...new Set(viewOrgs.map(o => o.companyId))].filter(id => !knownCompanyIds.has(id))
+              const extraCompanies = extraIds.map(id => ({ id, name: id, hasSF: true }))
+              const allCompanies = [...store.companies, ...extraCompanies]
+
+              return allCompanies.map(company => {
+                const rootOrgs = viewOrgs.filter(o => o.companyId === company.id && o.parentId === null)
+                if (rootOrgs.length === 0) return null
+                const isOpen = expandedCompanies.has(company.id)
+                return (
+                  <div key={company.id} className="border border-gray-200 rounded">
+                    <button
+                      onClick={() => toggleCompany(company.id)}
+                      className="w-full flex items-center justify-between px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded transition-colors"
+                    >
+                      <span>{company.name}{!company.hasSF && <span className="ml-1 font-normal text-gray-400">(SF外)</span>}</span>
+                      <span className="text-gray-400">{isOpen ? '▾' : '▸'}</span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-1 py-1">
+                        {rootOrgs.map(org => renderOrgNode(org, 0))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            })()}
+
+            {/* 所属なし（org/position が未設定の人物）*/}
+            {(() => {
+              const allAffPersonIds = new Set([
+                ...store.beforeAffiliations.map(a => a.personId),
+                ...store.afterAffiliations.map(a => a.personId),
+              ])
+              const unassigned = store.persons.filter(p => !allAffPersonIds.has(p.id))
+              if (unassigned.length === 0) return null
               return (
-                <div key={company.id} className="border border-gray-200 rounded">
-                  <button
-                    onClick={() => toggleCompany(company.id)}
-                    className="w-full flex items-center justify-between px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded transition-colors"
-                  >
-                    <span>{company.name}{!company.hasSF && <span className="ml-1 font-normal text-gray-400">(SF外)</span>}</span>
-                    <span className="text-gray-400">{isOpen ? '▾' : '▸'}</span>
-                  </button>
-                  {isOpen && (
-                    <div className="px-1 py-1">
-                      {rootOrgs.map(org => renderOrgNode(org, 0))}
-                    </div>
-                  )}
+                <div className="border border-dashed border-gray-200 rounded">
+                  <div className="px-2 py-1 text-xs font-semibold text-gray-400 bg-gray-50 rounded-t">
+                    所属なし ({unassigned.length})
+                  </div>
+                  <div className="px-1 py-0.5">
+                    {unassigned.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => selectPerson(p.id)}
+                        className={`w-full text-left flex items-center gap-1 py-0.5 px-1 rounded text-xs transition-colors ${
+                          selectedPersonId === p.id ? 'bg-yellow-50 text-gray-800 font-semibold' : 'text-gray-500 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="text-gray-300 flex-shrink-0">—</span>
+                        <span className="truncate">{p.name}</span>
+                        {p.sfPersonId && <span className="text-gray-300 font-mono text-xs flex-shrink-0">{p.sfPersonId}</span>}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )
-            })}
+            })()}
           </div>
           {isDragActive && (
             <div className="flex gap-2 text-xs flex-shrink-0 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mt-1">
