@@ -55,6 +55,9 @@ export function ExcelPreview() {
   const [matchIdx,   setMatchIdx]   = useState(0)
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([])
 
+  // クリック選択・ダブルクリック編集
+  const { persons, selectedPersonId, selectedRowId, selectPerson, selectRow, enterEditMode } = store
+
   // ── 右クリックコンテキストメニュー ──────────────────────────
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
 
@@ -72,20 +75,11 @@ export function ExcelPreview() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [store.organizations, store.afterOrganizations])
 
-  const rows = useMemo(() => toAllocationRows({
-    persons:            store.persons,
-    companies:          store.companies,
-    organizations:      allOrgs,
-    operations:         store.operations,
-    beforeAffiliations: store.beforeAffiliations,
-    beforePositions:    store.beforePositions,
-    afterAffiliations:  store.afterAffiliations,
-    afterPositions:     store.afterPositions,
-    effectiveDate:      store.effectiveDate,
-    rawImportedRows:    store.rawImportedRows,
+  const rows = useMemo(() => toAllocationRows(
+    store.allocationList,
+    allOrgs,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [store.beforeAffiliations, store.beforePositions, store.afterAffiliations, store.afterPositions,
-       store.effectiveDate, store.operations, store.afterOrganizations, store.rawImportedRows])
+  ), [store.allocationList, store.organizations, store.afterOrganizations])
 
   // 検索マッチするインデックス
   const matchIndices = useMemo(() => {
@@ -229,7 +223,17 @@ export function ExcelPreview() {
               const changed = row._meta.operationType !== '変更なし'
               const isMatch = matchIndices.includes(i)
               const isCurrent = isMatch && matchIndices[safeMatchIdx] === i
-              const baseBg  = changed
+
+              // クリック選択状態
+              const matchedPerson = row.userId ? persons.find(p => p.sfPersonId === row.userId) : undefined
+              const isPersonSelected = matchedPerson && selectedPersonId === matchedPerson.id
+              const isRowSelected    = selectedRowId === row.rowId
+
+              const baseBg = isRowSelected
+                ? 'bg-blue-100'
+                : isPersonSelected
+                ? 'bg-yellow-50'
+                : changed
                 ? (i % 2 === 0 ? 'bg-orange-50' : 'bg-orange-100/60')
                 : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50')
               const tdM = `px-2 py-1.5 whitespace-nowrap text-xs ${baseBg}`
@@ -238,16 +242,48 @@ export function ExcelPreview() {
               const v   = (val: string | undefined | null) =>
                 val ? val : <span className="text-gray-300">—</span>
 
+              const handleRowClick = () => {
+                if (!matchedPerson) return
+                selectPerson(matchedPerson.id)
+                selectRow(row.rowId)
+              }
+
+              const handleRowDoubleClick = () => {
+                if (!row.rowId) return
+                enterEditMode(row.rowId)
+              }
+
+              const handleRowDragStart = (e: React.DragEvent) => {
+                if (!matchedPerson) return
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                  personId:        matchedPerson.id,
+                  fromOrgId:       '',   // Excel からは org id 不明のため空
+                  fromCompanyId:   row._meta.companyId ?? '',
+                  affiliationType: 'primary',
+                  source:          'excel',
+                }))
+                e.dataTransfer.effectAllowed = 'move'
+              }
+
               return (
                 <tr
-                  key={`${row._meta.personId}_${row._meta.companyId}`}
+                  key={`${row.userId ?? ''}_${i}_${row._meta.companyId}`}
                   ref={el => { rowRefs.current[i] = el }}
+                  draggable={!!matchedPerson}
+                  onDragStart={handleRowDragStart}
+                  onClick={handleRowClick}
+                  onDoubleClick={handleRowDoubleClick}
                   onContextMenu={e => {
-                    if (!row._meta.personId) return
+                    if (!row.userId) return
                     e.preventDefault()
-                    setContextMenu({ x: e.clientX, y: e.clientY, personId: row._meta.personId })
+                    setContextMenu({ x: e.clientX, y: e.clientY, personId: `p_${row.userId}` })
                   }}
-                  className={`border-b border-gray-200 ${isCurrent ? 'ring-2 ring-inset ring-yellow-400' : isMatch ? 'ring-1 ring-inset ring-yellow-200' : ''}`}
+                  className={`border-b border-gray-200 cursor-pointer ${
+                    isRowSelected    ? 'ring-2 ring-inset ring-blue-400' :
+                    isPersonSelected ? 'ring-1 ring-inset ring-yellow-300' :
+                    isCurrent        ? 'ring-2 ring-inset ring-yellow-400' :
+                    isMatch          ? 'ring-1 ring-inset ring-yellow-200' : ''
+                  }`}
                 >
                   <td className={`${tdM} text-gray-400`}>{row.no}</td>
                   <td className={`${tdM} font-mono text-gray-500`}>{v(row.userId)}</td>

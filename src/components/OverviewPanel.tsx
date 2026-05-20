@@ -101,13 +101,8 @@ export function OverviewPanel() {
     const band   = currentPos?.band ?? 'B4'
     const title  = currentPos?.title ?? '担当'
     const pName  = store.persons.find(p => p.id === personId)?.name ?? ''
-    if (e.altKey) {
-      store.addOperation({ kind: 'AddConcurrent', label: `兼務追加：${toOrg.name} (${pName})`, params: { personId, orgId: toOrgId, companyId: toOrg.companyId, band, title }, effectiveDate: store.effectiveDate })
-    } else if (fromCompanyId !== toOrg.companyId) {
-      store.addOperation({ kind: 'SendOnSecondment', label: `出向：${toOrg.name} (${pName})`, params: { personId, toCompanyId: toOrg.companyId, orgId: toOrgId, band, title }, effectiveDate: store.effectiveDate })
-    } else {
-      store.addOperation({ kind: 'MoveToOrg', label: `組織異動：${toOrg.name} (${pName})`, params: { personId, toOrgId, companyId: fromCompanyId, band, title }, effectiveDate: store.effectiveDate })
-    }
+    // 行エディタからの直接編集に移行予定
+    void toOrg; void band; void title; void pName; void fromCompanyId
   }
 
   // ── Org tree node ─────────────────────────────────────────────

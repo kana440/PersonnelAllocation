@@ -1,266 +1,490 @@
-# データフロー設計書
+# データフロー・データ設計書
 
-## 概要
+## アーキテクチャ概要
 
 ```
 Excel ファイル
     │
     ▼
 [インポート層]   src/infrastructure/excelImport.ts
+    │              AllocationRow[] + OperationGroup[]（自動推定）を生成
+    ▼
+[ドメイン層]    src/domain/
+    │              allocationRow.ts         ← 行の型・before→after コピー
+    │              operationGroups/         ← 操作ハンドラー群（kind ごと）
+    │                apply.ts              ← 純粋関数: rows + groups → computedRows
+    │                parse.ts              ← Excel diff → OperationGroup[] 自動推定
+    ▼
+[アプリケーション層]  src/application/HRApplicationService.ts
+    │              Single Source of Truth の管理者
+    ▼
+[ストア層]      src/store/useStore.ts       ← Zustand（UI との橋渡し）
+    ├──────────────────────────────────────────────────────────────────
+    ▼                                       ▼
+[WebUI 操作]                             [AI 操作]
+ components/forms/ の各フォーム          AIChatDrawer → AI エージェント
+ ↓ addOperation / addOperationGroup      ↓ addOperationGroup（同一 API）
+    └──────────────────────────────────────────────────────────────────
+                            │
+                            ▼ HRApplicationService.addOperationGroup()
+                    operationGroups に追加
+                    applyOperationGroups() で再計算
+                            │
+                            ▼
+[エクスポート層] src/utils/excelIO.ts       ← computedRows → Excel
     │
     ▼
-[ドメイン層]    src/application/HRApplicationService.ts  ← 唯一の真実の源
-    │                                                        （Before 状態 + 操作リスト）
-    ├── applyOperations() → After 状態を毎回計算
-    │
-    ▼
-[ストア層]      src/store/useStore.ts                   ← Zustand（UI との橋渡し）
-    │
-    ▼
-[UI層]         src/components/                          ← 表示・操作
-    │
-    ▼
-[エクスポート層] src/utils/excelIO.ts
-    │
-    ▼
-Excel ファイル（元ファイルの要員配置リストシートを置換）
+Excel ファイル（要員配置リストシートを置換）
 ```
+
+**設計の核心**: WebUI からの編集も AI からの操作も **必ず同一の `addOperationGroup()` を通る**。
+検証・計算ロジックはドメイン層のハンドラーに一元化されており、UI 側に業務ロジックは置かない。
 
 ---
 
-## 1. インポート（Excel → ドメイン）
+## 1. 単一データソース（Single Source of Truth）
+
+`HRApplicationService` が保持する真の状態は 5 つだけ。
+
+```
+allocationList:  AllocationRow[]    ← Excel の before 列（不変）
+operationGroups: OperationGroup[]   ← 操作履歴（Undo/Redo の単位）
+organizations:   Organization[]     ← 組織マスタ（操作で変化しうる）
+companies:       Company[]          ← 会社マスタ
+codeLists:       AllCodeLists       ← 各種コードリスト
+```
+
+その他の状態（`computedRows`, `persons`, `beforePositions`, `afterAffiliations` 等）は
+すべて `getSnapshot()` 内で毎回計算される**派生ビュー**であり、保存されない。
+
+### AllocationRow の構造
+
+```
+AllocationRow = AllocationList（Excelの全列） + { rowId, operationGroupId? }
+
+┌──────────────────────────────────────────────┐
+│  before 列（prev*）    ← Excel 原本。不変     │
+│  prevDepartmentCode                           │
+│  prevBand                                     │
+│  prevEmploymentType ... 等                    │
+├──────────────────────────────────────────────┤
+│  after 列              ← 計算結果で上書き     │
+│  departmentCode                               │
+│  band                                         │
+│  employmentType ... 等                        │
+├──────────────────────────────────────────────┤
+│  メタ列                                       │
+│  rowId（Excel 行番号と対応）                  │
+│  operationGroupId（どの操作に属するか）       │
+└──────────────────────────────────────────────┘
+```
+
+`applyOperationGroups()` は:
+1. after 列 ← before 列のコピーで初期化（"変更なし"がデフォルト）
+2. `operationGroups` を `order` 順に適用して after 列を上書き
+
+Undo は「対象グループを除いて `applyOperationGroups()` を再実行」するだけ。
+
+---
+
+## 2. インポート（Excel → ドメイン）
 
 ### ファイル: `src/infrastructure/excelImport.ts`
 
-#### 処理の流れ
-
 ```
-importFromFile(file)
-  ├── FileReader で ArrayBuffer を読み込む
-  ├── _lastWorkbook / _lastFileName に保存（エクスポート時に再利用）
-  ├── ファイル名から会社名を推定
-  └── importWorkbook(wb, companyName)
-        ├── [1] 各種TBL シート → parseCodeListsFromWorkbook() → AllCodeLists
-        ├── [2] 組織CD一覧 シート → parseOrgMaster() → OrgMasterEntry[]
-        │         → orgMasterToEntities() → { organizations, companies }
-        └── [3] 要員配置リスト シート → parseAllocationSheet() → AllocationList[]
-                  → buildBaseState() → BaseStateFromImport
+importFromFile(file) / importFromUrl(url)
+  │
+  ├── [1] 各種TBL シート → parseCodeListsFromWorkbook() → AllCodeLists
+  ├── [2] 組織CD一覧 シート → parseOrgMaster() → orgMasterToEntities()
+  │         → { organizations, companies }
+  └── [3] 要員配置リスト シート → parseAllocationSheet()
+            → AllocationList[]（before/after 両列を保持）
+            → rowId = 行番号（1始まり）を付与 → AllocationRow[]
+            → parseOperationGroups(rows, effectiveDate)
+                  → OperationGroup[]（before/after 差分から自動推定）
 ```
 
-#### 組織マスタの階層構築（`orgMasterToEntities`）
+### `parseOperationGroups`（`src/domain/operationGroups/parse.ts`）
 
-| 優先度 | 方法 | 条件 |
+Excel の before/after 差分を見て、以下の順で kind を自動判定する。
+判定できない行は `RawDiff` として Excelの after 値をそのまま保持（エラーにしない）。
+
+| パス | 対象 | 判定条件 |
 |---|---|---|
-| ① | `上位組織コード` 列の値を `parentId` に直接使用 | 列が存在し、かつコードがマスタ内に存在する |
-| ② | BU/部門/統括部/グループ の名称一致で親を探す | ① が使えない場合の fallback |
-
-- 1 Excel = 1 社モデル。`companyId = 'imported_company'`（固定）。
-- 組織マスタにないコードが要員配置リストに出てきた場合は `unassigned_imported_company` ノード配下に自動追加。
-
-#### 列の自動検出（`parseOrgMaster`）
-
-最初の 5 行以内でヘッダー行をスキャンし、以下のキーワードで列を特定する。
-
-| 列の意味 | キーワードパターン |
-|---|---|
-| 上位組織コード | `上位組織コード` / `上位コード` / `親組織コード` |
-| 組織コード | `^組織コード$` / `^コード$` |
-| 組織名 | `組織名` / `名称` |
-| 組織レベル | `組織レベル` / `レベル` |
-
-ヘッダーが見つからない場合は `B=コード, C=BU, D=部門, E=統括部, F=グループ, G=チーム, H=レベル` にフォールバック。
-
-#### 要員配置リストのマッピング（`parseAllocationSheet`）
-
-- `ALLOCATION_LIST_FIELDS`（`src/domain/csvImport/allocationList/labels.ts`）の `header` と Excel ヘッダーをスコアマッチングして行を特定。
-- `_新` サフィックスがある列 = After（発令後）状態。ない列 = Before（発令前）状態。
-- `userId`（ユーザー/社員ID）が空の行はスキップ。
-
-#### `buildBaseState`（`src/utils/excelIO.ts`）
-
-各行に対して以下を生成する：
-
-| ドメインエンティティ | 生成ルール |
-|---|---|
-| `Person` | `groupEmployeeId → sfPersonId → 氏名` の順で重複チェック。重複なければ新規作成。 |
-| `Organization` | `prevDepartmentCode`（Before 優先）で org マスタを検索。ない場合は `unassigned_*` 配下に追加。 |
-| `Company` | org に紐づく会社。見つからない場合は placeholder を作成。 |
-| `Position` | `prevPositionCode`（Before 優先）をIDに使用。 |
-| `Affiliation` | `prevConcurrentType === '兼務'` なら concurrent、それ以外は primary。 |
-
-スキップ条件: `prevDepartmentCode / prevPositionCode / prevConcurrentType` と `departmentCode / positionCode / employmentType` がすべて空の行。
+| Pass 1 | `SendOnSecondment` | 同一 userId の 2 行：1 行目は employmentType='出向' に変化、2 行目は prevDeptCode 空で afterDeptCode あり |
+| Pass 2 | `RecallFromSecondment` | 同一 userId の 2 行：1 行目は prevEmploymentType='出向' から戻り、2 行目は出向先行 |
+| Pass 3 | `Hire` | prevDeptCode 空・prevPositionCode 空・afterDeptCode あり |
+| Pass 3 | `AddConcurrent` | prevConcurrentType≠'兼務' → afterConcurrentType='兼務' |
+| Pass 3 | `RemoveConcurrent` | prevConcurrentType='兼務' → afterConcurrentType 空 |
+| Pass 3 | `MoveToOrg` | deptCode が変化、band は変化なし |
+| Pass 3 | `Promote` | band が変化 |
+| Pass 3 | `RawDiff` | 上記に該当しない差分あり行（Excelの after 値を確定値として afterValues に保存） |
 
 ---
 
-## 2. ドメイン状態管理
+## 3. 操作グループ（OperationGroup）の設計
 
-### `HRApplicationService`（`src/application/HRApplicationService.ts`）
-
-アプリ全体で **シングルトン** として機能する唯一の状態管理クラス。
-
-```
-HRApplicationService
-  ├── beforePositions    : Position[]      ← インポート時に確定したポジション
-  ├── beforeAffiliations : Affiliation[]   ← インポート時に確定した在籍情報
-  ├── operations         : Operation[]     ← ユーザーが追加した操作（順序付き）
-  ├── organizations      : Organization[]
-  ├── persons            : Person[]
-  ├── companies          : Company[]
-  └── codeLists          : AllCodeLists
-```
-
-#### After 状態の計算
+### OperationGroup 型
 
 ```typescript
-// getSnapshot() 内
-const after = applyOperations(beforeAffiliations, beforePositions, operations, organizations)
-// → after.positions, after.affiliations, after.organizations
+interface OperationGroup {
+  id:            string            // 一意ID
+  kind:          OperationGroupKind
+  label:         string            // UI 表示用
+  rowIds:        number[]          // 対象 allocationList 行（複数可）
+  order:         number            // 適用順（Undo/Redo の基準）
+  effectiveDate: string            // 発令日
+  params:        Record<string, string>  // ハンドラーが使う入力値
+  afterValues?:  AfterValues       // RawDiff のみ：Excelの after 値を直接保持
+}
 ```
 
-`applyOperations` は毎回全 operations を順番に適用して After 状態を算出する。キャッシュなし。
+### kind 一覧とハンドラー
 
-#### 主要メソッド
+| kind | ハンドラーファイル | rowIds の扱い | Web フォーム |
+|---|---|---|---|
+| `MoveToOrg` | `handlers/moveToOrg.ts` | 1 行（本務行） | `MoveToOrgForm` |
+| `Promote` | `handlers/promote.ts` | 1 行 | `PromoteForm` |
+| `AddConcurrent` | `handlers/addConcurrent.ts` | 0 行（新行を生成） | `AddConcurrentForm` |
+| `RemoveConcurrent` | `handlers/removeConcurrent.ts` | 1 行（兼務行） | `RemoveConcurrentForm` |
+| `SendOnSecondment` | `handlers/sendOnSecondment.ts` | 2 行（本務＋出向先） | `SendOnSecondmentForm` |
+| `RecallFromSecondment` | `handlers/recallFromSecondment.ts` | 1〜2 行 | `RecallFromSecondmentForm` |
+| `Hire` | `handlers/hire.ts` | 0 行（新行を生成） | — (`addNewHire` 経由) |
+| `Retire` | `handlers/retire.ts` | 1 行 | — |
+| `CreateOrg` | `handlers/createOrg.ts` | 0 行（organizations を変更） | — |
+| `AbolishOrg` | `handlers/abolishOrg.ts` | 0 行（organizations を変更） | — |
+| `RawDiff` | `handlers/rawDiff.ts` | N 行 | — （自動生成のみ） |
+| `CreateVacantPosition`、`FillVacantPosition`、`SetManager`、`ChangeSecondment` | なし（RawDiff と同様に動作） | — | `SearchPersonPanel` 内フォーム |
 
-| メソッド | 説明 |
-|---|---|
-| `initialize(repos)` | リポジトリから全データを読み込む |
-| `addOperation(op)` | 操作を追加（preAdd で相殺・置換ルールを適用） |
-| `removeOperation(id)` | 操作を削除 |
-| `addNewHire(data)` | 新規採用：Person + Position + Affiliation を同時に Before 状態に追加 |
-| `loadBaseState(data)` | インポートデータで Before 状態を置換、operations をクリア |
-| `reset()` | 全状態をクリア |
-| `simulate(op)` | 副作用なしで操作追加後の状態を計算 |
+### OperationGroupHandler インターフェース
 
-### Zustand ストア（`src/store/useStore.ts`）
+```typescript
+interface OperationGroupHandler {
+  kind: OperationGroupKind
 
-`HRApplicationService` の変更通知（`subscribe`）を受けて Zustand の状態を同期する。UI が直接 `HRApplicationService` を呼ぶことはない。
+  // 操作適用（純粋関数: ctx を受け取り新しい ctx を返す）
+  apply(ctx: OperationContext, group: OperationGroup): OperationContext
+
+  // 追加前バリデーション・重複排除（省略可）
+  // null    → 対になる既存グループを削除して新規追加しない（相殺）
+  // []以上  → フィルタ済みリストを返し、その後ろに新規追加
+  preAdd?(groups: OperationGroup[], newGroup: Omit<OperationGroup, 'id'|'order'>): OperationGroup[] | null
+}
+```
+
+`preAdd` の使い道：
+- `MoveToOrg`: 同一人物の既存 MoveToOrg を取り消して上書き
+- `AddConcurrent`/`RemoveConcurrent`: ペアを相殺（追加→削除で null を返す）
+
+---
+
+## 4. Web UI の編集フロー
+
+### 操作の起点
+
+ユーザーが人物を選択 → `PersonDetailPanel` が表示 → アクションボタンで対応フォームを開く。
 
 ```
-HRApplicationService.emit() → useStore が set(snapshot) → React 再レンダリング
+左ツリー（OverviewPanel）
+  → 組織クリック → focusOrg → OrgOperationView
+      → 人物ドラッグ&ドロップ → addOperation('MoveToOrg')
+      → 人物クリック → selectPerson → PersonDetailPanel
+          → アクションボタン（分掌異動/出向/兼務追加…）
+              → forms/ 内のフォームコンポーネント
+                  → onSubmit(FormSubmitPayload) → addOperation()
+```
+
+### フォームコンポーネントの構成
+
+```
+src/components/forms/
+├── types.ts                    ← 共通型定義
+│     FormSubmitPayload         ← フォームが返す値（kind, label, params, transferReason…）
+│     BaseFormProps             ← 全フォームが受け取るプロパティ（person, orgs, bands…）
+├── parts.tsx                   ← 共通 UI パーツ（OrgSelect, BandSelector, MetaSection…）
+├── MoveToOrgForm.tsx
+├── PromoteForm.tsx
+├── SendOnSecondmentForm.tsx
+├── RecallFromSecondmentForm.tsx
+├── AddConcurrentForm.tsx
+└── RemoveConcurrentForm.tsx
+```
+
+### バリデーション・保存の責務分担
+
+| 層 | 責務 | 実装箇所 |
+|---|---|---|
+| **フォーム（UI）** | 入力の UI バリデーション（必須項目チェック、選択肢の制限） | 各フォームの `disabled` 条件 と `handleSubmit` 内ガード |
+| **`preAdd`（ドメイン）** | 業務ルールの相殺・重複排除 | `handlers/*.ts` の `preAdd` メソッド |
+| **`apply`（ドメイン）** | after 列への反映ロジック | `handlers/*.ts` の `apply` メソッド |
+| **保存（永続化）** | ブラウザセッション内は `HRApplicationService` のメモリのみ。Excel への保存は明示エクスポート時のみ | `excelIO.ts` の `exportToXlsx` / `buildExportWorkbook` |
+
+> **バリデーションに Zod は使っていない**。UI の `disabled` 制御と `preAdd` の業務ルールで十分なため。
+> フォームが `onSubmit(payload)` を呼ぶと、その後のロジックはすべてドメイン層に移譲する。
+
+### フォーム → ドメインへの接続
+
+```
+PersonDetailPanel.handleSubmit(payload: FormSubmitPayload)
+  └── addOperation({ ...payload, effectiveDate })   ← useStore のアクション
+        └── appService.addOperation(op)
+              ├── params.personId から userId を抽出（旧 'p_xxx' 形式対応）
+              ├── allocationList から rowIds を逆引き
+              └── addOperationGroup({ kind, label, rowIds, effectiveDate, params, afterValues? })
+                    ├── handler.preAdd() でバリデーション・相殺
+                    └── operationGroups に追加 → emit() → Zustand 再同期
 ```
 
 ---
 
-## 3. ドメインの操作体系（Operations）
+## 5. AI が利用する操作 API（Web と共通）
 
-`src/domain/operations/` 配下に操作ハンドラーが登録されている。
+AI エージェント（`AIChatDrawer` → AI バックエンド）も `addOperationGroup()` を直接呼ぶ。
+Web フォームとまったく同一のコードパスを経由するため、
+**業務ルールの実装は一箇所に集中**しており、AI/Web で動作の差異は生まれない。
 
-| 操作種別 (kind) | 内容 |
+```typescript
+// AI が出す命令の例（Web フォームの FormSubmitPayload と同形式）
+store.addOperationGroup({
+  kind:          'MoveToOrg',
+  label:         '分掌異動：田中 太郎',
+  rowIds:        [12],          // allocationList 上の行番号
+  effectiveDate: '2025-04-01',
+  params: {
+    userId:        'U001234',
+    toOrgId:       'ORG_SALES_A',
+    companyId:     'COMPANY_A',
+    transferReason: '要員計画',
+  },
+})
+// → MoveToOrgHandler.preAdd() → apply() → computedRows 更新
+```
+
+AI が利用するインターフェースは以下の 3 つのみ:
+
+| API | 用途 |
 |---|---|
-| `MoveToOrg` | 同一会社内での組織異動 |
-| `SendOnSecondment` | 出向（別会社へ） |
-| `RecallFromSecondment` | 出向戻り |
-| `Promote` | 昇格（band 変更） |
-| `AddConcurrent` | 兼務追加 |
-| `RemoveConcurrent` | 兼務削除 |
-| `CreateVacantPosition` | 空席ポジション作成 |
-| `FillVacantPosition` | 空席ポジションへの人物配置 |
-
-各ハンドラーは `preAdd`（追加前バリデーション/相殺）と `apply`（After 状態への適用）を持つ。
+| `store.addOperationGroup(group)` | 操作を追加 |
+| `store.removeOperationGroup(id)` | 操作を削除（Undo） |
+| `store.getSnapshot()` (= `useStore.getState()`) | 現在の状態を読む |
 
 ---
 
-## 4. エクスポート（ドメイン → Excel）
+## 6. エクスポート（ドメイン → Excel）
 
-### ファイル: `src/utils/excelIO.ts`
+### `toAllocationRows`（`src/utils/allocationListMapper.ts`）
 
-#### 処理の流れ
+```
+applyOperationGroups() で計算済みの computedRows
+  ├── 各行に _meta（operationType, companyName, hasSF…）を付与
+  └── UI 表示用 AllocationRow[] を返す
+```
+
+### `buildExportWorkbook` / `exportToXlsx`（`src/utils/excelIO.ts`）
 
 ```
 exportToXlsx(rows, effectiveDate, originalWorkbook?, originalFileName?)
   └── buildExportWorkbook()
-        ├── EXPORT_FIELDS（labels.ts の header を使用）でシートを組み立て
-        │     行0: グループヘッダー（本人情報 / After / Before / 除外）
-        │     行1: 列ヘッダー（日本語名）
-        │     行2〜: データ
-        ├── originalWorkbook がある場合
-        │     → 元ワークブックを複製し、要員配置リストシートだけ置換
-        │        （他のシート・マクロはそのまま保持）
-        └── ない場合
-              → 新規ワークブックを作成
+        ├── 元シートがある場合
+        │     → 要員配置リストシートのデータ行のみ上書き
+        │        （他シート・マクロ・タイトル行はそのまま保持）
+        └── ない場合 → 新規ワークブックを作成
 ```
 
-#### 「保存してクリア」フロー（`ClearSessionDialog`）
+### 「保存してクリア」フロー（`ClearSessionDialog`）
 
 ```
-buildExportWorkbook() でワークブックを組み立て
+buildExportWorkbook() でワークブック組み立て
   → showSaveFilePicker()（File System Access API）でユーザーが保存先を選択
-      → XLSX.write() で ArrayBuffer 生成
-      → FileSystemWritableFileStream に書き込み
+      → XLSX.write() で ArrayBuffer → FileSystemWritableFileStream に書き込み
       → 成功したら reset() + sessionReady = false
-      → ユーザーがキャンセルした場合（AbortError）は何もしない
-  ※ File System Access API 非対応ブラウザは XLSX.writeFile() でダウンロード
-```
-
-### `toAllocationRows`（`src/utils/allocationListMapper.ts`）
-
-ドメイン状態 → 発令一覧行への変換。
-
-```
-ドメイン状態（persons, beforeAffiliations, afterAffiliations, …）
-  │
-  ├── 各 person の before/after 在籍情報を突き合わせ
-  ├── before → prevXxx 列に配置
-  ├── after → afterXxx 列（_新 サフィックス）に配置
-  └── 操作の種別を申請区分（transferReason）に反映
+      → AbortError（キャンセル）は何もしない
+  ※ 非対応ブラウザ → XLSX.writeFile() でダウンロード
 ```
 
 ---
 
-## 5. メンテナンスポイント
+## 7. 新しい操作種別を追加するとき
+
+新しい `kind`（例: `TransferWithPromotion`）を追加する手順。
+
+### Step 1: ドメイン型に追加
+
+```typescript
+// src/domain/operationGroups/types.ts
+export const OPERATION_GROUP_KINDS = [
+  ...
+  'TransferWithPromotion',   // ← 追加
+] as const
+```
+
+### Step 2: ハンドラーを実装
+
+```typescript
+// src/domain/operationGroups/handlers/transferWithPromotion.ts
+import type { OperationGroupHandler } from '../handler'
+
+export const transferWithPromotionHandler: OperationGroupHandler = {
+  kind: 'TransferWithPromotion',
+
+  apply(ctx, group) {
+    // params から必要な値を取り出し、ctx.rows の after 列を書き換えて返す
+    const { userId, toOrgId, band } = group.params
+    const rows = ctx.rows.map(row => {
+      if (row.userId !== userId) return row
+      return { ...row, departmentCode: toOrgId, band, operationGroupId: group.id }
+    })
+    return { ...ctx, rows }
+  },
+
+  preAdd(groups, newGroup) {
+    // 同一人物の既存 TransferWithPromotion を取り消す例
+    return groups.filter(g =>
+      !(g.kind === 'TransferWithPromotion' && g.params.userId === newGroup.params.userId)
+    )
+  },
+}
+```
+
+### Step 3: レジストリに登録
+
+```typescript
+// src/domain/operationGroups/registry.ts
+import { transferWithPromotionHandler } from './handlers/transferWithPromotion'
+
+export const operationGroupRegistry = new Map<OperationGroupKind, OperationGroupHandler>([
+  ...
+  ['TransferWithPromotion', transferWithPromotionHandler],
+])
+```
+
+### Step 4: Web フォームを追加（UI が必要な場合）
+
+```typescript
+// src/components/forms/TransferWithPromotionForm.tsx
+export function TransferWithPromotionForm({ person, ... , onSubmit, onCancel }: BaseFormProps) {
+  // ...UI 実装...
+  const handleSubmit = () => {
+    onSubmit({
+      kind:   'TransferWithPromotion',
+      label:  `異動昇格: ${person.name}`,
+      params: { personId: person.id, toOrgId, band, companyId },
+    })
+  }
+  return <form>...</form>
+}
+```
+
+```typescript
+// src/components/PersonDetailPanel.tsx
+// ACTIONS 配列に追加すると、アクションボタンが自動で現れる
+const ACTIONS = [
+  ...
+  { kind: 'TransferWithPromotion', label: '異動昇格', ... },
+]
+// activeAction のスイッチに追加
+case 'TransferWithPromotion': return <TransferWithPromotionForm {...formProps} />
+```
+
+### Step 5: OP_LABELS / OP_COLORS / OPERATION_LABELS に追加
+
+```typescript
+// PersonDetailPanel.tsx の OP_LABELS
+// OperationPanel.tsx の OPERATION_LABELS
+'TransferWithPromotion': '異動昇格',
+```
+
+### Step 6（任意）: `parseOperationGroups` に自動推定ロジックを追加
+
+Excel インポート時に自動で `TransferWithPromotion` として分類したい場合は
+`src/domain/operationGroups/parse.ts` の Pass 3 に判定条件を追加する。
+
+---
+
+## 8. ファイルマップ
+
+```
+src/
+├── infrastructure/
+│   ├── excelImport.ts              ← インポーター（3シート対応）
+│   │                                  ImportedWorkbookResult を返す
+│   └── codeLists/
+│       ├── excelParser.ts
+│       └── localStorageRepository.ts
+├── utils/
+│   ├── excelIO.ts                  ← buildExportWorkbook / exportToXlsx / parseXlsx
+│   └── allocationListMapper.ts     ← computedRows + orgs → AllocationRow（_meta付）
+├── domain/
+│   ├── allocationRow.ts            ← AllocationRow 型・BEFORE_AFTER_FIELD_PAIRS・copyBeforeToAfter
+│   ├── operationGroups/
+│   │   ├── types.ts                ← OperationGroup・OperationGroupKind・AfterValues
+│   │   ├── handler.ts              ← OperationGroupHandler インターフェース・OperationContext
+│   │   ├── registry.ts             ← kind → handler のマップ
+│   │   ├── apply.ts                ← applyOperationGroups()（純粋関数）
+│   │   ├── parse.ts                ← parseOperationGroups()（Excel diff → groups 自動推定）
+│   │   ├── snapshot.ts             ← derivePersons / derivePositions 等（後方互換ビュー）
+│   │   └── handlers/
+│   │       ├── moveToOrg.ts
+│   │       ├── promote.ts
+│   │       ├── addConcurrent.ts
+│   │       ├── removeConcurrent.ts
+│   │       ├── sendOnSecondment.ts
+│   │       ├── recallFromSecondment.ts
+│   │       ├── hire.ts
+│   │       ├── retire.ts
+│   │       ├── createOrg.ts
+│   │       ├── abolishOrg.ts
+│   │       └── rawDiff.ts
+│   ├── codeLists/
+│   │   ├── orgMaster.ts
+│   │   └── aggregate.ts
+│   └── csvImport/allocationList/
+│       ├── labels.ts               ← ALLOCATION_LIST_FIELDS（列定義の中心）
+│       └── schema.ts               ← AllocationList Zod スキーマ
+├── application/
+│   └── HRApplicationService.ts    ← 単一 Source of Truth・addOperationGroup・getSnapshot
+├── store/
+│   └── useStore.ts                 ← Zustand（AppState = DomainSnapshot + UIState + Actions）
+└── components/
+    ├── MasterSetup.tsx             ← インポート画面
+    ├── OverviewPanel.tsx           ← 組織ツリー（左パネル）
+    ├── OrgOperationView.tsx        ← 組織図キャンバス（D&D 異動）
+    ├── BeforeOrgCanvas.tsx         ← 発令前組織図
+    ├── PersonDetailPanel.tsx       ← 人物詳細・操作フォーム起動
+    ├── SearchPersonPanel.tsx       ← ポジション一覧・人物追加
+    ├── OperationPanel.tsx          ← 操作履歴リスト（Undo）
+    ├── ExcelPreview.tsx            ← 発令一覧プレビュー + エクスポート
+    ├── ClearSessionDialog.tsx      ← クリア確認（保存してクリア）
+    ├── AIChatDrawer.tsx            ← AI アシスタント（addOperationGroup 経由で同一パス）
+    └── forms/
+        ├── types.ts                ← FormSubmitPayload・BaseFormProps
+        ├── parts.tsx               ← OrgSelect・BandSelector・MetaSection 等
+        ├── MoveToOrgForm.tsx
+        ├── PromoteForm.tsx
+        ├── SendOnSecondmentForm.tsx
+        ├── RecallFromSecondmentForm.tsx
+        ├── AddConcurrentForm.tsx
+        └── RemoveConcurrentForm.tsx
+```
+
+---
+
+## 9. メンテナンスポイント
 
 ### Excel の列が変わったとき
 
 | 対象 | ファイル |
 |---|---|
 | 要員配置リストの列 | `src/domain/csvImport/allocationList/labels.ts` の `ALLOCATION_LIST_FIELDS` |
+| after/before の対応 | `src/domain/allocationRow.ts` の `BEFORE_AFTER_FIELD_PAIRS` |
 | 組織CD一覧の列 | `src/infrastructure/excelImport.ts` の `parseOrgMaster` 内ヘッダーキーワード |
-| エクスポート列 | `src/utils/excelIO.ts` の `EXPORT_FIELDS`（= labels.ts のフィルタ結果） |
+| エクスポート列 | `src/utils/excelIO.ts` の `EXPORT_FIELDS`（labels.ts のフィルタ結果） |
 
-### 新しい操作種別を追加するとき
+### 組織マスタの階層構築（`orgMasterToEntities`）
 
-1. `src/domain/operations/` に新しいハンドラーファイルを作成
-2. `src/domain/operations/index.ts` の `operationRegistry` に登録
-3. 必要に応じてフォームコンポーネントを `src/components/forms/` に追加
+| 優先度 | 方法 |
+|---|---|
+| ① | `上位組織コード` 列が存在し、かつコードがマスタ内にある → `parentId` に直接使用 |
+| ② | BU/部門/統括部/グループ の名称一致で親を探す（fallback） |
 
-### 会社（Company）の追加ロジック
-
-現在は **1 Excel = 1 社**。将来複数社に対応する場合:
-
-- `importFromFile` を複数回呼び、`loadBaseState` で追記する（現在は毎回 reset）
-- または `HRApplicationService.mergeBaseState(data)` メソッドを新設して既存状態に追記する形にする
-
----
-
-## 6. ファイルマップ
-
-```
-src/
-├── infrastructure/
-│   ├── excelImport.ts          ← メインのインポーター（3シート対応）
-│   └── codeLists/
-│       ├── excelParser.ts      ← 各種TBL シートのパーサー
-│       └── localStorageRepository.ts
-├── utils/
-│   ├── excelIO.ts              ← buildBaseState / buildExportWorkbook / exportToXlsx
-│   └── allocationListMapper.ts ← ドメイン → AllocationRow 変換
-├── domain/
-│   ├── applyOperations.ts      ← Before + Operations → After 状態
-│   ├── operations/             ← 各操作ハンドラー
-│   ├── codeLists/
-│   │   ├── orgMaster.ts        ← OrgMasterEntry 型定義
-│   │   └── aggregate.ts        ← AllCodeLists 型定義
-│   └── csvImport/allocationList/
-│       ├── labels.ts           ← ALLOCATION_LIST_FIELDS（列定義の中心）
-│       └── schema.ts           ← AllocationList Zod スキーマ
-├── application/
-│   └── HRApplicationService.ts ← ドメイン状態の唯一の管理者
-├── store/
-│   └── useStore.ts             ← Zustand（UI ↔ HRApplicationService）
-└── components/
-    ├── MasterSetup.tsx         ← インポート画面
-    ├── OverviewPanel.tsx       ← 組織ツリー（左パネル）
-    ├── ExcelPreview.tsx        ← 発令一覧プレビュー + エクスポート
-    ├── ClearSessionDialog.tsx  ← クリア確認ダイアログ
-    └── SearchPersonPanel.tsx   ← ポジション・人物追加
-```
+- 組織マスタにないコードが要員配置リストに出てきた場合は `unassigned_*` ノード配下に自動追加。

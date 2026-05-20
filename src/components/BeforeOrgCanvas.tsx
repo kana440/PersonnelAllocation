@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
+import { rowDiff } from '../domain/allocationRow'
 
 interface DragData {
   personId: string
@@ -9,14 +10,14 @@ interface DragData {
   source: 'before'
 }
 
-type FilterMode = 'all' | 'unconfirmed'
+type FilterMode = 'all' | 'changed'
 
 export function BeforeOrgCanvas() {
   const store = useStore()
   const {
     beforeFocusedOrgId, focusBefore, organizations, persons,
     beforePositions, beforeAffiliations,
-    operations, confirmedNoChangeKeys,
+    allocationList,
     selectedPersonId, selectPerson,
   } = store
   const focusedOrgId = beforeFocusedOrgId
@@ -65,30 +66,26 @@ export function BeforeOrgCanvas() {
         x.person != null && x.pos != null
       )
 
-  const getConfirmStatus = (personId: string, companyId: string): 'changed' | 'no-change' | 'unconfirmed' => {
-    const hasOp = operations.some(o =>
-      o.params.personId === personId && (
-        (o.kind === 'MoveToOrg'             && o.params.companyId === companyId) ||
-        (o.kind === 'Promote'               && o.params.companyId === companyId) ||
-        (o.kind === 'RecallFromSecondment'  && o.params.companyId === companyId) ||
-         o.kind === 'SendOnSecondment'
-      )
-    )
-    if (hasOp) return 'changed'
-    if (confirmedNoChangeKeys.has(`${personId}_${companyId}`)) return 'no-change'
-    return 'unconfirmed'
+  // person が allocationList 内に差分のある行を持つかどうか
+  const hasChanges = (sfPersonId: string): boolean =>
+    allocationList
+      .filter(r => r.userId === sfPersonId)
+      .some(r => rowDiff(r).length > 0)
+
+  const getStatus = (person: { sfPersonId?: string }): 'changed' | 'unchanged' => {
+    return hasChanges(person.sfPersonId ?? '') ? 'changed' : 'unchanged'
   }
 
-  // Count unconfirmed across entire tree
-  const countUnconfirmed = (orgId: string): number => {
+  // Count changed across entire tree
+  const countChanged = (orgId: string): number => {
     const org = organizations.find(o => o.id === orgId)
     if (!org) return 0
-    const direct = getPersonsInOrg(orgId).filter(x => getConfirmStatus(x.person.id, org.companyId) === 'unconfirmed').length
-    const children = organizations.filter(o => o.parentId === orgId).reduce((sum, c) => sum + countUnconfirmed(c.id), 0)
+    const direct = getPersonsInOrg(orgId).filter(x => getStatus(x.person) === 'changed').length
+    const children = organizations.filter(o => o.parentId === orgId).reduce((sum, c) => sum + countChanged(c.id), 0)
     return direct + children
   }
 
-  const totalUnconfirmed = countUnconfirmed(focusedOrgId)
+  const totalChanged = countChanged(focusedOrgId)
 
   const handleDragStart = (
     e: React.DragEvent, personId: string, fromOrgId: string,
@@ -102,32 +99,29 @@ export function BeforeOrgCanvas() {
   // ── Person cards (before state, read-only with status) ─────────
   const renderPersonCards = (orgId: string, companyId: string) => {
     let list = getPersonsInOrg(orgId)
-    if (filterMode === 'unconfirmed') {
-      list = list.filter(x => getConfirmStatus(x.person.id, companyId) === 'unconfirmed')
+    if (filterMode === 'changed') {
+      list = list.filter(x => getStatus(x.person) === 'changed')
     }
-    if (list.length === 0) return filterMode === 'unconfirmed' ? null : null
+    if (list.length === 0) return null
 
     return (
       <div className="flex flex-wrap gap-1.5 mb-2">
         {list.map(({ aff, person, pos }) => {
-          const status       = getConfirmStatus(person.id, companyId)
+          const status       = getStatus(person)
           const isConcurrent = aff.type === 'concurrent'
           const isSelected   = selectedPersonId === person.id
 
           const statusBg: Record<typeof status, string> = {
-            unconfirmed: 'bg-amber-50 border-amber-300',
-            'no-change': 'bg-gray-100 border-gray-300',
-            changed:     'bg-blue-50 border-blue-300',
+            unchanged: 'bg-gray-100 border-gray-300',
+            changed:   'bg-blue-50 border-blue-300',
           }
           const statusBadge: Record<typeof status, string> = {
-            unconfirmed: '⚠',
-            'no-change': '✓',
-            changed:     '→',
+            unchanged: '−',
+            changed:   '→',
           }
           const badgeColor: Record<typeof status, string> = {
-            unconfirmed: 'text-amber-500',
-            'no-change': 'text-green-500',
-            changed:     'text-blue-500',
+            unchanged: 'text-gray-400',
+            changed:   'text-blue-500',
           }
 
           return (
@@ -161,7 +155,7 @@ export function BeforeOrgCanvas() {
     const org = organizations.find(o => o.id === orgId)
     if (!org) return null
     const childOrgIds = organizations.filter(o => o.parentId === orgId).map(o => o.id)
-    const unconfirmed = countUnconfirmed(orgId)
+    const changed = countChanged(orgId)
 
     return (
       <div className={`border-2 rounded-lg ${depth === 0 ? 'border-gray-300 bg-gray-50' : 'border-gray-200 bg-white'}`}>
@@ -169,8 +163,8 @@ export function BeforeOrgCanvas() {
           depth === 0 ? 'border-gray-300 text-gray-600 bg-gray-100 rounded-t-lg' : 'border-gray-200 text-gray-500 bg-gray-50 rounded-t-lg'
         }`}>
           <span className="flex-1">{org.name}</span>
-          {unconfirmed > 0 && (
-            <span className="text-amber-500 text-xs font-normal">⚠ {unconfirmed}</span>
+          {changed > 0 && (
+            <span className="text-blue-500 text-xs font-normal">→ {changed}</span>
           )}
         </div>
         <div className="p-2">
@@ -191,7 +185,7 @@ export function BeforeOrgCanvas() {
     const personsInOrg = getPersonsInOrg(orgId)
     const childOrgIds  = organizations.filter(o => o.parentId === orgId).map(o => o.id)
     const isExpanded   = expandedChipIds.has(orgId)
-    const unconfirmed  = countUnconfirmed(orgId)
+    const changed      = countChanged(orgId)
 
     const toggle = () => setExpandedChipIds(prev => {
       const s = new Set(prev); s.has(orgId) ? s.delete(orgId) : s.add(orgId); return s
@@ -207,7 +201,7 @@ export function BeforeOrgCanvas() {
           <span className="font-medium text-gray-700 truncate flex-1">{org.name}</span>
           {personsInOrg.length > 0 && <span className="text-gray-400">{personsInOrg.length}名</span>}
           {childOrgIds.length > 0 && <span className="text-gray-400">{childOrgIds.length}組織</span>}
-          {unconfirmed > 0 && <span className="text-amber-500">⚠{unconfirmed}</span>}
+          {changed > 0 && <span className="text-blue-500">→{changed}</span>}
         </div>
       )
     }
@@ -217,7 +211,7 @@ export function BeforeOrgCanvas() {
         <div className="px-2 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg text-xs font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 flex items-center gap-1" onClick={toggle}>
           <span className="text-gray-400">▾</span>
           <span className="flex-1">{org.name}</span>
-          {unconfirmed > 0 && <span className="text-amber-500 font-normal">⚠ {unconfirmed}</span>}
+          {changed > 0 && <span className="text-blue-500 font-normal">→ {changed}</span>}
         </div>
         <div className="p-2">
           {renderPersonCards(orgId, org.companyId)}
@@ -252,16 +246,16 @@ export function BeforeOrgCanvas() {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {totalUnconfirmed > 0 && (
-            <span className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-              ⚠ 未確認 {totalUnconfirmed}名
+          {totalChanged > 0 && (
+            <span className="text-xs text-blue-600 font-medium bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+              → 変更あり {totalChanged}名
             </span>
           )}
           <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
-            {(['all', 'unconfirmed'] as FilterMode[]).map(m => (
+            {(['all', 'changed'] as FilterMode[]).map(m => (
               <button key={m} onClick={() => setFilterMode(m)}
                 className={`px-2 py-1 text-xs font-medium rounded transition-colors ${filterMode === m ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                {m === 'all' ? '全員' : '未確認のみ'}
+                {m === 'all' ? '全員' : '変更ありのみ'}
               </button>
             ))}
           </div>
@@ -270,10 +264,9 @@ export function BeforeOrgCanvas() {
 
       {/* Legend */}
       <div className="flex-shrink-0 px-4 py-1 border-b border-gray-100 bg-gray-50 flex items-center gap-3 text-xs text-gray-500">
-        <span className="text-amber-500 font-medium">⚠ 未確認</span>
-        <span className="text-green-500 font-medium">✓ 変更なし</span>
-        <span className="text-blue-500 font-medium">→ 異動あり</span>
-        <span className="ml-auto text-gray-400">発令前の状態 (参照用) — ドラッグして右へ</span>
+        <span className="text-gray-400 font-medium">− 変更なし</span>
+        <span className="text-blue-500 font-medium">→ 変更あり</span>
+        <span className="ml-auto text-gray-400">発令前の状態 (参照用)</span>
       </div>
 
       {/* Canvas */}
@@ -284,7 +277,7 @@ export function BeforeOrgCanvas() {
           <div className="border-2 border-gray-300 rounded-lg bg-gray-50">
             <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center gap-2">
               <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
-              {totalUnconfirmed > 0 && <span className="text-xs text-amber-500">⚠ {totalUnconfirmed}</span>}
+              {totalChanged > 0 && <span className="text-xs text-blue-500">→ {totalChanged}</span>}
             </div>
             <div className="px-3 py-2">
               {renderPersonCards(focusedOrgId, focusedOrg.companyId)}

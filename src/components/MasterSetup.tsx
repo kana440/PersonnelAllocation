@@ -3,7 +3,6 @@ import { useStore } from '../store/useStore'
 import { useCodeListStore } from '../store/codeListStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
 import type { ImportedWorkbookResult } from '../infrastructure/excelImport'
-import { createImportedContainer } from '../infrastructure/container'
 import { CODE_LIST_LABELS } from '../infrastructure/codeLists/excelParser'
 import { MasterSetupHelp } from './MasterSetupHelp'
 
@@ -20,8 +19,8 @@ interface Props {
 }
 
 export function MasterSetup({ onReady }: Props) {
-  const { loadData, setRawImportedRows } = useStore()
-  const { save }      = useCodeListStore()
+  const { loadExcelData } = useStore()
+  const { save }          = useCodeListStore()
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
@@ -53,10 +52,8 @@ export function MasterSetup({ onReady }: Props) {
 
   const handleApply = async () => {
     if (phase.kind !== 'done') return
-    const { codeLists, baseState, rawImportedRows } = phase.result
-    await loadData(createImportedContainer(baseState, codeLists))
-    setRawImportedRows(rawImportedRows)
-    await save(codeLists)
+    await loadExcelData(phase.result)
+    await save(phase.result.codeLists)
     onReady()
   }
 

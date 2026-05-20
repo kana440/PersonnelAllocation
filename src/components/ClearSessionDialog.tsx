@@ -15,18 +15,8 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const rows = toAllocationRows({
-    persons:            store.persons,
-    companies:          store.companies,
-    organizations:      [...store.organizations, ...store.afterOrganizations.filter(o => !store.organizations.find(b => b.id === o.id))],
-    operations:         store.operations,
-    beforeAffiliations: store.beforeAffiliations,
-    beforePositions:    store.beforePositions,
-    afterAffiliations:  store.afterAffiliations,
-    afterPositions:     store.afterPositions,
-    effectiveDate:      store.effectiveDate,
-    rawImportedRows:    store.rawImportedRows,
-  })
+  const allOrgs = [...store.organizations, ...store.afterOrganizations.filter(o => !store.organizations.find(b => b.id === o.id))]
+  const rows = toAllocationRows(store.allocationList, allOrgs)
 
   const handleClearWithoutSave = () => {
     store.reset()
@@ -80,7 +70,7 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
         <div>
           <h2 className="text-base font-bold text-gray-800">セッションをクリア</h2>
           <p className="mt-1 text-sm text-gray-600">
-            現在のデータ（{rows.length} 行・操作 {store.operations.length} 件）が消去されます。
+            現在のデータ（{rows.length} 行）が消去されます。
           </p>
         </div>
 

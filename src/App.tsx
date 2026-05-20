@@ -1,21 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { OverviewPanel } from './components/OverviewPanel'
+import { OrgSearchSidebar } from './components/OrgSearchSidebar'
 import { OrgOperationView } from './components/OrgOperationView'
-import { ExcelPreview } from './components/ExcelPreview'
+import { EditView } from './components/EditView'
+import { BottomPanel } from './components/BottomPanel'
 import { AIChatDrawer } from './components/AIChatDrawer'
-import { SearchPersonPanel } from './components/SearchPersonPanel'
-import { PersonDrawer } from './components/PersonDrawer'
 import { MasterSetup } from './components/MasterSetup'
 import { ClearSessionDialog } from './components/ClearSessionDialog'
 import { useStore } from './store/useStore'
 import { useCodeListStore } from './store/codeListStore'
 
-const BOTTOM_MIN = 80
-const BOTTOM_MAX_RATIO = 0.65
-const BOTTOM_DEFAULT = 220
+const BOTTOM_MIN        = 36   // 折りたたみ時はヘッダーだけ
+const BOTTOM_MAX_RATIO  = 0.65
+const BOTTOM_DEFAULT    = 220
+const BOTTOM_COLLAPSED  = 36
 
 export default function App() {
-  const { effectiveDate, setEffectiveDate, operations, isLoading } = useStore()
+  const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo, editMode } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
   // セッション限りのフラグ — MasterSetup が完了したら true になる
@@ -27,6 +27,19 @@ export default function App() {
   const [isChatOpen,      setIsChatOpen]      = useState(false)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_DEFAULT)
+  const [excelCollapsed,  setExcelCollapsed]  = useState(false)
+  const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
+
+  const toggleExcelCollapse = useCallback(() => {
+    if (excelCollapsed) {
+      setBottomHeight(prevBottomHeightRef.current)
+      setExcelCollapsed(false)
+    } else {
+      prevBottomHeightRef.current = bottomHeight > BOTTOM_COLLAPSED ? bottomHeight : BOTTOM_DEFAULT
+      setBottomHeight(BOTTOM_COLLAPSED)
+      setExcelCollapsed(true)
+    }
+  }, [excelCollapsed, bottomHeight])
 
   // ── Drag-to-resize ────────────────────────────────────────────
   const dragState = useRef<{ startY: number; startH: number } | null>(null)
@@ -76,10 +89,24 @@ export default function App() {
             className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded border border-gray-600"
           />
         </div>
-        <div className="text-xs text-gray-400">
-          操作: <span className="text-white font-semibold">{operations.length}</span>
-        </div>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="元に戻す（保存単位）"
+          >
+            ↩ Undo
+          </button>
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="やり直し"
+          >
+            Redo ↪
+          </button>
+          <div className="w-px h-4 bg-gray-600" />
           <button
             onClick={() => setIsChatOpen(o => !o)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
@@ -106,34 +133,50 @@ export default function App() {
         />
       )}
 
-      {/* ── Upper area: tree + canvas + chat drawer ───────────────── */}
+      {/* ── Upper area: sidebar + canvas + chat drawer ───────────── */}
       <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5 pb-0">
 
-        {/* Org tree sidebar */}
+        {/* Org search sidebar */}
         {isTreeOpen ? (
-          <div className="flex-shrink-0 w-44 bg-white rounded-lg shadow overflow-hidden flex flex-col">
+          <div className="flex-shrink-0 w-48 bg-white rounded-lg shadow overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-200 flex-shrink-0">
-              <span className="text-xs font-semibold text-blue-600">組織・職務・人物</span>
+              <span className="text-xs font-semibold text-blue-600">組織・人物</span>
               <button onClick={() => setIsTreeOpen(false)} title="折りたたむ" className="text-gray-400 hover:text-gray-600 text-xs w-4 h-4 flex items-center justify-center">◀</button>
             </div>
-            <div className="flex-1 overflow-hidden p-1.5">
-              <OverviewPanel />
+            <div className="flex-1 overflow-hidden">
+              <OrgSearchSidebar />
             </div>
           </div>
         ) : (
           <div
             className="flex-shrink-0 w-7 bg-white rounded-lg shadow flex flex-col items-center py-2 gap-1 cursor-pointer hover:bg-blue-50 transition-colors"
             onClick={() => setIsTreeOpen(true)}
-            title="ツリーを展開"
+            title="サイドバーを展開"
           >
             <span className="text-gray-400 text-xs">▶</span>
             <span className="text-xs font-semibold text-blue-600" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', letterSpacing: '0.08em' }}>組織</span>
           </div>
         )}
 
-        {/* Main canvas */}
-        <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0">
-          <OrgOperationView />
+        {/* Main canvas: EditView が上にスライドオーバー */}
+        <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0 relative">
+          {/* 組織図ビュー: 常に背景として残る */}
+          <div
+            className="absolute inset-0"
+            style={{ pointerEvents: editMode ? 'none' : 'auto' }}
+          >
+            <OrgOperationView />
+          </div>
+          {/* 編集ビュー: 右からスライドオーバー */}
+          <div
+            className="absolute inset-0 z-10 bg-white transition-transform duration-300 ease-in-out"
+            style={{
+              transform: editMode ? 'translateX(0)' : 'translateX(100%)',
+              pointerEvents: editMode ? 'auto' : 'none',
+            }}
+          >
+            <EditView />
+          </div>
         </div>
 
         {/* AI Chat drawer */}
@@ -152,16 +195,15 @@ export default function App() {
         <div className="w-full h-1 bg-gray-300 rounded group-hover:bg-blue-400 transition-colors" />
       </div>
 
-      {/* ── Bottom panel (full width) ────────────────────────────── */}
+      {/* ── Bottom panel ────────────────────────────────────────── */}
       <div
-        className="flex-shrink-0 bg-white rounded-lg shadow mx-1.5 mb-1.5 flex overflow-hidden"
+        className="flex-shrink-0 bg-white rounded-lg shadow mx-1.5 mb-1.5 overflow-hidden"
         style={{ height: bottomHeight }}
       >
-        <SearchPersonPanel />
-        <div className="flex-1 overflow-hidden min-w-0">
-          <ExcelPreview />
-        </div>
-        <PersonDrawer />
+        <BottomPanel
+          isCollapsed={excelCollapsed}
+          onToggleCollapse={toggleExcelCollapse}
+        />
       </div>
 
     </div>

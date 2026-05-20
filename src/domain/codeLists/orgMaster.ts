@@ -4,11 +4,14 @@
 export interface OrgMasterEntry {
   code:              string          // 組織コード
   parentCode?:       string          // 上位組織コード（Excel に列がある場合）
-  name?:             string          // 組織名（Excel に列がある場合）
+  name?:             string          // 組織名
+  companyCode?:      string          // 会社コード（所属会社の識別子）
+  companyName?:      string          // 会社名
   businessUnit:      string          // ビジネスユニット
   division:          string          // 部門
   department:        string          // 統括部
   group:             string          // グループ
   team:              string          // チーム
   organizationLevel: number          // 組織レベル (1=BU, 2=部門, …)
+  phase:             'before' | 'after' | 'both'  // 発令前後フラグ（列なし → 'both'）
 }

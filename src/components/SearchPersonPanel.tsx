@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useStore } from '../store/useStore'
+import { rowDiff } from '../domain/allocationRow'
 
 const EMP_TYPES = ['正社員', '契約社員', 'パート・アルバイト', '派遣社員', '嘱託']
 
@@ -7,10 +8,9 @@ export function SearchPersonPanel() {
   const {
     persons, companies,
     afterOrganizations, afterAffiliations, afterPositions,
-    beforeAffiliations, beforePositions,
-    operations, confirmedNoChangeKeys,
+    allocationList,
     focusedOrgId, selectedPersonId, selectPerson,
-    bands, positionTitles, effectiveDate, addOperation, addNewHire,
+    bands, positionTitles, addNewHire,
   } = useStore()
 
   // 配置先として選べる組織（未設定・level99 を除く）
@@ -61,34 +61,14 @@ export function SearchPersonPanel() {
 
   // ── ハンドラー ───────────────────────────────────────────────
   const handleCreatePosition = () => {
-    if (!focusedOrg) return
-    const title = createTitle || '担当'
-    const band  = createBand  || (bands[3]?.id ?? 'B4')
-    addOperation({
-      kind: 'CreateVacantPosition',
-      label: `空席ポジション作成：${title}（${focusedOrg.name}）`,
-      params: { orgId: focusedOrg.id, companyId: focusedOrg.companyId, title, band },
-      effectiveDate,
-    })
+    // 行エディタからの直接編集に移行予定
     setCreateFormOpen(false)
-    setCreateTitle('')
-    setCreateBand('')
   }
 
   const handleFillPosition = () => {
-    if (!fillPositionId || !fillPersonId) return
-    const pos    = afterPositions.find(p => p.id === fillPositionId)
-    const person = persons.find(p => p.id === fillPersonId)
-    if (!pos || !person) return
-    addOperation({
-      kind: 'FillVacantPosition',
-      label: `ポジション割り当て：${person.name}（${pos.title || '担当'} / ${pos.band}）`,
-      params: { positionId: fillPositionId, personId: fillPersonId, employmentType: fillEmpType },
-      effectiveDate,
-    })
+    // 行エディタからの直接編集に移行予定
     setFillPositionId(null)
-    setFillPersonId('')
-    selectPerson(fillPersonId)
+    if (fillPersonId) selectPerson(fillPersonId)
   }
 
   const openCreateForm = () => {
@@ -102,29 +82,13 @@ export function SearchPersonPanel() {
     setFillPersonId('')
   }
 
-  // ── 未確認サマリー ───────────────────────────────────────────
-  const isConfirmedOrChanged = (personId: string, companyId: string) => {
-    const hasOp = operations.some(o =>
-      o.params.personId === personId && (
-        (o.kind === 'MoveToOrg'             && o.params.companyId === companyId) ||
-        (o.kind === 'Promote'               && o.params.companyId === companyId) ||
-        (o.kind === 'RecallFromSecondment'  && o.params.companyId === companyId) ||
-        o.kind === 'SendOnSecondment'
-      )
-    )
-    return hasOp || confirmedNoChangeKeys.has(`${personId}_${companyId}`)
+  // ── 変更サマリー ─────────────────────────────────────────────
+  const hasChanges = (personId: string): boolean => {
+    const sfId = persons.find(p => p.id === personId)?.sfPersonId ?? ''
+    return allocationList.filter(r => r.userId === sfId).some(r => rowDiff(r).length > 0)
   }
 
-  const unconfirmedPersonIds = [...new Set(
-    beforeAffiliations
-      .filter(a => {
-        if (a.status !== 'active') return false
-        const pos = beforePositions.find(p => p.id === a.positionId)
-        if (!pos) return false
-        return !isConfirmedOrChanged(a.personId, pos.companyId)
-      })
-      .map(a => a.personId)
-  )]
+  const changedPersonIds = [...new Set(persons.filter(p => hasChanges(p.id)).map(p => p.id))]
 
   // ── レンダリング ─────────────────────────────────────────────
   return (
@@ -354,37 +318,32 @@ export function SearchPersonPanel() {
             <div className="rounded border border-gray-200 bg-white p-2.5 text-xs space-y-1.5">
               <div className="text-gray-500 font-medium">発令サマリー</div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-500">操作件数</span>
-                <span className="font-semibold text-gray-800">{operations.length} 件</span>
+                <span className="text-gray-500">変更あり</span>
+                <span className="font-semibold text-blue-700">{changedPersonIds.length} 名</span>
               </div>
-              {unconfirmedPersonIds.length > 0 && (
-                <div className="flex items-center justify-between text-amber-600">
-                  <span>⚠ 未確認</span>
-                  <span className="font-semibold">{unconfirmedPersonIds.length} 名</span>
-                </div>
-              )}
-              {unconfirmedPersonIds.length === 0 && operations.length > 0 && (
-                <div className="text-green-600">✓ 全員確認済み</div>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">総人数</span>
+                <span className="font-semibold text-gray-800">{persons.length} 名</span>
+              </div>
             </div>
 
-            {unconfirmedPersonIds.length > 0 && (
-              <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs">
-                <div className="text-amber-700 font-medium mb-1">未確認の人物</div>
-                {unconfirmedPersonIds.slice(0, 6).map(pid => {
+            {changedPersonIds.length > 0 && (
+              <div className="rounded border border-blue-200 bg-blue-50 p-2 text-xs">
+                <div className="text-blue-700 font-medium mb-1">変更あり</div>
+                {changedPersonIds.slice(0, 6).map(pid => {
                   const person = persons.find(p => p.id === pid)
                   return person ? (
                     <button
                       key={pid}
                       onClick={() => selectPerson(pid)}
-                      className="block w-full text-left py-0.5 text-amber-800 hover:text-blue-600 truncate"
+                      className="block w-full text-left py-0.5 text-blue-800 hover:text-blue-600 truncate"
                     >
-                      {person.name}
+                      → {person.name}
                     </button>
                   ) : null
                 })}
-                {unconfirmedPersonIds.length > 6 && (
-                  <div className="text-amber-600 mt-1">他 {unconfirmedPersonIds.length - 6} 名…</div>
+                {changedPersonIds.length > 6 && (
+                  <div className="text-blue-600 mt-1">他 {changedPersonIds.length - 6} 名…</div>
                 )}
               </div>
             )}

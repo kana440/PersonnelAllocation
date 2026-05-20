@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { Position } from '../types/domain'
+import { rowDiff } from '../domain/allocationRow'
 
 const BAND_ORDER  = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
 const TITLE_ORDER = [
@@ -51,22 +52,49 @@ export function OrgOperationView() {
     afterOrganizations: allAfterOrgs, organizations: staticOrgs, persons,
     afterPositions, afterAffiliations,
     beforePositions, beforeAffiliations,
-    operations, confirmedNoChangeKeys,
-    effectiveDate, addOperation, confirmNoChange,
-    selectedPersonId, selectPerson,
+    allocationList,
+    selectedPersonId, selectPerson, enterEditMode, saveRow,
+    mainCanvasMode, setMainCanvasMode,
   } = store
+
+  // 人物のダブルクリック: 編集モードへ遷移
+  const handlePersonDoubleClick = (personId: string) => {
+    const person = persons.find(p => p.id === personId)
+    if (!person?.sfPersonId) return
+    const firstRow = allocationList.find(r => r.userId === person.sfPersonId)
+    if (!firstRow) return
+    enterEditMode(firstRow.rowId)
+  }
 
   const [dragOverOrgId,      setDragOverOrgId]      = useState<string | null>(null)
   const [dragOverVacantPosId, setDragOverVacantPosId] = useState<string | null>(null)
   const [pendingFill,         setPendingFill]         = useState<PendingFill | null>(null)
   const [highlightedOrgId,   setHighlightedOrgId]   = useState<string | null>(null)
   const [expandedChipIds,    setExpandedChipIds]    = useState<Set<string>>(new Set())
-  const [canvasMode,         setCanvasMode]         = useState<CanvasMode>('組織図')
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
+  // canvasMode は store で管理（戻るボタンのラベルに使用）
+  const canvasMode    = mainCanvasMode
+  const setCanvasMode = (mode: CanvasMode) => setMainCanvasMode(mode)
   const [viewState,          setViewState]          = useState<ViewState>('after')
   const [orgSortModes,       setOrgSortModes]       = useState<Record<string, SortMode>>({})
   const [orgManualOrders,    setOrgManualOrders]    = useState<Record<string, string[]>>({})
   const [reorderDropTarget,  setReorderDropTarget]  = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
   const [openSortDropdown,   setOpenSortDropdown]   = useState<string | null>(null)
+
+  const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    selectPerson(personId)
+    setContextMenu({ x: e.clientX, y: e.clientY, personId })
+  }
+
+  const closeContextMenu = () => setContextMenu(null)
+
+  const contextMenuEditClick = () => {
+    if (!contextMenu) return
+    closeContextMenu()
+    handlePersonDoubleClick(contextMenu.personId)
+  }
 
   const isBefore    = viewState === 'before'
   const isAfterDiff = viewState === 'after-diff'
@@ -168,18 +196,10 @@ export function OrgOperationView() {
       )
   }
 
-  const getConfirmStatus = (personId: string, companyId: string): 'changed' | 'no-change' | 'unconfirmed' => {
-    const hasOp = operations.some(o =>
-      o.params.personId === personId && (
-        (o.kind === 'MoveToOrg'            && o.params.companyId === companyId) ||
-        (o.kind === 'Promote'              && o.params.companyId === companyId) ||
-        (o.kind === 'RecallFromSecondment' && o.params.companyId === companyId) ||
-         o.kind === 'SendOnSecondment'
-      )
-    )
-    if (hasOp) return 'changed'
-    if (confirmedNoChangeKeys.has(`${personId}_${companyId}`)) return 'no-change'
-    return 'unconfirmed'
+  const getConfirmStatus = (personId: string): 'changed' | 'unchanged' => {
+    const sfId = persons.find(p => p.id === personId)?.sfPersonId ?? ''
+    return allocationList.filter(r => r.userId === sfId).some(r => rowDiff(r).length > 0)
+      ? 'changed' : 'unchanged'
   }
 
   // ── Sort helpers ──────────────────────────────────────────────
@@ -240,37 +260,23 @@ export function OrgOperationView() {
     e.preventDefault(); setDragOverOrgId(null)
     let data: DragData
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
-    const { personId, fromOrgId, fromCompanyId, affiliationType, source } = data
+    const { personId, fromOrgId } = data
+    // fromOrgId が空（Excel・サイドバー由来）の場合はスキップしない
+    if (fromOrgId && fromOrgId === toOrgId) return
 
-    if (affiliationType === 'concurrent' && !e.altKey && fromOrgId !== toOrgId) {
-      const toOrg = organizations.find(o => o.id === toOrgId); if (!toOrg) return
-      const ca = afterAffiliations.find(a => a.personId === personId && a.status === 'active' && a.type === 'concurrent' && afterPositions.find(p => p.id === a.positionId)?.orgId === fromOrgId)
-      const cp = ca ? afterPositions.find(p => p.id === ca.positionId) : null
-      const pn = persons.find(p => p.id === personId)?.name ?? personId
-      addOperation({ kind: 'RemoveConcurrent', label: `兼務解除：${pn}`, params: { personId, orgId: fromOrgId }, effectiveDate })
-      addOperation({ kind: 'AddConcurrent', label: `兼務先変更：${toOrg.name} (${pn})`, params: { personId, orgId: toOrgId, companyId: toOrg.companyId, band: cp?.band ?? 'B4', title: cp?.title ?? '兼務' }, effectiveDate })
-      setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800); return
+    const toOrg = organizations.find(o => o.id === toOrgId)
+    if (!toOrg) return
+    const person = persons.find(p => p.id === personId)
+    if (!person?.sfPersonId) return
+
+    // 主務行のみ departmentCode を更新（Undo チェックポイント込み）
+    const primaryRow = allocationList.find(
+      r => r.userId === person.sfPersonId && !r.concurrentType
+    ) ?? allocationList.find(r => r.userId === person.sfPersonId)
+    if (primaryRow) {
+      saveRow(primaryRow.rowId, { departmentCode: toOrg.externalCode ?? toOrg.id })
     }
-    if (fromOrgId === toOrgId && !e.altKey) {
-      if (source === 'before') confirmNoChange(personId, fromCompanyId)
-      return
-    }
-    const toOrg = organizations.find(o => o.id === toOrgId); if (!toOrg) return
-    const toCompanyId = toOrg.companyId
-    const currentAff = affiliationType === 'concurrent'
-      ? afterAffiliations.find(a => a.personId === personId && a.status === 'active' && a.type === 'concurrent' && afterPositions.find(p => p.id === a.positionId)?.orgId === fromOrgId)
-      : afterAffiliations.find(a => a.personId === personId && a.status === 'active' && a.type === 'primary' && afterPositions.find(p => p.id === a.positionId)?.companyId === fromCompanyId)
-    const currentPos = currentAff ? afterPositions.find(p => p.id === currentAff.positionId) : null
-    const band   = currentPos?.band ?? 'B4'
-    const title  = currentPos?.title ?? '担当'
-    const pn     = persons.find(p => p.id === personId)?.name ?? personId
-    if (e.altKey) {
-      addOperation({ kind: 'AddConcurrent', label: `兼務追加：${toOrg.name} (${pn})`, params: { personId, orgId: toOrgId, companyId: toCompanyId, band, title }, effectiveDate })
-    } else if (fromCompanyId !== toCompanyId) {
-      addOperation({ kind: 'SendOnSecondment', label: `出向：${toOrg.name} (${pn})`, params: { personId, toCompanyId, orgId: toOrgId, band, title }, effectiveDate })
-    } else {
-      addOperation({ kind: 'MoveToOrg', label: `組織異動：${toOrg.name} (${pn})`, params: { personId, toOrgId, companyId: fromCompanyId, band, title }, effectiveDate })
-    }
+
     setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
   }
 
@@ -328,21 +334,21 @@ export function OrgOperationView() {
     const sortMode = orgSortModes[orgId] ?? 'band'
     const sorted   = getSortedPersons(orgId, list)
 
-    const cardBg = (isConcurrent: boolean, isSelected: boolean, status?: 'changed' | 'no-change' | 'unconfirmed') => {
+    const cardBg = (isConcurrent: boolean, isSelected: boolean, status?: 'changed' | 'unchanged') => {
       if (isBefore && status) {
-        const statusBg = { unconfirmed: 'bg-amber-50 border-amber-300', 'no-change': 'bg-gray-100 border-gray-300', changed: 'bg-blue-50 border-blue-300' }
+        const statusBg = { unchanged: 'bg-gray-100 border-gray-300', changed: 'bg-blue-50 border-blue-300' }
         return `${statusBg[status]} ${isConcurrent ? 'border-dashed' : ''} ${isSelected ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`
       }
       return `${isConcurrent ? 'border-dashed border-purple-400 bg-purple-50' : 'border-blue-300 bg-blue-50'} ${isSelected ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`
     }
 
-    const cardInner = (person: { name: string }, pos: { title?: string; band?: string }, isConcurrent: boolean, fromOrgName: string | null, status?: 'changed' | 'no-change' | 'unconfirmed') => (
+    const cardInner = (person: { name: string }, pos: { title?: string; band?: string }, isConcurrent: boolean, fromOrgName: string | null, status?: 'changed' | 'unchanged') => (
       <>
         {isBefore && status && (
           <span className={`absolute -top-1 -right-1 text-xs leading-none ${
-            status === 'unconfirmed' ? 'text-amber-500' : status === 'no-change' ? 'text-green-500' : 'text-blue-500'
+            status === 'unchanged' ? 'text-gray-400' : 'text-blue-500'
           }`}>
-            {status === 'unconfirmed' ? '⚠' : status === 'no-change' ? '✓' : '→'}
+            {status === 'unchanged' ? '−' : '→'}
           </span>
         )}
         {fromOrgName && <div className="text-gray-400 text-xs leading-tight mb-0.5">← {fromOrgName}</div>}
@@ -372,6 +378,8 @@ export function OrgOperationView() {
                   onDragOver={e => { if (!e.dataTransfer.types.includes('application/json')) return; e.preventDefault(); e.stopPropagation(); setReorderDropTarget({ orgId, beforePersonId: person.id }) }}
                   onDrop={e => { e.stopPropagation(); setReorderDropTarget(null); let d: DragData; try { d = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }; if (d.fromOrgId === orgId && !e.altKey) { e.preventDefault(); doReorder(orgId, person.id, d.personId) } else { handleDrop(e, orgId) } }}
                   onClick={() => selectPerson(person.id)}
+                  onDoubleClick={() => handlePersonDoubleClick(person.id)}
+                  onContextMenu={e => handlePersonContextMenu(e, person.id)}
                   className={`relative px-2.5 py-1.5 rounded text-xs select-none cursor-grab active:cursor-grabbing transition-all hover:shadow-md border-2 ${cardBg(isConcurrent, isSelected)}`}
                 >
                   {cardInner(person, pos, isConcurrent, fromOrgName)}
@@ -394,13 +402,15 @@ export function OrgOperationView() {
           const isConcurrent = aff.type === 'concurrent'
           const isSelected   = selectedPersonId === person.id
           const fromOrgName  = getBeforeOrgName(person.id, orgId)
-          const status       = isBefore ? getConfirmStatus(person.id, companyId) : undefined
+          const status       = isBefore ? getConfirmStatus(person.id) : undefined
           return (
             <div
               key={aff.id}
               draggable={!isBefore}
               onDragStart={!isBefore ? e => handleDragStart(e, person.id, orgId, companyId, aff.type) : undefined}
               onClick={() => selectPerson(person.id)}
+              onDoubleClick={() => handlePersonDoubleClick(person.id)}
+              onContextMenu={e => handlePersonContextMenu(e, person.id)}
               className={`relative px-2.5 py-1.5 rounded text-xs select-none transition-all hover:shadow-md border-2 ${
                 !isBefore ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
               } ${cardBg(isConcurrent, isSelected, status)}`}
@@ -586,6 +596,9 @@ export function OrgOperationView() {
 
   // ── Report line view ──────────────────────────────────────────
   const ReportLineView = () => {
+    const [dragOverPersonId, setDragOverPersonId] = useState<string | null>(null)
+
+    // ── スコープ計算 ──────────────────────────────────────────────
     const getAllOrgsInTree = (rootId: string): string[] => {
       const result = [rootId]
       organizations.filter(o => o.parentId === rootId).forEach(c => result.push(...getAllOrgsInTree(c.id)))
@@ -613,14 +626,61 @@ export function OrgOperationView() {
       }).map(a => a.personId)
     )]
 
-    const getDirectReports = (managerId: string) => personsInScope.filter(pid => getPersonScopeAff(pid)?.aff.managerId === managerId)
+    // pos.sfPositionId / pos.managerPositionCode でレポートライン構築
+    // （aff.managerId は未設定のため使わない）
+    const getDirectReports = (personId: string): string[] => {
+      const sa = getPersonScopeAff(personId)
+      if (!sa) return []
+      const myPosCode = sa.pos.sfPositionId
+      if (!myPosCode) return []
+      return personsInScope.filter(pid => {
+        if (pid === personId) return false
+        return getPersonScopeAff(pid)?.pos.managerPositionCode === myPosCode
+      })
+    }
+
     const roots = personsInScope.filter(pid => {
       const sa = getPersonScopeAff(pid)
       if (!sa) return false
-      return !sa.aff.managerId || !personsInScope.includes(sa.aff.managerId)
+      const mgrPosCode = sa.pos.managerPositionCode
+      if (!mgrPosCode) return true
+      return !personsInScope.some(otherId => getPersonScopeAff(otherId)?.pos.sfPositionId === mgrPosCode)
     })
 
+    // ── 上司変更D&D（循環参照チェック付き） ──────────────────────
+    const wouldCycle = (targetId: string, sourceId: string, visited = new Set<string>()): boolean => {
+      if (visited.has(sourceId)) return false
+      visited.add(sourceId)
+      return getDirectReports(sourceId).some(childId =>
+        childId === targetId || wouldCycle(targetId, childId, new Set(visited))
+      )
+    }
+
+    const handleManagerDrop = (targetPersonId: string, sourcePersonId: string) => {
+      if (sourcePersonId === targetPersonId) return
+      if (wouldCycle(targetPersonId, sourcePersonId)) return  // 循環するので中止
+
+      const targetPerson = persons.find(p => p.id === targetPersonId)
+      if (!targetPerson?.sfPersonId) return
+      const targetRow =
+        allocationList.find(r => r.userId === targetPerson.sfPersonId && !r.concurrentType) ??
+        allocationList.find(r => r.userId === targetPerson.sfPersonId)
+      if (!targetRow) return
+
+      const sourcePerson = persons.find(p => p.id === sourcePersonId)
+      if (!sourcePerson?.sfPersonId) return
+      const sourceRow =
+        allocationList.find(r => r.userId === sourcePerson.sfPersonId && !r.concurrentType) ??
+        allocationList.find(r => r.userId === sourcePerson.sfPersonId)
+      if (!sourceRow) return
+
+      const managerName = [targetRow.lastName, targetRow.firstName].filter(Boolean).join('')
+      saveRow(sourceRow.rowId, { managerPositionCode: targetRow.positionCode ?? '', managerName })
+    }
+
+    // ── ノード描画 ────────────────────────────────────────────────
     const ReportNode = ({ personId, depth = 0 }: { personId: string; depth?: number }) => {
+      if (depth > 20) return <div className="ml-2 text-xs text-red-400">⚠ 循環参照</div>
       const person = persons.find(p => p.id === personId)
       const sa     = getPersonScopeAff(personId)
       if (!person || !sa) return null
@@ -629,11 +689,44 @@ export function OrgOperationView() {
       return (
         <div className={depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-3 mt-1.5' : 'mt-1.5'}>
           <button
+            draggable
+            onDragStart={e => {
+              e.stopPropagation()
+              e.dataTransfer.setData('application/json', JSON.stringify({
+                personId, fromOrgId: '', fromCompanyId: '', affiliationType: 'primary', source: 'reportLine',
+              }))
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverPersonId(personId) }}
+            onDragLeave={e => {
+              if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
+                setDragOverPersonId(null)
+            }}
+            onDrop={e => {
+              e.preventDefault(); e.stopPropagation(); setDragOverPersonId(null)
+              let data: { personId: string }
+              try { data = JSON.parse(e.dataTransfer.getData('application/json')) as { personId: string } } catch { return }
+              handleManagerDrop(personId, data.personId)
+            }}
             onClick={() => selectPerson(personId)}
-            className={`text-left inline-block px-2.5 py-1.5 rounded border text-xs transition-all hover:shadow-sm ${color.card} ${selectedPersonId === personId ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`}
+            onDoubleClick={() => handlePersonDoubleClick(personId)}
+            onContextMenu={e => handlePersonContextMenu(e, personId)}
+            className={`text-left inline-block px-2.5 py-1.5 rounded border text-xs transition-all hover:shadow-sm cursor-grab active:cursor-grabbing ${color.card} ${
+              dragOverPersonId === personId
+                ? 'ring-2 ring-green-400 ring-offset-1 scale-105'
+                : selectedPersonId === personId
+                ? 'ring-2 ring-yellow-400 ring-offset-1'
+                : ''
+            }`}
           >
+            {dragOverPersonId === personId && (
+              <div className="text-green-600 text-xs font-semibold mb-0.5">→ 上司にする</div>
+            )}
             <div className={`font-semibold leading-tight ${color.text}`}>{person.name}</div>
-            <div className="text-gray-500 leading-tight">{sa.pos.title}{sa.pos.band && <span className={`ml-1 font-medium ${color.text}`}>{sa.pos.band}</span>}</div>
+            <div className="text-gray-500 leading-tight">
+              {sa.pos.title}
+              {sa.pos.band && <span className={`ml-1 font-medium ${color.text}`}>{sa.pos.band}</span>}
+            </div>
             {org && <span className={`inline-block text-xs px-1 rounded mt-0.5 leading-tight ${color.tag}`}>{org.name}</span>}
           </button>
           {getDirectReports(personId).map(id => <ReportNode key={id} personId={id} depth={depth + 1} />)}
@@ -651,7 +744,7 @@ export function OrgOperationView() {
     return (
       <div className="p-4">
         {roots.length === 0
-          ? <div className="text-gray-400 text-sm text-center py-12">上司情報が設定されていません</div>
+          ? <div className="text-gray-400 text-sm text-center py-12">上司情報（上司ポジションコード）が設定されていません</div>
           : roots.map(pid => <ReportNode key={pid} personId={pid} />)
         }
 
@@ -790,6 +883,32 @@ export function OrgOperationView() {
         )}
       </div>
 
+      {/* ── 右クリックコンテキストメニュー ──────────────────────── */}
+      {contextMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeContextMenu} onContextMenu={e => { e.preventDefault(); closeContextMenu() }} />
+          <div
+            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-36"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            {(() => {
+              const p = persons.find(pp => pp.id === contextMenu.personId)
+              return p ? (
+                <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500 truncate">
+                  {p.name}
+                </div>
+              ) : null
+            })()}
+            <button
+              onClick={contextMenuEditClick}
+              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
+            >
+              <span>✏️</span> 編集画面を開く
+            </button>
+          </div>
+        </>
+      )}
+
       {/* ── 空席割り当て確認ダイアログ ─────────────────────────── */}
       {pendingFill && (
         <div
@@ -810,16 +929,7 @@ export function OrgOperationView() {
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  addOperation({
-                    kind:  'FillVacantPosition',
-                    label: `異動・割り当て：${pendingFill.personName} → ${pendingFill.positionTitle}（${pendingFill.orgName}）`,
-                    params: {
-                      positionId:     pendingFill.positionId,
-                      personId:       pendingFill.personId,
-                      employmentType: '正社員',
-                    },
-                    effectiveDate,
-                  })
+                  // 行エディタからの直接編集に移行予定
                   setPendingFill(null)
                   selectPerson(pendingFill.personId)
                 }}
@@ -830,17 +940,7 @@ export function OrgOperationView() {
               </button>
               <button
                 onClick={() => {
-                  addOperation({
-                    kind:  'FillVacantPosition',
-                    label: `兼務・割り当て：${pendingFill.personName} → ${pendingFill.positionTitle}（${pendingFill.orgName}）`,
-                    params: {
-                      positionId:     pendingFill.positionId,
-                      personId:       pendingFill.personId,
-                      employmentType: '兼務',
-                      asConcurrent:   'true',
-                    },
-                    effectiveDate,
-                  })
+                  // 行エディタからの直接編集に移行予定
                   setPendingFill(null)
                   selectPerson(pendingFill.personId)
                 }}

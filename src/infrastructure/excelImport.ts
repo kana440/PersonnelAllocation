@@ -10,10 +10,9 @@ import type { OrgMasterEntry }      from '../domain/codeLists/orgMaster'
 import type { Organization, Company } from '../types/domain'
 import { parseCodeListsFromWorkbook } from './codeLists/excelParser'
 import { EMPTY_CODE_LISTS }          from '../domain/codeLists/aggregate'
-import { buildBaseState }            from '../utils/excelIO'
-import type { BaseStateFromImport }  from '../utils/excelIO'
 import { ALLOCATION_LIST_FIELDS }    from '../domain/csvImport/allocationList/labels'
 import type { AllocationList }       from '../domain/csvImport/allocationList/schema'
+import type { AllocationRow }        from '../domain/allocationRow'
 
 // ── シート名定数 ────────────────────────────────────────────────────────────────
 export const SHEET_ALLOCATION = '要員配置リスト'
@@ -38,19 +37,19 @@ function cellNum(ws: XLSX.WorkSheet, r: number, c: number): number {
 
 // ── 組織CD一覧パーサー ─────────────────────────────────────────────────────────
 // ヘッダー行のキーワードから列インデックスを自動検出する。
-// 「上位組織コード」列が存在すればそれを parentCode として使用する（最優先）。
+// 新列: 会社コード / 会社名 / 発令区分（前後フラグ）を追加サポート。
 function parseOrgMaster(ws: XLSX.WorkSheet): OrgMasterEntry[] {
   const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1')
   const entries: OrgMasterEntry[] = []
 
-  // ── ヘッダー行スキャン（最初の 3 行以内で最もマッチする行を選択）──
   type ColMap = {
     code: number; parent: number; name: number
+    companyCode: number; companyName: number; phase: number
     bu: number; div: number; dept: number; group: number; team: number; level: number
   }
-  // デフォルト列（ヘッダー未検出時のフォールバック）
   const defaults: ColMap = {
     code: colIdx('B'), parent: -1, name: -1,
+    companyCode: -1, companyName: -1, phase: -1,
     bu: colIdx('C'), div: colIdx('D'), dept: colIdx('E'),
     group: colIdx('F'), team: colIdx('G'), level: colIdx('H'),
   }
@@ -60,29 +59,35 @@ function parseOrgMaster(ws: XLSX.WorkSheet): OrgMasterEntry[] {
   outer: for (let r = 0; r <= Math.min(4, range.e.r); r++) {
     const cm: ColMap = { ...defaults }
     let hits = 0
-    for (let c = 0; c <= Math.min(range.e.c, 20); c++) {
+    for (let c = 0; c <= Math.min(range.e.c, 30); c++) {
       const h = String(ws[XLSX.utils.encode_cell({ r, c })]?.v ?? '').replace(/\s/g, '')
       if (!h) continue
-      if (/上位組織コード|上位コード|親組織コード|親コード/.test(h))  { cm.parent = c; hits++ }
-      else if (/^組織コード$|^コード$/.test(h))                        { cm.code   = c; hits++ }
-      else if (/組織名|名称/.test(h))                                   { cm.name   = c; hits++ }
-      else if (/組織レベル|レベル/.test(h))                             { cm.level  = c; hits++ }
-      else if (/ビジネスユニット|BU/.test(h))                           { cm.bu     = c; hits++ }
-      else if (/^部門$/.test(h))                                        { cm.div    = c; hits++ }
-      else if (/統括部/.test(h))                                        { cm.dept   = c; hits++ }
-      else if (/グループ/.test(h))                                      { cm.group  = c; hits++ }
-      else if (/チーム/.test(h))                                        { cm.team   = c; hits++ }
+      if (/上位組織コード|上位コード|親組織コード|親コード/.test(h))  { cm.parent      = c; hits++ }
+      else if (/会社コード|会社ID|CompanyCode/i.test(h))              { cm.companyCode = c; hits++ }
+      else if (/会社名|^会社$|CompanyName/i.test(h))                  { cm.companyName = c; hits++ }
+      else if (/発令区分|前後フラグ|フェーズ|適用区分|Phase/i.test(h)) { cm.phase       = c; hits++ }
+      else if (/^組織コード$|^コード$/.test(h))                        { cm.code        = c; hits++ }
+      else if (/組織名|名称/.test(h))                                   { cm.name        = c; hits++ }
+      else if (/組織レベル|レベル/.test(h))                             { cm.level       = c; hits++ }
+      else if (/ビジネスユニット|BU/.test(h))                           { cm.bu          = c; hits++ }
+      else if (/^部門$/.test(h))                                        { cm.div         = c; hits++ }
+      else if (/統括部/.test(h))                                        { cm.dept        = c; hits++ }
+      else if (/グループ/.test(h))                                      { cm.group       = c; hits++ }
+      else if (/チーム/.test(h))                                        { cm.team        = c; hits++ }
     }
     if (hits >= 2) { colMap = cm; dataStartRow = r + 1; break outer }
   }
 
   for (let r = dataStartRow; r <= range.e.r; r++) {
     const code = cellStr(ws, r, colMap.code)
-    if (!code) continue   // 空行はスキップ（break ではなく continue）
+    if (!code) continue
     entries.push({
       code,
-      parentCode:        colMap.parent >= 0 ? (cellStr(ws, r, colMap.parent) || undefined) : undefined,
-      name:              colMap.name   >= 0 ? (cellStr(ws, r, colMap.name)   || undefined) : undefined,
+      parentCode:        colMap.parent      >= 0 ? (cellStr(ws, r, colMap.parent)      || undefined) : undefined,
+      name:              colMap.name        >= 0 ? (cellStr(ws, r, colMap.name)         || undefined) : undefined,
+      companyCode:       colMap.companyCode >= 0 ? (cellStr(ws, r, colMap.companyCode)  || undefined) : undefined,
+      companyName:       colMap.companyName >= 0 ? (cellStr(ws, r, colMap.companyName)  || undefined) : undefined,
+      phase:             parsePhase(colMap.phase >= 0 ? cellStr(ws, r, colMap.phase) : ''),
       businessUnit:      cellStr(ws, r, colMap.bu),
       division:          cellStr(ws, r, colMap.div),
       department:        cellStr(ws, r, colMap.dept),
@@ -94,64 +99,100 @@ function parseOrgMaster(ws: XLSX.WorkSheet): OrgMasterEntry[] {
   return entries
 }
 
+// 発令区分セルの値 → 'before' | 'after' | 'both'
+function parsePhase(v: string): 'before' | 'after' | 'both' {
+  const s = v.trim()
+  if (/^(前|旧|before|B)$/i.test(s)) return 'before'
+  if (/^(後|新|after|A)$/i.test(s))  return 'after'
+  return 'both'
+}
+
 // 元ワークブックをモジュール変数に保持（エクスポート時に要員配置リストシートだけ置換するため）
 let _lastWorkbook: XLSX.WorkBook | null = null
 let _lastFileName: string | null = null
 export function getLastWorkbook(): XLSX.WorkBook | null { return _lastWorkbook }
 export function getLastFileName(): string | null { return _lastFileName }
 
-// OrgMasterEntry → Organization + Company (ドメインエンティティ)
-// 1 Excel = 1 社モデル: BU はトップレベルの組織ノード、会社は 1 つだけ生成する
-function orgMasterToEntities(entries: OrgMasterEntry[], companyName = 'インポートデータ'): { organizations: Organization[]; companies: Company[] } {
-  const COMPANY_ID = 'imported_company'
-  const companies: Company[] = [{ id: COMPANY_ID, name: companyName, hasSF: true }]
-
-  const codeSet = new Set(entries.map(e => e.code))
-
-  // 上位組織コード列が使えるかチェック（少なくとも 1 エントリが有効な parentCode を持つ）
-  const hasParentCodeColumn = entries.some(e => e.parentCode && codeSet.has(e.parentCode))
-
-  function findParentId(entry: OrgMasterEntry): string | null {
-    // ① 上位組織コード列が信頼できれば直接使う
-    if (hasParentCodeColumn) {
-      return (entry.parentCode && codeSet.has(entry.parentCode))
-        ? entry.parentCode
-        : null  // 上位コードが空 or マスタ外 → ルート扱い
-    }
-    // ② fallback: BU/部門/… 列の名称一致で親を探す
-    const parentLevel = entry.organizationLevel - 1
-    if (parentLevel <= 0) return null
-    return entries.find(e => {
-      if (e.organizationLevel !== parentLevel)                           return false
-      if (e.businessUnit     !== entry.businessUnit)                    return false
-      if (parentLevel >= 2 && e.division   !== entry.division)         return false
-      if (parentLevel >= 3 && e.department !== entry.department)       return false
-      if (parentLevel >= 4 && e.group      !== entry.group)            return false
-      return true
-    })?.code ?? null
+// OrgMasterEntry → Organization[] + Company[]
+// ・会社コード / 会社名列がある場合は複数社に対応
+// ・phase フィールドで発令前後に分割し、それぞれ別の階層ツリーを構築する
+function orgMasterToEntities(
+  entries:             OrgMasterEntry[],
+  fallbackCompanyName = 'インポートデータ',
+): {
+  beforeOrganizations: Organization[]
+  afterOrganizations:  Organization[]
+  companies:           Company[]
+} {
+  // ── 1. 会社一覧を収集 ─────────────────────────────────────────
+  // companyCode > companyName > fallback の優先度で会社IDを決定
+  const companyMap = new Map<string, string>()   // companyId → companyName
+  for (const e of entries) {
+    const cid  = e.companyCode || e.companyName || fallbackCompanyName
+    const cname = e.companyName || e.companyCode || fallbackCompanyName
+    if (!companyMap.has(cid)) companyMap.set(cid, cname)
   }
+  const companies: Company[] = [...companyMap.entries()].map(([id, name]) => ({
+    id, name, hasSF: true,
+  }))
 
-  const organizations: Organization[] = entries
-    .filter(e => e.code)
-    .map(e => {
-      // 組織名: name列 > 末端の名称列 > コード
+  // ── 2. エントリのサブセットから Organization[] を構築 ─────────
+  function buildOrgList(subset: OrgMasterEntry[]): Organization[] {
+    const codeSet          = new Set(subset.map(e => e.code))
+    const hasParentCodeCol = subset.some(e => e.parentCode && codeSet.has(e.parentCode))
+
+    function findParentId(entry: OrgMasterEntry): string | null {
+      // ① 上位組織コード列が信頼できれば直接使う
+      if (hasParentCodeCol) {
+        return (entry.parentCode && codeSet.has(entry.parentCode))
+          ? entry.parentCode
+          : null
+      }
+      // ② fallback: BU/部門/… の名称一致で親を探す
+      const parentLevel = entry.organizationLevel - 1
+      if (parentLevel <= 0) return null
+      return subset.find(e => {
+        if (e.organizationLevel !== parentLevel)                    return false
+        if (e.businessUnit !== entry.businessUnit)                  return false
+        if (parentLevel >= 2 && e.division   !== entry.division)   return false
+        if (parentLevel >= 3 && e.department !== entry.department) return false
+        if (parentLevel >= 4 && e.group      !== entry.group)      return false
+        return true
+      })?.code ?? null
+    }
+
+    const orgs: Organization[] = subset.filter(e => e.code).map(e => {
+      const cid  = e.companyCode || e.companyName || fallbackCompanyName
       const derivedName = e.team || e.group || e.department || e.division || e.businessUnit || e.code
-      const name = e.name || derivedName
       return {
-        id: e.code, name, companyId: COMPANY_ID,
+        id:           e.code,
+        name:         e.name || derivedName,
+        companyId:    cid,
         parentId:     findParentId(e),
         level:        e.organizationLevel || 2,
         externalCode: e.code,
       }
     })
 
-  // 組織マスタに存在しない組織コードの受け皿（会社に１つ）
-  organizations.push({
-    id: `unassigned_${COMPANY_ID}`, name: '未設定', companyId: COMPANY_ID,
-    parentId: null, level: 99, externalCode: undefined,
-  })
+    // 会社ごとに「未設定」受け皿ノードを追加
+    for (const cid of companyMap.keys()) {
+      orgs.push({
+        id: `unassigned_${cid}`, name: '未設定', companyId: cid,
+        parentId: null, level: 99, externalCode: undefined,
+      })
+    }
+    return orgs
+  }
 
-  return { organizations, companies }
+  // ── 3. phase で分割して別々の階層を構築 ───────────────────────
+  const beforeEntries = entries.filter(e => e.phase !== 'after')
+  const afterEntries  = entries.filter(e => e.phase !== 'before')
+
+  return {
+    beforeOrganizations: buildOrgList(beforeEntries),
+    afterOrganizations:  buildOrgList(afterEntries),
+    companies,
+  }
 }
 
 // ── 要員配置リストパーサー ─────────────────────────────────────────────────────
@@ -227,18 +268,21 @@ function parseAllocationSheet(ws: XLSX.WorkSheet): AllocationList[] {
 
 // ── 統合インポート結果 ────────────────────────────────────────────────────────
 export interface ImportedWorkbookResult {
-  codeLists:          AllCodeLists
-  orgEntries:         OrgMasterEntry[]
-  baseState:          BaseStateFromImport
-  sheetsFound:        string[]
-  sheetsMissing:      string[]
-  allocationRowCount: number
-  rawImportedRows:    AllocationList[]
+  codeLists:           AllCodeLists
+  beforeOrganizations: Organization[]  // 発令前組織マスタ（phase='before'|'both'）
+  afterOrganizations:  Organization[]  // 発令後組織マスタ（phase='after'|'both'）
+  companies:           Company[]
+  allocationList:      AllocationRow[] // rowId 付き AllocationRow（Single Source of Truth）
+  sheetsFound:         string[]
+  sheetsMissing:       string[]
+  // 表示用
+  orgEntries:          OrgMasterEntry[]
+  allocationRowCount:  number
 }
 
 // ── メインエクスポート ────────────────────────────────────────────────────────
 
-export function importWorkbook(wb: XLSX.WorkBook, companyName = 'インポートデータ'): ImportedWorkbookResult {
+export function importWorkbook(wb: XLSX.WorkBook, fallbackCompanyName = 'インポートデータ'): ImportedWorkbookResult {
   const sheetsFound:   string[] = []
   const sheetsMissing: string[] = []
 
@@ -252,41 +296,43 @@ export function importWorkbook(wb: XLSX.WorkBook, companyName = 'インポート
     sheetsMissing.push(SHEET_CODE_LISTS)
   }
 
-  // 2. 組織CD一覧
-  let orgEntries:       OrgMasterEntry[] = []
-  let existingOrgs:     Organization[]   = []
-  let existingCompanies: Company[]       = []
+  // 2. 組織CD一覧 → 発令前/後に分けた Organization[] を生成
+  let orgEntries:           OrgMasterEntry[] = []
+  let beforeOrganizations:  Organization[]   = []
+  let afterOrganizations:   Organization[]   = []
+  let companies:            Company[]        = []
   if (wb.Sheets[SHEET_ORG_MASTER]) {
     sheetsFound.push(SHEET_ORG_MASTER)
     orgEntries = parseOrgMaster(wb.Sheets[SHEET_ORG_MASTER])
-    const entities = orgMasterToEntities(orgEntries, companyName)
-    existingOrgs      = entities.organizations
-    existingCompanies = entities.companies
-    // コードリストの orgMasterEntries にも格納
-    codeLists = { ...codeLists, orgMasterEntries: orgEntries }
+    const entities      = orgMasterToEntities(orgEntries, fallbackCompanyName)
+    beforeOrganizations = entities.beforeOrganizations
+    afterOrganizations  = entities.afterOrganizations
+    companies           = entities.companies
+    codeLists           = { ...codeLists, orgMasterEntries: orgEntries }
   } else {
     sheetsMissing.push(SHEET_ORG_MASTER)
   }
 
-  // 3. 要員配置リスト
-  let allocationRows: AllocationList[] = []
+  // 3. 要員配置リスト → AllocationRow（rowId = 1始まりの連番）
+  let allocationList: AllocationRow[] = []
   if (wb.Sheets[SHEET_ALLOCATION]) {
     sheetsFound.push(SHEET_ALLOCATION)
-    allocationRows = parseAllocationSheet(wb.Sheets[SHEET_ALLOCATION])
+    const rawRows = parseAllocationSheet(wb.Sheets[SHEET_ALLOCATION])
+    allocationList = rawRows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
   } else {
     sheetsMissing.push(SHEET_ALLOCATION)
   }
 
-  const baseState = buildBaseState(allocationRows, [], existingCompanies, existingOrgs)
-
   return {
     codeLists,
-    orgEntries,
-    baseState,
+    beforeOrganizations,
+    afterOrganizations,
+    companies,
+    allocationList,
     sheetsFound,
     sheetsMissing,
-    allocationRowCount: allocationRows.length,
-    rawImportedRows:    allocationRows,
+    orgEntries,
+    allocationRowCount: allocationList.length,
   }
 }
 

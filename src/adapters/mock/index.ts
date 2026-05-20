@@ -3,14 +3,7 @@
  * Each adapter runs Zod validation at parse time so bad mock data fails loudly.
  * To add a new adapter (Excel / Salesforce), implement the same port interfaces.
  */
-import { z } from 'zod'
 import {
-  CompanySchema,
-  OrganizationSchema,
-  PersonSchema,
-  PositionSchema,
-  AffiliationSchema,
-  OperationSchema,
   BandOptionSchema,
   type BandOption,
   type Company,
@@ -29,29 +22,6 @@ import type {
   IAffiliationRepository,
   IOperationRepository,
 } from '../../ports'
-import {
-  companies as rawCompanies,
-  organizations as rawOrganizations,
-  persons as rawPersons,
-  beforePositions as rawPositions,
-  beforeAffiliations as rawAffiliations,
-  initialOperations as rawOperations,
-} from '../../data/mockData'
-
-// ── ユーティリティ: Zodパースを配列に適用 ─────────────────────
-function parseAll<S extends z.ZodTypeAny>(
-  schema: S,
-  data: unknown[],
-): z.infer<S>[] {
-  return data.map((item, i) => {
-    const result = schema.safeParse(item)
-    if (!result.success) {
-      console.error(`[MockAdapter] parse error at index ${i}:`, result.error.issues)
-      throw new Error(`Mock data validation failed: ${result.error.issues[0]?.message}`)
-    }
-    return result.data
-  })
-}
 
 // ── Master ─────────────────────────────────────────────────────
 const RAW_BANDS: BandOption[] = [
@@ -76,7 +46,7 @@ const RAW_POSITION_TITLES = [
 
 export class MockMasterRepository implements IMasterRepository {
   async getBands(): Promise<BandOption[]> {
-    return parseAll(BandOptionSchema, RAW_BANDS)
+    return RAW_BANDS.map(b => BandOptionSchema.parse(b))
   }
   async getTransferReasons(): Promise<string[]> {
     return RAW_TRANSFER_REASONS
@@ -88,62 +58,39 @@ export class MockMasterRepository implements IMasterRepository {
 
 // ── Companies ──────────────────────────────────────────────────
 export class MockCompanyRepository implements ICompanyRepository {
-  async getAll(): Promise<Company[]> {
-    return parseAll(CompanySchema, rawCompanies)
-  }
+  async getAll(): Promise<Company[]> { return [] }
 }
 
 // ── Organizations ──────────────────────────────────────────────
 export class MockOrganizationRepository implements IOrganizationRepository {
-  async getAll(): Promise<Organization[]> {
-    return parseAll(OrganizationSchema, rawOrganizations)
-  }
-  async getByCompany(companyId: string): Promise<Organization[]> {
-    const all = await this.getAll()
-    return all.filter(o => o.companyId === companyId)
-  }
+  async getAll(): Promise<Organization[]> { return [] }
+  async getByCompany(_companyId: string): Promise<Organization[]> { return [] }
 }
 
 // ── Persons ───────────────────────────────────────────────────
 export class MockPersonRepository implements IPersonRepository {
-  async getAll(): Promise<Person[]> {
-    return parseAll(PersonSchema, rawPersons)
-  }
-  async getById(id: string): Promise<Person | null> {
-    const all = await this.getAll()
-    return all.find(p => p.id === id) ?? null
-  }
+  async getAll(): Promise<Person[]> { return [] }
+  async getById(_id: string): Promise<Person | null> { return null }
 }
 
 // ── Positions (Before state) ───────────────────────────────────
 export class MockPositionRepository implements IPositionRepository {
-  async getAll(): Promise<Position[]> {
-    return parseAll(PositionSchema, rawPositions)
-  }
+  async getAll(): Promise<Position[]> { return [] }
 }
 
 // ── Affiliations (Before state) ────────────────────────────────
 export class MockAffiliationRepository implements IAffiliationRepository {
-  async getAll(): Promise<Affiliation[]> {
-    return parseAll(AffiliationSchema, rawAffiliations)
-  }
+  async getAll(): Promise<Affiliation[]> { return [] }
 }
 
 // ── Operations ────────────────────────────────────────────────
-// デモ用初期手順を返す。将来のSFアダプターではSFカスタムオブジェクトへ保存する。
 export class MockOperationRepository implements IOperationRepository {
-  private ops: Operation[] = parseAll(OperationSchema, rawOperations)
+  private ops: Operation[] = []
 
-  async getAll(): Promise<Operation[]> {
-    return [...this.ops]
-  }
+  async getAll(): Promise<Operation[]> { return [...this.ops] }
   async save(op: Operation): Promise<void> {
     const idx = this.ops.findIndex(o => o.id === op.id)
-    if (idx >= 0) {
-      this.ops[idx] = op
-    } else {
-      this.ops.push(op)
-    }
+    if (idx >= 0) { this.ops[idx] = op } else { this.ops.push(op) }
   }
   async delete(id: string): Promise<void> {
     this.ops = this.ops.filter(o => o.id !== id)
