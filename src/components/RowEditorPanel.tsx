@@ -6,7 +6,7 @@ import { validateRow, fieldsToShow, issuesForField } from '../domain/validation/
 import { RowEditorField } from './RowEditorField'
 import { ComboInput } from './ComboInput'
 import type { AllocationRow } from '../domain/allocationRow'
-import type { AfterValues } from '../domain/operationGroups/types'
+import type { AfterValues } from '../domain/allocationRow'
 
 const FIELD_LABEL: Partial<Record<string, string>> = Object.fromEntries(
   ALLOCATION_LIST_FIELDS.map(f => [f.key, f.ja])

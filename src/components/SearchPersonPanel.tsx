@@ -10,7 +10,7 @@ export function SearchPersonPanel() {
     afterOrganizations, afterAffiliations, afterPositions,
     allocationList,
     focusedOrgId, selectedPersonId, selectPerson,
-    bands, positionTitles, addNewHire,
+    addNewHire,
   } = useStore()
 
   // 配置先として選べる組織（未設定・level99 を除く）
@@ -120,22 +120,20 @@ export function SearchPersonPanel() {
               <div className="border-b border-blue-100 bg-blue-50 p-2 flex-shrink-0 space-y-1.5">
                 <div className="text-xs font-medium text-blue-700">空席ポジション作成</div>
                 <div className="flex gap-1">
-                  <select
+                  <input
+                    type="text"
                     value={createTitle}
                     onChange={e => setCreateTitle(e.target.value)}
+                    placeholder="職位名"
                     className="flex-1 border border-gray-300 rounded px-1.5 py-1 text-xs bg-white focus:outline-none focus:border-blue-400"
-                  >
-                    <option value="">職位名を選択</option>
-                    {positionTitles.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <select
+                  />
+                  <input
+                    type="text"
                     value={createBand}
                     onChange={e => setCreateBand(e.target.value)}
+                    placeholder="Band"
                     className="w-16 border border-gray-300 rounded px-1.5 py-1 text-xs bg-white focus:outline-none focus:border-blue-400"
-                  >
-                    <option value="">Bnd</option>
-                    {bands.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-                  </select>
+                  />
                 </div>
                 <div className="flex gap-1">
                   <button

@@ -76,27 +76,6 @@ export const AffiliationSchema = z.object({
   isDiscretionaryLabor:        z.boolean().optional(),
 })
 
-export const OperationKindSchema = z.enum([
-  'MoveToOrg', 'AddConcurrent', 'RemoveConcurrent', 'SetManager',
-  'Promote', 'SendOnSecondment', 'RecallFromSecondment', 'ChangeSecondment',
-  'Hire', 'Retire', 'CreateVacantPosition', 'FillVacantPosition',
-  'CreateOrg', 'AbolishOrg',
-])
-
-export const OperationSchema = z.object({
-  id:                   z.string(),
-  kind:                 OperationKindSchema,
-  label:                z.string(),
-  params:               z.record(z.string(), z.string()),
-  effectiveDate:        z.string(),
-  order:                z.number().int().min(1),
-  transferReason:       z.string().optional(),
-  memo:                 z.string().optional(),
-  promotionSign:        z.boolean().optional(),
-  demotionReason:       z.string().optional(),
-  salaryGradeChangeSign: z.boolean().optional(),
-})
-
 // ── Inferred TypeScript types (schemas are the source of truth) ──
 export type BandOption    = z.infer<typeof BandOptionSchema>
 export type Company       = z.infer<typeof CompanySchema>
@@ -105,5 +84,3 @@ export type Person        = z.infer<typeof PersonSchema>
 export type Position      = z.infer<typeof PositionSchema>
 export type AffiliationType = z.infer<typeof AffiliationTypeSchema>
 export type Affiliation   = z.infer<typeof AffiliationSchema>
-export type OperationKind = z.infer<typeof OperationKindSchema>
-export type Operation     = z.infer<typeof OperationSchema>

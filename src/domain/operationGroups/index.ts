@@ -1,4 +1,7 @@
-export type { OperationKind, OperationGroupKind, OperationGroup, AfterValues } from './types'
+// Projection functions are now in domain/projection/rows.ts.
+// AfterValues is now in domain/allocationRow.ts.
+// This barrel exists only for backward-compat during migration.
+export type { AfterValues } from '../allocationRow'
 export {
   derivePersons,
   deriveCompanies,
@@ -6,4 +9,4 @@ export {
   deriveAfterPositions,
   deriveBeforeAffiliations,
   deriveAfterAffiliations,
-} from './snapshot'
+} from '../projection/rows'

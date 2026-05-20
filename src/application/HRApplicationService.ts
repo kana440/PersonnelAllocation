@@ -1,9 +1,11 @@
-import type { Company, Organization, BandOption } from '../domain/schemas'
+import type { Company, Organization } from '../domain/schemas'
 import type { AllCodeLists } from '../domain/codeLists/aggregate'
 import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
 import type { AllocationRow } from '../domain/allocationRow'
 import { nextRowId } from '../domain/allocationRow'
-import type { AfterValues } from '../domain/operationGroups/types'
+import type { AfterValues } from '../domain/allocationRow'
+import type { IDomainOperation, ValidationResult } from '../domain/operation/types'
+import { DirectEditOperation }  from '../domain/operation/handlers/directEdit'
 import {
   derivePersons,
   deriveCompanies,
@@ -11,7 +13,7 @@ import {
   deriveAfterPositions,
   deriveBeforeAffiliations,
   deriveAfterAffiliations,
-} from '../domain/operationGroups/snapshot'
+} from '../domain/projection/rows'
 import type { Person, Position, Affiliation } from '../domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
 import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
@@ -33,11 +35,6 @@ export interface DomainSnapshot {
   beforeAffiliations:  Affiliation[]
   afterPositions:      Position[]
   afterAffiliations:   Affiliation[]
-
-  // ── マスタ補助 ──────────────────────────────────────────────────
-  bands:               BandOption[]
-  transferReasons:     string[]
-  positionTitles:      string[]
 
   // ── Undo/Redo 状態 ─────────────────────────────────────────────
   canUndo:             boolean
@@ -142,9 +139,6 @@ export class HRApplicationService {
       beforeAffiliations:  deriveBeforeAffiliations(this.allocationList, persons),
       afterPositions:      deriveAfterPositions(this.allocationList, this.afterOrganizations),
       afterAffiliations:   deriveAfterAffiliations(this.allocationList, persons),
-      bands:               [],
-      transferReasons:     [],
-      positionTitles:      [],
       canUndo:             this.past.length > 0,
       canRedo:             this.future.length > 0,
       patternCache:        this.patternCache,
@@ -170,7 +164,27 @@ export class HRApplicationService {
     this.emit()
   }
 
-  // ── 行の直接編集（checkpoint なし・AI/内部用）────────────────
+  // ── 操作の実行（意味のある単位・Undo の単位）────────────────────
+  // validate() が error を返した場合は適用せず ValidationError を返す。
+  // ok の場合は checkpoint を積んで apply() を実行し emit() する。
+  executeOperation(op: IDomainOperation): ValidationResult {
+    const ctx = {
+      allocationList:     this.allocationList,
+      afterOrganizations: this.afterOrganizations,
+      codeLists:          this.codeLists,
+    }
+    const result = op.validate(ctx)
+    if (!result.ok) return result
+
+    this.checkpoint()
+    const applied = op.apply(ctx)
+    this.allocationList     = applied.updatedList
+    if (applied.updatedOrgs) this.afterOrganizations = applied.updatedOrgs
+    this.emit()
+    return result
+  }
+
+  // ── 行の直接編集（checkpoint なし・プレビュー/AI 内部用）────────
   editRow(rowId: number, changes: AfterValues): void {
     const idx = this.allocationList.findIndex(r => r.rowId === rowId)
     if (idx < 0) return
@@ -180,15 +194,13 @@ export class HRApplicationService {
     this.emit()
   }
 
-  // ── ユーザー保存（checkpoint → 適用。Undo の単位）────────────
-  saveRow(rowId: number, changes: AfterValues): void {
-    const idx = this.allocationList.findIndex(r => r.rowId === rowId)
-    if (idx < 0) return
-    this.checkpoint()
-    this.allocationList = this.allocationList.map((r, i) =>
-      i === idx ? { ...r, ...changes } : r
-    )
-    this.emit()
+  // ── ユーザー保存（executeOperation の薄いラッパー）───────────
+  saveRow(rowId: number, changes: AfterValues): ValidationResult {
+    const row   = this.allocationList.find(r => r.rowId === rowId)
+    const label = row
+      ? `${row.lastName ?? ''}${row.firstName ?? ''} 編集`
+      : `行 ${rowId} 編集`
+    return this.executeOperation(new DirectEditOperation(rowId, changes, label))
   }
 
   // ── 新規採用行の追加 ─────────────────────────────────────────

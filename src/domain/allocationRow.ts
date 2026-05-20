@@ -83,3 +83,22 @@ export function rowDiff(row: AllocationRow): Array<{
 export function nextRowId(rows: AllocationRow[]): number {
   return rows.length === 0 ? 1 : Math.max(...rows.map(r => r.rowId)) + 1
 }
+
+// ── AfterValues ──────────────────────────────────────────────────────────────
+// after フィールドの部分的な変更値。
+// DirectEditOperation / executeOperation の入力型として使用する。
+export type AfterValues = Partial<
+  Pick<
+    AllocationList,
+    | 'employmentType' | 'concurrentType' | 'concurrentReason'
+    | 'secondmentFromCompany' | 'secondmentFromEmployeeNumber'
+    | 'leaveFlag' | 'positionCode' | 'departmentCode'
+    | 'businessUnit' | 'division' | 'subDivision' | 'group' | 'team'
+    | 'officialPositionCode' | 'localJobTitle' | 'secondmentToCompany'
+    | 'location' | 'costCenter' | 'managerPositionCode' | 'managerName'
+    | 'jobFamily' | 'jobType' | 'positionBand' | 'band' | 'payGrade'
+    | 'trainingPositionFlag' | 'nonUnionAgreementFlag' | 'positionUnionFlag'
+    | 'unionFlag' | 'positionDiscretionaryWorkFlag' | 'discretionaryWorkFlag'
+    | 'transferReason' | 'memo' | 'promotionSign' | 'demotionReason' | 'payGradeChangeSign'
+  >
+>

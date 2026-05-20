@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { AfterValues } from '../domain/operationGroups/types'
+import type { AfterValues } from '../domain/allocationRow'
+import type { ValidationResult } from '../domain/operation/types'
 import { appService } from '../application/HRApplicationService'
 import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '../domain/allocationRow'
@@ -35,7 +36,7 @@ interface Actions {
 
   // 行の直接編集
   editRow:   (rowId: number, changes: AfterValues) => void
-  saveRow:   (rowId: number, changes: AfterValues) => void  // checkpoint + 適用（Undo 単位）
+  saveRow:   (rowId: number, changes: AfterValues) => ValidationResult
   selectRow: (rowId: number | null) => void
 
   // 新規採用
