@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../store/useStore'
 import { rowDiff } from '../domain/allocationRow'
 import { buildOrgMap } from '../domain/projection/rows'
@@ -32,14 +32,14 @@ interface OrgBoxProps           { orgId: string; depth?: number }
 interface CollapsedOrgChipProps { orgId: string }
 
 const ORG_PALETTE = [
-  { card: 'bg-blue-50 border-blue-200',     tag: 'bg-blue-100 text-blue-700',     text: 'text-blue-800' },
-  { card: 'bg-green-50 border-green-200',   tag: 'bg-green-100 text-green-700',   text: 'text-green-800' },
-  { card: 'bg-purple-50 border-purple-200', tag: 'bg-purple-100 text-purple-700', text: 'text-purple-800' },
-  { card: 'bg-amber-50 border-amber-200',   tag: 'bg-amber-100 text-amber-700',   text: 'text-amber-800' },
-  { card: 'bg-cyan-50 border-cyan-200',     tag: 'bg-cyan-100 text-cyan-700',     text: 'text-cyan-800' },
-  { card: 'bg-rose-50 border-rose-200',     tag: 'bg-rose-100 text-rose-700',     text: 'text-rose-800' },
-  { card: 'bg-teal-50 border-teal-200',     tag: 'bg-teal-100 text-teal-700',     text: 'text-teal-800' },
-  { card: 'bg-orange-50 border-orange-200', tag: 'bg-orange-100 text-orange-700', text: 'text-orange-800' },
+  { card: 'bg-blue-50 border-blue-200',     tag: 'bg-blue-100 text-blue-700',     text: 'text-blue-800',   line: 'border-l-blue-400' },
+  { card: 'bg-green-50 border-green-200',   tag: 'bg-green-100 text-green-700',   text: 'text-green-800',  line: 'border-l-green-400' },
+  { card: 'bg-purple-50 border-purple-200', tag: 'bg-purple-100 text-purple-700', text: 'text-purple-800', line: 'border-l-purple-400' },
+  { card: 'bg-amber-50 border-amber-200',   tag: 'bg-amber-100 text-amber-700',   text: 'text-amber-800',  line: 'border-l-amber-400' },
+  { card: 'bg-cyan-50 border-cyan-200',     tag: 'bg-cyan-100 text-cyan-700',     text: 'text-cyan-800',   line: 'border-l-cyan-400' },
+  { card: 'bg-rose-50 border-rose-200',     tag: 'bg-rose-100 text-rose-700',     text: 'text-rose-800',   line: 'border-l-rose-400' },
+  { card: 'bg-teal-50 border-teal-200',     tag: 'bg-teal-100 text-teal-700',     text: 'text-teal-800',   line: 'border-l-teal-400' },
+  { card: 'bg-orange-50 border-orange-200', tag: 'bg-orange-100 text-orange-700', text: 'text-orange-800', line: 'border-l-orange-400' },
 ]
 
 export function OrgOperationView() {
@@ -71,6 +71,13 @@ export function OrgOperationView() {
   const [orgManualOrders,   setOrgManualOrders]   = useState<Record<string, string[]>>({})
   const [reorderDropTarget, setReorderDropTarget] = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
   const [openSortDropdown,  setOpenSortDropdown]  = useState<string | null>(null)
+  const [expandedNodes,       setExpandedNodes]       = useState<Set<string>>(new Set())
+  const [reportLineRootId,    setReportLineRootId]    = useState<string | null>(null)
+
+  // レポートライン内クリックと外部選択を区別するフラグ (宣言はhookルール上ここに置く)
+  const isReportLineInternalSelect = useRef(false)
+  const rlManagerMapRef    = useRef(new Map<string, string>())
+  const reportLineRootIdRef = useRef<string | null>(null)
 
   const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
     e.preventDefault()
@@ -122,6 +129,81 @@ export function OrgOperationView() {
     }
     return map
   }, [allocationList, beforeOrgByCode, personBySfId])
+
+  // ── レポートライン用マップ (org フィルタなし) ──────────────────
+  const rlPosCodeToPersonId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const row of allocationList) {
+      if (row.concurrentType) continue
+      const person = personBySfId.get(row.userId ?? '')
+      if (!person) continue
+      const posCode = isBefore ? row.prevPositionCode : row.positionCode
+      if (posCode) map.set(posCode, person.id)
+    }
+    return map
+  }, [allocationList, isBefore, personBySfId])
+
+  const rlManagerMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const row of allocationList) {
+      if (row.concurrentType) continue
+      const person = personBySfId.get(row.userId ?? '')
+      if (!person) continue
+      const mgrCode = isBefore ? row.prevManagerPositionCode : row.managerPositionCode
+      if (!mgrCode) continue
+      const mgrId = rlPosCodeToPersonId.get(mgrCode)
+      if (mgrId && mgrId !== person.id) map.set(person.id, mgrId)
+    }
+    return map
+  }, [allocationList, isBefore, personBySfId, rlPosCodeToPersonId])
+
+  rlManagerMapRef.current     = rlManagerMap
+  reportLineRootIdRef.current = reportLineRootId
+
+  // ヘッダー表示用: 描写起点（reportLineRootId）の人名と組織名
+  const rlRootPersonInfo = useMemo(() => {
+    if (!reportLineRootId) return null
+    const person = persons.find(p => p.id === reportLineRootId)
+    if (!person?.sfPersonId) return null
+    const row = allocationList.find(r => r.userId === person.sfPersonId && !r.concurrentType)
+              ?? allocationList.find(r => r.userId === person.sfPersonId)
+    const deptCode = row ? (isBefore ? row.prevDepartmentCode : row.departmentCode) : null
+    const org = deptCode ? (isBefore ? beforeOrgByCode : afterOrgByCode).get(deptCode) : null
+    return { name: person.name, orgName: org?.name ?? null }
+  }, [reportLineRootId, persons, allocationList, isBefore, beforeOrgByCode, afterOrgByCode])
+
+  // 「↑ 上へ」で移動できる先 (現在ルートの親)
+  const rlRootManagerId = reportLineRootId != null ? rlManagerMap.get(reportLineRootId) : undefined
+
+  // 外部（サイドバー/組織図/Excel）で人が選択された時: 祖先を展開して見えるようにする
+  // 現在のツリー外にいる場合はルートをその人の親に変更
+  useEffect(() => {
+    if (canvasMode !== 'レポートライン' || !selectedPersonId) return
+    if (isReportLineInternalSelect.current) {
+      isReportLineInternalSelect.current = false
+      return
+    }
+    const mgr = rlManagerMapRef.current
+    // 祖先チェーンを構築
+    const ancestors: string[] = []
+    let cur = mgr.get(selectedPersonId)
+    while (cur) {
+      ancestors.push(cur)
+      cur = mgr.get(cur)
+    }
+    const rootId = reportLineRootIdRef.current
+    // ツリー内かどうか判定: root=null(全体) または 祖先に root が含まれる または 選択者自身がroot
+    const inTree = rootId == null || rootId === selectedPersonId || ancestors.includes(rootId)
+    if (!inTree) {
+      // ツリー外 → 親をルートにしてから展開
+      const parentId = mgr.get(selectedPersonId)
+      setReportLineRootId(parentId ?? selectedPersonId)
+      setExpandedNodes(prev => new Set([...prev, ...(parentId ? [parentId] : []), ...ancestors]))
+    } else {
+      // ツリー内 → 祖先を全て展開して対象を表示
+      setExpandedNodes(prev => new Set([...prev, ...ancestors]))
+    }
+  }, [selectedPersonId, canvasMode])
 
   // ── Early returns ─────────────────────────────────────────────
   if (!focusedOrgId) {
@@ -549,57 +631,83 @@ export function OrgOperationView() {
   const ReportLineView = () => {
     const [dragOverPersonId, setDragOverPersonId] = useState<string | null>(null)
 
-    const getAllOrgsInTree = (rootId: string): string[] => {
-      const result = [rootId]
-      organizations.filter(o => o.parentId === rootId).forEach(c => result.push(...getAllOrgsInTree(c.id)))
-      return result
-    }
-    const orgsInScope = getAllOrgsInTree(focusedOrgId)
-    const orgColorMap = Object.fromEntries(orgsInScope.map((id, i) => [id, ORG_PALETTE[i % ORG_PALETTE.length]]))
-
-    const membersByOrg = isBefore ? beforeMembersByOrgId : afterMembersByOrgId
-
-    const getPersonScopeRow = (personId: string): { row: AllocationRow; orgId: string } | null => {
-      for (const scopeOrgId of orgsInScope) {
-        const match = (membersByOrg.get(scopeOrgId) ?? []).find(m => m.person.id === personId)
-        if (match) return { row: match.row, orgId: scopeOrgId }
+    // All people regardless of org — primary row preferred, concurrent as fallback
+    const scopeRowMap = useMemo(() => {
+      const orgMap = isBefore ? beforeOrgByCode : afterOrgByCode
+      const map = new Map<string, { row: AllocationRow; orgId: string }>()
+      for (const row of allocationList) {
+        if (row.concurrentType) continue
+        const person = personBySfId.get(row.userId ?? '')
+        if (!person) continue
+        const deptCode = isBefore ? row.prevDepartmentCode : row.departmentCode
+        const org = deptCode ? orgMap.get(deptCode) : undefined
+        map.set(person.id, { row, orgId: org?.id ?? '' })
       }
-      return null
-    }
+      for (const row of allocationList) {
+        if (!row.concurrentType) continue
+        const person = personBySfId.get(row.userId ?? '')
+        if (!person || map.has(person.id)) continue
+        const deptCode = isBefore ? row.prevDepartmentCode : row.departmentCode
+        const org = deptCode ? orgMap.get(deptCode) : undefined
+        map.set(person.id, { row, orgId: org?.id ?? '' })
+      }
+      return map
+    }, [allocationList, isBefore, beforeOrgByCode, afterOrgByCode, personBySfId])
 
-    const personsInScope = [...new Set(
-      orgsInScope.flatMap(orgId => (membersByOrg.get(orgId) ?? []).map(m => m.person.id))
-    )]
+    const orgColorMap = useMemo(() => {
+      const seen = new Map<string, number>()
+      let i = 0
+      for (const sr of scopeRowMap.values()) {
+        if (!seen.has(sr.orgId)) seen.set(sr.orgId, i++)
+      }
+      return Object.fromEntries([...seen.entries()].map(([id, idx]) => [id, ORG_PALETTE[idx % ORG_PALETTE.length]]))
+    }, [scopeRowMap])
 
-    const getDirectReports = (personId: string): string[] => {
-      const sr = getPersonScopeRow(personId)
-      if (!sr) return []
-      const myPosCode = isBefore ? sr.row.prevPositionCode : sr.row.positionCode
-      if (!myPosCode) return []
-      return personsInScope.filter(pid => {
-        if (pid === personId) return false
-        const otherSr = getPersonScopeRow(pid)
-        const mgrCode = otherSr ? (isBefore ? otherSr.row.prevManagerPositionCode : otherSr.row.managerPositionCode) : null
-        return mgrCode === myPosCode
-      })
-    }
+    // positionCode → personId
+    const posCodeToPersonId = useMemo(() => {
+      const map = new Map<string, string>()
+      for (const [pid, sr] of scopeRowMap) {
+        const posCode = isBefore ? sr.row.prevPositionCode : sr.row.positionCode
+        if (posCode) map.set(posCode, pid)
+      }
+      return map
+    }, [scopeRowMap, isBefore])
 
-    const roots = personsInScope.filter(pid => {
-      const sr = getPersonScopeRow(pid)
-      if (!sr) return false
-      const mgrCode = isBefore ? sr.row.prevManagerPositionCode : sr.row.managerPositionCode
-      if (!mgrCode) return true
-      return !personsInScope.some(otherId => {
-        const otherSr = getPersonScopeRow(otherId)
-        const posCode = otherSr ? (isBefore ? otherSr.row.prevPositionCode : otherSr.row.positionCode) : null
-        return posCode === mgrCode
-      })
-    })
+    // personId → manager personId
+    const managerMap = useMemo(() => {
+      const map = new Map<string, string>()
+      for (const [pid, sr] of scopeRowMap) {
+        const mgrCode = isBefore ? sr.row.prevManagerPositionCode : sr.row.managerPositionCode
+        if (!mgrCode) continue
+        const mgrId = posCodeToPersonId.get(mgrCode)
+        if (mgrId && mgrId !== pid) map.set(pid, mgrId)
+      }
+      return map
+    }, [scopeRowMap, posCodeToPersonId, isBefore])
+
+    // personId → direct report personIds
+    const directReportsMap = useMemo(() => {
+      const map = new Map<string, string[]>()
+      for (const pid of scopeRowMap.keys()) map.set(pid, [])
+      for (const [pid, mgrId] of managerMap) {
+        map.get(mgrId)?.push(pid)
+      }
+      return map
+    }, [scopeRowMap, managerMap])
+
+    const globalRoots = useMemo(() =>
+      [...scopeRowMap.keys()].filter(pid => !managerMap.has(pid)),
+      [scopeRowMap, managerMap]
+    )
+
+    const displayRoots = reportLineRootId && scopeRowMap.has(reportLineRootId)
+      ? [reportLineRootId]
+      : globalRoots
 
     const wouldCycle = (targetId: string, sourceId: string, visited = new Set<string>()): boolean => {
       if (visited.has(sourceId)) return false
       visited.add(sourceId)
-      return getDirectReports(sourceId).some(childId =>
+      return (directReportsMap.get(sourceId) ?? []).some(childId =>
         childId === targetId || wouldCycle(targetId, childId, new Set(visited))
       )
     }
@@ -607,87 +715,112 @@ export function OrgOperationView() {
     const handleManagerDrop = (targetPersonId: string, sourcePersonId: string) => {
       if (sourcePersonId === targetPersonId) return
       if (wouldCycle(targetPersonId, sourcePersonId)) return
-
       const targetPerson = persons.find(p => p.id === targetPersonId)
       if (!targetPerson?.sfPersonId) return
       const targetRow =
         allocationList.find(r => r.userId === targetPerson.sfPersonId && !r.concurrentType) ??
         allocationList.find(r => r.userId === targetPerson.sfPersonId)
       if (!targetRow) return
-
       const sourcePerson = persons.find(p => p.id === sourcePersonId)
       if (!sourcePerson?.sfPersonId) return
       const sourceRow =
         allocationList.find(r => r.userId === sourcePerson.sfPersonId && !r.concurrentType) ??
         allocationList.find(r => r.userId === sourcePerson.sfPersonId)
       if (!sourceRow) return
-
       const managerName = [targetRow.lastName, targetRow.firstName].filter(Boolean).join('')
       saveRow(sourceRow.rowId, { managerPositionCode: targetRow.positionCode ?? '', managerName })
     }
 
+    const toggleExpand = (personId: string) => {
+      setExpandedNodes(prev => {
+        const next = new Set(prev)
+        next.has(personId) ? next.delete(personId) : next.add(personId)
+        return next
+      })
+    }
+
     const ReportNode = ({ personId, depth = 0 }: { personId: string; depth?: number }) => {
-      if (depth > 20) return <div className="ml-2 text-xs text-red-400">⚠ 循環参照</div>
+      if (depth > 20) return <div className="text-xs text-red-400 ml-5">⚠ 循環参照</div>
       const person = persons.find(p => p.id === personId)
-      const sr     = getPersonScopeRow(personId)
+      const sr     = scopeRowMap.get(personId)
       if (!person || !sr) return null
-      const color = orgColorMap[sr.orgId]
-      const org   = organizations.find(o => o.id === sr.orgId)
-      const title = isBefore ? sr.row.prevOfficialPositionCode : sr.row.officialPositionCode
-      const band  = isBefore ? (sr.row.prevPositionBand ?? sr.row.prevBand) : (sr.row.positionBand ?? sr.row.band)
+      const color         = orgColorMap[sr.orgId] ?? ORG_PALETTE[0]
+      const org           = organizations.find(o => o.id === sr.orgId)
+      const title         = isBefore ? sr.row.prevOfficialPositionCode : sr.row.officialPositionCode
+      const band          = isBefore ? (sr.row.prevPositionBand ?? sr.row.prevBand) : (sr.row.positionBand ?? sr.row.band)
+      const directReports = directReportsMap.get(personId) ?? []
+      const isExpanded    = expandedNodes.has(personId)
+      const hasReports    = directReports.length > 0
       return (
-        <div className={depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-3 mt-1.5' : 'mt-1.5'}>
-          <button
-            draggable
-            onDragStart={e => {
-              e.stopPropagation()
-              e.dataTransfer.setData('application/json', JSON.stringify({
-                personId, fromOrgId: '', fromCompanyId: '', affiliationType: 'primary', source: 'reportLine',
-              }))
-              e.dataTransfer.effectAllowed = 'move'
-            }}
-            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverPersonId(personId) }}
-            onDragLeave={e => {
-              if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
-                setDragOverPersonId(null)
-            }}
-            onDrop={e => {
-              e.preventDefault(); e.stopPropagation(); setDragOverPersonId(null)
-              let data: { personId: string }
-              try { data = JSON.parse(e.dataTransfer.getData('application/json')) as { personId: string } } catch { return }
-              handleManagerDrop(personId, data.personId)
-            }}
-            onClick={() => selectPerson(personId)}
-            onDoubleClick={() => handlePersonDoubleClick(personId)}
-            onContextMenu={e => handlePersonContextMenu(e, personId)}
-            className={`text-left inline-block px-2.5 py-1.5 rounded border text-xs transition-all hover:shadow-sm cursor-grab active:cursor-grabbing ${color.card} ${
-              dragOverPersonId === personId
-                ? 'ring-2 ring-green-400 ring-offset-1 scale-105'
-                : selectedPersonId === personId
-                ? 'ring-2 ring-yellow-400 ring-offset-1'
-                : ''
-            }`}
-          >
-            {dragOverPersonId === personId && (
-              <div className="text-green-600 text-xs font-semibold mb-0.5">→ 上司にする</div>
-            )}
-            <div className={`font-semibold leading-tight ${color.text}`}>{person.name}</div>
-            <div className="text-gray-500 leading-tight">
-              {title}
-              {band && <span className={`ml-1 font-medium ${color.text}`}>{band}</span>}
+        <div className="mt-1">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => hasReports && toggleExpand(personId)}
+              className={`w-4 flex-shrink-0 text-xs text-center leading-none ${hasReports ? 'text-gray-400 hover:text-gray-600 cursor-pointer' : 'text-gray-300 cursor-default'}`}
+            >
+              {hasReports ? (isExpanded ? '▼' : '▶') : '·'}
+            </button>
+            <button
+              draggable
+              onDragStart={e => {
+                e.stopPropagation()
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                  personId, fromOrgId: '', fromCompanyId: '', affiliationType: 'primary', source: 'reportLine',
+                }))
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverPersonId(personId) }}
+              onDragLeave={e => {
+                if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
+                  setDragOverPersonId(null)
+              }}
+              onDrop={e => {
+                e.preventDefault(); e.stopPropagation(); setDragOverPersonId(null)
+                let data: { personId: string }
+                try { data = JSON.parse(e.dataTransfer.getData('application/json')) as { personId: string } } catch { return }
+                handleManagerDrop(personId, data.personId)
+              }}
+              onClick={() => {
+                isReportLineInternalSelect.current = true
+                selectPerson(personId)
+                // ルートカードをクリックしたら親へ移動
+                if (personId === reportLineRootId && rlRootManagerId) {
+                  setReportLineRootId(rlRootManagerId)
+                  setExpandedNodes(prev => new Set([...prev, rlRootManagerId]))
+                }
+              }}
+              onDoubleClick={() => handlePersonDoubleClick(personId)}
+              onContextMenu={e => handlePersonContextMenu(e, personId)}
+              className={`flex items-center gap-2 pl-3 pr-2.5 py-1 rounded-r border-l-4 bg-white text-xs transition-all hover:shadow-sm cursor-grab active:cursor-grabbing whitespace-nowrap ${color.line} ${
+                dragOverPersonId === personId
+                  ? 'shadow-md outline outline-2 outline-green-400'
+                  : selectedPersonId === personId
+                  ? 'outline outline-2 outline-yellow-400'
+                  : 'shadow-sm'
+              }`}
+            >
+              {dragOverPersonId === personId && <span className="text-green-600 font-semibold">→</span>}
+              <span className={`font-semibold ${color.text}`}>{person.name}</span>
+              {title && <><span className="text-gray-300">·</span><span className="text-gray-500">{title}</span></>}
+              {band && <span className={`font-medium ${color.text}`}>{band}</span>}
+              {org && <span className={`px-1.5 py-0.5 rounded text-xs ${color.tag}`}>{org.name}</span>}
+              {hasReports && <span className="text-gray-400">{directReports.length}名</span>}
+            </button>
+          </div>
+          {isExpanded && hasReports && (
+            <div className="ml-5 pl-3 border-l-2 border-gray-100 mt-0.5">
+              {directReports.map(id => <ReportNode key={id} personId={id} depth={depth + 1} />)}
             </div>
-            {org && <span className={`inline-block text-xs px-1 rounded mt-0.5 leading-tight ${color.tag}`}>{org.name}</span>}
-          </button>
-          {getDirectReports(personId).map(id => <ReportNode key={id} personId={id} depth={depth + 1} />)}
+          )}
         </div>
       )
     }
 
     return (
       <div className="p-4">
-        {roots.length === 0
+        {displayRoots.length === 0
           ? <div className="text-gray-400 text-sm text-center py-12">上司情報（上司ポジションコード）が設定されていません</div>
-          : roots.map(pid => <ReportNode key={pid} personId={pid} />)
+          : <div>{displayRoots.map(pid => <ReportNode key={pid} personId={pid} />)}</div>
         }
       </div>
     )
@@ -702,22 +835,45 @@ export function OrgOperationView() {
     >
       {/* Header */}
       <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
-        {parentOrg && (
+        {canvasMode === 'レポートライン' ? (
           <>
-            <button onClick={() => focusOrg(parentOrg.id)} className="text-xs text-gray-500 hover:text-blue-600 flex-shrink-0">← 上へ</button>
+            <button
+              onClick={() => { if (rlRootManagerId) setReportLineRootId(rlRootManagerId) }}
+              className={`text-xs flex-shrink-0 ${rlRootManagerId ? 'text-gray-500 hover:text-blue-600' : 'text-gray-300 cursor-default'}`}
+            >
+              ↑ 上へ
+            </button>
             <span className="text-gray-300 flex-shrink-0">|</span>
+            <div className="text-xs flex-1 min-w-0 truncate text-gray-700">
+              {rlRootPersonInfo
+                ? `${rlRootPersonInfo.name}${rlRootPersonInfo.orgName ? ` (${rlRootPersonInfo.orgName})` : ''}`
+                : <span className="text-gray-400">全体</span>
+              }
+            </div>
+            {reportLineRootId && (
+              <button onClick={() => setReportLineRootId(null)} className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0">全体</button>
+            )}
+          </>
+        ) : (
+          <>
+            {parentOrg && (
+              <>
+                <button onClick={() => focusOrg(parentOrg.id)} className="text-xs text-gray-500 hover:text-blue-600 flex-shrink-0">← 上へ</button>
+                <span className="text-gray-300 flex-shrink-0">|</span>
+              </>
+            )}
+            <div className="flex items-center gap-0.5 text-xs flex-1 min-w-0 overflow-hidden">
+              {breadcrumb.map((crumb, i) => (
+                <span key={crumb.id} className="flex items-center gap-0.5 flex-shrink-0">
+                  {i > 0 && <span className="text-gray-400">›</span>}
+                  <button onClick={() => focusOrg(crumb.id)} className={`hover:text-blue-600 truncate max-w-24 ${i === breadcrumb.length - 1 ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
+                    {crumb.name}
+                  </button>
+                </span>
+              ))}
+            </div>
           </>
         )}
-        <div className="flex items-center gap-0.5 text-xs flex-1 min-w-0 overflow-hidden">
-          {breadcrumb.map((crumb, i) => (
-            <span key={crumb.id} className="flex items-center gap-0.5 flex-shrink-0">
-              {i > 0 && <span className="text-gray-400">›</span>}
-              <button onClick={() => focusOrg(crumb.id)} className={`hover:text-blue-600 truncate max-w-24 ${i === breadcrumb.length - 1 ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
-                {crumb.name}
-              </button>
-            </span>
-          ))}
-        </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
             {(['組織図', 'レポートライン'] as CanvasMode[]).map(mode => (
@@ -796,6 +952,19 @@ export function OrgOperationView() {
             >
               <span>✏️</span> 編集画面を開く
             </button>
+            {canvasMode === 'レポートライン' && (
+              <button
+                onClick={() => {
+                  if (!contextMenu) return
+                  setReportLineRootId(contextMenu.personId)
+                  setExpandedNodes(prev => new Set([...prev, contextMenu.personId]))
+                  closeContextMenu()
+                }}
+                className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
+              >
+                <span>📍</span> この人を起点に表示
+              </button>
+            )}
           </div>
         </>
       )}
