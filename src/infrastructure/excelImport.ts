@@ -259,13 +259,25 @@ export interface ImportedWorkbookResult {
 
 // ── メインエクスポート ────────────────────────────────────────────────────────
 
-export function importWorkbook(wb: XLSX.WorkBook, fallbackCompanyName = 'インポートデータ'): ImportedWorkbookResult {
+export type ProgressCallback = (message: string) => void
+
+// React が再レンダリングできるようにイベントループを1回明け渡す
+const tick = () => new Promise<void>(r => setTimeout(r, 0))
+
+export async function importWorkbook(
+  wb: XLSX.WorkBook,
+  fallbackCompanyName = 'インポートデータ',
+  onProgress?: ProgressCallback,
+): Promise<ImportedWorkbookResult> {
+  const report = async (msg: string) => { onProgress?.(msg); await tick() }
+
   const sheetsFound:   string[] = []
   const sheetsMissing: string[] = []
 
   // 1. コードリスト (各種TBL)
   let codeLists: AllCodeLists = EMPTY_CODE_LISTS
   if (wb.Sheets[SHEET_CODE_LISTS]) {
+    await report('コードリスト（各種TBL）を解析中...')
     sheetsFound.push(SHEET_CODE_LISTS)
     const result = parseCodeListsFromWorkbook(wb, SHEET_CODE_LISTS)
     codeLists = { ...EMPTY_CODE_LISTS, ...result.lists }
@@ -279,6 +291,7 @@ export function importWorkbook(wb: XLSX.WorkBook, fallbackCompanyName = 'イン�
   let afterOrganizations:   Organization[]   = []
   let companies:            Company[]        = []
   if (wb.Sheets[SHEET_ORG_MASTER]) {
+    await report('組織マスタ（組織CD一覧）を解析中...')
     sheetsFound.push(SHEET_ORG_MASTER)
     orgEntries = parseOrgMaster(wb.Sheets[SHEET_ORG_MASTER])
     const entities      = orgMasterToEntities(orgEntries, fallbackCompanyName)
@@ -293,8 +306,10 @@ export function importWorkbook(wb: XLSX.WorkBook, fallbackCompanyName = 'イン�
   // 3. 要員配置リスト → AllocationRow（rowId = 1始まりの連番）
   let allocationList: AllocationRow[] = []
   if (wb.Sheets[SHEET_ALLOCATION]) {
+    await report('要員配置リストを解析中...')
     sheetsFound.push(SHEET_ALLOCATION)
     const rawRows = parseAllocationSheet(wb.Sheets[SHEET_ALLOCATION])
+    await report(`要員配置リストを処理中... (${rawRows.length} 行)`)
     allocationList = rawRows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
   } else {
     sheetsMissing.push(SHEET_ALLOCATION)
@@ -314,21 +329,23 @@ export function importWorkbook(wb: XLSX.WorkBook, fallbackCompanyName = 'イン�
 }
 
 // File から workbook を読んで importWorkbook を呼ぶ
-export async function importFromFile(file: File): Promise<ImportedWorkbookResult> {
+export function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {
   return new Promise((resolve, reject) => {
+    onProgress?.('ファイルを読み込み中...')
     const reader = new FileReader()
-    reader.onload = e => {
+    reader.onload = async e => {
       try {
         const data = e.target?.result
         if (!data) throw new Error('ファイルの読み込みに失敗しました')
+        onProgress?.('Excelを解析中...')
+        await tick()
         _lastWorkbook = XLSX.read(data, { type: 'array' })
         _lastFileName = file.name
-        // ファイル名から会社名を推定（拡張子・"要員配置"以降を除去）
         const companyName = file.name
           .replace(/\.[^.]+$/, '')
           .replace(/[_\-]?要員配置.*$/i, '')
           .trim() || 'インポートデータ'
-        resolve(importWorkbook(_lastWorkbook, companyName))
+        resolve(await importWorkbook(_lastWorkbook, companyName, onProgress))
       } catch (err) {
         reject(err)
       }
@@ -338,12 +355,41 @@ export async function importFromFile(file: File): Promise<ImportedWorkbookResult
   })
 }
 
-// URL から workbook を読んで importWorkbook を呼ぶ (サンプルデータ用)
-export async function importFromUrl(url: string): Promise<ImportedWorkbookResult> {
+// URL から workbook を読んで importWorkbook を呼ぶ
+export async function importFromUrl(url: string, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {
+  onProgress?.('ファイルを取得中...')
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`サンプルファイルが見つかりません (${res.status}): ${url}`)
+  if (!res.ok) throw new Error(`ファイルが見つかりません (${res.status}): ${url}`)
+  onProgress?.('Excelを解析中...')
+  await tick()
   const buffer = await res.arrayBuffer()
   _lastWorkbook = XLSX.read(buffer, { type: 'array' })
+  _lastFileName = url.split('/').pop() ?? 'import.xlsx'
+  return importWorkbook(_lastWorkbook, undefined, onProgress)
+}
+
+// public/ の CSV サンプルファイルから workbook を組み立てて importWorkbook を呼ぶ。
+// sample.xlsx 不要・CSV 単一メンテナンスで動作する。
+export async function importFromSampleCsv(onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {
+  const fetchCsv = async (label: string, path: string) => {
+    onProgress?.(`${label}を取得中...`)
+    const res = await fetch(path)
+    if (!res.ok) throw new Error(`サンプルファイルが見つかりません (${res.status}): ${path}`)
+    return res.text()
+  }
+  const allocCsv = await fetchCsv('要員配置リスト', '/sample_allocation_list.csv')
+  const orgCsv   = await fetchCsv('組織マスタ',     '/sample_org_master.csv')
+
+  onProgress?.('サンプルデータを構築中...')
+  await tick()
+  const wb = XLSX.utils.book_new()
+  // XLSX.read は CSV テキストを WorkSheet 形式で解析する
+  const allocWs = XLSX.read(allocCsv, { type: 'string' }).Sheets.Sheet1
+  const orgWs   = XLSX.read(orgCsv,   { type: 'string' }).Sheets.Sheet1
+  XLSX.utils.book_append_sheet(wb, allocWs, SHEET_ALLOCATION)
+  XLSX.utils.book_append_sheet(wb, orgWs,   SHEET_ORG_MASTER)
+
+  _lastWorkbook = wb
   _lastFileName = 'sample.xlsx'
-  return importWorkbook(_lastWorkbook)
+  return importWorkbook(wb, 'サンプル', onProgress)
 }

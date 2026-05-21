@@ -1,16 +1,15 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useCodeListStore } from '../store/codeListStore'
-import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
+import { importFromFile, importFromSampleCsv, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
 import type { ImportedWorkbookResult } from '../infrastructure/excelImport'
 import { CODE_LIST_LABELS } from '../infrastructure/codeLists/excelParser'
 import { MasterSetupHelp } from './MasterSetupHelp'
 
-const SAMPLE_URL = '/.local/sample.xlsx'
 
 type Phase =
   | { kind: 'idle' }
-  | { kind: 'loading' }
+  | { kind: 'loading'; progress: string }
   | { kind: 'done'; result: ImportedWorkbookResult }
   | { kind: 'error'; message: string }
 
@@ -25,10 +24,11 @@ export function MasterSetup({ onReady }: Props) {
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
 
-  const runImport = async (fn: () => Promise<ImportedWorkbookResult | null>) => {
-    setPhase({ kind: 'loading' })
+  const runImport = async (fn: (onProgress: (msg: string) => void) => Promise<ImportedWorkbookResult | null>) => {
+    const onProgress = (progress: string) => setPhase({ kind: 'loading', progress })
+    setPhase({ kind: 'loading', progress: '準備中...' })
     try {
-      const result = await fn()
+      const result = await fn(onProgress)
       if (result) setPhase({ kind: 'done', result })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err) })
@@ -39,16 +39,10 @@ export function MasterSetup({ onReady }: Props) {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
-    await runImport(() => importFromFile(file))
+    await runImport(onProgress => importFromFile(file, onProgress))
   }
 
-  const handleSample = () => runImport(async () => {
-    try { return await importFromUrl(SAMPLE_URL) }
-    catch {
-      setPhase({ kind: 'error', message: `サンプルファイルが見つかりません。public/.local/sample.xlsx に配置してください。` })
-      return null
-    }
-  })
+  const handleSample = () => runImport(onProgress => importFromSampleCsv(onProgress))
 
   const handleApply = async () => {
     if (phase.kind !== 'done') return
@@ -70,7 +64,7 @@ export function MasterSetup({ onReady }: Props) {
             onHelp={() => setShowHelp(true)}
           />
         )}
-        {phase.kind === 'loading' && <LoadingView />}
+        {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
         {phase.kind === 'done' && (
           <ResultView
             result={phase.result}
@@ -137,11 +131,11 @@ function IdleView({ onFileClick, onSample, onHelp }: {
 
 // ── 画面②: 読み込み中 ─────────────────────────────────────────────
 
-function LoadingView() {
+function LoadingView({ progress }: { progress: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-14 space-y-4">
       <div className="w-9 h-9 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
-      <p className="text-sm text-gray-500">Excelファイルを解析中…</p>
+      <p className="text-sm text-gray-500">{progress}</p>
     </div>
   )
 }
