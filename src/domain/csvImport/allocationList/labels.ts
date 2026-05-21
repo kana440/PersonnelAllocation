@@ -7,8 +7,8 @@ import type { FieldDef } from '../types'
 // ja     = Japanese description
 export const ALLOCATION_LIST_FIELDS: FieldDef[] = [
   // ── Metadata ──────────────────────────────────────────────────────────────────────────────────────
-  { key: 'no',                               header: 'No',                          en: 'No.',                                    ja: 'No' },
-  { key: 'userId',                           header: 'ユーザー/社員ID',              en: 'User/Employee ID',                       ja: 'ユーザー/社員ID' },
+  { key: 'no',                               header: '№',                          en: 'No.',                                    ja: 'No' },
+  { key: 'userId',                           header: 'ユーザー／社員ID',              en: 'User/Employee ID',                       ja: 'ユーザー/社員ID' },
   { key: 'groupEmployeeId',                  header: 'グループ社員ID',               en: 'Group Employee ID',                      ja: 'グループ社員ID' },
   { key: 'employeeNumber',                   header: '社員番号',                     en: 'Employee Number',                        ja: '社員番号' },
   { key: 'lastName',                         header: '姓',                           en: 'Last Name',                              ja: '姓' },

@@ -9,12 +9,8 @@ import { DirectEditOperation }  from '../domain/operation/handlers/directEdit'
 import {
   derivePersons,
   deriveCompanies,
-  deriveBeforePositions,
-  deriveAfterPositions,
-  deriveBeforeAffiliations,
-  deriveAfterAffiliations,
 } from '../domain/projection/rows'
-import type { Person, Position, Affiliation } from '../domain/schemas'
+import type { Person } from '../domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
 import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
 
@@ -31,10 +27,6 @@ export interface DomainSnapshot {
 
   // ── 計算済みビュー（コンポーネント用）────────────────────────
   persons:             Person[]
-  beforePositions:     Position[]
-  beforeAffiliations:  Affiliation[]
-  afterPositions:      Position[]
-  afterAffiliations:   Affiliation[]
 
   // ── Undo/Redo 状態 ─────────────────────────────────────────────
   canUndo:             boolean
@@ -82,6 +74,7 @@ export class HRApplicationService {
   }
 
   private rebuildPatternCache(): void {
+    if (this.patterns.length === 0) return
     this.patternCache = matchAllPatterns(this.allocationList, this.patterns)
   }
 
@@ -127,7 +120,6 @@ export class HRApplicationService {
       [...this.beforeOrganizations, ...this.afterOrganizations],
       this.companies,
     )
-
     return {
       allocationList:      this.allocationList,
       beforeOrganizations: this.beforeOrganizations,
@@ -135,10 +127,6 @@ export class HRApplicationService {
       companies,
       codeLists:           this.codeLists,
       persons,
-      beforePositions:     deriveBeforePositions(this.allocationList, this.beforeOrganizations),
-      beforeAffiliations:  deriveBeforeAffiliations(this.allocationList, persons),
-      afterPositions:      deriveAfterPositions(this.allocationList, this.afterOrganizations),
-      afterAffiliations:   deriveAfterAffiliations(this.allocationList, persons),
       canUndo:             this.past.length > 0,
       canRedo:             this.future.length > 0,
       patternCache:        this.patternCache,

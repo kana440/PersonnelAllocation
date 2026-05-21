@@ -1,10 +1,8 @@
 import { z } from 'zod'
 
 export const AllocationListSchema = z.object({
-  // ── Required ──────────────────────────────────────────────────
-  userId:                            z.string(),
-
   // ── Metadata ──────────────────────────────────────────────────
+  userId:                            z.string().optional(),
   no:                                z.string().optional(),
   groupEmployeeId:                   z.string().optional(),
   employeeNumber:                    z.string().optional(),

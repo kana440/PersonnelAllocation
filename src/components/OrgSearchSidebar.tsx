@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '../store/useStore'
 import { rowDiff } from '../domain/allocationRow'
+import { buildOrgMap } from '../domain/projection/rows'
+import type { AllocationRow } from '../domain/allocationRow'
+import type { Person } from '../domain/schemas'
 import type { Organization } from '../types/domain'
 
 const CHANGE_DOT: Record<string, string> = {
@@ -12,8 +15,6 @@ const CHANGE_DOT: Record<string, string> = {
 export function OrgSearchSidebar() {
   const {
     afterOrganizations, organizations: beforeOrgs, companies,
-    afterPositions, afterAffiliations,
-    beforePositions, beforeAffiliations,
     persons, allocationList,
     focusedOrgId, focusOrg, selectedPersonId, selectPerson, enterEditMode,
   } = useStore()
@@ -37,13 +38,65 @@ export function OrgSearchSidebar() {
     setContextMenu({ x: e.clientX, y: e.clientY, personId })
   }
 
-  // サイドバーからの D&D: OrgOperationView の DragData 形式に合わせる
+  const viewOrgs = useMemo(
+    () => afterOrganizations.filter(o => !o.isAbandoned),
+    [afterOrganizations]
+  )
+
+  const afterOrgByCode  = useMemo(() => buildOrgMap(afterOrganizations), [afterOrganizations])
+  const beforeOrgByCode = useMemo(() => buildOrgMap(beforeOrgs),         [beforeOrgs])
+
+  const personBySfId = useMemo(
+    () => new Map(persons.map(p => [p.sfPersonId ?? '', p])),
+    [persons]
+  )
+
+  // orgId → {row, person}[] for after state
+  const afterMembersByOrgId = useMemo(() => {
+    const map = new Map<string, Array<{ row: AllocationRow; person: Person }>>()
+    for (const row of allocationList) {
+      if (!row.departmentCode) continue
+      const org = afterOrgByCode.get(row.departmentCode)
+      if (!org) continue
+      const person = personBySfId.get(row.userId ?? '')
+      if (!person) continue
+      const arr = map.get(org.id)
+      if (arr) arr.push({ row, person })
+      else map.set(org.id, [{ row, person }])
+    }
+    return map
+  }, [allocationList, afterOrgByCode, personBySfId])
+
+  // orgId → Set<personId> for before state
+  const beforeMembersByOrgId = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const row of allocationList) {
+      if (!row.prevDepartmentCode) continue
+      const org = beforeOrgByCode.get(row.prevDepartmentCode)
+      if (!org) continue
+      const person = personBySfId.get(row.userId ?? '')
+      if (!person) continue
+      const set = map.get(org.id)
+      if (set) set.add(person.id)
+      else map.set(org.id, new Set([person.id]))
+    }
+    return map
+  }, [allocationList, beforeOrgByCode, personBySfId])
+
+  // personId set for persons assigned to any after-org
+  const assignedPersonIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const members of afterMembersByOrgId.values()) {
+      for (const { person } of members) ids.add(person.id)
+    }
+    return ids
+  }, [afterMembersByOrgId])
+
   const handlePersonDragStart = (e: React.DragEvent, personId: string) => {
     const person = persons.find(p => p.id === personId)
-    if (!person) return
-    const aff = viewAffs.find(a => a.personId === person.id && a.status === 'active' && a.type === 'primary')
-    const pos  = aff ? viewPos.find(p => p.id === aff.positionId) : null
-    const org  = pos ? viewOrgs.find(o => o.id === pos.orgId) : null
+    if (!person?.sfPersonId) return
+    const row = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
+    const org = row?.departmentCode ? afterOrgByCode.get(row.departmentCode) : null
     e.dataTransfer.setData('application/json', JSON.stringify({
       personId,
       fromOrgId:       org?.id ?? '',
@@ -53,10 +106,6 @@ export function OrgSearchSidebar() {
     }))
     e.dataTransfer.effectAllowed = 'move'
   }
-
-  const viewOrgs = afterOrganizations.filter(o => !o.isAbandoned)
-  const viewAffs = afterAffiliations
-  const viewPos  = afterPositions
 
   const [orgSearch, setOrgSearch] = useState('')
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(() => {
@@ -79,29 +128,11 @@ export function OrgSearchSidebar() {
     return allocationList.filter(r => r.userId === sfId).some(r => rowDiff(r).length > 0)
   }
 
-  const getPersonsInOrg = (orgId: string) =>
-    viewAffs
-      .filter(a => a.status === 'active' && viewPos.find(p => p.id === a.positionId)?.orgId === orgId)
-      .map(a => ({
-        aff:    a,
-        person: persons.find(p => p.id === a.personId),
-        pos:    viewPos.find(p => p.id === a.positionId),
-      }))
-      .filter((x): x is { aff: typeof x.aff; person: NonNullable<typeof x.person>; pos: NonNullable<typeof x.pos> } =>
-        x.person != null && x.pos != null
-      )
+  const getPersonsInOrg = (orgId: string) => afterMembersByOrgId.get(orgId) ?? []
 
   const getOrgChangeStatus = (orgId: string): 'changed' | 'new' | 'removed' | null => {
-    const beforeIds = new Set(
-      beforeAffiliations
-        .filter(a => a.status === 'active' && beforePositions.find(p => p.id === a.positionId)?.orgId === orgId)
-        .map(a => a.personId)
-    )
-    const afterIds = new Set(
-      viewAffs
-        .filter(a => a.status === 'active' && viewPos.find(p => p.id === a.positionId)?.orgId === orgId)
-        .map(a => a.personId)
-    )
+    const beforeIds = beforeMembersByOrgId.get(orgId) ?? new Set<string>()
+    const afterIds  = new Set((afterMembersByOrgId.get(orgId) ?? []).map(m => m.person.id))
     if (beforeIds.size === 0 && afterIds.size > 0) return 'new'
     if (beforeIds.size > 0 && afterIds.size === 0) return 'removed'
     for (const pid of [...beforeIds, ...afterIds]) {
@@ -147,13 +178,14 @@ export function OrgSearchSidebar() {
           {changeStatus && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${CHANGE_DOT[changeStatus]}`} />}
         </div>
 
-        {isExpanded && directPeople.map(({ aff, person, pos }) => {
+        {isExpanded && directPeople.map(({ row, person }) => {
           const isPersonSelected = selectedPersonId === person.id
-          const isConcurrent     = aff.type === 'concurrent'
+          const isConcurrent     = row.concurrentType === '兼務'
           const hasChange        = hasPersonChanges(person.id)
+          const band             = row.positionBand ?? row.band ?? ''
           return (
             <div
-              key={aff.id}
+              key={row.rowId}
               draggable
               style={{ marginLeft: `${depth * 10 + 16}px` }}
               className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-grab active:cursor-grabbing ${
@@ -172,7 +204,7 @@ export function OrgSearchSidebar() {
               }`}>
                 {person.name}
               </span>
-              <span className="text-xs text-gray-400 flex-shrink-0">{pos.band}</span>
+              <span className="text-xs text-gray-400 flex-shrink-0">{band}</span>
               {hasChange && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />}
               {isPersonSelected && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />}
             </div>
@@ -195,9 +227,9 @@ export function OrgSearchSidebar() {
     ...persons
       .filter(p => p.name.toLowerCase().includes(orgSearchLower))
       .map(p => {
-        const aff = viewAffs.find(a => a.personId === p.id && a.status === 'active' && a.type === 'primary')
-        const pos = aff ? viewPos.find(pp => pp.id === aff.positionId) : null
-        const org = pos ? viewOrgs.find(o => o.id === pos.orgId) : null
+        const sfId = p.sfPersonId ?? ''
+        const row  = allocationList.find(r => r.userId === sfId && r.concurrentType !== '兼務')
+        const org  = row?.departmentCode ? afterOrgByCode.get(row.departmentCode) : null
         return {
           type: 'person' as const, id: p.id, label: p.name,
           sub: org?.name ?? '所属なし',
@@ -277,11 +309,7 @@ export function OrgSearchSidebar() {
 
           {/* 所属なし */}
           {(() => {
-            const allAffPersonIds = new Set([
-              ...beforeAffiliations.map(a => a.personId),
-              ...viewAffs.map(a => a.personId),
-            ])
-            const unassigned = persons.filter(p => !allAffPersonIds.has(p.id))
+            const unassigned = persons.filter(p => !assignedPersonIds.has(p.id))
             if (unassigned.length === 0) return null
             return (
               <div className="border border-dashed border-gray-200 rounded">

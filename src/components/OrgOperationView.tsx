@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '../store/useStore'
-import type { Position } from '../types/domain'
 import { rowDiff } from '../domain/allocationRow'
+import { buildOrgMap } from '../domain/projection/rows'
+import type { AllocationRow } from '../domain/allocationRow'
+import type { Person } from '../domain/schemas'
 
 const BAND_ORDER  = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
 const TITLE_ORDER = [
@@ -18,17 +20,12 @@ interface DragData {
   fromOrgId: string
   fromCompanyId: string
   affiliationType: 'primary' | 'concurrent'
-  source?: 'before' | 'after'
+  source?: 'before' | 'after' | 'reportLine' | 'sidebar'
 }
 
-interface PendingFill {
-  personId:          string
-  personName:        string
-  positionId:        string
-  positionTitle:     string
-  positionBand:      string
-  orgName:           string
-  positionCompanyId: string
+interface MemberEntry {
+  row:    AllocationRow
+  person: Person
 }
 
 interface OrgBoxProps           { orgId: string; depth?: number }
@@ -50,14 +47,11 @@ export function OrgOperationView() {
   const {
     focusedOrgId, focusOrg,
     afterOrganizations: allAfterOrgs, organizations: staticOrgs, persons,
-    afterPositions, afterAffiliations,
-    beforePositions, beforeAffiliations,
     allocationList,
     selectedPersonId, selectPerson, enterEditMode, saveRow,
     mainCanvasMode, setMainCanvasMode,
   } = store
 
-  // 人物のダブルクリック: 編集モードへ遷移
   const handlePersonDoubleClick = (personId: string) => {
     const person = persons.find(p => p.id === personId)
     if (!person?.sfPersonId) return
@@ -66,20 +60,17 @@ export function OrgOperationView() {
     enterEditMode(firstRow.rowId)
   }
 
-  const [dragOverOrgId,      setDragOverOrgId]      = useState<string | null>(null)
-  const [dragOverVacantPosId, setDragOverVacantPosId] = useState<string | null>(null)
-  const [pendingFill,         setPendingFill]         = useState<PendingFill | null>(null)
-  const [highlightedOrgId,   setHighlightedOrgId]   = useState<string | null>(null)
-  const [expandedChipIds,    setExpandedChipIds]    = useState<Set<string>>(new Set())
+  const [dragOverOrgId,    setDragOverOrgId]    = useState<string | null>(null)
+  const [highlightedOrgId, setHighlightedOrgId] = useState<string | null>(null)
+  const [expandedChipIds,  setExpandedChipIds]  = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
-  // canvasMode は store で管理（戻るボタンのラベルに使用）
   const canvasMode    = mainCanvasMode
   const setCanvasMode = (mode: CanvasMode) => setMainCanvasMode(mode)
-  const [viewState,          setViewState]          = useState<ViewState>('after')
-  const [orgSortModes,       setOrgSortModes]       = useState<Record<string, SortMode>>({})
-  const [orgManualOrders,    setOrgManualOrders]    = useState<Record<string, string[]>>({})
-  const [reorderDropTarget,  setReorderDropTarget]  = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
-  const [openSortDropdown,   setOpenSortDropdown]   = useState<string | null>(null)
+  const [viewState,         setViewState]         = useState<ViewState>('after')
+  const [orgSortModes,      setOrgSortModes]      = useState<Record<string, SortMode>>({})
+  const [orgManualOrders,   setOrgManualOrders]   = useState<Record<string, string[]>>({})
+  const [reorderDropTarget, setReorderDropTarget] = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
+  const [openSortDropdown,  setOpenSortDropdown]  = useState<string | null>(null)
 
   const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
     e.preventDefault()
@@ -87,21 +78,52 @@ export function OrgOperationView() {
     selectPerson(personId)
     setContextMenu({ x: e.clientX, y: e.clientY, personId })
   }
-
-  const closeContextMenu = () => setContextMenu(null)
-
-  const contextMenuEditClick = () => {
-    if (!contextMenu) return
-    closeContextMenu()
-    handlePersonDoubleClick(contextMenu.personId)
-  }
+  const closeContextMenu     = () => setContextMenu(null)
+  const contextMenuEditClick = () => { if (!contextMenu) return; closeContextMenu(); handlePersonDoubleClick(contextMenu.personId) }
 
   const isBefore    = viewState === 'before'
   const isAfterDiff = viewState === 'after-diff'
-  const viewAffs    = isBefore ? beforeAffiliations : afterAffiliations
-  const viewPos     = isBefore ? beforePositions    : afterPositions
   const organizations = isBefore ? staticOrgs : allAfterOrgs.filter(o => !o.isAbandoned)
 
+  // ── Maps (before any early returns — hooks must not be conditional) ──
+  const afterOrgByCode  = useMemo(() => buildOrgMap(allAfterOrgs), [allAfterOrgs])
+  const beforeOrgByCode = useMemo(() => buildOrgMap(staticOrgs),   [staticOrgs])
+  const personBySfId    = useMemo(
+    () => new Map(persons.map(p => [p.sfPersonId ?? '', p])),
+    [persons]
+  )
+
+  const afterMembersByOrgId = useMemo(() => {
+    const map = new Map<string, MemberEntry[]>()
+    for (const row of allocationList) {
+      if (!row.departmentCode) continue
+      const org = afterOrgByCode.get(row.departmentCode)
+      if (!org) continue
+      const person = personBySfId.get(row.userId ?? '')
+      if (!person) continue
+      const arr = map.get(org.id)
+      if (arr) arr.push({ row, person })
+      else map.set(org.id, [{ row, person }])
+    }
+    return map
+  }, [allocationList, afterOrgByCode, personBySfId])
+
+  const beforeMembersByOrgId = useMemo(() => {
+    const map = new Map<string, MemberEntry[]>()
+    for (const row of allocationList) {
+      if (!row.prevDepartmentCode) continue
+      const org = beforeOrgByCode.get(row.prevDepartmentCode)
+      if (!org) continue
+      const person = personBySfId.get(row.userId ?? '')
+      if (!person) continue
+      const arr = map.get(org.id)
+      if (arr) arr.push({ row, person })
+      else map.set(org.id, [{ row, person }])
+    }
+    return map
+  }, [allocationList, beforeOrgByCode, personBySfId])
+
+  // ── Early returns ─────────────────────────────────────────────
   if (!focusedOrgId) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400 text-sm">
@@ -129,6 +151,12 @@ export function OrgOperationView() {
 
   if (!focusedOrg) return null
 
+  // ── Row field helpers (view-state-aware) ─────────────────────
+  const rowBand  = (row: AllocationRow) =>
+    isBefore ? (row.prevPositionBand ?? row.prevBand ?? '') : (row.positionBand ?? row.band ?? '')
+  const rowTitle = (row: AllocationRow) =>
+    isBefore ? (row.prevOfficialPositionCode ?? '') : (row.officialPositionCode ?? '')
+
   const buildBreadcrumb = (orgId: string): Array<{ id: string; name: string }> => {
     const path: Array<{ id: string; name: string }> = []
     let current = organizations.find(o => o.id === orgId)
@@ -143,57 +171,34 @@ export function OrgOperationView() {
   const parentOrg  = focusedOrg.parentId ? organizations.find(o => o.id === focusedOrg.parentId) : null
   const childOrgs  = organizations.filter(o => o.parentId === focusedOrgId)
 
-  const getPersonsInOrg = (orgId: string) =>
-    viewAffs
-      .filter(a => a.status === 'active' && viewPos.find(p => p.id === a.positionId)?.orgId === orgId)
-      .map(a => ({
-        aff:    a,
-        person: persons.find(p => p.id === a.personId),
-        pos:    viewPos.find(p => p.id === a.positionId),
-      }))
-      .filter((x): x is { aff: typeof x.aff; person: NonNullable<typeof x.person>; pos: NonNullable<typeof x.pos> } =>
-        x.person != null && x.pos != null
-      )
+  const getPersonsInOrg = (orgId: string): MemberEntry[] =>
+    (isBefore ? beforeMembersByOrgId : afterMembersByOrgId).get(orgId) ?? []
 
-  // 空席ポジション（発令後ビューのみ）
-  const getVacantPositionsInOrg = (orgId: string): Position[] => {
-    if (isBefore) return []
-    return viewPos
-      .filter(p => p.orgId === orgId)
-      .filter(p => !viewAffs.some(a => a.positionId === p.id && a.status === 'active'))
-  }
-
-  const getBeforeOrgName = (personId: string, currentOrgId: string): string | null => {
+  const getBeforeOrgName = (person: Person, currentOrgId: string): string | null => {
     if (isBefore) return null
-    const bAff = beforeAffiliations.find(a => {
-      if (a.personId !== personId || a.status !== 'active') return false
-      const pos = beforePositions.find(p => p.id === a.positionId)
-      return pos != null && pos.orgId !== currentOrgId
-    })
-    if (!bAff) return null
-    const bPos = beforePositions.find(p => p.id === bAff.positionId)
-    return bPos ? (staticOrgs.find(o => o.id === bPos.orgId)?.name ?? null) : null
+    const sfId = person.sfPersonId ?? ''
+    const row  = allocationList.find(r => r.userId === sfId && r.concurrentType !== '兼務')
+              ?? allocationList.find(r => r.userId === sfId)
+    if (!row?.prevDepartmentCode) return null
+    const beforeOrg = beforeOrgByCode.get(row.prevDepartmentCode)
+    if (!beforeOrg || beforeOrg.id === currentOrgId) return null
+    return beforeOrg.name
   }
 
   const getDepartedPersons = (orgId: string) => {
     if (!isAfterDiff) return []
-    return beforeAffiliations
-      .filter(a => a.status === 'active' && beforePositions.find(p => p.id === a.positionId)?.orgId === orgId)
-      .filter(a => !afterAffiliations.some(aa =>
-        aa.personId === a.personId && aa.status === 'active' &&
-        afterPositions.find(p => p.id === aa.positionId)?.orgId === orgId
-      ))
-      .map(a => {
-        const person   = persons.find(p => p.id === a.personId)
-        const pos      = beforePositions.find(p => p.id === a.positionId)
-        const afterAff = afterAffiliations.find(aa => aa.personId === a.personId && aa.status === 'active')
-        const afterPos = afterAff ? afterPositions.find(p => p.id === afterAff.positionId) : null
-        const afterOrg = afterPos ? allAfterOrgs.find(o => o.id === afterPos.orgId) : null
-        return { person, pos, afterOrg }
+    const afterPersonIds = new Set((afterMembersByOrgId.get(orgId) ?? []).map(m => m.person.id))
+    return (beforeMembersByOrgId.get(orgId) ?? [])
+      .filter(({ person }) => !afterPersonIds.has(person.id))
+      .map(({ row, person }) => {
+        const userId   = row.userId ?? ''
+        const afterRow = allocationList.find(r => r.userId === userId && r.concurrentType !== '兼務')
+                      ?? allocationList.find(r => r.userId === userId)
+        const afterOrg = afterRow?.departmentCode
+          ? (afterOrgByCode.get(afterRow.departmentCode) ?? null)
+          : null
+        return { person, row, afterOrg }
       })
-      .filter((x): x is { person: NonNullable<typeof x.person>; pos: NonNullable<typeof x.pos>; afterOrg: typeof x.afterOrg } =>
-        x.person != null && x.pos != null
-      )
   }
 
   const getConfirmStatus = (personId: string): 'changed' | 'unchanged' => {
@@ -203,12 +208,15 @@ export function OrgOperationView() {
   }
 
   // ── Sort helpers ──────────────────────────────────────────────
-  const getSortedPersons = (orgId: string, list: ReturnType<typeof getPersonsInOrg>, overrideOrders?: Record<string, string[]>) => {
+  const getSortedPersons = (orgId: string, list: MemberEntry[], overrideOrders?: Record<string, string[]>) => {
     const mode = orgSortModes[orgId] ?? 'band'
-    if (mode === 'band') return [...list].sort((a, b) => BAND_ORDER.indexOf(b.pos.band ?? 'B4') - BAND_ORDER.indexOf(a.pos.band ?? 'B4'))
+    if (mode === 'band')
+      return [...list].sort((a, b) =>
+        BAND_ORDER.indexOf(rowBand(b.row) || 'B4') - BAND_ORDER.indexOf(rowBand(a.row) || 'B4')
+      )
     if (mode === 'title') {
       return [...list].sort((a, b) => {
-        const ai = TITLE_ORDER.indexOf(a.pos.title ?? ''); const bi = TITLE_ORDER.indexOf(b.pos.title ?? '')
+        const ai = TITLE_ORDER.indexOf(rowTitle(a.row)); const bi = TITLE_ORDER.indexOf(rowTitle(b.row))
         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
       })
     }
@@ -216,7 +224,10 @@ export function OrgOperationView() {
     const order  = orders[orgId]
     if (!order) return list
     const byId   = new Map(list.map(p => [p.person.id, p]))
-    return [...order.map(id => byId.get(id)).filter((x): x is NonNullable<typeof x> => x != null), ...list.filter(p => !order.includes(p.person.id))]
+    return [
+      ...order.map(id => byId.get(id)).filter((x): x is NonNullable<typeof x> => x != null),
+      ...list.filter(p => !order.includes(p.person.id)),
+    ]
   }
 
   const setSortMode = (orgId: string, mode: SortMode) => {
@@ -239,7 +250,7 @@ export function OrgOperationView() {
     })
   }
 
-  // ── Drag handlers (person ↔ org) ──────────────────────────────
+  // ── Drag handlers ─────────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, personId: string, fromOrgId: string, fromCompanyId: string, affiliationType: 'primary' | 'concurrent') => {
     const data: DragData = { personId, fromOrgId, fromCompanyId, affiliationType, source: 'after' }
     e.dataTransfer.setData('application/json', JSON.stringify(data))
@@ -261,7 +272,6 @@ export function OrgOperationView() {
     let data: DragData
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
     const { personId, fromOrgId } = data
-    // fromOrgId が空（Excel・サイドバー由来）の場合はスキップしない
     if (fromOrgId && fromOrgId === toOrgId) return
 
     const toOrg = organizations.find(o => o.id === toOrgId)
@@ -269,34 +279,12 @@ export function OrgOperationView() {
     const person = persons.find(p => p.id === personId)
     if (!person?.sfPersonId) return
 
-    // 主務行のみ departmentCode を更新（Undo チェックポイント込み）
-    const primaryRow = allocationList.find(
-      r => r.userId === person.sfPersonId && !r.concurrentType
-    ) ?? allocationList.find(r => r.userId === person.sfPersonId)
+    const primaryRow = allocationList.find(r => r.userId === person.sfPersonId && !r.concurrentType)
+                    ?? allocationList.find(r => r.userId === person.sfPersonId)
     if (primaryRow) {
       saveRow(primaryRow.rowId, { departmentCode: toOrg.externalCode ?? toOrg.id })
     }
-
     setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
-  }
-
-  // ── Drop on vacant position → show confirmation ───────────────
-  const handleDropOnVacantPosition = (e: React.DragEvent, pos: Position) => {
-    let data: DragData
-    try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
-    const { personId } = data
-    const person = persons.find(p => p.id === personId)
-    const org    = organizations.find(o => o.id === pos.orgId)
-    if (!person || !org) return
-    setPendingFill({
-      personId,
-      personName:        person.name,
-      positionId:        pos.id,
-      positionTitle:     pos.title ?? '担当',
-      positionBand:      pos.band  ?? 'B4',
-      orgName:           org.name,
-      positionCompanyId: pos.companyId,
-    })
   }
 
   // ── Sort button ───────────────────────────────────────────────
@@ -306,8 +294,10 @@ export function OrgOperationView() {
     const label = mode === 'band' ? 'B↓' : mode === 'title' ? '役↓' : '⠿'
     return (
       <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
-        <button onClick={e => { e.stopPropagation(); setOpenSortDropdown(prev => prev === orgId ? null : orgId) }}
-          className={`text-xs px-1 rounded ${mode === 'manual' ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600'}`}>
+        <button
+          onClick={e => { e.stopPropagation(); setOpenSortDropdown(prev => prev === orgId ? null : orgId) }}
+          className={`text-xs px-1 rounded ${mode === 'manual' ? 'text-blue-500' : 'text-gray-400 hover:text-gray-600'}`}
+        >
           {label}
         </button>
         {openSortDropdown === orgId && (
@@ -342,47 +332,54 @@ export function OrgOperationView() {
       return `${isConcurrent ? 'border-dashed border-purple-400 bg-purple-50' : 'border-blue-300 bg-blue-50'} ${isSelected ? 'ring-2 ring-yellow-400 ring-offset-1' : ''}`
     }
 
-    const cardInner = (person: { name: string }, pos: { title?: string; band?: string }, isConcurrent: boolean, fromOrgName: string | null, status?: 'changed' | 'unchanged') => (
-      <>
-        {isBefore && status && (
-          <span className={`absolute -top-1 -right-1 text-xs leading-none ${
-            status === 'unchanged' ? 'text-gray-400' : 'text-blue-500'
-          }`}>
-            {status === 'unchanged' ? '−' : '→'}
-          </span>
-        )}
-        {fromOrgName && <div className="text-gray-400 text-xs leading-tight mb-0.5">← {fromOrgName}</div>}
-        <div className="font-semibold text-gray-800 leading-tight">{person.name}</div>
-        <div className="text-gray-500 leading-tight">
-          {pos.title}
-          {pos.band && <span className={`ml-1 font-medium ${isBefore ? 'text-gray-600' : isConcurrent ? 'text-purple-600' : 'text-blue-600'}`}>{pos.band}</span>}
-        </div>
-        {isConcurrent && <div className="text-purple-600 text-xs leading-tight">兼務</div>}
-      </>
-    )
+    const cardInner = (row: AllocationRow, person: { name: string }, isConcurrent: boolean, fromOrgName: string | null, status?: 'changed' | 'unchanged') => {
+      const title = rowTitle(row)
+      const band  = rowBand(row)
+      return (
+        <>
+          {isBefore && status && (
+            <span className={`absolute -top-1 -right-1 text-xs leading-none ${status === 'unchanged' ? 'text-gray-400' : 'text-blue-500'}`}>
+              {status === 'unchanged' ? '−' : '→'}
+            </span>
+          )}
+          {fromOrgName && <div className="text-gray-400 text-xs leading-tight mb-0.5">← {fromOrgName}</div>}
+          <div className="font-semibold text-gray-800 leading-tight">{person.name}</div>
+          <div className="text-gray-500 leading-tight">
+            {title}
+            {band && <span className={`ml-1 font-medium ${isBefore ? 'text-gray-600' : isConcurrent ? 'text-purple-600' : 'text-blue-600'}`}>{band}</span>}
+          </div>
+          {isConcurrent && <div className="text-purple-600 text-xs leading-tight">兼務</div>}
+        </>
+      )
+    }
 
     if (!isBefore && sortMode === 'manual') {
       return (
         <div className="flex flex-col gap-1 mb-2">
-          {sorted.map(({ aff, person, pos }) => {
-            const isConcurrent = aff.type === 'concurrent'
+          {sorted.map(({ row, person }) => {
+            const isConcurrent = row.concurrentType === '兼務'
             const isSelected   = selectedPersonId === person.id
-            const fromOrgName  = getBeforeOrgName(person.id, orgId)
+            const fromOrgName  = getBeforeOrgName(person, orgId)
             const isDropBefore = reorderDropTarget?.orgId === orgId && reorderDropTarget.beforePersonId === person.id
             return (
-              <div key={aff.id}>
+              <div key={row.rowId}>
                 {isDropBefore && <div className="h-0.5 bg-blue-400 rounded mb-0.5 mx-1" />}
                 <div
                   draggable
-                  onDragStart={e => handleDragStart(e, person.id, orgId, companyId, aff.type)}
+                  onDragStart={e => handleDragStart(e, person.id, orgId, companyId, isConcurrent ? 'concurrent' : 'primary')}
                   onDragOver={e => { if (!e.dataTransfer.types.includes('application/json')) return; e.preventDefault(); e.stopPropagation(); setReorderDropTarget({ orgId, beforePersonId: person.id }) }}
-                  onDrop={e => { e.stopPropagation(); setReorderDropTarget(null); let d: DragData; try { d = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }; if (d.fromOrgId === orgId && !e.altKey) { e.preventDefault(); doReorder(orgId, person.id, d.personId) } else { handleDrop(e, orgId) } }}
+                  onDrop={e => {
+                    e.stopPropagation(); setReorderDropTarget(null)
+                    let d: DragData; try { d = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+                    if (d.fromOrgId === orgId && !e.altKey) { e.preventDefault(); doReorder(orgId, person.id, d.personId) }
+                    else { handleDrop(e, orgId) }
+                  }}
                   onClick={() => selectPerson(person.id)}
                   onDoubleClick={() => handlePersonDoubleClick(person.id)}
                   onContextMenu={e => handlePersonContextMenu(e, person.id)}
                   className={`relative px-2.5 py-1.5 rounded text-xs select-none cursor-grab active:cursor-grabbing transition-all hover:shadow-md border-2 ${cardBg(isConcurrent, isSelected)}`}
                 >
-                  {cardInner(person, pos, isConcurrent, fromOrgName)}
+                  {cardInner(row, person, isConcurrent, fromOrgName)}
                 </div>
               </div>
             )
@@ -390,7 +387,12 @@ export function OrgOperationView() {
           <div
             className={`h-1 rounded mx-1 transition-colors ${reorderDropTarget?.orgId === orgId && reorderDropTarget.beforePersonId === null ? 'bg-blue-400' : ''}`}
             onDragOver={e => { if (!e.dataTransfer.types.includes('application/json')) return; e.preventDefault(); e.stopPropagation(); setReorderDropTarget({ orgId, beforePersonId: null }) }}
-            onDrop={e => { e.stopPropagation(); setReorderDropTarget(null); let d: DragData; try { d = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }; if (d.fromOrgId === orgId && !e.altKey) { e.preventDefault(); doReorder(orgId, null, d.personId) } else { handleDrop(e, orgId) } }}
+            onDrop={e => {
+              e.stopPropagation(); setReorderDropTarget(null)
+              let d: DragData; try { d = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+              if (d.fromOrgId === orgId && !e.altKey) { e.preventDefault(); doReorder(orgId, null, d.personId) }
+              else { handleDrop(e, orgId) }
+            }}
           />
         </div>
       )
@@ -398,16 +400,16 @@ export function OrgOperationView() {
 
     return (
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {sorted.map(({ aff, person, pos }) => {
-          const isConcurrent = aff.type === 'concurrent'
+        {sorted.map(({ row, person }) => {
+          const isConcurrent = row.concurrentType === '兼務'
           const isSelected   = selectedPersonId === person.id
-          const fromOrgName  = getBeforeOrgName(person.id, orgId)
+          const fromOrgName  = getBeforeOrgName(person, orgId)
           const status       = isBefore ? getConfirmStatus(person.id) : undefined
           return (
             <div
-              key={aff.id}
+              key={row.rowId}
               draggable={!isBefore}
-              onDragStart={!isBefore ? e => handleDragStart(e, person.id, orgId, companyId, aff.type) : undefined}
+              onDragStart={!isBefore ? e => handleDragStart(e, person.id, orgId, companyId, isConcurrent ? 'concurrent' : 'primary') : undefined}
               onClick={() => selectPerson(person.id)}
               onDoubleClick={() => handlePersonDoubleClick(person.id)}
               onContextMenu={e => handlePersonContextMenu(e, person.id)}
@@ -415,58 +417,7 @@ export function OrgOperationView() {
                 !isBefore ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
               } ${cardBg(isConcurrent, isSelected, status)}`}
             >
-              {cardInner(person, pos, isConcurrent, fromOrgName, status)}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
-  // ── Vacant position cards (drop targets) ─────────────────────
-  const renderVacantCards = (orgId: string) => {
-    const vacants = getVacantPositionsInOrg(orgId)
-    if (vacants.length === 0) return null
-    return (
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {vacants.map(pos => {
-          const isOver = dragOverVacantPosId === pos.id
-          return (
-            <div
-              key={pos.id}
-              onDragOver={e => {
-                if (!e.dataTransfer.types.includes('application/json')) return
-                e.preventDefault(); e.stopPropagation()
-                setDragOverVacantPosId(pos.id)
-              }}
-              onDragLeave={e => {
-                if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
-                  setDragOverVacantPosId(null)
-              }}
-              onDrop={e => {
-                e.preventDefault(); e.stopPropagation()
-                setDragOverVacantPosId(null)
-                handleDropOnVacantPosition(e, pos)
-              }}
-              className={`relative px-2.5 py-1.5 rounded text-xs select-none border-2 border-dashed min-w-[60px] transition-all ${
-                isOver
-                  ? 'border-green-400 bg-green-50 shadow-md scale-105'
-                  : 'border-gray-300 bg-white hover:border-blue-300 hover:bg-blue-50/30'
-              }`}
-            >
-              {isOver ? (
-                <div className="text-green-600 font-semibold text-center leading-tight py-0.5">
-                  ↓ 割り当て
-                </div>
-              ) : (
-                <>
-                  <div className="text-gray-400 font-medium leading-tight">{pos.title ?? '担当'}</div>
-                  <div className="leading-tight flex items-center gap-1">
-                    <span className="font-medium text-gray-400">{pos.band}</span>
-                    <span className="text-gray-300 text-xs">空席</span>
-                  </div>
-                </>
-              )}
+              {cardInner(row, person, isConcurrent, fromOrgName, status)}
             </div>
           )
         })}
@@ -479,13 +430,17 @@ export function OrgOperationView() {
     if (departed.length === 0) return null
     return (
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {departed.map(({ person, pos, afterOrg }) => (
-          <div key={person.id} className="px-2.5 py-1.5 rounded text-xs border-2 border-dashed border-red-300 bg-red-50 opacity-70 select-none">
-            <div className="font-semibold text-gray-400 line-through leading-tight">{person.name}</div>
-            <div className="text-gray-400 leading-tight">{pos.title}{pos.band && <span className="ml-1">{pos.band}</span>}</div>
-            {afterOrg && <div className="text-red-500 text-xs leading-tight">→ {afterOrg.name}</div>}
-          </div>
-        ))}
+        {departed.map(({ person, row, afterOrg }) => {
+          const prevBand  = row.prevPositionBand ?? row.prevBand ?? ''
+          const prevTitle = row.prevOfficialPositionCode ?? ''
+          return (
+            <div key={person.id} className="px-2.5 py-1.5 rounded text-xs border-2 border-dashed border-red-300 bg-red-50 opacity-70 select-none">
+              <div className="font-semibold text-gray-400 line-through leading-tight">{person.name}</div>
+              <div className="text-gray-400 leading-tight">{prevTitle}{prevBand && <span className="ml-1">{prevBand}</span>}</div>
+              {afterOrg && <div className="text-red-500 text-xs leading-tight">→ {afterOrg.name}</div>}
+            </div>
+          )
+        })}
       </div>
     )
   }
@@ -496,7 +451,7 @@ export function OrgOperationView() {
       <div className={`${compact ? 'min-h-6 py-1' : 'min-h-8 py-1.5'} rounded border border-dashed text-xs text-center transition-colors ${
         dragOverOrgId === orgId ? 'border-blue-400 bg-blue-100 text-blue-600' : 'border-gray-300 text-gray-300'
       }`}>
-        {dragOverOrgId === orgId ? 'ここにドロップ（新規ポジション作成）' : getPersonsInOrg(orgId).length === 0 && getVacantPositionsInOrg(orgId).length === 0 && !compact ? 'ドロップで異動' : ''}
+        {dragOverOrgId === orgId ? 'ここにドロップ' : getPersonsInOrg(orgId).length === 0 && !compact ? 'ドロップで異動' : ''}
       </div>
     )
   }
@@ -505,12 +460,11 @@ export function OrgOperationView() {
   const CollapsedOrgChip = ({ orgId }: CollapsedOrgChipProps) => {
     const org = organizations.find(o => o.id === orgId)
     if (!org) return null
-    const personsInOrg = getPersonsInOrg(orgId)
-    const childOrgIds  = organizations.filter(o => o.parentId === orgId).map(o => o.id)
-    const vacantCount  = getVacantPositionsInOrg(orgId).length
-    const isDragOver   = dragOverOrgId === orgId
+    const personsInOrg  = getPersonsInOrg(orgId)
+    const childOrgIds   = organizations.filter(o => o.parentId === orgId).map(o => o.id)
+    const isDragOver    = dragOverOrgId === orgId
     const isHighlighted = highlightedOrgId === orgId
-    const isExpanded   = expandedChipIds.has(orgId)
+    const isExpanded    = expandedChipIds.has(orgId)
     const toggle = () => setExpandedChipIds(prev => { const s = new Set(prev); s.has(orgId) ? s.delete(orgId) : s.add(orgId); return s })
 
     if (!isExpanded) {
@@ -527,7 +481,6 @@ export function OrgOperationView() {
           <span className="text-gray-400">▸</span>
           <span className="font-medium text-gray-700 truncate flex-1">{org.name}</span>
           {personsInOrg.length > 0 && <span className="text-gray-400">{personsInOrg.length}名</span>}
-          {vacantCount > 0 && <span className="text-gray-300 border border-dashed border-gray-300 rounded px-1">{vacantCount}空席</span>}
           {childOrgIds.length > 0 && <span className="text-gray-400">{childOrgIds.length}組織</span>}
           {isDragOver && !isBefore && <span className="text-blue-500">← ドロップ</span>}
         </div>
@@ -551,7 +504,6 @@ export function OrgOperationView() {
         <div className="p-2">
           {renderDepartedCards(orgId)}
           {renderPersonCards(orgId, org.companyId)}
-          {renderVacantCards(orgId)}
           {renderDropZone(orgId)}
           {childOrgIds.length > 0 && <div className="mt-2 space-y-1">{childOrgIds.map(id => <CollapsedOrgChip key={id} orgId={id} />)}</div>}
         </div>
@@ -586,7 +538,6 @@ export function OrgOperationView() {
         <div className="p-2">
           {renderDepartedCards(orgId)}
           {renderPersonCards(orgId, org.companyId)}
-          {renderVacantCards(orgId)}
           {renderDropZone(orgId)}
           {childOrgIds.length > 0 && <div className="mt-2 space-y-1">{childOrgIds.map(id => <CollapsedOrgChip key={id} orgId={id} />)}</div>}
         </div>
@@ -598,7 +549,6 @@ export function OrgOperationView() {
   const ReportLineView = () => {
     const [dragOverPersonId, setDragOverPersonId] = useState<string | null>(null)
 
-    // ── スコープ計算 ──────────────────────────────────────────────
     const getAllOrgsInTree = (rootId: string): string[] => {
       const result = [rootId]
       organizations.filter(o => o.parentId === rootId).forEach(c => result.push(...getAllOrgsInTree(c.id)))
@@ -607,47 +557,45 @@ export function OrgOperationView() {
     const orgsInScope = getAllOrgsInTree(focusedOrgId)
     const orgColorMap = Object.fromEntries(orgsInScope.map((id, i) => [id, ORG_PALETTE[i % ORG_PALETTE.length]]))
 
-    const getPersonScopeAff = (personId: string) => {
-      const aff = viewAffs.find(a => {
-        if (a.personId !== personId || a.status !== 'active') return false
-        const pos = viewPos.find(p => p.id === a.positionId)
-        return pos != null && orgsInScope.includes(pos.orgId)
-      })
-      if (!aff) return null
-      const pos = viewPos.find(p => p.id === aff.positionId)!
-      return { aff, pos, orgId: pos.orgId }
+    const membersByOrg = isBefore ? beforeMembersByOrgId : afterMembersByOrgId
+
+    const getPersonScopeRow = (personId: string): { row: AllocationRow; orgId: string } | null => {
+      for (const scopeOrgId of orgsInScope) {
+        const match = (membersByOrg.get(scopeOrgId) ?? []).find(m => m.person.id === personId)
+        if (match) return { row: match.row, orgId: scopeOrgId }
+      }
+      return null
     }
 
     const personsInScope = [...new Set(
-      viewAffs.filter(a => {
-        if (a.status !== 'active') return false
-        const pos = viewPos.find(p => p.id === a.positionId)
-        return pos != null && orgsInScope.includes(pos.orgId)
-      }).map(a => a.personId)
+      orgsInScope.flatMap(orgId => (membersByOrg.get(orgId) ?? []).map(m => m.person.id))
     )]
 
-    // pos.sfPositionId / pos.managerPositionCode でレポートライン構築
-    // （aff.managerId は未設定のため使わない）
     const getDirectReports = (personId: string): string[] => {
-      const sa = getPersonScopeAff(personId)
-      if (!sa) return []
-      const myPosCode = sa.pos.sfPositionId
+      const sr = getPersonScopeRow(personId)
+      if (!sr) return []
+      const myPosCode = isBefore ? sr.row.prevPositionCode : sr.row.positionCode
       if (!myPosCode) return []
       return personsInScope.filter(pid => {
         if (pid === personId) return false
-        return getPersonScopeAff(pid)?.pos.managerPositionCode === myPosCode
+        const otherSr = getPersonScopeRow(pid)
+        const mgrCode = otherSr ? (isBefore ? otherSr.row.prevManagerPositionCode : otherSr.row.managerPositionCode) : null
+        return mgrCode === myPosCode
       })
     }
 
     const roots = personsInScope.filter(pid => {
-      const sa = getPersonScopeAff(pid)
-      if (!sa) return false
-      const mgrPosCode = sa.pos.managerPositionCode
-      if (!mgrPosCode) return true
-      return !personsInScope.some(otherId => getPersonScopeAff(otherId)?.pos.sfPositionId === mgrPosCode)
+      const sr = getPersonScopeRow(pid)
+      if (!sr) return false
+      const mgrCode = isBefore ? sr.row.prevManagerPositionCode : sr.row.managerPositionCode
+      if (!mgrCode) return true
+      return !personsInScope.some(otherId => {
+        const otherSr = getPersonScopeRow(otherId)
+        const posCode = otherSr ? (isBefore ? otherSr.row.prevPositionCode : otherSr.row.positionCode) : null
+        return posCode === mgrCode
+      })
     })
 
-    // ── 上司変更D&D（循環参照チェック付き） ──────────────────────
     const wouldCycle = (targetId: string, sourceId: string, visited = new Set<string>()): boolean => {
       if (visited.has(sourceId)) return false
       visited.add(sourceId)
@@ -658,7 +606,7 @@ export function OrgOperationView() {
 
     const handleManagerDrop = (targetPersonId: string, sourcePersonId: string) => {
       if (sourcePersonId === targetPersonId) return
-      if (wouldCycle(targetPersonId, sourcePersonId)) return  // 循環するので中止
+      if (wouldCycle(targetPersonId, sourcePersonId)) return
 
       const targetPerson = persons.find(p => p.id === targetPersonId)
       if (!targetPerson?.sfPersonId) return
@@ -678,14 +626,15 @@ export function OrgOperationView() {
       saveRow(sourceRow.rowId, { managerPositionCode: targetRow.positionCode ?? '', managerName })
     }
 
-    // ── ノード描画 ────────────────────────────────────────────────
     const ReportNode = ({ personId, depth = 0 }: { personId: string; depth?: number }) => {
       if (depth > 20) return <div className="ml-2 text-xs text-red-400">⚠ 循環参照</div>
       const person = persons.find(p => p.id === personId)
-      const sa     = getPersonScopeAff(personId)
-      if (!person || !sa) return null
-      const color = orgColorMap[sa.orgId]
-      const org   = organizations.find(o => o.id === sa.orgId)
+      const sr     = getPersonScopeRow(personId)
+      if (!person || !sr) return null
+      const color = orgColorMap[sr.orgId]
+      const org   = organizations.find(o => o.id === sr.orgId)
+      const title = isBefore ? sr.row.prevOfficialPositionCode : sr.row.officialPositionCode
+      const band  = isBefore ? (sr.row.prevPositionBand ?? sr.row.prevBand) : (sr.row.positionBand ?? sr.row.band)
       return (
         <div className={depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-3 mt-1.5' : 'mt-1.5'}>
           <button
@@ -724,8 +673,8 @@ export function OrgOperationView() {
             )}
             <div className={`font-semibold leading-tight ${color.text}`}>{person.name}</div>
             <div className="text-gray-500 leading-tight">
-              {sa.pos.title}
-              {sa.pos.band && <span className={`ml-1 font-medium ${color.text}`}>{sa.pos.band}</span>}
+              {title}
+              {band && <span className={`ml-1 font-medium ${color.text}`}>{band}</span>}
             </div>
             {org && <span className={`inline-block text-xs px-1 rounded mt-0.5 leading-tight ${color.tag}`}>{org.name}</span>}
           </button>
@@ -734,65 +683,12 @@ export function OrgOperationView() {
       )
     }
 
-    // 空席ポジション（スコープ内）
-    const vacantPositions = !isBefore
-      ? viewPos
-          .filter(p => orgsInScope.includes(p.orgId))
-          .filter(p => !viewAffs.some(a => a.positionId === p.id && a.status === 'active'))
-      : []
-
     return (
       <div className="p-4">
         {roots.length === 0
           ? <div className="text-gray-400 text-sm text-center py-12">上司情報（上司ポジションコード）が設定されていません</div>
           : roots.map(pid => <ReportNode key={pid} personId={pid} />)
         }
-
-        {vacantPositions.length > 0 && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">空席ポジション</div>
-            <div className="flex flex-wrap gap-1.5">
-              {vacantPositions.map(pos => {
-                const org    = organizations.find(o => o.id === pos.orgId)
-                const isOver = dragOverVacantPosId === pos.id
-                return (
-                  <div
-                    key={pos.id}
-                    onDragOver={e => {
-                      if (!e.dataTransfer.types.includes('application/json')) return
-                      e.preventDefault(); e.stopPropagation()
-                      setDragOverVacantPosId(pos.id)
-                    }}
-                    onDragLeave={e => {
-                      if (!(e.currentTarget as Element).contains(e.relatedTarget as Node))
-                        setDragOverVacantPosId(null)
-                    }}
-                    onDrop={e => {
-                      e.preventDefault(); e.stopPropagation()
-                      setDragOverVacantPosId(null)
-                      handleDropOnVacantPosition(e, pos)
-                    }}
-                    className={`px-2.5 py-1.5 rounded text-xs border-2 border-dashed transition-all ${
-                      isOver ? 'border-green-400 bg-green-50 scale-105' : 'border-gray-300 bg-white hover:border-blue-300'
-                    }`}
-                  >
-                    {isOver ? (
-                      <div className="text-green-600 font-semibold">↓ 割り当て</div>
-                    ) : (
-                      <>
-                        <div className="text-gray-400 font-medium leading-tight">{pos.title ?? '担当'}</div>
-                        <div className="text-gray-300 leading-tight">
-                          {pos.band}
-                          {org && <span className="ml-1 text-gray-300">{org.name}</span>}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </div>
     )
   }
@@ -802,7 +698,7 @@ export function OrgOperationView() {
   return (
     <div
       className="flex flex-col h-full overflow-hidden"
-      onDragEnd={() => { setReorderDropTarget(null); setDragOverOrgId(null); setDragOverVacantPosId(null) }}
+      onDragEnd={() => { setReorderDropTarget(null); setDragOverOrgId(null) }}
     >
       {/* Header */}
       <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
@@ -844,7 +740,7 @@ export function OrgOperationView() {
             ))}
           </div>
           {!isBefore && canvasMode === '組織図' && (
-            <span className="text-xs text-gray-400">Alt+ドロップ=兼務 / 空席カード⬇=割り当て</span>
+            <span className="text-xs text-gray-400">Alt+ドロップ=兼務</span>
           )}
         </div>
       </div>
@@ -873,7 +769,6 @@ export function OrgOperationView() {
             <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
               {renderDepartedCards(focusedOrgId)}
               {renderPersonCards(focusedOrgId, focusedOrg.companyId)}
-              {renderVacantCards(focusedOrgId)}
               {renderDropZone(focusedOrgId, true)}
             </div>
             <div className="px-3 pb-3 grid grid-cols-2 gap-3">
@@ -883,7 +778,7 @@ export function OrgOperationView() {
         )}
       </div>
 
-      {/* ── 右クリックコンテキストメニュー ──────────────────────── */}
+      {/* Context menu */}
       {contextMenu && (
         <>
           <div className="fixed inset-0 z-40" onClick={closeContextMenu} onContextMenu={e => { e.preventDefault(); closeContextMenu() }} />
@@ -893,11 +788,7 @@ export function OrgOperationView() {
           >
             {(() => {
               const p = persons.find(pp => pp.id === contextMenu.personId)
-              return p ? (
-                <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500 truncate">
-                  {p.name}
-                </div>
-              ) : null
+              return p ? <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500 truncate">{p.name}</div> : null
             })()}
             <button
               onClick={contextMenuEditClick}
@@ -907,57 +798,6 @@ export function OrgOperationView() {
             </button>
           </div>
         </>
-      )}
-
-      {/* ── 空席割り当て確認ダイアログ ─────────────────────────── */}
-      {pendingFill && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
-          onClick={() => setPendingFill(null)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-2xl border border-gray-200 p-5 w-80"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="text-sm font-semibold text-gray-800 mb-1">ポジションへ割り当て</div>
-            <div className="text-xs text-gray-500 mb-4 leading-relaxed">
-              <span className="font-medium text-gray-700">{pendingFill.personName}</span> を{' '}
-              <span className="font-medium text-gray-700">{pendingFill.orgName}</span> の{' '}
-              <span className="font-medium text-gray-700">{pendingFill.positionTitle}（{pendingFill.positionBand}）</span>{' '}
-              に割り当てます。どちらの方法で割り当てますか？
-            </div>
-            <div className="space-y-2">
-              <button
-                onClick={() => {
-                  // 行エディタからの直接編集に移行予定
-                  setPendingFill(null)
-                  selectPerson(pendingFill.personId)
-                }}
-                className="w-full text-left px-3 py-2.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors"
-              >
-                <div className="text-xs font-semibold text-blue-700">🔄 異動して割り当て</div>
-                <div className="text-xs text-blue-500 mt-0.5">元のポジションが空席になります</div>
-              </button>
-              <button
-                onClick={() => {
-                  // 行エディタからの直接編集に移行予定
-                  setPendingFill(null)
-                  selectPerson(pendingFill.personId)
-                }}
-                className="w-full text-left px-3 py-2.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 transition-colors"
-              >
-                <div className="text-xs font-semibold text-purple-700">＋ 兼務として割り当て</div>
-                <div className="text-xs text-purple-500 mt-0.5">元のポジションはそのまま残ります</div>
-              </button>
-              <button
-                onClick={() => setPendingFill(null)}
-                className="w-full text-center py-1.5 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg transition-colors"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )

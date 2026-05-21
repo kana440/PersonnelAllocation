@@ -4,47 +4,16 @@ import { toAllocationRows } from '../utils/allocationListMapper'
 import type { AllocationRow } from '../utils/allocationListMapper'
 import { exportToXlsx } from '../utils/excelIO'
 import { getLastWorkbook, getLastFileName } from '../infrastructure/excelImport'
+import { BEFORE_AFTER_FIELD_PAIRS } from '../domain/allocationRow'
+import { ALLOCATION_LIST_LABEL_MAP } from '../domain/csvImport/allocationList/labels'
 
-// ── Display columns: after/prev key pairs shown side-by-side ──────────────────
-type DisplayField = {
-  label:   string
-  afterKey: keyof AllocationRow
-  prevKey:  keyof AllocationRow
-}
-
-const DISPLAY_FIELDS: DisplayField[] = [
-  { label: '雇用タイプ',         afterKey: 'employmentType',                prevKey: 'prevEmploymentType' },
-  { label: '本務兼務区分',        afterKey: 'concurrentType',                prevKey: 'prevConcurrentType' },
-  { label: '兼務理由',           afterKey: 'concurrentReason',              prevKey: 'prevConcurrentReason' },
-  { label: '出向元会社',         afterKey: 'secondmentFromCompany',         prevKey: 'prevSecondmentFromCompany' },
-  { label: '出向元社員番号',      afterKey: 'secondmentFromEmployeeNumber',  prevKey: 'prevSecondmentFromEmployeeNumber' },
-  { label: '休職者サイン',        afterKey: 'leaveFlag',                     prevKey: 'prevLeaveFlag' },
-  { label: 'ポジションコード',    afterKey: 'positionCode',                  prevKey: 'prevPositionCode' },
-  { label: '組織コード',         afterKey: 'departmentCode',                prevKey: 'prevDepartmentCode' },
-  { label: 'BU',               afterKey: 'businessUnit',                  prevKey: 'prevBusinessUnit' },
-  { label: '部門',              afterKey: 'division',                      prevKey: 'prevDivision' },
-  { label: '統括部',            afterKey: 'subDivision',                   prevKey: 'prevSubDivision' },
-  { label: 'グループ',           afterKey: 'group',                         prevKey: 'prevGroup' },
-  { label: 'チーム',            afterKey: 'team',                          prevKey: 'prevTeam' },
-  { label: '役職',              afterKey: 'officialPositionCode',          prevKey: 'prevOfficialPositionCode' },
-  { label: 'フリータイトル',      afterKey: 'localJobTitle',                 prevKey: 'prevLocalJobTitle' },
-  { label: '出向先会社',         afterKey: 'secondmentToCompany',           prevKey: 'prevSecondmentToCompany' },
-  { label: '勤務場所',           afterKey: 'location',                      prevKey: 'prevLocation' },
-  { label: 'コストセンター',      afterKey: 'costCenter',                    prevKey: 'prevCostCenter' },
-  { label: '上司PFコード',       afterKey: 'managerPositionCode',           prevKey: 'prevManagerPositionCode' },
-  { label: '上司氏名',           afterKey: 'managerName',                   prevKey: 'prevManagerName' },
-  { label: 'ジョブファミリー',    afterKey: 'jobFamily',                     prevKey: 'prevJobFamily' },
-  { label: 'ジョブタイプ',        afterKey: 'jobType',                       prevKey: 'prevJobType' },
-  { label: 'PFバンド',          afterKey: 'positionBand',                  prevKey: 'prevPositionBand' },
-  { label: 'バンド',            afterKey: 'band',                          prevKey: 'prevBand' },
-  { label: '給与等級',           afterKey: 'payGrade',                      prevKey: 'prevPayGrade' },
-  { label: '業務研修PF',         afterKey: 'trainingPositionFlag',          prevKey: 'prevTrainingPositionFlag' },
-  { label: '非組合協定',         afterKey: 'nonUnionAgreementFlag',         prevKey: 'prevNonUnionAgreementFlag' },
-  { label: 'PF組合員FG',        afterKey: 'positionUnionFlag',             prevKey: 'prevPositionUnionFlag' },
-  { label: '組合員',            afterKey: 'unionFlag',                     prevKey: 'prevUnionFlag' },
-  { label: 'PF裁量労働FG',      afterKey: 'positionDiscretionaryWorkFlag', prevKey: 'prevPositionDiscretionaryWorkFlag' },
-  { label: '裁量労働',           afterKey: 'discretionaryWorkFlag',         prevKey: 'prevDiscretionaryWorkFlag' },
-]
+// ── Display columns: derived from BEFORE_AFTER_FIELD_PAIRS + ALLOCATION_LIST_LABEL_MAP
+// prevKey の ja ラベル（_新 なし）を表示ラベルとして使用。labels.ts が唯一の変更ポイント。
+const DISPLAY_FIELDS = BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => ({
+  label:   ALLOCATION_LIST_LABEL_MAP[String(prevKey)]?.ja ?? String(prevKey),
+  afterKey: afterKey as keyof AllocationRow,
+  prevKey:  prevKey  as keyof AllocationRow,
+}))
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ExcelPreview() {

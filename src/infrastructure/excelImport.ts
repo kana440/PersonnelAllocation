@@ -30,81 +30,68 @@ function cellStr(ws: XLSX.WorkSheet, r: number, c: number): string {
   return String(ws[XLSX.utils.encode_cell({ r, c })]?.v ?? '').trim()
 }
 
-function cellNum(ws: XLSX.WorkSheet, r: number, c: number): number {
-  const v = ws[XLSX.utils.encode_cell({ r, c })]?.v
-  return typeof v === 'number' ? v : (Number(String(v ?? '')) || 0)
-}
 
 // ── 組織CD一覧パーサー ─────────────────────────────────────────────────────────
-// ヘッダー行のキーワードから列インデックスを自動検出する。
-// 新列: 会社コード / 会社名 / 発令区分（前後フラグ）を追加サポート。
 function parseOrgMaster(ws: XLSX.WorkSheet): OrgMasterEntry[] {
   const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1')
   const entries: OrgMasterEntry[] = []
 
-  type ColMap = {
-    code: number; parent: number; name: number
-    companyCode: number; companyName: number; phase: number
-    bu: number; div: number; dept: number; group: number; team: number; level: number
-  }
-  const defaults: ColMap = {
-    code: colIdx('B'), parent: -1, name: -1,
-    companyCode: -1, companyName: -1, phase: -1,
-    bu: colIdx('C'), div: colIdx('D'), dept: colIdx('E'),
-    group: colIdx('F'), team: colIdx('G'), level: colIdx('H'),
-  }
-  let colMap = { ...defaults }
+  // 列インデックス（デフォルト: 固定レイアウト想定）
+  let cCode = colIdx('B'), cParent = -1, cName = -1
+  let cCompany = -1, cPhase = -1, cOrgLevel = -1
+  let cBu = colIdx('C'), cDiv = colIdx('D'), cDept = colIdx('E')
+  let cGroup = colIdx('F'), cTeam = colIdx('G')
+  let cCostCenter = -1, cWorkLocation = -1
   let dataStartRow = 1
 
-  outer: for (let r = 0; r <= Math.min(4, range.e.r); r++) {
-    const cm: ColMap = { ...defaults }
-    let hits = 0
+  // 先頭5行を走査し、'組織コード' 列が見つかった行をヘッダー行とする
+  for (let r = 0; r <= Math.min(4, range.e.r); r++) {
+    let foundCode = false
     for (let c = 0; c <= Math.min(range.e.c, 30); c++) {
       const h = String(ws[XLSX.utils.encode_cell({ r, c })]?.v ?? '').replace(/\s/g, '')
       if (!h) continue
-      if (/上位組織コード|上位コード|親組織コード|親コード/.test(h))  { cm.parent      = c; hits++ }
-      else if (/会社コード|会社ID|CompanyCode/i.test(h))              { cm.companyCode = c; hits++ }
-      else if (/会社名|^会社$|CompanyName/i.test(h))                  { cm.companyName = c; hits++ }
-      else if (/発令区分|前後フラグ|フェーズ|適用区分|Phase/i.test(h)) { cm.phase       = c; hits++ }
-      else if (/^組織コード$|^コード$/.test(h))                        { cm.code        = c; hits++ }
-      else if (/組織名|名称/.test(h))                                   { cm.name        = c; hits++ }
-      else if (/組織レベル|レベル/.test(h))                             { cm.level       = c; hits++ }
-      else if (/ビジネスユニット|BU/.test(h))                           { cm.bu          = c; hits++ }
-      else if (/^部門$/.test(h))                                        { cm.div         = c; hits++ }
-      else if (/統括部/.test(h))                                        { cm.dept        = c; hits++ }
-      else if (/グループ/.test(h))                                      { cm.group       = c; hits++ }
-      else if (/チーム/.test(h))                                        { cm.team        = c; hits++ }
+      if      (/^組織コード$|^コード$/.test(h))               { cCode = c; foundCode = true }
+      else if (/上位組織コード|親組織コード/.test(h))          { cParent = c }
+      else if (/組織名|名称/.test(h))                          { cName = c }
+      else if (/会社名|^会社$/i.test(h))                       { cCompany = c }
+      else if (/発令区分|前後フラグ|フェーズ/i.test(h))        { cPhase = c }
+      else if (/ビジネスユニット|^BU$/i.test(h))               { cBu = c }
+      else if (/^部門$/.test(h))                               { cDiv = c }
+      else if (/統括部/.test(h))                               { cDept = c }
+      else if (/グループ/.test(h))                             { cGroup = c }
+      else if (/チーム/.test(h))                               { cTeam = c }
+      else if (/組織レベル|レベル/.test(h))                    { cOrgLevel = c }
+      else if (/コストセンター|CostCenter/i.test(h))           { cCostCenter = c }
+      else if (/勤務地|勤務場所|workLocation/i.test(h))        { cWorkLocation = c }
     }
-    if (hits >= 2) { colMap = cm; dataStartRow = r + 1; break outer }
+    if (foundCode) { dataStartRow = r + 1; break }
   }
 
   for (let r = dataStartRow; r <= range.e.r; r++) {
-    const code = cellStr(ws, r, colMap.code)
+    const code = cellStr(ws, r, cCode)
     if (!code) continue
     entries.push({
       code,
-      parentCode:        colMap.parent      >= 0 ? (cellStr(ws, r, colMap.parent)      || undefined) : undefined,
-      name:              colMap.name        >= 0 ? (cellStr(ws, r, colMap.name)         || undefined) : undefined,
-      companyCode:       colMap.companyCode >= 0 ? (cellStr(ws, r, colMap.companyCode)  || undefined) : undefined,
-      companyName:       colMap.companyName >= 0 ? (cellStr(ws, r, colMap.companyName)  || undefined) : undefined,
-      phase:             parsePhase(colMap.phase >= 0 ? cellStr(ws, r, colMap.phase) : ''),
-      businessUnit:      cellStr(ws, r, colMap.bu),
-      division:          cellStr(ws, r, colMap.div),
-      department:        cellStr(ws, r, colMap.dept),
-      group:             cellStr(ws, r, colMap.group),
-      team:              cellStr(ws, r, colMap.team),
-      organizationLevel: cellNum(ws, r, colMap.level),
+      parentCode:        cParent   >= 0 ? (cellStr(ws, r, cParent)   || undefined) : undefined,
+      name:              cName     >= 0 ? (cellStr(ws, r, cName)      || undefined) : undefined,
+      company:           cCompany  >= 0 ? cellStr(ws, r, cCompany) : '',
+      phase:             parsePhase(cPhase >= 0 ? cellStr(ws, r, cPhase) : ''),
+      businessUnit:      cellStr(ws, r, cBu),
+      division:          cellStr(ws, r, cDiv),
+      department:        cellStr(ws, r, cDept),
+      group:             cellStr(ws, r, cGroup),
+      team:              cellStr(ws, r, cTeam),
+      organizationLevel: cOrgLevel    >= 0 ? cellStr(ws, r, cOrgLevel)    : '',
+      CostCenter:        cCostCenter  >= 0 ? cellStr(ws, r, cCostCenter)  : '',
+      workLocation:      cWorkLocation >= 0 ? cellStr(ws, r, cWorkLocation) : '',
     })
   }
   return entries
 }
 
-// 発令区分セルの値 → 'before' | 'after' | 'both'
-function parsePhase(v: string): 'before' | 'after' | 'both' {
-  const s = v.trim()
-  if (/^(前|旧|before|B)$/i.test(s)) return 'before'
-  if (/^(後|新|after|A)$/i.test(s))  return 'after'
-  return 'both'
+// 発令区分セルの値 → 'before' | 'after'（空セル・列なし → 'after'）
+function parsePhase(v: string): 'before' | 'after' {
+  return /^(前|旧|before|B)$/i.test(v.trim()) ? 'before' : 'after'
 }
 
 // 元ワークブックをモジュール変数に保持（エクスポート時に要員配置リストシートだけ置換するため）
@@ -114,7 +101,7 @@ export function getLastWorkbook(): XLSX.WorkBook | null { return _lastWorkbook }
 export function getLastFileName(): string | null { return _lastFileName }
 
 // OrgMasterEntry → Organization[] + Company[]
-// ・会社コード / 会社名列がある場合は複数社に対応
+// ・company 列がある場合は複数社に対応
 // ・phase フィールドで発令前後に分割し、それぞれ別の階層ツリーを構築する
 function orgMasterToEntities(
   entries:             OrgMasterEntry[],
@@ -125,54 +112,43 @@ function orgMasterToEntities(
   companies:           Company[]
 } {
   // ── 1. 会社一覧を収集 ─────────────────────────────────────────
-  // companyCode > companyName > fallback の優先度で会社IDを決定
   const companyMap = new Map<string, string>()   // companyId → companyName
   for (const e of entries) {
-    const cid  = e.companyCode || e.companyName || fallbackCompanyName
-    const cname = e.companyName || e.companyCode || fallbackCompanyName
-    if (!companyMap.has(cid)) companyMap.set(cid, cname)
+    const cid = e.company || fallbackCompanyName
+    if (!companyMap.has(cid)) companyMap.set(cid, cid)
   }
-  const companies: Company[] = [...companyMap.entries()].map(([id, name]) => ({
-    id, name, hasSF: true,
+  const companies: Company[] = [...companyMap.keys()].map(id => ({
+    id, name: id, hasSF: true,
   }))
 
   // ── 2. エントリのサブセットから Organization[] を構築 ─────────
   function buildOrgList(subset: OrgMasterEntry[]): Organization[] {
-    const codeSet          = new Set(subset.map(e => e.code))
-    const hasParentCodeCol = subset.some(e => e.parentCode && codeSet.has(e.parentCode))
-
-    function findParentId(entry: OrgMasterEntry): string | null {
-      // ① 上位組織コード列が信頼できれば直接使う
-      if (hasParentCodeCol) {
-        return (entry.parentCode && codeSet.has(entry.parentCode))
-          ? entry.parentCode
-          : null
-      }
-      // ② fallback: BU/部門/… の名称一致で親を探す
-      const parentLevel = entry.organizationLevel - 1
-      if (parentLevel <= 0) return null
-      return subset.find(e => {
-        if (e.organizationLevel !== parentLevel)                    return false
-        if (e.businessUnit !== entry.businessUnit)                  return false
-        if (parentLevel >= 2 && e.division   !== entry.division)   return false
-        if (parentLevel >= 3 && e.department !== entry.department) return false
-        if (parentLevel >= 4 && e.group      !== entry.group)      return false
-        return true
-      })?.code ?? null
-    }
+    const codeSet = new Set(subset.map(e => e.code))
 
     const orgs: Organization[] = subset.filter(e => e.code).map(e => {
-      const cid  = e.companyCode || e.companyName || fallbackCompanyName
+      const cid         = e.company || fallbackCompanyName
       const derivedName = e.team || e.group || e.department || e.division || e.businessUnit || e.code
+      const parentId    = (e.parentCode && codeSet.has(e.parentCode)) ? e.parentCode : null
       return {
         id:           e.code,
         name:         e.name || derivedName,
         companyId:    cid,
-        parentId:     findParentId(e),
-        level:        e.organizationLevel || 2,
+        parentId,
+        level:        1,   // 後で親チェーンから再計算
         externalCode: e.code,
       }
     })
+
+    // 親チェーンを辿って level を確定
+    const byId = new Map(orgs.map(o => [o.id, o]))
+    for (const org of orgs) {
+      let lvl = 1, cur = org
+      while (cur.parentId && byId.has(cur.parentId) && lvl < 10) {
+        cur = byId.get(cur.parentId)!
+        lvl++
+      }
+      ;(org as { level: number }).level = lvl
+    }
 
     // 会社ごとに「未設定」受け皿ノードを追加
     for (const cid of companyMap.keys()) {
@@ -185,12 +161,13 @@ function orgMasterToEntities(
   }
 
   // ── 3. phase で分割して別々の階層を構築 ───────────────────────
-  const beforeEntries = entries.filter(e => e.phase !== 'after')
-  const afterEntries  = entries.filter(e => e.phase !== 'before')
+  // phase列がない場合は全エントリが 'after' になるため、before にも同じリストを使う
+  const beforeEntries = entries.filter(e => e.phase === 'before')
+  const afterEntries  = entries.filter(e => e.phase === 'after')
 
   return {
-    beforeOrganizations: buildOrgList(beforeEntries),
-    afterOrganizations:  buildOrgList(afterEntries),
+    beforeOrganizations: buildOrgList(beforeEntries.length > 0 ? beforeEntries : afterEntries),
+    afterOrganizations:  buildOrgList(afterEntries.length  > 0 ? afterEntries  : beforeEntries),
     companies,
   }
 }
@@ -258,7 +235,7 @@ function parseAllocationSheet(ws: XLSX.WorkSheet): AllocationList[] {
       console.log('first data row (parsed keys):', Object.keys(entry))
     }
 
-    if (!entry.userId) continue
+    if (!entry.no) continue
     rows.push(entry as AllocationList)
   }
   console.log('parsed rows:', rows.length)
@@ -269,8 +246,8 @@ function parseAllocationSheet(ws: XLSX.WorkSheet): AllocationList[] {
 // ── 統合インポート結果 ────────────────────────────────────────────────────────
 export interface ImportedWorkbookResult {
   codeLists:           AllCodeLists
-  beforeOrganizations: Organization[]  // 発令前組織マスタ（phase='before'|'both'）
-  afterOrganizations:  Organization[]  // 発令後組織マスタ（phase='after'|'both'）
+  beforeOrganizations: Organization[]  // 発令前組織マスタ（phase='before'）
+  afterOrganizations:  Organization[]  // 発令後組織マスタ（phase='after'）
   companies:           Company[]
   allocationList:      AllocationRow[] // rowId 付き AllocationRow（Single Source of Truth）
   sheetsFound:         string[]

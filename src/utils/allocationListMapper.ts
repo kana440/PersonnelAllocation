@@ -33,7 +33,7 @@ export function toAllocationRows(
 
     return {
       ...row,
-      no: row.no ?? String(idx + 1),
+      no: String(idx + 1),
       _meta: {
         operationType,
         operationGroupId: groupId,
