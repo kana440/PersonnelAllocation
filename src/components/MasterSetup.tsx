@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
 import { useCodeListStore } from '../store/codeListStore'
-import { importFromFile, importFromSampleCsv, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
+import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
 import type { ImportedWorkbookResult } from '../infrastructure/excelImport'
 import { CODE_LIST_LABELS } from '../infrastructure/codeLists/excelParser'
 import { MasterSetupHelp } from './MasterSetupHelp'
@@ -42,7 +42,7 @@ export function MasterSetup({ onReady }: Props) {
     await runImport(onProgress => importFromFile(file, onProgress))
   }
 
-  const handleSample = () => runImport(onProgress => importFromSampleCsv(onProgress))
+  const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
 
   const handleApply = async () => {
     if (phase.kind !== 'done') return
@@ -54,7 +54,7 @@ export function MasterSetup({ onReady }: Props) {
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
       {showHelp && <MasterSetupHelp onClose={() => setShowHelp(false)} />}
-      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm" onChange={handleFile} className="hidden" />
 
       <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">
         {phase.kind === 'idle' && (

@@ -368,28 +368,3 @@ export async function importFromUrl(url: string, onProgress?: ProgressCallback):
   return importWorkbook(_lastWorkbook, undefined, onProgress)
 }
 
-// public/ の CSV サンプルファイルから workbook を組み立てて importWorkbook を呼ぶ。
-// sample.xlsx 不要・CSV 単一メンテナンスで動作する。
-export async function importFromSampleCsv(onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {
-  const fetchCsv = async (label: string, path: string) => {
-    onProgress?.(`${label}を取得中...`)
-    const res = await fetch(path)
-    if (!res.ok) throw new Error(`サンプルファイルが見つかりません (${res.status}): ${path}`)
-    return res.text()
-  }
-  const allocCsv = await fetchCsv('要員配置リスト', '/sample_allocation_list.csv')
-  const orgCsv   = await fetchCsv('組織マスタ',     '/sample_org_master.csv')
-
-  onProgress?.('サンプルデータを構築中...')
-  await tick()
-  const wb = XLSX.utils.book_new()
-  // XLSX.read は CSV テキストを WorkSheet 形式で解析する
-  const allocWs = XLSX.read(allocCsv, { type: 'string' }).Sheets.Sheet1
-  const orgWs   = XLSX.read(orgCsv,   { type: 'string' }).Sheets.Sheet1
-  XLSX.utils.book_append_sheet(wb, allocWs, SHEET_ALLOCATION)
-  XLSX.utils.book_append_sheet(wb, orgWs,   SHEET_ORG_MASTER)
-
-  _lastWorkbook = wb
-  _lastFileName = 'sample.xlsx'
-  return importWorkbook(wb, 'サンプル', onProgress)
-}
