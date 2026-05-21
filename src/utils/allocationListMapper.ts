@@ -23,9 +23,16 @@ export function toAllocationRows(
   computedRows:  BaseAllocationRow[],
   organizations: Organization[],
 ): AllocationRow[] {
+  // O(n) Map を事前構築して organizations.find の O(n²) を回避
+  const orgMap = new Map<string, Organization>()
+  for (const o of organizations) {
+    if (o.externalCode) orgMap.set(o.externalCode, o)
+    orgMap.set(o.id, o)
+  }
+
   return computedRows.map((row, idx) => {
     const orgId    = row.departmentCode ?? ''
-    const org      = organizations.find(o => o.externalCode === orgId || o.id === orgId)
+    const org      = orgMap.get(orgId)
     const companyId = org?.companyId ?? ''
 
     const operationType = deriveOperationType(row)

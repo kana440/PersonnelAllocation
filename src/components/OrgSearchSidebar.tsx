@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../store/useStore'
 import { rowDiff } from '../domain/allocationRow'
 import { buildOrgMap } from '../domain/projection/rows'
@@ -14,10 +14,13 @@ const CHANGE_DOT: Record<string, string> = {
 
 export function OrgSearchSidebar() {
   const {
-    afterOrganizations, organizations: beforeOrgs, companies,
+    afterOrganizations, organizations: beforeOrgs,
     persons, allocationList,
     focusedOrgId, focusOrg, selectedPersonId, selectPerson, enterEditMode,
+    selectPersonAndFocusOrg,
   } = useStore()
+
+  const treeScrollRef = useRef<HTMLDivElement>(null)
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
 
@@ -42,6 +45,40 @@ export function OrgSearchSidebar() {
     () => afterOrganizations.filter(o => !o.isAbandoned),
     [afterOrganizations]
   )
+
+  // 人物が選択されたらサイドバーの該当組織を展開してスクロール
+  useEffect(() => {
+    if (!selectedPersonId) return
+    const person = persons.find(p => p.id === selectedPersonId)
+    if (!person?.sfPersonId) return
+    const row = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
+             ?? allocationList.find(r => r.userId === person.sfPersonId)
+    const deptCode = row?.departmentCode
+    if (!deptCode) return
+
+    const orgById  = new Map(viewOrgs.map(o => [o.id, o]))
+    const orgByExt = new Map(viewOrgs.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
+    const personOrg = orgByExt.get(deptCode) ?? orgById.get(deptCode)
+    if (!personOrg) return
+
+    // 会社グループを展開
+    if (personOrg.companyId) {
+      setExpandedCompanies(prev => { const s = new Set(prev); s.add(personOrg.companyId!); return s })
+    }
+
+    // 祖先 + 当該組織を展開
+    const toExpand: string[] = [personOrg.id]
+    let cur = personOrg.parentId ? orgById.get(personOrg.parentId) : undefined
+    while (cur) { toExpand.push(cur.id); cur = cur.parentId ? orgById.get(cur.parentId) : undefined }
+    setExpandedOrgs(prev => { const s = new Set(prev); for (const id of toExpand) s.add(id); return s })
+
+    // 展開後にスクロール（二重 rAF で React の描画を待つ）
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      treeScrollRef.current
+        ?.querySelector(`[data-org-id="${personOrg.id}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }))
+  }, [selectedPersonId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const afterOrgByCode  = useMemo(() => buildOrgMap(afterOrganizations), [afterOrganizations])
   const beforeOrgByCode = useMemo(() => buildOrgMap(beforeOrgs),         [beforeOrgs])
@@ -118,7 +155,7 @@ export function OrgSearchSidebar() {
     return expanded
   })
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(
-    () => new Set(companies.map(c => c.id))
+    () => new Set(viewOrgs.map(o => o.companyId).filter(Boolean))
   )
 
   const orgSearchLower = orgSearch.toLowerCase().trim()
@@ -154,7 +191,9 @@ export function OrgSearchSidebar() {
 
     return (
       <div key={org.id} style={{ marginLeft: `${depth * 10}px` }}>
-        <div className={`flex items-center gap-0.5 rounded py-0.5 px-1 transition-colors ${
+        <div
+          data-org-id={org.id}
+          className={`flex items-center gap-0.5 rounded py-0.5 px-1 transition-colors ${
           isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
         }`}>
           <button
@@ -221,7 +260,7 @@ export function OrgSearchSidebar() {
       .filter(o => o.name.toLowerCase().includes(orgSearchLower))
       .map(o => ({
         type: 'org' as const, id: o.id, label: o.name,
-        sub: companies.find(c => c.id === o.companyId)?.name ?? '',
+        sub: o.companyId,
         orgId: o.id, personId: undefined as string | undefined,
       })),
     ...persons
@@ -261,8 +300,8 @@ export function OrgSearchSidebar() {
             <button
               key={`${r.type}-${r.id}`}
               onClick={() => {
-                if (r.orgId) focusOrg(r.orgId)
-                if (r.personId) selectPerson(r.personId)
+                if (r.personId) selectPersonAndFocusOrg(r.personId)
+                else if (r.orgId) focusOrg(r.orgId)
                 setOrgSearch('')
               }}
               className="w-full text-left flex items-center gap-1.5 px-1 py-1 rounded hover:bg-blue-50 transition-colors"
@@ -276,14 +315,11 @@ export function OrgSearchSidebar() {
           ))}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto min-h-0 px-1 space-y-1 pb-1">
+        <div ref={treeScrollRef} className="flex-1 overflow-y-auto min-h-0 px-1 space-y-1 pb-1">
           {(() => {
-            const knownCompanyIds = new Set(companies.map(c => c.id))
-            const extraIds = [...new Set(viewOrgs.map(o => o.companyId))].filter(id => !knownCompanyIds.has(id))
-            const allCompanies = [
-              ...companies,
-              ...extraIds.map(id => ({ id, name: id, hasSF: true })),
-            ]
+            const allCompanies = [...new Set(viewOrgs.map(o => o.companyId))]
+              .filter(Boolean)
+              .map(id => ({ id, name: id }))
             return allCompanies.map(company => {
               const rootOrgs = viewOrgs.filter(o => o.companyId === company.id && o.parentId === null)
               if (rootOrgs.length === 0) return null

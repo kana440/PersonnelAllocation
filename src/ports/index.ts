@@ -1,6 +1,6 @@
 import type { AllCodeLists }   from '../domain/codeLists/aggregate'
 import type { AllocationRow }  from '../domain/allocationRow'
-import type { Organization, Company } from '../domain/schemas'
+import type { Organization } from '../domain/schemas'
 
 // ── Data source port (read) ──────────────────────────────────────────────────
 // Excel implementation: src/infrastructure/excelImport.ts (importFromFile)
@@ -10,7 +10,6 @@ export interface AllocationData {
   allocationList:      AllocationRow[]
   beforeOrganizations: Organization[]
   afterOrganizations:  Organization[]
-  companies:           Company[]
   codeLists:           AllCodeLists
 }
 

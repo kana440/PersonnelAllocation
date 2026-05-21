@@ -1,4 +1,4 @@
-import type { Company, Organization } from '../domain/schemas'
+import type { Organization } from '../domain/schemas'
 import type { AllCodeLists } from '../domain/codeLists/aggregate'
 import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
 import type { AllocationRow } from '../domain/allocationRow'
@@ -6,66 +6,53 @@ import { nextRowId } from '../domain/allocationRow'
 import type { AfterValues } from '../domain/allocationRow'
 import type { IDomainOperation, ValidationResult } from '../domain/operation/types'
 import { DirectEditOperation }  from '../domain/operation/handlers/directEdit'
-import {
-  derivePersons,
-  deriveCompanies,
-} from '../domain/projection/rows'
+import { derivePersons } from '../domain/projection/rows'
 import type { Person } from '../domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
 import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
 
 // ── DomainSnapshot ────────────────────────────────────────────────────────────
-// Zustand・AI アダプター両方がこの型で状態を受け取る。
-// allocationList の after フィールドが発令後の単一データソース。
 export interface DomainSnapshot {
-  // ── Single Source of Truth ──────────────────────────────────────
-  allocationList:      AllocationRow[]  // prev*=発令前(不変), after=発令後(編集可)
-  beforeOrganizations: Organization[]  // 発令前組織マスタ
-  afterOrganizations:  Organization[]  // 発令後組織マスタ
-  companies:           Company[]
-  codeLists:           AllCodeLists
-
-  // ── 計算済みビュー（コンポーネント用）────────────────────────
-  persons:             Person[]
-
-  // ── Undo/Redo 状態 ─────────────────────────────────────────────
-  canUndo:             boolean
-  canRedo:             boolean
-
-  // ── パターンキャッシュ ─────────────────────────────────────────
-  patternCache:        Map<string, PatternDetectionResult>
-
-  // ── 後方互換エイリアス ─────────────────────────────────────────
-  organizations:       Organization[]  // = beforeOrganizations
-}
-
-// Undo/Redo 用に保存するコアデータのみ（派生ビューは除く）
-interface CoreState {
   allocationList:      AllocationRow[]
   beforeOrganizations: Organization[]
   afterOrganizations:  Organization[]
-  companies:           Company[]
   codeLists:           AllCodeLists
+  persons:             Person[]
+  canUndo:             boolean
+  canRedo:             boolean
+  patternCache:        Map<string, PatternDetectionResult>
+  organizations:       Organization[]  // = beforeOrganizations（後方互換エイリアス）
 }
+
+// ── 差分Undo/Redo ─────────────────────────────────────────────────────────────
+// 全行スナップショットの代わりに、変更された行のみを記録する。
+// 30k行 × 操作1件 → 通常1〜数行分のみ保持。
+interface RowDiff {
+  rowId:  number
+  before: AllocationRow | null  // null = この操作で追加された行
+  after:  AllocationRow | null  // null = この操作で削除された行（将来対応）
+}
+
+interface StatePatch {
+  rowDiffs:    RowDiff[]
+  orgsBefore?: Organization[]   // afterOrganizations が変わった場合のみ
+  orgsAfter?:  Organization[]
+}
+
+const MAX_UNDO = 50
 
 // ── HRApplicationService ──────────────────────────────────────────────────────
 export class HRApplicationService {
   private allocationList:      AllocationRow[] = []
   private beforeOrganizations: Organization[]  = []
   private afterOrganizations:  Organization[]  = []
-  private companies:           Company[]       = []
   private codeLists:           AllCodeLists    = EMPTY_CODE_LISTS
 
-  // Undo/Redo スタック（コアデータのスナップショット）
-  private past:   CoreState[] = []
-  private future: CoreState[] = []
+  private past:   StatePatch[] = []
+  private future: StatePatch[] = []
 
-  // パターン定義（container.ts から DI）
-  private patterns: IOperationPattern[] = []
-
-  // allocationList 変更のたびに再計算するパターンキャッシュ
+  private patterns:     IOperationPattern[]               = []
   private patternCache: Map<string, PatternDetectionResult> = new Map()
-
   private listeners = new Set<() => void>()
 
   registerPatterns(patterns: IOperationPattern[]): void {
@@ -78,7 +65,6 @@ export class HRApplicationService {
     this.patternCache = matchAllPatterns(this.allocationList, this.patterns)
   }
 
-  // ── 変更通知 ──────────────────────────────────────────────────
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn)
     return () => this.listeners.delete(fn)
@@ -88,45 +74,78 @@ export class HRApplicationService {
     this.listeners.forEach(fn => fn())
   }
 
-  // ── コアデータのスナップショット ─────────────────────────────
-  private coreSnapshot(): CoreState {
+  // ── 差分計算 ──────────────────────────────────────────────────
+  private computePatch(
+    beforeList: AllocationRow[],
+    afterList:  AllocationRow[],
+    beforeOrgs: Organization[],
+    afterOrgs?: Organization[],
+  ): StatePatch {
+    const beforeMap = new Map(beforeList.map(r => [r.rowId, r]))
+    const afterMap  = new Map(afterList.map(r  => [r.rowId, r]))
+    const rowDiffs: RowDiff[] = []
+
+    for (const [id, bRow] of beforeMap) {
+      const aRow = afterMap.get(id)
+      if (!aRow) {
+        rowDiffs.push({ rowId: id, before: bRow, after: null })
+      } else if (bRow !== aRow) {
+        rowDiffs.push({ rowId: id, before: bRow, after: aRow })
+      }
+    }
+    for (const [id, aRow] of afterMap) {
+      if (!beforeMap.has(id)) rowDiffs.push({ rowId: id, before: null, after: aRow })
+    }
+
     return {
-      allocationList:      this.allocationList.map(r => ({ ...r })),
-      beforeOrganizations: this.beforeOrganizations,
-      afterOrganizations:  this.afterOrganizations,
-      companies:           this.companies,
-      codeLists:           this.codeLists,
+      rowDiffs,
+      ...(afterOrgs ? { orgsBefore: beforeOrgs, orgsAfter: afterOrgs } : {}),
     }
   }
 
-  private restoreCore(snap: CoreState): void {
-    this.allocationList      = snap.allocationList
-    this.beforeOrganizations = snap.beforeOrganizations
-    this.afterOrganizations  = snap.afterOrganizations
-    this.companies           = snap.companies
-    this.codeLists           = snap.codeLists
+  private applyPatch(patch: StatePatch, direction: 'undo' | 'redo'): void {
+    const changedMap  = new Map<number, AllocationRow>()
+    const removeIds   = new Set<number>()
+    const addedRows:  AllocationRow[] = []
+
+    for (const { rowId, before, after } of patch.rowDiffs) {
+      const target = direction === 'undo' ? before : after
+      const remove = direction === 'undo' ? before === null : after === null
+
+      if (remove) {
+        removeIds.add(rowId)
+      } else if (target !== null) {
+        const exists = this.allocationList.some(r => r.rowId === rowId)
+        if (exists) changedMap.set(rowId, target)
+        else        addedRows.push(target)
+      }
+    }
+
+    this.allocationList = [
+      ...this.allocationList
+        .filter(r => !removeIds.has(r.rowId))
+        .map(r => changedMap.get(r.rowId) ?? r),
+      ...addedRows,
+    ]
+
+    if (direction === 'undo' && patch.orgsBefore) this.afterOrganizations = patch.orgsBefore
+    if (direction === 'redo' && patch.orgsAfter)  this.afterOrganizations = patch.orgsAfter
   }
 
-  // 保存時に呼ぶ: Undo スタックに現在状態を積む（public）
-  checkpoint(): void {
-    this.past.push(this.coreSnapshot())
+  private pushPast(patch: StatePatch): void {
+    this.past.push(patch)
+    if (this.past.length > MAX_UNDO) this.past.shift()
     this.future = []
   }
 
   // ── スナップショット取得 ───────────────────────────────────────
   getSnapshot(): DomainSnapshot {
-    const persons   = derivePersons(this.allocationList)
-    const companies = deriveCompanies(
-      [...this.beforeOrganizations, ...this.afterOrganizations],
-      this.companies,
-    )
     return {
       allocationList:      this.allocationList,
       beforeOrganizations: this.beforeOrganizations,
       afterOrganizations:  this.afterOrganizations,
-      companies,
       codeLists:           this.codeLists,
-      persons,
+      persons:             derivePersons(this.allocationList),
       canUndo:             this.past.length > 0,
       canRedo:             this.future.length > 0,
       patternCache:        this.patternCache,
@@ -139,22 +158,18 @@ export class HRApplicationService {
     allocationList:      AllocationRow[]
     beforeOrganizations: Organization[]
     afterOrganizations:  Organization[]
-    companies:           Company[]
     codeLists:           AllCodeLists
   }): void {
     this.allocationList      = data.allocationList
     this.beforeOrganizations = data.beforeOrganizations
     this.afterOrganizations  = data.afterOrganizations
-    this.companies           = data.companies
     this.codeLists           = data.codeLists
     this.past                = []
     this.future              = []
     this.emit()
   }
 
-  // ── 操作の実行（意味のある単位・Undo の単位）────────────────────
-  // validate() が error を返した場合は適用せず ValidationError を返す。
-  // ok の場合は checkpoint を積んで apply() を実行し emit() する。
+  // ── 操作の実行（差分をスタックに積む）────────────────────────
   executeOperation(op: IDomainOperation): ValidationResult {
     const ctx = {
       allocationList:     this.allocationList,
@@ -164,15 +179,18 @@ export class HRApplicationService {
     const result = op.validate(ctx)
     if (!result.ok) return result
 
-    this.checkpoint()
-    const applied = op.apply(ctx)
-    this.allocationList     = applied.updatedList
+    const beforeList = this.allocationList
+    const beforeOrgs = this.afterOrganizations
+    const applied    = op.apply(ctx)
+
+    this.pushPast(this.computePatch(beforeList, applied.updatedList, beforeOrgs, applied.updatedOrgs))
+    this.allocationList = applied.updatedList
     if (applied.updatedOrgs) this.afterOrganizations = applied.updatedOrgs
     this.emit()
     return result
   }
 
-  // ── 行の直接編集（checkpoint なし・プレビュー/AI 内部用）────────
+  // ── 行の直接編集（Undo なし・プレビュー/AI 内部用）────────────
   editRow(rowId: number, changes: AfterValues): void {
     const idx = this.allocationList.findIndex(r => r.rowId === rowId)
     if (idx < 0) return
@@ -182,7 +200,6 @@ export class HRApplicationService {
     this.emit()
   }
 
-  // ── ユーザー保存（executeOperation の薄いラッパー）───────────
   saveRow(rowId: number, changes: AfterValues): ValidationResult {
     const row   = this.allocationList.find(r => r.rowId === rowId)
     const label = row
@@ -191,7 +208,7 @@ export class HRApplicationService {
     return this.executeOperation(new DirectEditOperation(rowId, changes, label))
   }
 
-  // ── 新規採用行の追加 ─────────────────────────────────────────
+  // ── 新規採用行の追加（差分をスタックに積む）──────────────────
   addNewHireRow(opts: {
     lastName:       string
     firstName:      string
@@ -201,45 +218,42 @@ export class HRApplicationService {
     companyId?:     string
     effectiveDate:  string
   }): void {
-    this.checkpoint()
     const newRow: AllocationRow = {
       rowId:          nextRowId(this.allocationList),
       userId:         opts.userId,
       lastName:       opts.lastName,
       firstName:      opts.firstName,
       employeeNumber: opts.employeeNumber ?? '',
-      // after フィールド（採用時の発令後情報）
       employmentType: '正社員',
       departmentCode: opts.departmentCode ?? '',
-      // prev* フィールドは全て空（新規採用＝発令前データなし）
     } as AllocationRow
+
+    this.pushPast({ rowDiffs: [{ rowId: newRow.rowId, before: null, after: newRow }] })
     this.allocationList = [...this.allocationList, newRow]
     this.emit()
   }
 
   // ── Undo / Redo ───────────────────────────────────────────────
   undo(): void {
-    const prev = this.past.pop()
-    if (!prev) return
-    this.future.push(this.coreSnapshot())
-    this.restoreCore(prev)
+    const patch = this.past.pop()
+    if (!patch) return
+    this.future.push(patch)
+    this.applyPatch(patch, 'undo')
     this.emit()
   }
 
   redo(): void {
-    const next = this.future.pop()
-    if (!next) return
-    this.past.push(this.coreSnapshot())
-    this.restoreCore(next)
+    const patch = this.future.pop()
+    if (!patch) return
+    this.past.push(patch)
+    this.applyPatch(patch, 'redo')
     this.emit()
   }
 
-  // ── セッションリセット ────────────────────────────────────────
   reset(): void {
     this.allocationList      = []
     this.beforeOrganizations = []
     this.afterOrganizations  = []
-    this.companies           = []
     this.codeLists           = EMPTY_CODE_LISTS
     this.past                = []
     this.future              = []

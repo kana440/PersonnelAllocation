@@ -4,6 +4,39 @@ import type { ValidationResult } from '../domain/operation/types'
 import { appService } from '../application/HRApplicationService'
 import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '../domain/allocationRow'
+import type { Organization } from '../domain/schemas'
+
+// ── org ナビゲーションヘルパー（ストアアクション用）───────────────
+function buildIdMap(orgs: Organization[]): Map<string, Organization> {
+  return new Map(orgs.map(o => [o.id, o]))
+}
+
+function isDescendantOf(orgId: string, ancestorId: string, map: Map<string, Organization>): boolean {
+  let cur = map.get(orgId)
+  while (cur) {
+    if (cur.id === ancestorId) return true
+    cur = cur.parentId ? map.get(cur.parentId) : undefined
+  }
+  return false
+}
+
+// fromId の子孫 toId への経路（fromId 除く、toId 含む、上から下順）
+function pathBetween(fromId: string, toId: string, map: Map<string, Organization>): string[] {
+  const path: string[] = []
+  let cur = map.get(toId)
+  while (cur && cur.id !== fromId) {
+    path.push(cur.id)
+    cur = cur.parentId ? map.get(cur.parentId) : undefined
+  }
+  return cur?.id === fromId ? path.reverse() : []
+}
+
+// 親を辿ってルート（parentId がない、または map にない）の id を返す
+function rootOrgId(orgId: string, map: Map<string, Organization>): string {
+  let cur = map.get(orgId)
+  while (cur?.parentId && map.has(cur.parentId)) cur = map.get(cur.parentId)
+  return cur?.id ?? orgId
+}
 
 // 編集モードに入る前のビュー状態スナップショット
 export interface PreviousViewState {
@@ -27,6 +60,7 @@ interface UIState {
   editMode:             boolean
   previousViewState:    PreviousViewState | null
   mainCanvasMode:       '組織図' | 'レポートライン'
+  expandedChipIds:      Set<string>
 }
 
 // ── アクション ────────────────────────────────────────────────────
@@ -68,6 +102,10 @@ interface Actions {
   exitEditMode:       () => void
   setMainCanvasMode:  (mode: '組織図' | 'レポートライン') => void
 
+  // チップ展開
+  toggleChip:               (orgId: string) => void
+  selectPersonAndFocusOrg:  (personId: string) => void
+
   // 後方互換（既存コンポーネントが参照している場合のみ残す）
   setRawImportedRows: (rows: AllocationRow[]) => void
 }
@@ -95,6 +133,7 @@ export const useStore = create<AppState>((set, get) => {
     editMode:             false,
     previousViewState:    null,
     mainCanvasMode:       '組織図',
+    expandedChipIds:      new Set<string>(),
 
     // ── アクション ────────────────────────────────────────────────
     loadExcelData: async (result) => {
@@ -103,11 +142,10 @@ export const useStore = create<AppState>((set, get) => {
         allocationList:      result.allocationList,
         beforeOrganizations: result.beforeOrganizations,
         afterOrganizations:  result.afterOrganizations,
-        companies:           result.companies,
         codeLists:           result.codeLists,
       })
       await save(result.codeLists)
-      set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null })
+      set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
     },
 
     editRow:   (rowId, changes) => appService.editRow(rowId, changes),
@@ -135,7 +173,7 @@ export const useStore = create<AppState>((set, get) => {
 
     reset: () => {
       appService.reset()
-      set({ selectedPersonId: null, selectedRowId: null, focusedOrgId: null, isLoading: false })
+      set({ selectedPersonId: null, selectedRowId: null, focusedOrgId: null, isLoading: false, expandedChipIds: new Set() })
     },
 
     enterEditMode: (rowId) => {
@@ -163,6 +201,41 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     setMainCanvasMode:  (mode) => set({ mainCanvasMode: mode }),
+
+    toggleChip: (orgId) => {
+      const { expandedChipIds } = get()
+      const next = new Set(expandedChipIds)
+      next.has(orgId) ? next.delete(orgId) : next.add(orgId)
+      set({ expandedChipIds: next })
+    },
+
+    selectPersonAndFocusOrg: (personId) => {
+      const { afterOrganizations, persons, allocationList, focusedOrgId, expandedChipIds } = get()
+      const person = persons.find(p => p.id === personId)
+      if (!person) { set({ selectedPersonId: personId, workspaceMode: 'org' }); return }
+
+      const row = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
+               ?? allocationList.find(r => r.userId === person.sfPersonId)
+      const deptCode = row?.departmentCode
+      if (!deptCode) { set({ selectedPersonId: personId, workspaceMode: 'org' }); return }
+
+      const orgById  = buildIdMap(afterOrganizations)
+      const orgByExt = new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
+      const personOrg = orgByExt.get(deptCode) ?? orgById.get(deptCode)
+      if (!personOrg) { set({ selectedPersonId: personId, workspaceMode: 'org' }); return }
+
+      const newExpanded = new Set(expandedChipIds)
+      let newFocusedOrgId = focusedOrgId
+
+      if (focusedOrgId && isDescendantOf(personOrg.id, focusedOrgId, orgById)) {
+        for (const id of pathBetween(focusedOrgId, personOrg.id, orgById)) newExpanded.add(id)
+      } else {
+        newFocusedOrgId = rootOrgId(personOrg.id, orgById)
+        for (const id of pathBetween(newFocusedOrgId, personOrg.id, orgById)) newExpanded.add(id)
+      }
+
+      set({ selectedPersonId: personId, workspaceMode: 'org', focusedOrgId: newFocusedOrgId, expandedChipIds: newExpanded })
+    },
 
     setRawImportedRows: (_rows) => { /* no-op: 後方互換 */ },
 

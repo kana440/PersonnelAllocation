@@ -151,15 +151,15 @@ private future:              CoreState[]        ← Redo スタック
 ### DomainSnapshot（派生・毎回再計算）
 
 ```
-persons:            Person[]            ← allocationList から userId を dedupe
-beforePositions:    Position[]          ← prev* フィールド → Position 型
-afterPositions:     Position[]          ← after フィールド → Position 型
-beforeAffiliations: Affiliation[]       ← prev* フィールド → Affiliation 型
-afterAffiliations:  Affiliation[]       ← after フィールド → Affiliation 型
-canUndo:            boolean
-canRedo:            boolean
-patternCache:       Map<...>            ← パターン判定結果のキャッシュ
+persons:             Person[]           ← allocationList から userId を dedupe
+canUndo:             boolean
+canRedo:             boolean
+patternCache:        Map<...>           ← パターン判定結果のキャッシュ
+organizations:       Organization[]    ← beforeOrganizations の後方互換エイリアス
 ```
+
+> **注**: `Position` / `Affiliation` の派生ビューは廃止。
+> コンポーネントは `allocationList` + `useMemo` で構築した Map を直接参照する。
 
 ### Undo の仕組み
 

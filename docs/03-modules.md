@@ -145,19 +145,23 @@ test('DirectEdit が after フィールドを更新する', () => {
 
 **場所**: `src/domain/projection/rows.ts`
 
-**責務**: `AllocationRow[]` から UI が必要とする派生ビュー（Person, Position, Affiliation）を生成する
+**責務**: `AllocationRow[]` から UI が必要とする派生ビュー（Person, Company）と組織検索 Map を生成する
 
 **依存**: Module A のみ
 
 **公開 API**:
 ```typescript
-function derivePersons(rows): Person[]
-function deriveBeforePositions(rows, orgs): Position[]
-function deriveAfterPositions(rows, orgs): Position[]
-function deriveBeforeAffiliations(rows, persons): Affiliation[]
-function deriveAfterAffiliations(rows, persons): Affiliation[]
-function deriveCompanies(orgs, companies): Company[]
+function buildOrgMap(orgs: Organization[]): Map<string, Organization>
+// externalCode と id の両方をキーに登録した O(1) 検索 Map
+
+function derivePersons(rows: AllocationRow[]): Person[]
+// userId を dedupe しながら Person[] を生成
+
+function deriveCompanies(orgs: Organization[], companies: Company[]): Company[]
 ```
+
+> **注**: `deriveBeforePositions` / `deriveAfterPositions` / `deriveBeforeAffiliations` / `deriveAfterAffiliations` は廃止。
+> コンポーネント側で `allocationList` + `useMemo` により `afterMembersByOrgId` / `beforeMembersByOrgId` Map を構築する。
 
 **テスト方法**: 純粋関数。AllocationRow の配列を作って直接テスト可能
 
@@ -280,21 +284,25 @@ test('findPersons が名前で絞り込める', () => {
 
 **場所**: `src/infrastructure/excelImport.ts`, `src/utils/excelIO.ts`
 
-**責務**: ファイル I/O。Excel の読み込みと書き出しを担う。
+**責務**: ファイル I/O。Excel（`.xlsx` / `.xls` / `.xlsm`）の読み込みと書き出しを担う。
 
 **依存**: Module A + xlsx ライブラリ
 
 **公開 API**:
 ```typescript
-// 読み込み
-function importFromFile(file): Promise<ImportedWorkbookResult>
-function importFromUrl(url): Promise<ImportedWorkbookResult>
-function importWorkbook(wb): ImportedWorkbookResult
+type ProgressCallback = (message: string) => void
+
+// 読み込み（全関数に onProgress? を渡すと各ステップで呼ばれる）
+async function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult>
+async function importFromUrl(url: string, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult>
+async function importWorkbook(wb: WorkBook, fallbackCompanyName?: string, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult>
 
 // 書き出し
 function exportToXlsx(rows, effectiveDate, originalWorkbook?): Promise<void>
 function buildExportWorkbook(rows, effectiveDate, originalWorkbook?): WorkBook
 ```
+
+**インポートのスキップ条件**: `No` 列が空の行はブランク行として読み飛ばす（`userId` の有無は問わない）
 
 **ポートとの関係**:
 ```

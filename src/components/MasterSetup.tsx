@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../store/useStore'
-import { useCodeListStore } from '../store/codeListStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
 import type { ImportedWorkbookResult } from '../infrastructure/excelImport'
 import { CODE_LIST_LABELS } from '../infrastructure/codeLists/excelParser'
@@ -19,10 +18,11 @@ interface Props {
 
 export function MasterSetup({ onReady }: Props) {
   const { loadExcelData } = useStore()
-  const { save }          = useCodeListStore()
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
+
+  const tick = () => new Promise<void>(r => setTimeout(r, 0))
 
   const runImport = async (fn: (onProgress: (msg: string) => void) => Promise<ImportedWorkbookResult | null>) => {
     const onProgress = (progress: string) => setPhase({ kind: 'loading', progress })
@@ -46,8 +46,9 @@ export function MasterSetup({ onReady }: Props) {
 
   const handleApply = async () => {
     if (phase.kind !== 'done') return
+    setPhase({ kind: 'loading', progress: `データ適用中... (${phase.result.allocationRowCount.toLocaleString()} 行)` })
+    await tick()
     await loadExcelData(phase.result)
-    await save(phase.result.codeLists)
     onReady()
   }
 

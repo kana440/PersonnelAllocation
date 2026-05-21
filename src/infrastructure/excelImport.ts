@@ -1,13 +1,13 @@
 // 要員配置リスト Excel の統合インポーター
 // 以下の3シートを1ファイルから読み取る:
-//   "要員配置リスト" — AllocationList rows → Person / Position / Affiliation
+//   "要員配置リスト" — AllocationList rows → AllocationRow[]
 //   "各種TBL"        — コードリスト (AllCodeLists)
 //   "組織CD一覧"      — 組織マスタ (OrgMasterEntry[] → Organization[])
 
 import * as XLSX from 'xlsx'
 import type { AllCodeLists }        from '../domain/codeLists/aggregate'
 import type { OrgMasterEntry }      from '../domain/codeLists/orgMaster'
-import type { Organization, Company } from '../types/domain'
+import type { Organization } from '../types/domain'
 import { parseCodeListsFromWorkbook } from './codeLists/excelParser'
 import { EMPTY_CODE_LISTS }          from '../domain/codeLists/aggregate'
 import { ALLOCATION_LIST_FIELDS }    from '../domain/csvImport/allocationList/labels'
@@ -100,7 +100,7 @@ let _lastFileName: string | null = null
 export function getLastWorkbook(): XLSX.WorkBook | null { return _lastWorkbook }
 export function getLastFileName(): string | null { return _lastFileName }
 
-// OrgMasterEntry → Organization[] + Company[]
+// OrgMasterEntry → Organization[]（before / after の2セット）
 // ・company 列がある場合は複数社に対応
 // ・phase フィールドで発令前後に分割し、それぞれ別の階層ツリーを構築する
 function orgMasterToEntities(
@@ -109,17 +109,10 @@ function orgMasterToEntities(
 ): {
   beforeOrganizations: Organization[]
   afterOrganizations:  Organization[]
-  companies:           Company[]
 } {
-  // ── 1. 会社一覧を収集 ─────────────────────────────────────────
-  const companyMap = new Map<string, string>()   // companyId → companyName
-  for (const e of entries) {
-    const cid = e.company || fallbackCompanyName
-    if (!companyMap.has(cid)) companyMap.set(cid, cid)
-  }
-  const companies: Company[] = [...companyMap.keys()].map(id => ({
-    id, name: id, hasSF: true,
-  }))
+  // ── 1. 会社 ID を収集（未設定ノード用）─────────────────────────
+  const companyIds = new Set<string>()
+  for (const e of entries) companyIds.add(e.company || fallbackCompanyName)
 
   // ── 2. エントリのサブセットから Organization[] を構築 ─────────
   function buildOrgList(subset: OrgMasterEntry[]): Organization[] {
@@ -151,7 +144,7 @@ function orgMasterToEntities(
     }
 
     // 会社ごとに「未設定」受け皿ノードを追加
-    for (const cid of companyMap.keys()) {
+    for (const cid of companyIds) {
       orgs.push({
         id: `unassigned_${cid}`, name: '未設定', companyId: cid,
         parentId: null, level: 99, externalCode: undefined,
@@ -168,7 +161,6 @@ function orgMasterToEntities(
   return {
     beforeOrganizations: buildOrgList(beforeEntries.length > 0 ? beforeEntries : afterEntries),
     afterOrganizations:  buildOrgList(afterEntries.length  > 0 ? afterEntries  : beforeEntries),
-    companies,
   }
 }
 
@@ -248,7 +240,6 @@ export interface ImportedWorkbookResult {
   codeLists:           AllCodeLists
   beforeOrganizations: Organization[]  // 発令前組織マスタ（phase='before'）
   afterOrganizations:  Organization[]  // 発令後組織マスタ（phase='after'）
-  companies:           Company[]
   allocationList:      AllocationRow[] // rowId 付き AllocationRow（Single Source of Truth）
   sheetsFound:         string[]
   sheetsMissing:       string[]
@@ -289,7 +280,6 @@ export async function importWorkbook(
   let orgEntries:           OrgMasterEntry[] = []
   let beforeOrganizations:  Organization[]   = []
   let afterOrganizations:   Organization[]   = []
-  let companies:            Company[]        = []
   if (wb.Sheets[SHEET_ORG_MASTER]) {
     await report('組織マスタ（組織CD一覧）を解析中...')
     sheetsFound.push(SHEET_ORG_MASTER)
@@ -297,7 +287,6 @@ export async function importWorkbook(
     const entities      = orgMasterToEntities(orgEntries, fallbackCompanyName)
     beforeOrganizations = entities.beforeOrganizations
     afterOrganizations  = entities.afterOrganizations
-    companies           = entities.companies
     codeLists           = { ...codeLists, orgMasterEntries: orgEntries }
   } else {
     sheetsMissing.push(SHEET_ORG_MASTER)
@@ -319,7 +308,6 @@ export async function importWorkbook(
     codeLists,
     beforeOrganizations,
     afterOrganizations,
-    companies,
     allocationList,
     sheetsFound,
     sheetsMissing,

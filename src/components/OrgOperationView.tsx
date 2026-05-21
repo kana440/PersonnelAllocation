@@ -50,6 +50,7 @@ export function OrgOperationView() {
     allocationList,
     selectedPersonId, selectPerson, enterEditMode, saveRow,
     mainCanvasMode, setMainCanvasMode,
+    expandedChipIds, toggleChip,
   } = store
 
   const handlePersonDoubleClick = (personId: string) => {
@@ -62,7 +63,6 @@ export function OrgOperationView() {
 
   const [dragOverOrgId,    setDragOverOrgId]    = useState<string | null>(null)
   const [highlightedOrgId, setHighlightedOrgId] = useState<string | null>(null)
-  const [expandedChipIds,  setExpandedChipIds]  = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
   const canvasMode    = mainCanvasMode
   const setCanvasMode = (mode: CanvasMode) => setMainCanvasMode(mode)
@@ -465,7 +465,7 @@ export function OrgOperationView() {
     const isDragOver    = dragOverOrgId === orgId
     const isHighlighted = highlightedOrgId === orgId
     const isExpanded    = expandedChipIds.has(orgId)
-    const toggle = () => setExpandedChipIds(prev => { const s = new Set(prev); s.has(orgId) ? s.delete(orgId) : s.add(orgId); return s })
+    const toggle = () => toggleChip(orgId)
 
     if (!isExpanded) {
       return (

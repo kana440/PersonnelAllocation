@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../allocationRow'
-import type { Person, Company, Organization } from '../schemas'
+import type { Person, Organization } from '../schemas'
 
 // externalCode と id の両方をキーにした組織検索 Map を構築する。
 export function buildOrgMap(orgs: Organization[]): Map<string, Organization> {
@@ -31,18 +31,3 @@ export function derivePersons(rows: AllocationRow[]): Person[] {
   return persons
 }
 
-// ── Company ───────────────────────────────────────────────────────────────────
-// organizations から一意な companyId を抽出して返す（storage に保持している companies を優先）
-
-export function deriveCompanies(
-  orgs:      Organization[],
-  companies: Company[],
-): Company[] {
-  const covered = new Set(companies.map(c => c.id))
-  const extra: Company[] = orgs
-    .map(o => o.companyId)
-    .filter(id => id && !covered.has(id))
-    .filter((id, i, arr) => arr.indexOf(id) === i)
-    .map(id => ({ id, name: id, hasSF: true }))
-  return [...companies, ...extra]
-}
