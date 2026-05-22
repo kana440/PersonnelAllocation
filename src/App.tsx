@@ -4,6 +4,7 @@ import { OrgOperationView } from './components/canvas/OrgOperationView'
 import { EditView } from './components/editor/EditView'
 import { BottomPanel } from './components/editor/BottomPanel'
 import { AIChatDrawer } from './components/ai/AIChatDrawer'
+import { AIView } from './components/ai/AIView'
 import { SetupView } from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { useStore } from './store/useStore'
@@ -18,7 +19,8 @@ export default function App() {
   const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo, editMode } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
-  const [sessionReady, setSessionReady] = useState(false)
+  const [appMode,       setAppMode]       = useState<'ai' | 'editor'>('ai')
+  const [sessionReady,  setSessionReady]  = useState(false)
 
   useEffect(() => { checkStorage() }, [checkStorage])
 
@@ -67,6 +69,15 @@ export default function App() {
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
   )
 
+  if (appMode === 'ai') {
+    return (
+      <AIView
+        onOpenEditor={() => setAppMode('editor')}
+        onDataLoaded={() => setSessionReady(true)}
+      />
+    )
+  }
+
   if (!sessionReady) return <SetupView onReady={() => setSessionReady(true)} />
 
   if (isLoading) return (
@@ -114,6 +125,13 @@ export default function App() {
           >
             <span>💬</span>
             <span>AI アシスタント</span>
+          </button>
+          <button
+            onClick={() => setAppMode('ai')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-blue-700 hover:text-white transition-colors"
+            title="AI アシスタントに切り替え"
+          >
+            AI ←
           </button>
           <button
             onClick={() => setClearDialogOpen(true)}

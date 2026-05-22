@@ -1,0 +1,75 @@
+import type { ChatMessage, WidgetCallbacks } from './types'
+import { FilePickerWidget }    from './widgets/FilePickerWidget'
+import { ExcelHelpWidget }     from './widgets/ExcelHelpWidget'
+import { OrgInputWidget }      from './widgets/OrgInputWidget'
+import { OrgMembersWidget }    from './widgets/OrgMembersWidget'
+import { PersonInputWidget }   from './widgets/PersonInputWidget'
+import { PromoteConfirmWidget } from './widgets/PromoteConfirmWidget'
+
+interface Props {
+  message: ChatMessage
+  isActiveWidget: boolean
+  callbacks: WidgetCallbacks
+}
+
+export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
+  const isAI = message.role === 'ai'
+
+  return (
+    <div className={`flex items-start gap-3 ${isAI ? '' : 'justify-end'}`}>
+      {isAI && (
+        <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5 shadow-sm">
+          AI
+        </div>
+      )}
+
+      <div className={`min-w-0 ${isAI ? 'flex-1 max-w-[85%]' : 'max-w-[75%]'}`}>
+        {/* Bubble text */}
+        {(message.text || message.isLoading) && (
+          <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
+            isAI
+              ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm'
+              : 'bg-blue-500 text-white rounded-tr-sm'
+          }`}>
+            {message.isLoading ? (
+              <div className="flex gap-1 items-center py-0.5">
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            ) : message.text}
+          </div>
+        )}
+
+        {/* Widget */}
+        {isAI && message.widget && (
+          <div className="mt-1">
+            {message.widget.type === 'file-picker' && (
+              <FilePickerWidget isActive={isActiveWidget} onFile={callbacks.onFileSelected} />
+            )}
+            {message.widget.type === 'excel-help' && (
+              <ExcelHelpWidget />
+            )}
+            {message.widget.type === 'org-input' && (
+              <OrgInputWidget isActive={isActiveWidget} onSubmit={callbacks.onOrgNameSubmit} />
+            )}
+            {message.widget.type === 'org-members' && (
+              <OrgMembersWidget orgName={message.widget.orgName} members={message.widget.members} />
+            )}
+            {message.widget.type === 'person-input' && (
+              <PersonInputWidget isActive={isActiveWidget} onSubmit={callbacks.onPersonNamesSubmit} />
+            )}
+            {message.widget.type === 'promote-confirm' && (
+              <PromoteConfirmWidget
+                persons={message.widget.persons}
+                isActive={isActiveWidget}
+                onConfirm={callbacks.onPromoteConfirm}
+                onCancel={callbacks.onPromoteCancel}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

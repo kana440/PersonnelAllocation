@@ -33,9 +33,8 @@ export interface ICodeListSource {
   load(): Promise<AllCodeLists | null>
 }
 
-// ── AI chat port ──────────────────────────────────────────────────────────────
+// ── AI chat port (legacy drawer) ─────────────────────────────────────────────
 // Mock:   src/infrastructure/ai/mockChatService.ts
-// Future: src/infrastructure/ai/openAICompatibleAdapter.ts
 
 export interface ChatMessage {
   role: 'user' | 'ai'
@@ -44,4 +43,20 @@ export interface ChatMessage {
 
 export interface IAIChatService {
   send(history: ChatMessage[], userMessage: string): Promise<string>
+}
+
+// ── Stateless chat service port ───────────────────────────────────────────────
+// Matches the OpenAI / Anthropic chat completions pattern:
+// full conversation history is passed on every call; the server is stateless.
+//
+// Mock:   src/infrastructure/ai/mockApiService.ts
+// Future: src/infrastructure/ai/openAICompatibleAdapter.ts
+
+export interface APIMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface IChatService {
+  chat(messages: APIMessage[]): Promise<string>
 }
