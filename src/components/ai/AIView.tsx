@@ -5,13 +5,16 @@ import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import { ChatSession } from '../../application/chatSession'
 import { DirectEditOperation } from '../../domain/operation/handlers/directEdit'
-import { mockApiService }           from '../../infrastructure/ai/mockApiService'
-import { importExcelScenario }      from '../../infrastructure/ai/scenarios/importExcel'
-import { excelHelpScenario }        from '../../infrastructure/ai/scenarios/excelHelp'
-import { checkOrgMembersScenario }  from '../../infrastructure/ai/scenarios/checkOrgMembers'
-import { promotePersonsScenario }   from '../../infrastructure/ai/scenarios/promotePersons'
-import { exportExcelScenario }      from '../../infrastructure/ai/scenarios/exportExcel'
-import type { ChatWidget, PersonMatch, WidgetCallbacks } from './types'
+import { mockApiService }             from '../../infrastructure/ai/mockApiService'
+import { importExcelScenario }        from '../../infrastructure/ai/scenarios/importExcel'
+import { excelHelpScenario }          from '../../infrastructure/ai/scenarios/excelHelp'
+import { checkOrgMembersScenario }    from '../../infrastructure/ai/scenarios/checkOrgMembers'
+import { checkDepartmentScenario, buildOrgTree } from '../../infrastructure/ai/scenarios/checkDepartment'
+import { reportLineScenario, buildReportLineMembers } from '../../infrastructure/ai/scenarios/reportLine'
+import { promotePersonsScenario }     from '../../infrastructure/ai/scenarios/promotePersons'
+import { checkImpactScenario, buildImpactGroups } from '../../infrastructure/ai/scenarios/checkImpact'
+import { exportExcelScenario, buildExportChangeSummary } from '../../infrastructure/ai/scenarios/exportExcel'
+import type { ChatWidget, PersonDiff, WidgetCallbacks } from './types'
 import { AIWelcomeScreen }   from './AIWelcomeScreen'
 import { AIMessageThread }   from './AIMessageThread'
 import { AIInput }           from './AIInput'
@@ -22,8 +25,12 @@ import type { ChatPhase } from '../../store/useChatStore'
 const WIDGET_PHASE_MAP: Partial<Record<ChatPhase, ChatWidget['type']>> = {
   'awaiting-file':            'file-picker',
   'awaiting-org-name':        'org-input',
+  'awaiting-dept-select':     'org-input',
   'awaiting-person-names':    'person-input',
-  'awaiting-promote-confirm': 'promote-confirm',
+  'awaiting-report-target':   'person-input',
+  'awaiting-promote-confirm': 'diff-preview',
+  'awaiting-impact-org':      'org-input',
+  'awaiting-export-confirm':  'export-confirm',
 }
 
 interface Props {
@@ -42,7 +49,9 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
   const chatSession = useMemo(() => new ChatSession(mockApiService), [])
 
   const isDataLoaded = store.allocationList.length > 0
-  const isBusy = !['idle', 'awaiting-file', 'awaiting-org-name', 'awaiting-person-names', 'awaiting-promote-confirm'].includes(phase)
+  const isBusy = !['idle', 'awaiting-file', 'awaiting-org-name', 'awaiting-dept-select',
+    'awaiting-person-names', 'awaiting-report-target', 'awaiting-promote-confirm',
+    'awaiting-impact-org', 'awaiting-export-confirm'].includes(phase)
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const addAILoading = useCallback((): string =>
@@ -61,12 +70,11 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     }
   }
 
-  // ── Scenario: unknown query (uses stateless ChatSession) ─────────────────────
+  // ── Scenario: unknown query ───────────────────────────────────────────────────
   const handleUnknownQuery = useCallback(async (text: string) => {
     addMessage({ role: 'user', text })
     const id = addAILoading()
     try {
-      // Snapshot current messages; chatSession sends full history to the API
       const snapshot = useChatStore.getState().messages.filter(m => !m.isLoading)
       const reply = await chatSession.send(snapshot, text)
       updateMessage(id, { isLoading: false, text: reply })
@@ -75,7 +83,7 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     }
   }, [addMessage, addAILoading, updateMessage, chatSession])
 
-  // ── Scenario: import Excel ───────────────────────────────────────────────────
+  // ── Scenario: import Excel ────────────────────────────────────────────────────
   const startImportExcel = useCallback(async () => {
     addMessage({ role: 'user', text: 'Excelをインポートして開始' })
     const id = addAILoading()
@@ -99,7 +107,7 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     setPhase('idle')
   }, [addMessage, addAILoading, updateMessage, setPhase, store, onDataLoaded])
 
-  // ── Scenario: excel help ─────────────────────────────────────────────────────
+  // ── Scenario: excel help ──────────────────────────────────────────────────────
   const startExcelHelp = useCallback(async () => {
     addMessage({ role: 'user', text: 'Excelについて聞く' })
     const id = addAILoading()
@@ -108,7 +116,7 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     setPhase('idle')
   }, [addMessage, addAILoading, updateMessage, setPhase])
 
-  // ── Scenario: check org members ──────────────────────────────────────────────
+  // ── Scenario: check org members (legacy) ─────────────────────────────────────
   const startCheckOrgMembers = useCallback(async () => {
     addMessage({ role: 'user', text: '組織のメンバーを確認する' })
     const id = addAILoading()
@@ -117,74 +125,168 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     setPhase('awaiting-org-name')
   }, [addMessage, addAILoading, updateMessage, setPhase])
 
-  const handleOrgNameSubmit = useCallback(async (orgName: string) => {
-    setPhase('searching-org')
-    addMessage({ role: 'user', text: orgName })
+  // ── Scenario: check department (org tree) ────────────────────────────────────
+  const startCheckDepartment = useCallback(async () => {
+    addMessage({ role: 'user', text: '担当部門を確認する' })
     const id = addAILoading()
-
-    const org  = aiTools.findOrgs({ name: orgName })[0] ?? null
-    const found = org
-      ? { orgName: org.name, members: aiTools.findPersons({ orgCode: org.externalCode ?? org.id }) }
-      : null
-
-    const reply = await checkOrgMembersScenario.searchMessage(orgName, found)
-    if ('found' in reply) {
-      updateMessage(id, {
-        isLoading: false,
-        text: reply.text,
-        widget: { type: 'org-members', orgName: reply.found.orgName, members: reply.found.members },
-      })
-    } else {
-      updateMessage(id, { isLoading: false, text: reply.text })
-    }
-    setPhase('idle')
+    const text = await checkDepartmentScenario.promptMessage()
+    updateMessage(id, { isLoading: false, text, widget: { type: 'org-input' } })
+    setPhase('awaiting-dept-select')
   }, [addMessage, addAILoading, updateMessage, setPhase])
 
-  // ── Scenario: promote persons ────────────────────────────────────────────────
-  const startPromotePersons = useCallback(async () => {
-    addMessage({ role: 'user', text: '昇進する人を選択' })
+  // ── Scenario: report line ─────────────────────────────────────────────────────
+  const startReportLine = useCallback(async () => {
+    addMessage({ role: 'user', text: 'レポートラインを確認する' })
     const id = addAILoading()
-    const text = await promotePersonsScenario.promptMessage()
+    const text = await reportLineScenario.promptMessage()
     updateMessage(id, { isLoading: false, text, widget: { type: 'person-input' } })
-    setPhase('awaiting-person-names')
+    setPhase('awaiting-report-target')
   }, [addMessage, addAILoading, updateMessage, setPhase])
 
-  const handlePersonNamesSubmit = useCallback(async (namesInput: string) => {
-    setPhase('searching-persons')
-    addMessage({ role: 'user', text: namesInput })
-    const id = addAILoading()
-
-    const names = namesInput.split(/[,、，]/).map(n => n.trim()).filter(Boolean)
-    const matches: PersonMatch[] = []
-    for (const name of names) {
-      for (const r of aiTools.findPersons({ name })) {
-        const row = aiTools.getRow(r.rowIds[0])
-        matches.push({
-          userId: r.userId,
-          name: r.name,
-          currentOrgName: r.orgName,
-          rowId: r.rowIds[0],
-          currentGrade:    row?.prevPayGrade,
-          currentPosition: row?.prevOfficialPositionCode,
+  // Org-input submit — dispatches by current phase
+  const handleOrgNameSubmit = useCallback(async (orgName: string) => {
+    if (phase === 'awaiting-org-name') {
+      // Legacy: simple member list
+      setPhase('searching-org')
+      addMessage({ role: 'user', text: orgName })
+      const id = addAILoading()
+      const org   = aiTools.findOrgs({ name: orgName })[0] ?? null
+      const found = org
+        ? { orgName: org.name, members: aiTools.findPersons({ orgCode: org.externalCode ?? org.id }) }
+        : null
+      const reply = await checkOrgMembersScenario.searchMessage(orgName, found)
+      if ('found' in reply) {
+        updateMessage(id, {
+          isLoading: false,
+          text: reply.text,
+          widget: { type: 'org-members', orgName: reply.found.orgName, members: reply.found.members },
         })
+      } else {
+        updateMessage(id, { isLoading: false, text: reply.text })
       }
-    }
+      setPhase('idle')
 
-    const reply = await promotePersonsScenario.confirmMessage(matches)
-    if ('persons' in reply) {
-      setPendingPersons(reply.persons)
-      updateMessage(id, {
-        isLoading: false,
-        text: reply.text,
-        widget: { type: 'promote-confirm', persons: reply.persons },
-      })
-      setPhase('awaiting-promote-confirm')
-    } else {
-      updateMessage(id, { isLoading: false, text: reply.text })
+    } else if (phase === 'awaiting-dept-select') {
+      // New: org tree view
+      setPhase('searching-dept')
+      addMessage({ role: 'user', text: orgName })
+      const id = addAILoading()
+      const org     = aiTools.findOrgs({ name: orgName })[0] ?? null
+      const allOrgs = aiTools.getOrgs()
+      const allPersons = aiTools.findPersons({})
+      const tree = org ? buildOrgTree(org, allOrgs, allPersons) : null
+      const reply = await checkDepartmentScenario.searchMessage(orgName, org, tree)
+      if ('tree' in reply) {
+        updateMessage(id, {
+          isLoading: false,
+          text: reply.text,
+          widget: { type: 'org-tree', orgName: reply.orgName, tree: reply.tree },
+        })
+      } else {
+        updateMessage(id, { isLoading: false, text: reply.text })
+      }
+      setPhase('idle')
+
+    } else if (phase === 'awaiting-impact-org') {
+      // Impact check
+      setPhase('checking-impact')
+      addMessage({ role: 'user', text: orgName })
+      const id = addAILoading()
+      const org     = aiTools.findOrgs({ name: orgName })[0] ?? null
+      const allOrgs = aiTools.getOrgs()
+      const groups  = org ? buildImpactGroups(org, allOrgs, store.allocationList) : []
+      const reply = await checkImpactScenario.scanMessage(orgName, org, groups)
+      if ('targetOrgName' in reply) {
+        updateMessage(id, {
+          isLoading: false,
+          text: reply.text,
+          widget: { type: 'impact-check', targetOrgName: reply.targetOrgName, hasImpact: reply.hasImpact, groups: reply.groups },
+        })
+      } else {
+        updateMessage(id, { isLoading: false, text: reply.text })
+      }
       setPhase('idle')
     }
-  }, [addMessage, addAILoading, updateMessage, setPhase, setPendingPersons])
+  }, [phase, addMessage, addAILoading, updateMessage, setPhase, store.allocationList])
 
+  // Person-input submit — dispatches by current phase
+  const handlePersonNamesSubmit = useCallback(async (namesInput: string) => {
+    addMessage({ role: 'user', text: namesInput })
+
+    if (phase === 'awaiting-person-names') {
+      // Promote
+      setPhase('searching-persons')
+      const id = addAILoading()
+      const names = namesInput.split(/[,、，]/).map(n => n.trim()).filter(Boolean)
+      const diffs: PersonDiff[] = []
+      for (const name of names) {
+        for (const r of aiTools.findPersons({ name })) {
+          const row = aiTools.getRow(r.rowIds[0])
+          diffs.push({
+            userId:  r.userId,
+            name:    r.name,
+            orgName: r.orgName,
+            rowId:   r.rowIds[0],
+            before: { grade: row?.prevPayGrade, position: row?.prevOfficialPositionCode },
+            after:  { note: '昇格' },
+          })
+        }
+      }
+      const reply = await promotePersonsScenario.confirmMessage(diffs)
+      if ('persons' in reply) {
+        // Store as PersonMatch for the apply step
+        setPendingPersons(reply.persons.map(d => ({
+          userId:          d.userId,
+          name:            d.name,
+          currentOrgName:  d.orgName,
+          rowId:           d.rowId,
+          currentGrade:    d.before.grade,
+          currentPosition: d.before.position,
+        })))
+        updateMessage(id, {
+          isLoading: false,
+          text: reply.text,
+          widget: { type: 'diff-preview', persons: reply.persons },
+        })
+        setPhase('awaiting-promote-confirm')
+      } else {
+        updateMessage(id, { isLoading: false, text: reply.text })
+        setPhase('idle')
+      }
+
+    } else if (phase === 'awaiting-report-target') {
+      // Report line
+      setPhase('searching-report')
+      const id = addAILoading()
+      const name = namesInput.split(/[,、，]/)[0].trim()
+      const found = aiTools.findPersons({ name })[0] ?? null
+      const allOrgs = aiTools.getOrgs()
+
+      let result: { managerName: string; managerOrgName: string; members: ReturnType<typeof buildReportLineMembers> } | null = null
+      if (found) {
+        const targetRows = aiTools.getPersonRows(found.userId)
+        const members    = buildReportLineMembers(targetRows, store.allocationList, allOrgs)
+        result = {
+          managerName:    found.name,
+          managerOrgName: found.orgName ?? '',
+          members,
+        }
+      }
+      const reply = await reportLineScenario.searchMessage(namesInput, result)
+      if ('managerName' in reply) {
+        updateMessage(id, {
+          isLoading: false,
+          text: reply.text,
+          widget: { type: 'report-line', managerName: reply.managerName, managerOrgName: reply.managerOrgName, members: reply.members },
+        })
+      } else {
+        updateMessage(id, { isLoading: false, text: reply.text })
+      }
+      setPhase('idle')
+    }
+  }, [phase, addMessage, addAILoading, updateMessage, setPhase, setPendingPersons, store.allocationList])
+
+  // ── Scenario: promote confirm/cancel ────────────────────────────────────────
   const handlePromoteConfirm = useCallback(async () => {
     setPhase('applying-promotion')
     const id = addAILoading()
@@ -208,13 +310,44 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     addMessage({ role: 'ai', text: '昇進の操作をキャンセルしました。' })
   }, [addMessage, setPhase, setPendingPersons])
 
-  // ── Scenario: export Excel ───────────────────────────────────────────────────
+  // ── Scenario: promote persons ────────────────────────────────────────────────
+  const startPromotePersons = useCallback(async () => {
+    addMessage({ role: 'user', text: '昇進する人を選択' })
+    const id = addAILoading()
+    const text = await promotePersonsScenario.promptMessage()
+    updateMessage(id, { isLoading: false, text, widget: { type: 'person-input' } })
+    setPhase('awaiting-person-names')
+  }, [addMessage, addAILoading, updateMessage, setPhase])
+
+  // ── Scenario: impact check ────────────────────────────────────────────────────
+  const startCheckImpact = useCallback(async () => {
+    addMessage({ role: 'user', text: '担当外への影響をチェック' })
+    const id = addAILoading()
+    const text = await checkImpactScenario.promptMessage()
+    updateMessage(id, { isLoading: false, text, widget: { type: 'org-input' } })
+    setPhase('awaiting-impact-org')
+  }, [addMessage, addAILoading, updateMessage, setPhase])
+
+  // ── Scenario: export Excel (with confirm step) ───────────────────────────────
   const startExportExcel = useCallback(async () => {
     addMessage({ role: 'user', text: 'Excelをエクスポート' })
     const id = addAILoading()
-    const startText = await exportExcelScenario.startMessage()
-    updateMessage(id, { isLoading: true, text: startText })
+    const allOrgs = [...store.organizations, ...store.afterOrganizations]
+    const { changeCount, groups } = buildExportChangeSummary(store.allocationList, allOrgs)
+    const text = await exportExcelScenario.confirmMessage()
+    updateMessage(id, {
+      isLoading: false,
+      text,
+      widget: { type: 'export-confirm', changeCount, groups },
+    })
+    setPhase('awaiting-export-confirm')
+  }, [addMessage, addAILoading, updateMessage, setPhase, store])
+
+  const handleExportConfirm = useCallback(async () => {
     setPhase('exporting')
+    const id = addAILoading()
+    const startText = '出力中です...'
+    updateMessage(id, { isLoading: true, text: startText })
 
     try {
       const { buffer, fileName } = await exportExcelScenario.buildBuffer(
@@ -254,19 +387,28 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
       updateMessage(id, { isLoading: false, text })
     }
     setPhase('idle')
-  }, [addMessage, addAILoading, updateMessage, setPhase, store])
+  }, [addAILoading, updateMessage, setPhase, store])
+
+  const handleExportCancel = useCallback(() => {
+    setPhase('idle')
+    addMessage({ role: 'user', text: 'キャンセル' })
+    addMessage({ role: 'ai', text: 'エクスポートをキャンセルしました。' })
+  }, [addMessage, setPhase])
 
   // ── Routing ───────────────────────────────────────────────────────────────────
   const handlePromptClick = useCallback((id: string) => {
     if (isBusy) return
     switch (id) {
-      case 'import-excel': startImportExcel();     break
-      case 'excel-help':   startExcelHelp();       break
-      case 'check-org':    startCheckOrgMembers(); break
-      case 'promote':      startPromotePersons();  break
-      case 'export-excel': startExportExcel();     break
+      case 'import-excel':   startImportExcel();      break
+      case 'excel-help':     startExcelHelp();        break
+      case 'check-org':      startCheckOrgMembers();  break
+      case 'check-dept':     startCheckDepartment();  break
+      case 'report-line':    startReportLine();       break
+      case 'promote':        startPromotePersons();   break
+      case 'check-impact':   startCheckImpact();      break
+      case 'export-excel':   startExportExcel();      break
     }
-  }, [isBusy, startImportExcel, startExcelHelp, startCheckOrgMembers, startPromotePersons, startExportExcel])
+  }, [isBusy, startImportExcel, startExcelHelp, startCheckOrgMembers, startCheckDepartment, startReportLine, startPromotePersons, startCheckImpact, startExportExcel])
 
   const handleTextSubmit = useCallback((text: string) => {
     if (!text.trim() || isBusy) return
@@ -279,6 +421,8 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     onPersonNamesSubmit: handlePersonNamesSubmit,
     onPromoteConfirm:    handlePromoteConfirm,
     onPromoteCancel:     handlePromoteCancel,
+    onExportConfirm:     handleExportConfirm,
+    onExportCancel:      handleExportCancel,
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -331,13 +475,15 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
         )}
       </div>
 
-      {/* Suggested prompt chips — shown when data is loaded and idle */}
+      {/* Suggested prompt chips */}
       {messages.length > 0 && isDataLoaded && phase === 'idle' && (
         <div className="flex-shrink-0 border-t border-gray-100 bg-white px-4 pt-2 pb-0">
           <div className="max-w-2xl mx-auto flex flex-wrap gap-2">
             {[
-              { id: 'check-org',    label: '👥 組織のメンバーを確認する' },
+              { id: 'check-dept',   label: '🏢 担当部門を確認する' },
+              { id: 'report-line',  label: '📋 レポートラインを確認する' },
               { id: 'promote',      label: '⬆️ 昇進する人を選択' },
+              { id: 'check-impact', label: '🔍 担当外への影響をチェック' },
               { id: 'export-excel', label: '📤 Excelをエクスポート' },
             ].map(p => (
               <button

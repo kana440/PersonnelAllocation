@@ -14,6 +14,32 @@ export interface PersonMatch {
   currentPosition?: string
 }
 
+export interface PersonDiff {
+  userId: string
+  name: string
+  orgName?: string
+  rowId: number
+  before: { grade?: string; position?: string; orgName?: string }
+  after:  { grade?: string; position?: string; orgName?: string; note?: string }
+}
+
+export interface OrgTreeNode {
+  orgId: string
+  orgName: string
+  orgCode: string
+  members: PersonInfo[]
+  children: OrgTreeNode[]
+}
+
+export interface ReportLineMember {
+  userId: string
+  name: string
+  orgName: string
+  isSameOrg: boolean
+  position?: string
+  grade?: string
+}
+
 export type ChatWidget =
   | { type: 'file-picker' }
   | { type: 'excel-help' }
@@ -21,6 +47,11 @@ export type ChatWidget =
   | { type: 'person-input' }
   | { type: 'org-members'; orgName: string; members: PersonInfo[] }
   | { type: 'promote-confirm'; persons: PersonMatch[] }
+  | { type: 'org-tree'; orgName: string; tree: OrgTreeNode }
+  | { type: 'report-line'; managerName: string; managerOrgName: string; members: ReportLineMember[] }
+  | { type: 'diff-preview'; persons: PersonDiff[] }
+  | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
+  | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
 
 export interface ChatMessage {
   id: string
@@ -31,9 +62,11 @@ export interface ChatMessage {
 }
 
 export interface WidgetCallbacks {
-  onFileSelected: (file: File) => void
-  onOrgNameSubmit: (name: string) => void
+  onFileSelected:      (file: File) => void
+  onOrgNameSubmit:     (name: string) => void
   onPersonNamesSubmit: (names: string) => void
-  onPromoteConfirm: () => void
-  onPromoteCancel: () => void
+  onPromoteConfirm:    () => void
+  onPromoteCancel:     () => void
+  onExportConfirm:     () => void
+  onExportCancel:      () => void
 }

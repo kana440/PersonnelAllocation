@@ -1,5 +1,5 @@
 import { delay } from './delay'
-import type { PersonMatch } from '../../../components/ai/types'
+import type { PersonDiff } from '../../../components/ai/types'
 
 export const promotePersonsScenario = {
   async promptMessage(): Promise<string> {
@@ -8,8 +8,8 @@ export const promotePersonsScenario = {
   },
 
   async confirmMessage(
-    persons: PersonMatch[],
-  ): Promise<{ text: string; persons: PersonMatch[] } | { text: string }> {
+    persons: PersonDiff[],
+  ): Promise<{ text: string; persons: PersonDiff[] } | { text: string }> {
     await delay(1000)
     if (persons.length === 0) {
       return { text: '該当する方が見つかりませんでした。氏名を確認して再度入力してください。' }

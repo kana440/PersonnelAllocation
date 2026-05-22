@@ -22,22 +22,34 @@ const PROMPTS_NO_DATA: PromptCard[] = [
 
 const PROMPTS_WITH_DATA: PromptCard[] = [
   {
-    id: 'check-org',
-    icon: '👥',
-    title: '組織のメンバーを確認する',
-    description: '組織名を入力してメンバー一覧を表示します',
+    id: 'check-dept',
+    icon: '🏢',
+    title: '担当部門を確認する',
+    description: '部門名を入力してメンバーの組織ツリーを表示します',
+  },
+  {
+    id: 'report-line',
+    icon: '📋',
+    title: 'レポートラインを確認する',
+    description: '指定した方の直属レポートメンバーを表示します（他組織含む）',
   },
   {
     id: 'promote',
     icon: '⬆️',
     title: '昇進する人を選択',
-    description: '昇格対象者の名前を入力して適用します',
+    description: '昇格対象者の名前を入力して差分を確認・適用します',
+  },
+  {
+    id: 'check-impact',
+    icon: '🔍',
+    title: '担当外への影響をチェック',
+    description: '担当部門以外に意図しない変更がないか確認します',
   },
   {
     id: 'export-excel',
     icon: '📤',
     title: 'Excelをエクスポート',
-    description: '現在のデータをExcelファイルで保存します',
+    description: '変更内容を確認してExcelファイルで保存します',
   },
 ]
 
@@ -50,10 +62,10 @@ export function AIWelcomeScreen({ isDataLoaded, onPromptClick }: Props) {
   const prompts = isDataLoaded ? PROMPTS_WITH_DATA : PROMPTS_NO_DATA
 
   return (
-    <div className="h-full flex flex-col items-center justify-center px-6">
+    <div className="h-full flex flex-col items-center justify-center px-6 py-8 overflow-y-auto">
       <div className="w-full max-w-lg">
         {/* Greeting */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <span className="text-white text-2xl font-bold">AI</span>
           </div>

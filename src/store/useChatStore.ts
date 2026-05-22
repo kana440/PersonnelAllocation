@@ -8,10 +8,17 @@ export type ChatPhase =
   | 'importing'
   | 'awaiting-org-name'
   | 'searching-org'
+  | 'awaiting-dept-select'
+  | 'searching-dept'
   | 'awaiting-person-names'
   | 'searching-persons'
   | 'awaiting-promote-confirm'
   | 'applying-promotion'
+  | 'awaiting-report-target'
+  | 'searching-report'
+  | 'awaiting-impact-org'
+  | 'checking-impact'
+  | 'awaiting-export-confirm'
   | 'exporting'
 
 let _msgId = 0

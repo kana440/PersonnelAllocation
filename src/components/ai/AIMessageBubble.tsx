@@ -3,8 +3,13 @@ import { FilePickerWidget }    from './widgets/FilePickerWidget'
 import { ExcelHelpWidget }     from './widgets/ExcelHelpWidget'
 import { OrgInputWidget }      from './widgets/OrgInputWidget'
 import { OrgMembersWidget }    from './widgets/OrgMembersWidget'
+import { OrgTreeWidget }       from './widgets/OrgTreeWidget'
 import { PersonInputWidget }   from './widgets/PersonInputWidget'
 import { PromoteConfirmWidget } from './widgets/PromoteConfirmWidget'
+import { ReportLineWidget }    from './widgets/ReportLineWidget'
+import { DiffPreviewWidget }   from './widgets/DiffPreviewWidget'
+import { ImpactCheckWidget }   from './widgets/ImpactCheckWidget'
+import { ExportConfirmWidget } from './widgets/ExportConfirmWidget'
 
 interface Props {
   message: ChatMessage
@@ -56,6 +61,9 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
             {message.widget.type === 'org-members' && (
               <OrgMembersWidget orgName={message.widget.orgName} members={message.widget.members} />
             )}
+            {message.widget.type === 'org-tree' && (
+              <OrgTreeWidget orgName={message.widget.orgName} tree={message.widget.tree} />
+            )}
             {message.widget.type === 'person-input' && (
               <PersonInputWidget isActive={isActiveWidget} onSubmit={callbacks.onPersonNamesSubmit} />
             )}
@@ -65,6 +73,37 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
                 isActive={isActiveWidget}
                 onConfirm={callbacks.onPromoteConfirm}
                 onCancel={callbacks.onPromoteCancel}
+              />
+            )}
+            {message.widget.type === 'report-line' && (
+              <ReportLineWidget
+                managerName={message.widget.managerName}
+                managerOrgName={message.widget.managerOrgName}
+                members={message.widget.members}
+              />
+            )}
+            {message.widget.type === 'diff-preview' && (
+              <DiffPreviewWidget
+                persons={message.widget.persons}
+                isActive={isActiveWidget}
+                onConfirm={callbacks.onPromoteConfirm}
+                onCancel={callbacks.onPromoteCancel}
+              />
+            )}
+            {message.widget.type === 'impact-check' && (
+              <ImpactCheckWidget
+                targetOrgName={message.widget.targetOrgName}
+                hasImpact={message.widget.hasImpact}
+                groups={message.widget.groups}
+              />
+            )}
+            {message.widget.type === 'export-confirm' && (
+              <ExportConfirmWidget
+                changeCount={message.widget.changeCount}
+                groups={message.widget.groups}
+                isActive={isActiveWidget}
+                onConfirm={callbacks.onExportConfirm}
+                onCancel={callbacks.onExportCancel}
               />
             )}
           </div>
