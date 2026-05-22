@@ -1,6 +1,4 @@
 // allocationListMapper.ts
-// 新モデルでは allocationList が after 列を直接持つため、
-// ドメイン→行変換の複雑なロジックは不要になった。
 // このファイルは UI 表示用メタデータの付与のみを行う。
 
 import type { AllocationRow as BaseAllocationRow } from '../domain/allocationRow'

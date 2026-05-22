@@ -2,8 +2,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 import type { AllocationRow } from '../../infrastructure/allocationListMapper'
-import { exportToXlsx } from '../../infrastructure/excelIO'
-import { getLastWorkbook, getLastFileName } from '../../infrastructure/excelImport'
+import { exportToXlsx } from '../../infrastructure/excel/engine'
 import { BEFORE_AFTER_FIELD_PAIRS } from '../../domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '../../domain/csvImport/allocationList/labels'
 
@@ -146,7 +145,7 @@ export function ExcelPreview() {
   }, [searchTerm])
 
   const handleExport = () =>
-    exportToXlsx(rows, store.effectiveDate, getLastWorkbook() ?? undefined, getLastFileName() ?? undefined)
+    exportToXlsx(rows, store.effectiveDate)
 
   // ── 仮想スクロールの計算 ──────────────────────────────────────
   const startIdx      = Math.max(0,                 Math.floor(scrollTop / ROW_HEIGHT) - ROW_BUFFER)

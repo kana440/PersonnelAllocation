@@ -66,7 +66,7 @@ interface UIState {
 // ── アクション ────────────────────────────────────────────────────
 interface Actions {
   // データロード
-  loadExcelData: (result: import('../infrastructure/excelImport').ImportedWorkbookResult) => Promise<void>
+  loadExcelData: (result: import('../infrastructure/excel/types').ImportedWorkbookResult) => Promise<void>
 
   // 行の直接編集
   editRow:   (rowId: number, changes: AfterValues) => void

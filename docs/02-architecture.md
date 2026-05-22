@@ -26,14 +26,18 @@
 │  operationPatterns/  — パターン判定インターフェース              │
 ├──────────────────────────────────────────────────────────────────┤
 │ インフラ層         src/infrastructure/                           │
-│  excelImport.ts      — xlsx 依存のインポーター                  │
-│  codeLists/          — LocalStorage 実装                        │
+│  excelImport.ts         — xlsx 依存のインポーター               │
+│  excelIO.ts             — Excel エクスポート                    │
+│  allocationListMapper.ts — ドメイン→Excel 行変換               │
+│  codeLists/             — LocalStorage 実装                    │
+│  ai/mockChatService.ts  — AI チャットモック実装                 │
 ├──────────────────────────────────────────────────────────────────┤
 │ ポート             src/ports/                                    │
 │  IAllocationDataSource — データ読み込み抽象                      │
 │  IAllocationExporter   — データ書き出し抽象                     │
 │  ICodeListSource       — コードリスト読み込み抽象                │
-│  （将来の SF アダプターはここを実装する）                        │
+│  IAIChatService        — AI チャット抽象                        │
+│  （将来の SF アダプター・AI アダプターはここを実装する）         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -117,15 +121,20 @@ Excel エクスポート層（`excelIO.ts`）は変更不要。
 ポートを介しているため、アダプターを差し替えるだけで連携できる。
 
 ```
-現在（Excel）                      将来（SuccessFactors）
-────────────────────               ────────────────────────────────
-excelImport.ts                     src/adapters/salesforce/SFDataSource.ts
-  implements (概念的に)               implements IAllocationDataSource
+現在（Excel）                           将来（SuccessFactors）
+──────────────────────────────         ────────────────────────────────
+infrastructure/excelImport.ts          src/adapters/salesforce/SFDataSource.ts
+  implements (概念的に)                   implements IAllocationDataSource
   IAllocationDataSource
-                                   src/adapters/salesforce/SFExporter.ts
-excelIO.ts                           implements IAllocationExporter
+                                       src/adapters/salesforce/SFExporter.ts
+infrastructure/excelIO.ts                implements IAllocationExporter
   implements (概念的に)
   IAllocationExporter
+
+現在（モック）                          将来（カスタム AI サービス）
+──────────────────────────────         ────────────────────────────────
+infrastructure/ai/mockChatService.ts   src/infrastructure/ai/openAICompatibleAdapter.ts
+  implements IAIChatService              implements IAIChatService
 ```
 
 `HRApplicationService` は `IAllocationDataSource` を受け取るよう

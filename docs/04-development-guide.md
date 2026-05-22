@@ -7,7 +7,7 @@
 | 要員配置リストの列定義 | `src/domain/csvImport/allocationList/labels.ts` の `ALLOCATION_LIST_FIELDS` |
 | after / prev* の対応表 | `src/domain/allocationRow.ts` の `BEFORE_AFTER_FIELD_PAIRS` |
 | 組織CD一覧の列 | `src/infrastructure/excelImport.ts` の `parseOrgMaster` |
-| エクスポート列 | `src/utils/excelIO.ts` の `EXPORT_FIELDS` |
+| エクスポート列 | `src/infrastructure/excelIO.ts` の `EXPORT_FIELDS` |
 
 ---
 
@@ -258,7 +258,7 @@ async loadFromSource(source: IAllocationDataSource): Promise<void> {
 }
 ```
 
-### Step 3: MasterSetup.tsx に選択肢を追加
+### Step 3: SetupView.tsx に選択肢を追加
 
 Excel 読み込みと SF 読み込みを選べる UI を追加するだけ。
 ドメイン層・バリデーション・AI Tools は変更不要。

@@ -33,9 +33,7 @@ src/
 │   │   ├── types.ts           ValidationResult, OperationContext など
 │   │   └── handlers/          操作ハンドラー実装（DirectEdit など）
 │   ├── projection/            派生ビュー（純粋関数）
-│   │   └── rows.ts            derivePersons / derivePositions など
 │   ├── validation/            バリデーション（純粋関数）
-│   │   └── validateRow.ts     validateRow()
 │   ├── codeLists/             コードリスト集約
 │   └── csvImport/             Excel/CSV 解釈ロジック（純粋関数）
 ├── application/      アプリケーション層
@@ -43,9 +41,19 @@ src/
 │   └── aiTools.ts                AI 向け Tool 関数群
 ├── infrastructure/   インフラ層（外部 I/O）
 │   ├── excelImport.ts            Excel 読み込み
-│   └── codeLists/                LocalStorage 実装
-├── ports/            ポート定義（将来の SF 連携ここから）
-│   └── index.ts                  IAllocationDataSource など
+│   ├── excelIO.ts                Excel エクスポート
+│   ├── allocationListMapper.ts   ドメイン→Excel 行変換
+│   ├── codeLists/                LocalStorage 実装
+│   └── ai/                       AI チャット実装
+│       └── mockChatService.ts    モック（将来: openAICompatibleAdapter.ts）
+├── ports/            ポート定義（将来の SF / AI 連携はここを実装）
+│   └── index.ts                  IAllocationDataSource / IAIChatService など
 ├── components/       UI 層（React）
+│   ├── canvas/                   組織図・レポートライン
+│   ├── sidebar/                  組織・人物検索
+│   ├── editor/                   発令編集・Excel プレビュー
+│   ├── setup/                    セッション初期化画面
+│   ├── ai/                       AI チャットドロワー
+│   └── common/                   共通 UI パーツ
 └── store/            状態管理（Zustand）
 ```

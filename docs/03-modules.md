@@ -282,7 +282,7 @@ test('findPersons が名前で絞り込める', () => {
 
 ## Module H: Excel Adapter
 
-**場所**: `src/infrastructure/excelImport.ts`, `src/utils/excelIO.ts`
+**場所**: `src/infrastructure/excelImport.ts`, `src/infrastructure/excelIO.ts`, `src/infrastructure/allocationListMapper.ts`
 
 **責務**: ファイル I/O。Excel（`.xlsx` / `.xls` / `.xlsm`）の読み込みと書き出しを担う。
 
@@ -353,7 +353,7 @@ Excel インポート時に抽出したコードリストを次回起動時に�
 **追加手順**:
 1. `src/adapters/salesforce/SFDataSource.ts` を作成し `IAllocationDataSource` を実装
 2. `src/adapters/salesforce/SFExporter.ts` を作成し `IAllocationExporter` を実装
-3. `MasterSetup.tsx` に SF 読み込みボタンを追加
+3. `SetupView.tsx` に SF 読み込みボタンを追加
 4. `HRApplicationService.loadFromSource(source: IAllocationDataSource)` を追加
 
 UI・ドメイン・バリデーション層はすべて変更不要。

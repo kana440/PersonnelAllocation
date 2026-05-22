@@ -1,9 +1,7 @@
 import { useState } from 'react'
-import * as XLSX from 'xlsx'
 import { useStore } from '../../store/useStore'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
-import { buildExportWorkbook } from '../../infrastructure/excelIO'
-import { getLastWorkbook, getLastFileName } from '../../infrastructure/excelImport'
+import { buildExportBuffer } from '../../infrastructure/excel/engine'
 
 interface Props {
   onCleared: () => void   // セッションクリア後に呼ぶ（sessionReady = false など）
@@ -27,9 +25,11 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
     setSaving(true)
     setSaveError(null)
     try {
-      const origWb   = getLastWorkbook() ?? undefined
-      const origName = getLastFileName() ?? undefined
-      const { workbook, fileName } = buildExportWorkbook(rows, store.effectiveDate, origWb, origName)
+      const { buffer, fileName } = await buildExportBuffer(rows, store.effectiveDate)
+      const ext      = fileName.endsWith('.xlsm') ? 'xlsm' : 'xlsx'
+      const mimeType = ext === 'xlsm'
+        ? 'application/vnd.ms-excel.sheet.macroEnabled.12'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
       if ('showSaveFilePicker' in window) {
         // File System Access API: ユーザーが保存先を選択→保存できたらクリア
@@ -39,16 +39,23 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
           suggestedName: fileName,
           types: [{
             description: 'Excel ファイル',
-            accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
+            accept: { [mimeType]: [`.${ext}`] },
           }],
         })
-        const data     = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
         const writable = await handle.createWritable()
-        await writable.write(data)
+        await writable.write(buffer)
         await writable.close()
       } else {
         // フォールバック: 通常のブラウザダウンロード
-        XLSX.writeFile(workbook, fileName)
+        const blob = new Blob([buffer], { type: mimeType })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = fileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
       }
 
       store.reset()

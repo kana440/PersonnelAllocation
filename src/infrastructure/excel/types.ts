@@ -1,0 +1,19 @@
+import type { AllCodeLists }  from '../../domain/codeLists/aggregate'
+import type { Organization }  from '../../domain/schemas'
+import type { AllocationRow } from '../../domain/allocationRow'
+import type { OrgMasterEntry } from '../../domain/codeLists/orgMaster'
+
+export interface ImportedWorkbookResult {
+  codeLists:           AllCodeLists
+  beforeOrganizations: Organization[]
+  afterOrganizations:  Organization[]
+  allocationList:      AllocationRow[]
+  sheetsFound:         string[]
+  sheetsMissing:       string[]
+  orgEntries:          OrgMasterEntry[]
+  allocationRowCount:  number
+}
+
+export type ProgressCallback = (message: string) => void
+
+export const tick = (): Promise<void> => new Promise(r => setTimeout(r, 0))
