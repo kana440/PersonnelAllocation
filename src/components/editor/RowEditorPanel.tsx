@@ -1,12 +1,12 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useStore } from '../store/useStore'
-import { BEFORE_AFTER_FIELD_PAIRS } from '../domain/allocationRow'
-import { ALLOCATION_LIST_LABEL_MAP } from '../domain/csvImport/allocationList/labels'
-import { validateRow, fieldsToShow, issuesForField } from '../domain/validation/validateRow'
+import { useStore } from '../../store/useStore'
+import { BEFORE_AFTER_FIELD_PAIRS } from '../../domain/allocationRow'
+import { ALLOCATION_LIST_LABEL_MAP } from '../../domain/csvImport/allocationList/labels'
+import { validateRow, fieldsToShow, issuesForField } from '../../domain/validation/validateRow'
 import { RowEditorField } from './RowEditorField'
-import { ComboInput } from './ComboInput'
-import type { AllocationRow } from '../domain/allocationRow'
-import type { AfterValues } from '../domain/allocationRow'
+import { ComboInput } from '../common/ComboInput'
+import type { AllocationRow } from '../../domain/allocationRow'
+import type { AfterValues } from '../../domain/allocationRow'
 
 const FIELD_LABEL = Object.fromEntries(
   BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => [

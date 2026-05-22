@@ -1,25 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
+import type { IAIChatService, ChatMessage } from '../../ports'
+import { mockChatService } from '../../infrastructure/ai/mockChatService'
 
-interface Message {
-  role: 'ai' | 'user'
-  text: string
+interface Props {
+  onClose: () => void
+  chatService?: IAIChatService
 }
 
-const INITIAL_MESSAGES: Message[] = [
-  { role: 'ai', text: 'こんにちは！人事異動の操作についてサポートします。組織異動・出向・兼務追加・昇降格などについてご質問ください。' },
+const INITIAL_MESSAGES: ChatMessage[] = [
+  { role: 'ai',  text: 'こんにちは！人事異動の操作についてサポートします。組織異動・出向・兼務追加・昇降格などについてご質問ください。' },
   { role: 'user', text: '山田さんの発令後の所属を教えて' },
-  { role: 'ai', text: '山田 太郎さん（SF014）は発令前・発令後ともにA社 営業本部の本部長（B6）です。今回の発令では変更はありません。' },
+  { role: 'ai',  text: '山田 太郎さん（SF014）は発令前・発令後ともにA社 営業本部の本部長（B6）です。今回の発令では変更はありません。' },
   { role: 'user', text: '業務推進課が廃止になるけど、メンバーの確認ができてる？' },
-  { role: 'ai', text: '業務推進課（廃止予定）のメンバー2名の対応状況です：\n• 山口 陽菜さん → 経営企画部へ異動（設定済み ✓）\n• 松本 翔さん → 事業戦略部（新設）へ異動（設定済み ✓）\n全員の対応が完了しています。' },
+  { role: 'ai',  text: '業務推進課（廃止予定）のメンバー2名の対応状況です：\n• 山口 陽菜さん → 経営企画部へ異動（設定済み ✓）\n• 松本 翔さん → 事業戦略部（新設）へ異動（設定済み ✓）\n全員の対応が完了しています。' },
 ]
 
-interface AIChatDrawerProps {
-  onClose: () => void
-}
-
-export function AIChatDrawer({ onClose }: AIChatDrawerProps) {
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES)
-  const [input, setInput] = useState('')
+export function AIChatDrawer({ onClose, chatService = mockChatService }: Props) {
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
+  const [input,    setInput]    = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -27,19 +25,19 @@ export function AIChatDrawer({ onClose }: AIChatDrawerProps) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim()
     if (!text || isLoading) return
-    setMessages(prev => [...prev, { role: 'user', text }])
+    const next: ChatMessage[] = [...messages, { role: 'user', text }]
+    setMessages(next)
     setInput('')
     setIsLoading(true)
-    setTimeout(() => {
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        text: '（AIの応答はここに表示されます。現在モックモードです。実際のAI連携は今後実装予定です。）',
-      }])
+    try {
+      const reply = await chatService.send(next, text)
+      setMessages(prev => [...prev, { role: 'ai', text: reply }])
+    } finally {
       setIsLoading(false)
-    }, 800)
+    }
   }
 
   return (

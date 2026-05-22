@@ -7,7 +7,7 @@
 import * as XLSX from 'xlsx'
 import type { AllCodeLists }        from '../domain/codeLists/aggregate'
 import type { OrgMasterEntry }      from '../domain/codeLists/orgMaster'
-import type { Organization } from '../types/domain'
+import type { Organization } from '../domain/schemas'
 import { parseCodeListsFromWorkbook } from './codeLists/excelParser'
 import { EMPTY_CODE_LISTS }          from '../domain/codeLists/aggregate'
 import { ALLOCATION_LIST_FIELDS }    from '../domain/csvImport/allocationList/labels'

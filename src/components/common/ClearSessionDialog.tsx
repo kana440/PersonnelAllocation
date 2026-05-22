@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
-import { useStore } from '../store/useStore'
-import { toAllocationRows } from '../utils/allocationListMapper'
-import { buildExportWorkbook } from '../utils/excelIO'
-import { getLastWorkbook, getLastFileName } from '../infrastructure/excelImport'
+import { useStore } from '../../store/useStore'
+import { toAllocationRows } from '../../infrastructure/allocationListMapper'
+import { buildExportWorkbook } from '../../infrastructure/excelIO'
+import { getLastWorkbook, getLastFileName } from '../../infrastructure/excelImport'
 
 interface Props {
   onCleared: () => void   // セッションクリア後に呼ぶ（sessionReady = false など）

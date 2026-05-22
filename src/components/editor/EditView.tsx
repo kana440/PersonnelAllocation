@@ -1,5 +1,5 @@
-import { useStore } from '../store/useStore'
-import { rowDiff } from '../domain/allocationRow'
+import { useStore } from '../../store/useStore'
+import { rowDiff } from '../../domain/allocationRow'
 import { RowEditorPanel } from './RowEditorPanel'
 
 export function EditView() {

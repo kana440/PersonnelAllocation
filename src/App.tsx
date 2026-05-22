@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { OrgSearchSidebar } from './components/OrgSearchSidebar'
-import { OrgOperationView } from './components/OrgOperationView'
-import { EditView } from './components/EditView'
-import { BottomPanel } from './components/BottomPanel'
-import { AIChatDrawer } from './components/AIChatDrawer'
-import { MasterSetup } from './components/MasterSetup'
-import { ClearSessionDialog } from './components/ClearSessionDialog'
+import { OrgSearchSidebar } from './components/sidebar/OrgSearchSidebar'
+import { OrgOperationView } from './components/canvas/OrgOperationView'
+import { EditView } from './components/editor/EditView'
+import { BottomPanel } from './components/editor/BottomPanel'
+import { AIChatDrawer } from './components/ai/AIChatDrawer'
+import { SetupView } from './components/setup/SetupView'
+import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { useStore } from './store/useStore'
 import { useCodeListStore } from './store/codeListStore'
 
@@ -18,7 +18,6 @@ export default function App() {
   const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo, editMode } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
-  // セッション限りのフラグ — MasterSetup が完了したら true になる
   const [sessionReady, setSessionReady] = useState(false)
 
   useEffect(() => { checkStorage() }, [checkStorage])
@@ -68,7 +67,7 @@ export default function App() {
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
   )
 
-  if (!sessionReady) return <MasterSetup onReady={() => setSessionReady(true)} />
+  if (!sessionReady) return <SetupView onReady={() => setSessionReady(true)} />
 
   if (isLoading) return (
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>

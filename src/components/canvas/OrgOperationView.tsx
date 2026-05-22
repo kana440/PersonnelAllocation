@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useStore } from '../store/useStore'
-import { rowDiff } from '../domain/allocationRow'
-import { buildOrgMap } from '../domain/projection/rows'
-import type { AllocationRow } from '../domain/allocationRow'
-import type { Person } from '../domain/schemas'
+import { useStore } from '../../store/useStore'
+import { rowDiff } from '../../domain/allocationRow'
+import { buildOrgMap } from '../../domain/projection/rows'
+import type { AllocationRow } from '../../domain/allocationRow'
+import type { Person } from '../../domain/schemas'
 
 const BAND_ORDER  = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
 const TITLE_ORDER = [

@@ -1,5 +1,5 @@
-import { ComboInput } from './ComboInput'
-import type { ValidationIssue } from '../domain/validation/validateRow'
+import { ComboInput } from '../common/ComboInput'
+import type { ValidationIssue } from '../../domain/validation/validateRow'
 
 interface Props {
   label:      string

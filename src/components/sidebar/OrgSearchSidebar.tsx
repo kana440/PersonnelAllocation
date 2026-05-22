@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useStore } from '../store/useStore'
-import { rowDiff } from '../domain/allocationRow'
-import { buildOrgMap } from '../domain/projection/rows'
-import type { AllocationRow } from '../domain/allocationRow'
-import type { Person } from '../domain/schemas'
-import type { Organization } from '../types/domain'
+import { useStore } from '../../store/useStore'
+import { rowDiff } from '../../domain/allocationRow'
+import { buildOrgMap } from '../../domain/projection/rows'
+import type { AllocationRow } from '../../domain/allocationRow'
+import type { Person } from '../../domain/schemas'
+import type { Organization } from '../../domain/schemas'
 
 const CHANGE_DOT: Record<string, string> = {
   changed: 'bg-yellow-400',

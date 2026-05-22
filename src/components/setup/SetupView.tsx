@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
-import { useStore } from '../store/useStore'
-import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../infrastructure/excelImport'
-import type { ImportedWorkbookResult } from '../infrastructure/excelImport'
-import { CODE_LIST_LABELS } from '../infrastructure/codeLists/excelParser'
-import { MasterSetupHelp } from './MasterSetupHelp'
+import { useStore } from '../../store/useStore'
+import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excelImport'
+import type { ImportedWorkbookResult } from '../../infrastructure/excelImport'
+import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/excelParser'
+import { SetupHelp } from './SetupHelp'
 
 
 type Phase =
@@ -16,7 +16,7 @@ interface Props {
   onReady: () => void
 }
 
-export function MasterSetup({ onReady }: Props) {
+export function SetupView({ onReady }: Props) {
   const { loadExcelData } = useStore()
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
@@ -54,7 +54,7 @@ export function MasterSetup({ onReady }: Props) {
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
-      {showHelp && <MasterSetupHelp onClose={() => setShowHelp(false)} />}
+      {showHelp && <SetupHelp onClose={() => setShowHelp(false)} />}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm" onChange={handleFile} className="hidden" />
 
       <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">

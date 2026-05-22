@@ -4,7 +4,7 @@
 // このファイルは UI 表示用メタデータの付与のみを行う。
 
 import type { AllocationRow as BaseAllocationRow } from '../domain/allocationRow'
-import type { Organization } from '../types/domain'
+import type { Organization } from '../domain/schemas'
 
 // UI/エクスポート用に _meta を付加した行型
 export type AllocationRow = BaseAllocationRow & {

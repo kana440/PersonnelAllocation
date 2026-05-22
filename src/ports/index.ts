@@ -18,7 +18,7 @@ export interface IAllocationDataSource {
 }
 
 // ── Data export port (write) ─────────────────────────────────────────────────
-// Excel implementation: src/utils/excelIO.ts (exportToXlsx)
+// Excel implementation: src/infrastructure/excelIO.ts (exportToXlsx)
 // Future SF implementation: src/adapters/salesforce/SFExporter.ts
 
 export interface IAllocationExporter {
@@ -31,4 +31,17 @@ export interface IAllocationExporter {
 
 export interface ICodeListSource {
   load(): Promise<AllCodeLists | null>
+}
+
+// ── AI chat port ──────────────────────────────────────────────────────────────
+// Mock:   src/infrastructure/ai/mockChatService.ts
+// Future: src/infrastructure/ai/openAICompatibleAdapter.ts
+
+export interface ChatMessage {
+  role: 'user' | 'ai'
+  text: string
+}
+
+export interface IAIChatService {
+  send(history: ChatMessage[], userMessage: string): Promise<string>
 }
