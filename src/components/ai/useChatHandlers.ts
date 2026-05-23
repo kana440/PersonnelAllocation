@@ -70,10 +70,12 @@ export function useChatHandlers({
 
   // ── unknown query (free text) ─────────────────────────────────────────────────
   const handleUnknownQuery = useCallback(async (text: string) => {
+    // Snapshot before adding the new message — chatSession.send / agentRunner.run
+    // both append the user text themselves when building the API payload.
+    const snapshot = useChatStore.getState().messages.filter(m => !m.isLoading)
     addMessage({ role: 'user', text })
     const id = addAILoading()
     try {
-      const snapshot = useChatStore.getState().messages.filter(m => !m.isLoading)
       let reply: string
       if (agentRunner) {
         reply = await agentRunner.run(snapshot, text, label => updateMessage(id, { text: label }))

@@ -1,10 +1,11 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
-import { useStore } from '../../store/useStore'
+import { useScopedStore } from '../../store/useScopedStore'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 import type { AllocationRow } from '../../infrastructure/allocationListMapper'
 import { exportToXlsx } from '../../infrastructure/excel/engine'
 import { BEFORE_AFTER_FIELD_PAIRS } from '../../domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '../../domain/csvImport/allocationList/labels'
+import { ExportOrgDialog } from './ExportOrgDialog'
 
 type SearchCol = 'name' | 'id' | 'dept'
 const SEARCH_COL_LABELS: Record<SearchCol, string> = { name: '氏名', id: '社員ID', dept: '部署名' }
@@ -22,7 +23,7 @@ const ROW_BUFFER  = 25   // ビューポート外に余分にレンダリング�
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ExcelPreview() {
-  const store = useStore()
+  const store = useScopedStore()
 
   // ── 検索（入力は即時反映、フィルタは 300ms デバウンス）────────
   const [searchInput, setSearchInput] = useState('')
@@ -144,8 +145,19 @@ export function ExcelPreview() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm])
 
-  const handleExport = () =>
-    exportToXlsx(rows, store.effectiveDate)
+  const scopeOrg = store.scopeOrgId
+    ? store.afterOrganizations.find(o => o.id === store.scopeOrgId) ?? null
+    : null
+
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+
+  const handleExport = () => {
+    if (scopeOrg) {
+      setExportDialogOpen(true)   // scope active → show org selection dialog
+    } else {
+      exportToXlsx(rows, store.effectiveDate)  // no scope → direct download
+    }
+  }
 
   // ── 仮想スクロールの計算 ──────────────────────────────────────
   const startIdx      = Math.max(0,                 Math.floor(scrollTop / ROW_HEIGHT) - ROW_BUFFER)
@@ -226,7 +238,12 @@ export function ExcelPreview() {
           )}
         </div>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {scopeOrg && (
+            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+              スコープ: {scopeOrg.name}（{rows.length}行）
+            </span>
+          )}
           <button
             onClick={handleExport}
             disabled={rows.length === 0}
@@ -235,6 +252,16 @@ export function ExcelPreview() {
             📤 エクスポート
           </button>
         </div>
+
+        {exportDialogOpen && (
+          <ExportOrgDialog
+            afterOrgs={store.afterOrganizations}
+            rows={rows}
+            effectiveDate={store.effectiveDate}
+            scopeOrg={scopeOrg}
+            onClose={() => setExportDialogOpen(false)}
+          />
+        )}
       </div>
 
       {/* コンテキストメニュー */}

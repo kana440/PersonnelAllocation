@@ -2,6 +2,11 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../../store/useStore'
 import { rowDiff } from '../../domain/allocationRow'
 import { buildOrgMap } from '../../domain/projection/rows'
+import { BulkMoveToOrgOperation } from '../../domain/operation/handlers/bulkMoveToOrg'
+import { MoveRowsToOrgOperation } from '../../domain/operation/handlers/moveRowsToOrg'
+import { appService } from '../../application/HRApplicationService'
+import { useScopedStore } from '../../store/useScopedStore'
+import { OrgCombobox } from '../common/OrgCombobox'
 import type { AllocationRow } from '../../domain/allocationRow'
 import type { Person } from '../../domain/schemas'
 
@@ -43,7 +48,8 @@ const ORG_PALETTE = [
 ]
 
 export function OrgOperationView() {
-  const store = useStore()
+  const store = useScopedStore()
+  const { afterOrganizations: allAfterOrgsUnscoped } = useStore()  // full list for move target picker
   const {
     focusedOrgId, focusOrg,
     afterOrganizations: allAfterOrgs, organizations: staticOrgs, persons,
@@ -71,6 +77,30 @@ export function OrgOperationView() {
   const [orgManualOrders,   setOrgManualOrders]   = useState<Record<string, string[]>>({})
   const [reorderDropTarget, setReorderDropTarget] = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
   const [openSortDropdown,  setOpenSortDropdown]  = useState<string | null>(null)
+  const [bulkMoveSourceId,  setBulkMoveSourceId]  = useState<string | null>(null)
+  const [bulkMoveTargetId,  setBulkMoveTargetId]  = useState<string>('')
+  const [bulkMoveError,     setBulkMoveError]     = useState<string | null>(null)
+
+  // 選択モード
+  const [isSelectMode,       setIsSelectMode]       = useState(false)
+  const [selectedPersonIds,  setSelectedPersonIds]  = useState<Set<string>>(new Set())
+  const [moveTargetOrgId,    setMoveTargetOrgId]    = useState<string | null>(null)
+  const [moveModalOpen,      setMoveModalOpen]      = useState(false)
+  const [moveError,          setMoveError]          = useState<string | null>(null)
+
+  const togglePersonSelection = (personId: string) => {
+    setSelectedPersonIds(prev => {
+      const next = new Set(prev)
+      if (next.has(personId)) next.delete(personId)
+      else next.add(personId)
+      return next
+    })
+  }
+
+  const exitSelectMode = () => {
+    setIsSelectMode(false)
+    setSelectedPersonIds(new Set())
+  }
   const [expandedNodes,       setExpandedNodes]       = useState<Set<string>>(new Set())
   const [reportLineRootId,    setReportLineRootId]    = useState<string | null>(null)
 
@@ -483,22 +513,29 @@ export function OrgOperationView() {
     return (
       <div className="flex flex-wrap gap-1.5 mb-2">
         {sorted.map(({ row, person }) => {
-          const isConcurrent = row.concurrentType === '兼務'
-          const isSelected   = selectedPersonId === person.id
-          const fromOrgName  = getBeforeOrgName(person, orgId)
-          const status       = isBefore ? getConfirmStatus(person.id) : undefined
+          const isConcurrent  = row.concurrentType === '兼務'
+          const isSelected    = isSelectMode ? selectedPersonIds.has(person.id) : selectedPersonId === person.id
+          const fromOrgName   = getBeforeOrgName(person, orgId)
+          const status        = isBefore ? getConfirmStatus(person.id) : undefined
           return (
             <div
               key={row.rowId}
-              draggable={!isBefore}
-              onDragStart={!isBefore ? e => handleDragStart(e, person.id, orgId, companyId, isConcurrent ? 'concurrent' : 'primary') : undefined}
-              onClick={() => selectPerson(person.id)}
-              onDoubleClick={() => handlePersonDoubleClick(person.id)}
-              onContextMenu={e => handlePersonContextMenu(e, person.id)}
+              draggable={!isBefore && !isSelectMode}
+              onDragStart={!isBefore && !isSelectMode ? e => handleDragStart(e, person.id, orgId, companyId, isConcurrent ? 'concurrent' : 'primary') : undefined}
+              onClick={() => isSelectMode ? togglePersonSelection(person.id) : selectPerson(person.id)}
+              onDoubleClick={() => !isSelectMode && handlePersonDoubleClick(person.id)}
+              onContextMenu={e => !isSelectMode && handlePersonContextMenu(e, person.id)}
               className={`relative px-2.5 py-1.5 rounded text-xs select-none transition-all hover:shadow-md border-2 ${
-                !isBefore ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                isSelectMode ? 'cursor-pointer' : !isBefore ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
               } ${cardBg(isConcurrent, isSelected, status)}`}
             >
+              {isSelectMode && (
+                <span className={`absolute top-1 right-1 w-3.5 h-3.5 rounded border flex items-center justify-center text-xs font-bold ${
+                  isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
+                }`}>
+                  {isSelected ? '✓' : ''}
+                </span>
+              )}
               {cardInner(row, person, isConcurrent, fromOrgName, status)}
             </div>
           )
@@ -581,6 +618,15 @@ export function OrgOperationView() {
         <div className="px-2 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg text-xs font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 flex items-center gap-1" onClick={toggle}>
           <span className="text-gray-400">▾</span>
           <span className="flex-1">{org.name}</span>
+          {!isBefore && (
+            <button
+              onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId); setBulkMoveTargetId(''); setBulkMoveError(null) }}
+              className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+              title="このボックスのメンバを別組織に一括移動"
+            >
+              ⇄ 移動
+            </button>
+          )}
           {renderSortButton(orgId)}
         </div>
         <div className="p-2">
@@ -611,10 +657,19 @@ export function OrgOperationView() {
         onDragLeave={handleDragLeave}
         onDrop={e => handleDrop(e, orgId)}
       >
-        <div className={`px-3 py-1.5 border-b text-xs font-semibold flex items-center ${
+        <div className={`px-3 py-1.5 border-b text-xs font-semibold flex items-center gap-1 ${
           depth === 0 ? 'border-gray-300 text-gray-600 bg-gray-100 rounded-t-lg' : 'border-gray-200 text-gray-500 bg-gray-50 rounded-t-lg'
         }`}>
           <span className="flex-1">{org.name}</span>
+          {!isBefore && (
+            <button
+              onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId); setBulkMoveTargetId(''); setBulkMoveError(null) }}
+              className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+              title="このボックスのメンバを別組織に一括移動"
+            >
+              ⇄ 移動
+            </button>
+          )}
           {renderSortButton(orgId)}
         </div>
         <div className="p-2">
@@ -898,6 +953,18 @@ export function OrgOperationView() {
           {!isBefore && canvasMode === '組織図' && (
             <span className="text-xs text-gray-400">Alt+ドロップ=兼務</span>
           )}
+          {!isBefore && canvasMode === '組織図' && (
+            <button
+              onClick={() => { setIsSelectMode(m => !m); setSelectedPersonIds(new Set()) }}
+              className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
+                isSelectMode
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {isSelectMode ? '✓ 選択中' : '複数選択'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -968,6 +1035,142 @@ export function OrgOperationView() {
           </div>
         </>
       )}
+
+      {/* ── 選択モード アクションバー ───────────────────────────────── */}
+      {isSelectMode && selectedPersonIds.size > 0 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-gray-900 text-white rounded-full px-4 py-2 shadow-2xl text-xs">
+          <span className="font-semibold">{selectedPersonIds.size}名選択中</span>
+          <div className="w-px h-4 bg-gray-600" />
+          <button
+            onClick={() => { setMoveTargetOrgId(null); setMoveError(null); setMoveModalOpen(true) }}
+            className="px-2.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 font-medium transition-colors"
+          >
+            組織を移動
+          </button>
+          <button
+            onClick={exitSelectMode}
+            className="px-2.5 py-1 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors"
+          >
+            解除
+          </button>
+        </div>
+      )}
+
+      {/* ── 選択した人を組織に移動モーダル ──────────────────────────── */}
+      {moveModalOpen && (() => {
+        const handleMoveConfirm = () => {
+          if (!moveTargetOrgId) { setMoveError('移動先を選択してください'); return }
+          // Collect primary row IDs for selected persons
+          const rowIds: number[] = []
+          for (const personId of selectedPersonIds) {
+            const person = persons.find(p => p.id === personId)
+            if (!person?.sfPersonId) continue
+            const primary = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
+                         ?? allocationList.find(r => r.userId === person.sfPersonId)
+            if (primary) rowIds.push(primary.rowId)
+          }
+          const targetOrg = allAfterOrgsUnscoped.find(o => o.id === moveTargetOrgId)
+          const op     = new MoveRowsToOrgOperation(rowIds, moveTargetOrgId, `${rowIds.length}名 → ${targetOrg?.name ?? ''}`)
+          const result = appService.executeOperation(op)
+          if (!result.ok) { setMoveError(result.errors.map(e => e.message).join('、')); return }
+          setMoveModalOpen(false)
+          exitSelectMode()
+        }
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setMoveModalOpen(false)}>
+            <div className="bg-white rounded-xl shadow-2xl w-96 p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+              <div className="text-sm font-bold text-gray-800">組織を移動</div>
+              <div className="text-xs text-gray-600">
+                <span className="font-semibold text-gray-800">{selectedPersonIds.size}名</span> を移動先組織に移動します。
+                <br />レポートラインは変更されません。
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-500">移動先組織</label>
+                <OrgCombobox
+                  allOrgs={allAfterOrgsUnscoped}
+                  value={moveTargetOrgId}
+                  onChange={id => { setMoveTargetOrgId(id); setMoveError(null) }}
+                  placeholder="組織を選択…"
+                  variant="light"
+                  className="w-full"
+                />
+              </div>
+              {moveError && <div className="text-xs text-red-600">{moveError}</div>}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setMoveModalOpen(false)}
+                  className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleMoveConfirm}
+                  disabled={!moveTargetOrgId}
+                  className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  移動する（{selectedPersonIds.size}名）
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── 一括メンバ移動モーダル ──────────────────────────────────── */}
+      {bulkMoveSourceId && (() => {
+        const sourceOrg   = allAfterOrgsUnscoped.find(o => o.id === bulkMoveSourceId)
+        const sourceCode  = sourceOrg?.externalCode
+        const memberCount = sourceCode ? allocationList.filter(r => r.departmentCode === sourceCode).length : 0
+        const moveableOrgs = allAfterOrgsUnscoped.filter(o => o.id !== bulkMoveSourceId)
+
+        const handleConfirm = () => {
+          if (!bulkMoveTargetId) { setBulkMoveError('移動先を選択してください'); return }
+          const op     = new BulkMoveToOrgOperation(bulkMoveSourceId, bulkMoveTargetId, `${sourceOrg?.name ?? ''} メンバ一括移動`)
+          const result = appService.executeOperation(op as Parameters<typeof appService.executeOperation>[0])
+          if (!result.ok) { setBulkMoveError(result.errors.map(e => e.message).join('、')); return }
+          setBulkMoveSourceId(null)
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setBulkMoveSourceId(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-96 p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+              <div className="text-sm font-bold text-gray-800">メンバを別組織に一括移動</div>
+              <div className="text-xs text-gray-600">
+                <span className="font-semibold text-gray-800">{sourceOrg?.name}</span> の
+                <span className="font-semibold text-gray-800"> {memberCount}名</span> を移動先組織に一括移動します。
+                <br />レポートラインは変更されません。
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-500">移動先組織</label>
+                <OrgCombobox
+                  allOrgs={moveableOrgs}
+                  value={bulkMoveTargetId || null}
+                  onChange={id => { setBulkMoveTargetId(id ?? ''); setBulkMoveError(null) }}
+                  placeholder="組織を選択…"
+                  variant="light"
+                  className="w-full"
+                />
+              </div>
+              {bulkMoveError && <div className="text-xs text-red-600">{bulkMoveError}</div>}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setBulkMoveSourceId(null)}
+                  className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  disabled={!bulkMoveTargetId}
+                  className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  移動する（{memberCount}名）
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

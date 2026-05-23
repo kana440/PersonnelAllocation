@@ -5,6 +5,8 @@ import { appService } from '../application/HRApplicationService'
 import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '../domain/allocationRow'
 import type { Organization } from '../domain/schemas'
+import { getDescendantOrgIds } from '../domain/orgScope'
+import type { ImportMode, MergeResult } from '../domain/importMerge'
 
 // ── org ナビゲーションヘルパー（ストアアクション用）───────────────
 function buildIdMap(orgs: Organization[]): Map<string, Organization> {
@@ -61,6 +63,7 @@ interface UIState {
   previousViewState:    PreviousViewState | null
   mainCanvasMode:       '組織図' | 'レポートライン'
   expandedChipIds:      Set<string>
+  scopeOrgId:           string | null   // 作業対象組織スコープ（null = 全件）
 }
 
 // ── アクション ────────────────────────────────────────────────────
@@ -72,6 +75,9 @@ interface Actions {
   editRow:   (rowId: number, changes: AfterValues) => void
   saveRow:   (rowId: number, changes: AfterValues) => ValidationResult
   selectRow: (rowId: number | null) => void
+
+  // 追加インポート（マージ）
+  mergeExcelData: (data: { allocationList: AllocationRow[]; mode: ImportMode; scopeOrgId: string | null }) => MergeResult
 
   // 新規採用
   addNewHire: (opts: {
@@ -106,6 +112,9 @@ interface Actions {
   toggleChip:               (orgId: string) => void
   selectPersonAndFocusOrg:  (personId: string) => void
 
+  // 作業スコープ
+  setScopeOrgId: (id: string | null) => void
+
   // 後方互換（既存コンポーネントが参照している場合のみ残す）
   setRawImportedRows: (rows: AllocationRow[]) => void
 }
@@ -134,6 +143,7 @@ export const useStore = create<AppState>((set, get) => {
     previousViewState:    null,
     mainCanvasMode:       '組織図',
     expandedChipIds:      new Set<string>(),
+    scopeOrgId:           null,
 
     // ── アクション ────────────────────────────────────────────────
     loadExcelData: async (result) => {
@@ -147,6 +157,8 @@ export const useStore = create<AppState>((set, get) => {
       await save(result.codeLists)
       set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
     },
+
+    mergeExcelData: (data) => appService.mergeExcelData(data),
 
     editRow:   (rowId, changes) => appService.editRow(rowId, changes),
     saveRow:   (rowId, changes) => appService.saveRow(rowId, changes),
@@ -235,6 +247,20 @@ export const useStore = create<AppState>((set, get) => {
       }
 
       set({ selectedPersonId: personId, workspaceMode: 'org', focusedOrgId: newFocusedOrgId, expandedChipIds: newExpanded })
+    },
+
+    setScopeOrgId: (id) => {
+      const { focusedOrgId, afterOrganizations } = get()
+      let newFocusedOrgId = focusedOrgId
+      if (id) {
+        const scopeIds = getDescendantOrgIds(id, afterOrganizations)
+        if (!focusedOrgId || !scopeIds.has(focusedOrgId)) {
+          // Auto-focus the scope org so the org chart immediately shows content
+          newFocusedOrgId = id
+        }
+      }
+      // When clearing scope (id = null), preserve existing focusedOrgId
+      set({ scopeOrgId: id, focusedOrgId: newFocusedOrgId })
     },
 
     setRawImportedRows: (_rows) => { /* no-op: 後方互換 */ },

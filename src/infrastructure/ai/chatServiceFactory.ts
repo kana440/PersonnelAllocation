@@ -11,9 +11,11 @@ import { MockApiService }           from './mockApiService'
 import { OpenAICompatibleAdapter }  from './openAICompatibleAdapter'
 import { AgentRunner }              from './agentRunner'
 
-const RAW_BASE_URL = import.meta.env.VITE_AI_BASE_URL
-const API_KEY      = import.meta.env.VITE_AI_API_KEY ?? ''
-const RAW_MODELS   = import.meta.env.VITE_AI_MODELS
+const RAW_BASE_URL   = import.meta.env.VITE_AI_BASE_URL
+const API_KEY        = import.meta.env.VITE_AI_API_KEY        ?? ''
+const API_KEY_SCHEME = import.meta.env.VITE_AI_API_KEY_SCHEME === 'api-key' ? 'api-key' as const : 'bearer' as const
+const OMIT_MODEL     = import.meta.env.VITE_AI_OMIT_MODEL === 'true'
+const RAW_MODELS     = import.meta.env.VITE_AI_MODELS
 
 // ── Public constants ──────────────────────────────────────────────────────────
 
@@ -33,7 +35,7 @@ export const DEFAULT_MODELS: string[] = RAW_MODELS
 export function createAdapter(model: string): OpenAICompatibleAdapter | null {
   if (!RAW_BASE_URL) return null
   const baseUrl = RAW_BASE_URL.replace('{model}', encodeURIComponent(model))
-  return new OpenAICompatibleAdapter({ baseUrl, model, apiKey: API_KEY })
+  return new OpenAICompatibleAdapter({ baseUrl, model, apiKey: API_KEY, apiKeyScheme: API_KEY_SCHEME, omitModel: OMIT_MODEL })
 }
 
 /**

@@ -10,6 +10,8 @@ import { derivePersons } from '../domain/projection/rows'
 import type { Person } from '../domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
 import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
+import { mergeAllocationList } from '../domain/importMerge'
+import type { ImportMode, MergeResult } from '../domain/importMerge'
 
 // ── DomainSnapshot ────────────────────────────────────────────────────────────
 export interface DomainSnapshot {
@@ -167,6 +169,26 @@ export class HRApplicationService {
     this.past                = []
     this.future              = []
     this.emit()
+  }
+
+  // ── 追加インポート（マージ）────────────────────────────────
+  mergeExcelData(data: {
+    allocationList: AllocationRow[]
+    mode:           ImportMode
+    scopeOrgId:     string | null
+  }): MergeResult {
+    const result = mergeAllocationList({
+      existing:   this.allocationList,
+      incoming:   data.allocationList,
+      mode:       data.mode,
+      scopeOrgId: data.scopeOrgId,
+      afterOrgs:  this.afterOrganizations,
+    })
+    const before = this.allocationList
+    this.allocationList = result.rows
+    this.pushPast(this.computePatch(before, result.rows, this.afterOrganizations))
+    this.emit()
+    return result
   }
 
   // ── 操作の実行（差分をスタックに積む）────────────────────────

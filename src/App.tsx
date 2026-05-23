@@ -9,6 +9,8 @@ import { SetupView } from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { useStore } from './store/useStore'
 import { useCodeListStore } from './store/codeListStore'
+import { ScopeSelector } from './components/header/ScopeSelector'
+import { MergeImportButton } from './components/header/MergeImportButton'
 
 const BOTTOM_MIN        = 36
 const BOTTOM_MAX_RATIO  = 0.65
@@ -150,7 +152,10 @@ export default function App() {
             className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded border border-gray-600"
           />
         </div>
+        <ScopeSelector />
         <div className="ml-auto flex items-center gap-2">
+          <MergeImportButton />
+          <div className="w-px h-4 bg-gray-600" />
           <button
             onClick={undo}
             disabled={!canUndo}
