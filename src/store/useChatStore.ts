@@ -27,18 +27,21 @@ interface ChatStore {
   messages:       ChatMessage[]
   phase:          ChatPhase
   pendingPersons: PersonMatch[]
+  selectedModel:  string
 
   addMessage:        (msg: Omit<ChatMessage, 'id'>) => string
   updateMessage:     (id: string, updates: Partial<ChatMessage>) => void
   clearMessages:     () => void
   setPhase:          (phase: ChatPhase) => void
   setPendingPersons: (persons: PersonMatch[]) => void
+  setSelectedModel:  (model: string) => void
 }
 
 export const useChatStore = create<ChatStore>(set => ({
   messages:       [],
   phase:          'idle',
   pendingPersons: [],
+  selectedModel:  '',
 
   addMessage: msg => {
     const id = `msg-${++_msgId}`
@@ -53,4 +56,5 @@ export const useChatStore = create<ChatStore>(set => ({
 
   setPhase:          phase          => set({ phase }),
   setPendingPersons: pendingPersons => set({ pendingPersons }),
+  setSelectedModel:  model          => set({ selectedModel: model }),
 }))

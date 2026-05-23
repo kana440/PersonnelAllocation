@@ -10,10 +10,18 @@ import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { useStore } from './store/useStore'
 import { useCodeListStore } from './store/codeListStore'
 
-const BOTTOM_MIN        = 36   // 折りたたみ時はヘッダーだけ
+const BOTTOM_MIN        = 36
 const BOTTOM_MAX_RATIO  = 0.65
 const BOTTOM_DEFAULT    = 220
 const BOTTOM_COLLAPSED  = 36
+
+const SIDEBAR_MIN     = 140
+const SIDEBAR_MAX     = 480
+const SIDEBAR_DEFAULT = 192
+
+const CHAT_MIN     = 240
+const CHAT_MAX     = 600
+const CHAT_DEFAULT = 320
 
 export default function App() {
   const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo, editMode } = useStore()
@@ -29,6 +37,8 @@ export default function App() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_DEFAULT)
   const [excelCollapsed,  setExcelCollapsed]  = useState(false)
+  const [sidebarWidth,    setSidebarWidth]    = useState(SIDEBAR_DEFAULT)
+  const [chatWidth,       setChatWidth]       = useState(CHAT_DEFAULT)
   const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
 
   const toggleExcelCollapse = useCallback(() => {
@@ -42,7 +52,7 @@ export default function App() {
     }
   }, [excelCollapsed, bottomHeight])
 
-  // ── Drag-to-resize ────────────────────────────────────────────
+  // ── Drag-to-resize (bottom panel) ────────────────────────────────────────────
   const dragState = useRef<{ startY: number; startH: number } | null>(null)
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -64,6 +74,47 @@ export default function App() {
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }, [bottomHeight])
+
+  // ── Drag-to-resize (sidebar) ──────────────────────────────────────────────────
+  const sidebarDragState = useRef<{ startX: number; startW: number } | null>(null)
+
+  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    sidebarDragState.current = { startX: e.clientX, startW: sidebarWidth }
+    const onMove = (ev: MouseEvent) => {
+      if (!sidebarDragState.current) return
+      const delta = ev.clientX - sidebarDragState.current.startX
+      setSidebarWidth(Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, sidebarDragState.current.startW + delta)))
+    }
+    const onUp = () => {
+      sidebarDragState.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [sidebarWidth])
+
+  // ── Drag-to-resize (chat drawer) ──────────────────────────────────────────────
+  const chatDragState = useRef<{ startX: number; startW: number } | null>(null)
+
+  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    chatDragState.current = { startX: e.clientX, startW: chatWidth }
+    const onMove = (ev: MouseEvent) => {
+      if (!chatDragState.current) return
+      // dragging left → wider, dragging right → narrower
+      const delta = chatDragState.current.startX - ev.clientX
+      setChatWidth(Math.max(CHAT_MIN, Math.min(CHAT_MAX, chatDragState.current.startW + delta)))
+    }
+    const onUp = () => {
+      chatDragState.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [chatWidth])
 
   if (!isChecked) return (
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
@@ -155,7 +206,7 @@ export default function App() {
 
         {/* Org search sidebar */}
         {isTreeOpen ? (
-          <div className="flex-shrink-0 w-48 bg-white rounded-lg shadow overflow-hidden flex flex-col">
+          <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: sidebarWidth }}>
             <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-200 flex-shrink-0">
               <span className="text-xs font-semibold text-blue-600">組織・人物</span>
               <button onClick={() => setIsTreeOpen(false)} title="折りたたむ" className="text-gray-400 hover:text-gray-600 text-xs w-4 h-4 flex items-center justify-center">◀</button>
@@ -163,6 +214,11 @@ export default function App() {
             <div className="flex-1 overflow-hidden">
               <OrgSearchSidebar />
             </div>
+            {/* Right-edge resize handle */}
+            <div
+              className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10"
+              onMouseDown={handleSidebarResizeStart}
+            />
           </div>
         ) : (
           <div
@@ -198,7 +254,12 @@ export default function App() {
 
         {/* AI Chat drawer */}
         {isChatOpen && (
-          <div className="flex-shrink-0 w-80 bg-white rounded-lg shadow overflow-hidden flex flex-col">
+          <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: chatWidth }}>
+            {/* Left-edge resize handle */}
+            <div
+              className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10"
+              onMouseDown={handleChatResizeStart}
+            />
             <AIChatDrawer onClose={() => setIsChatOpen(false)} />
           </div>
         )}

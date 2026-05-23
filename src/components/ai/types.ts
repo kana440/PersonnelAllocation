@@ -63,6 +63,7 @@ export interface ChatMessage {
 
 export interface WidgetCallbacks {
   onFileSelected:      (file: File) => void
+  onImportCancel:      () => void
   onOrgNameSubmit:     (name: string) => void
   onPersonNamesSubmit: (names: string) => void
   onPromoteConfirm:    () => void

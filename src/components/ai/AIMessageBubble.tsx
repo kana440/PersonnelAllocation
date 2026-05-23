@@ -50,7 +50,7 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
         {isAI && message.widget && (
           <div className="mt-1">
             {message.widget.type === 'file-picker' && (
-              <FilePickerWidget isActive={isActiveWidget} onFile={callbacks.onFileSelected} />
+              <FilePickerWidget isActive={isActiveWidget} onFile={callbacks.onFileSelected} onCancel={callbacks.onImportCancel} />
             )}
             {message.widget.type === 'excel-help' && (
               <ExcelHelpWidget />
