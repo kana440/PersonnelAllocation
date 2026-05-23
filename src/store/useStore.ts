@@ -79,6 +79,12 @@ interface Actions {
   // 追加インポート（マージ）
   mergeExcelData: (data: { allocationList: AllocationRow[]; mode: ImportMode; scopeOrgId: string | null }) => MergeResult
 
+  // ポジション操作
+  createVacantPosition:         (departmentCode: string, localJobTitle: string) => void
+  removePosition:               (rowId: number) => void
+  assignPersonToVacantPosition: (vacantRowId: number, personSfId: string) => void
+  unassignPersonFromPosition:   (occupiedRowId: number) => void
+
   // 新規採用
   addNewHire: (opts: {
     name:            string
@@ -159,6 +165,11 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),
+
+    createVacantPosition:         (deptCode, title)          => appService.createVacantPosition(deptCode, title),
+    removePosition:               (rowId)                    => appService.removePosition(rowId),
+    assignPersonToVacantPosition: (vacantRowId, personSfId)  => appService.assignPersonToVacantPosition(vacantRowId, personSfId),
+    unassignPersonFromPosition:   (rowId)                    => appService.unassignPersonFromPosition(rowId),
 
     editRow:   (rowId, changes) => appService.editRow(rowId, changes),
     saveRow:   (rowId, changes) => appService.saveRow(rowId, changes),

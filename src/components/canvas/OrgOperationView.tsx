@@ -2,12 +2,11 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useStore } from '../../store/useStore'
 import { rowDiff } from '../../domain/allocationRow'
 import { buildOrgMap } from '../../domain/projection/rows'
-import { BulkMoveToOrgOperation } from '../../domain/operation/handlers/bulkMoveToOrg'
 import { MoveRowsToOrgOperation } from '../../domain/operation/handlers/moveRowsToOrg'
 import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
 import { OrgCombobox } from '../common/OrgCombobox'
-import type { AllocationRow } from '../../domain/allocationRow'
+import type { AllocationRow, AfterValues } from '../../domain/allocationRow'
 import type { Person } from '../../domain/schemas'
 
 const BAND_ORDER  = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7']
@@ -21,16 +20,24 @@ type CanvasMode = '組織図' | 'レポートライン'
 type ViewState  = 'after' | 'after-diff' | 'before'
 
 interface DragData {
-  personId: string
-  fromOrgId: string
-  fromCompanyId: string
+  dragType?:       'person' | 'position'  // positionは左枠ドラッグ（席ごと移動）
+  personId:        string
+  fromOrgId:       string
+  fromCompanyId:   string
   affiliationType: 'primary' | 'concurrent'
-  source?: 'before' | 'after' | 'reportLine' | 'sidebar'
+  source?: 'before' | 'after' | 'reportLine' | 'sidebar' | 'excel'
+  fromRowId?: number
 }
 
 interface MemberEntry {
   row:    AllocationRow
   person: Person
+}
+
+interface PositionEntry {
+  row:    AllocationRow
+  person: Person | null   // null = 空席
+  depth:  number          // reportToツリーの深さ（インデント用）
 }
 
 interface OrgBoxProps           { orgId: string; depth?: number }
@@ -57,6 +64,8 @@ export function OrgOperationView() {
     selectedPersonId, selectPerson, enterEditMode, saveRow,
     mainCanvasMode, setMainCanvasMode,
     expandedChipIds, toggleChip,
+    createVacantPosition, removePosition, assignPersonToVacantPosition,
+    unassignPersonFromPosition,
   } = store
 
   const handlePersonDoubleClick = (personId: string) => {
@@ -77,9 +86,20 @@ export function OrgOperationView() {
   const [orgManualOrders,   setOrgManualOrders]   = useState<Record<string, string[]>>({})
   const [reorderDropTarget, setReorderDropTarget] = useState<{ orgId: string; beforePersonId: string | null } | null>(null)
   const [openSortDropdown,  setOpenSortDropdown]  = useState<string | null>(null)
-  const [bulkMoveSourceId,  setBulkMoveSourceId]  = useState<string | null>(null)
-  const [bulkMoveTargetId,  setBulkMoveTargetId]  = useState<string>('')
-  const [bulkMoveError,     setBulkMoveError]     = useState<string | null>(null)
+  const [bulkMoveSourceId,       setBulkMoveSourceId]       = useState<string | null>(null)
+  const [addPositionOrgId,      setAddPositionOrgId]      = useState<string | null>(null)
+  const [addPositionTitle,      setAddPositionTitle]      = useState('')
+  const [bulkMoveTargetId,      setBulkMoveTargetId]      = useState<string>('')
+  const [bulkMoveError,         setBulkMoveError]         = useState<string | null>(null)
+  const [bulkMoveMode,          setBulkMoveMode]          = useState<'positions' | 'persons'>('positions')
+  const [bulkMoveSelectedIds,   setBulkMoveSelectedIds]   = useState<Set<number>>(new Set())
+  const [bulkMoveRetireOriginal,setBulkMoveRetireOriginal]= useState(false)
+
+  // 人移動ダイアログ（人ドラッグ → 組織エリアドロップ）
+  const [personMoveDialog,  setPersonMoveDialog]  = useState<{
+    fromRowId: number | null; personId: string; toOrgId: string
+  } | null>(null)
+  const [pmRetireOriginal,  setPmRetireOriginal]  = useState(false)
 
   // 選択モード
   const [isSelectMode,       setIsSelectMode]       = useState(false)
@@ -160,6 +180,20 @@ export function OrgOperationView() {
     return map
   }, [allocationList, beforeOrgByCode, personBySfId])
 
+  // 全行（空席含む）を org.id で引くマップ — ポジションツリー用
+  const afterOrgRowsById = useMemo(() => {
+    const map = new Map<string, AllocationRow[]>()
+    for (const row of allocationList) {
+      if (!row.departmentCode) continue
+      const org = afterOrgByCode.get(row.departmentCode)
+      if (!org) continue
+      const arr = map.get(org.id)
+      if (arr) arr.push(row)
+      else map.set(org.id, [row])
+    }
+    return map
+  }, [allocationList, afterOrgByCode])
+
   // ── レポートライン用マップ (org フィルタなし) ──────────────────
   const rlPosCodeToPersonId = useMemo(() => {
     const map = new Map<string, string>()
@@ -201,6 +235,51 @@ export function OrgOperationView() {
     const org = deptCode ? (isBefore ? beforeOrgByCode : afterOrgByCode).get(deptCode) : null
     return { name: person.name, orgName: org?.name ?? null }
   }, [reportLineRootId, persons, allocationList, isBefore, beforeOrgByCode, afterOrgByCode])
+
+  // ── ポジションツリー（全組織分を useMemo で事前計算）─────────
+  // early return より前に置く必要がある（Rules of Hooks: 条件分岐でフック呼び出し順が変わってはいけない）
+  const positionTreeByOrgId = useMemo((): Map<string, PositionEntry[]> => {
+    const result = new Map<string, PositionEntry[]>()
+
+    for (const [orgId, rows] of afterOrgRowsById) {
+      const childrenByMgrCode = new Map<string, AllocationRow[]>()
+      const inOrgPosCodes     = new Set<string>()
+      for (const row of rows) {
+        if (row.positionCode) inOrgPosCodes.add(row.positionCode)
+        if (row.managerPositionCode) {
+          const arr = childrenByMgrCode.get(row.managerPositionCode)
+          if (arr) arr.push(row)
+          else childrenByMgrCode.set(row.managerPositionCode, [row])
+        }
+      }
+
+      const rootRows = rows.filter(r => !r.managerPositionCode || !inOrgPosCodes.has(r.managerPositionCode))
+      const entries: PositionEntry[] = []
+      const visited = new Set<number>()
+
+      const visit = (row: AllocationRow, depth: number) => {
+        if (visited.has(row.rowId)) return
+        visited.add(row.rowId)
+        const person = row.userId ? (personBySfId.get(row.userId) ?? null) : null
+        entries.push({ row, person, depth })
+        if (row.positionCode) {
+          const children = childrenByMgrCode.get(row.positionCode) ?? []
+          for (const c of children) if (c.rowId !== row.rowId) visit(c, depth + 1)
+        }
+      }
+
+      rootRows.forEach(r => visit(r, 0))
+      for (const row of rows) {
+        if (!visited.has(row.rowId)) {
+          const person = row.userId ? (personBySfId.get(row.userId) ?? null) : null
+          entries.push({ row, person, depth: 0 })
+        }
+      }
+
+      result.set(orgId, entries)
+    }
+    return result
+  }, [afterOrgRowsById, personBySfId])
 
   // 「↑ 上へ」で移動できる先 (現在ルートの親)
   const rlRootManagerId = reportLineRootId != null ? rlManagerMap.get(reportLineRootId) : undefined
@@ -383,20 +462,187 @@ export function OrgOperationView() {
     e.preventDefault(); setDragOverOrgId(null)
     let data: DragData
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
-    const { personId, fromOrgId } = data
-    if (fromOrgId && fromOrgId === toOrgId) return
+    const { dragType, fromOrgId, fromRowId } = data
 
     const toOrg = organizations.find(o => o.id === toOrgId)
     if (!toOrg) return
-    const person = persons.find(p => p.id === personId)
-    if (!person?.sfPersonId) return
 
-    const primaryRow = allocationList.find(r => r.userId === person.sfPersonId && !r.concurrentType)
-                    ?? allocationList.find(r => r.userId === person.sfPersonId)
-    if (primaryRow) {
-      saveRow(primaryRow.rowId, { departmentCode: toOrg.externalCode ?? toOrg.id })
+    // ── ポジション左枠ドラッグ: 席ごと（人も一緒に）移動 ──
+    if (dragType === 'position' && fromRowId) {
+      if (fromOrgId === toOrgId) return
+      saveRow(fromRowId, { departmentCode: toOrg.externalCode ?? toOrg.id })
+      setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
+      return
     }
-    setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
+
+    // 人ドラッグ → 組織エリアへドロップ: 移動ダイアログを表示
+    if (data.personId && fromOrgId !== toOrgId) {
+      setPersonMoveDialog({ fromRowId: fromRowId ?? null, personId: data.personId, toOrgId })
+      setPmRetireOriginal(false)
+    }
+  }
+
+  const handleDropOnVacantSlot = (e: React.DragEvent, vacantRowId: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    let data: DragData
+    try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+    const person = persons.find(p => p.id === data.personId)
+    if (!person?.sfPersonId) return
+    assignPersonToVacantPosition(vacantRowId, person.sfPersonId)
+  }
+
+  // ── 人移動ダイアログ確認ハンドラー ───────────────────────────────
+  const handlePersonMoveConfirm = () => {
+    if (!personMoveDialog) return
+    const { fromRowId, personId, toOrgId } = personMoveDialog
+    const person = persons.find(p => p.id === personId)
+    if (!person?.sfPersonId) { setPersonMoveDialog(null); return }
+
+    const toOrg = allAfterOrgsUnscoped.find(o => o.id === toOrgId)
+    const toOrgCode = toOrg?.externalCode ?? toOrg?.id ?? toOrgId
+
+    // 元行を特定（fromRowId があればそれ、なければ本務行を探す）
+    const fromRow = fromRowId
+      ? allocationList.find(r => r.rowId === fromRowId)
+      : (allocationList.find(r => r.userId === person.sfPersonId && !r.concurrentType)
+        ?? allocationList.find(r => r.userId === person.sfPersonId))
+    if (!fromRow) { setPersonMoveDialog(null); return }
+
+    const actualFromRowId = fromRow.rowId
+    const hasPosition     = !!fromRow.positionCode
+
+    // 引き継ぐポジション情報
+    const posTitle        = fromRow.localJobTitle || fromRow.officialPositionCode || ''
+    const posOfficialCode = fromRow.officialPositionCode
+    const posBand         = fromRow.positionBand
+
+    // 移動先組織の最上位ポジションをデフォルト上司に
+    const targetRows   = allocationList.filter(r => afterOrgByCode.get(r.departmentCode ?? '')?.id === toOrgId && !!r.positionCode)
+    const targetPosSet = new Set(targetRows.map(r => r.positionCode).filter(Boolean))
+    const topRow       = targetRows.find(r => !r.managerPositionCode || !targetPosSet.has(r.managerPositionCode))
+    const defaultMgrCode = topRow?.positionCode
+
+    // Step1: 元ポジションから解除（vacant + unassigned に分割）
+    if (hasPosition) appService.unassignPersonFromPosition(actualFromRowId)
+
+    // Step2: 移動先に新規ポジションを作成
+    appService.createVacantPosition(toOrgCode, posTitle)
+    const snap1    = appService.getSnapshot()
+    const newVacant = [...snap1.allocationList].reverse().find(r => !r.userId && r.departmentCode === toOrgCode)
+
+    if (newVacant) {
+      // Step3: ポジション属性を引き継ぎ、上司をデフォルト設定
+      const updates: AfterValues = {}
+      if (posOfficialCode) updates.officialPositionCode = posOfficialCode
+      if (posBand)         updates.positionBand = posBand
+      if (defaultMgrCode)  updates.managerPositionCode = defaultMgrCode
+      if (Object.keys(updates).length > 0) appService.saveRow(newVacant.rowId, updates)
+
+      // Step4: 人を新ポジションに配属（未アサイン行は自動削除される）
+      appService.assignPersonToVacantPosition(newVacant.rowId, person.sfPersonId)
+    }
+
+    // Step5: 元ポジションを廃止（チェック時）
+    if (pmRetireOriginal && hasPosition) {
+      const snap2     = appService.getSnapshot()
+      const vacantRow = snap2.allocationList.find(r => r.rowId === actualFromRowId && !r.userId)
+      if (vacantRow) appService.removePosition(actualFromRowId)
+    }
+
+    setPersonMoveDialog(null)
+  }
+
+  // ── 一括移動確認ハンドラー ─────────────────────────────────────
+  const handleBulkMoveConfirm = () => {
+    if (!bulkMoveSourceId || !bulkMoveTargetId) { setBulkMoveError('移動先を選択してください'); return }
+    const targetOrg  = allAfterOrgsUnscoped.find(o => o.id === bulkMoveTargetId)
+    const targetCode = targetOrg?.externalCode ?? targetOrg?.id ?? bulkMoveTargetId
+    const selectedIds = [...bulkMoveSelectedIds]
+
+    if (bulkMoveMode === 'positions') {
+      // ── ポジションごと移動（席+人） ─────────────────────────────
+      if (selectedIds.length === 0) { setBulkMoveError('移動対象を選択してください'); return }
+      const op     = new MoveRowsToOrgOperation(selectedIds, bulkMoveTargetId, `${selectedIds.length}ポジション → ${targetOrg?.name ?? ''}`)
+      const result = appService.executeOperation(op)
+      if (!result.ok) { setBulkMoveError(result.errors.map(e => e.message).join('、')); return }
+    } else {
+      // ── 人だけ移動（ポジション新設 + レポートライン再現） ────────
+      if (selectedIds.length === 0) { setBulkMoveError('移動対象を選択してください'); return }
+
+      // 選択行の元情報を事前収集
+      const selectedRowInfos = selectedIds.map(rowId => {
+        const row = allocationList.find(r => r.rowId === rowId)
+        return row ? {
+          rowId, userId: row.userId,
+          posCode: row.positionCode,
+          mgrCode: row.managerPositionCode,
+          title:   row.localJobTitle || row.officialPositionCode || '',
+          officialCode: row.officialPositionCode,
+          band:    row.positionBand,
+        } : null
+      }).filter((x): x is NonNullable<typeof x> => x !== null)
+
+      // 移動先組織の最上位ポジションをデフォルト上司に
+      const targetRows   = allocationList.filter(r => afterOrgByCode.get(r.departmentCode ?? '')?.id === bulkMoveTargetId && !!r.positionCode)
+      const targetPosSet = new Set(targetRows.map(r => r.positionCode).filter(Boolean))
+      const topTargetRow = targetRows.find(r => !r.managerPositionCode || !targetPosSet.has(r.managerPositionCode))
+      const defaultMgrCode = topTargetRow?.positionCode
+
+      // 元ポジションコード → 新ポジションコードのマップ（レポートライン再現用）
+      const oldToNewPosCode = new Map<string, string>()
+      // 元rowId → 新rowId（saveRow用）
+      const oldRowToNewRow = new Map<number, number>()
+
+      // Step1: 全員分のポジション作成 + 配属
+      for (const info of selectedRowInfos) {
+        if (!info.userId) continue // 空席はスキップ
+
+        // 元ポジションから解除
+        const currentRow = allocationList.find(r => r.rowId === info.rowId)
+        if (currentRow?.positionCode) appService.unassignPersonFromPosition(info.rowId)
+
+        // 新ポジション作成
+        appService.createVacantPosition(targetCode, info.title)
+        const snap1     = appService.getSnapshot()
+        const newVacant = [...snap1.allocationList].reverse().find(r => !r.userId && r.departmentCode === targetCode)
+        if (!newVacant) continue
+
+        // 元ポジションコードと新ポジションコードを対応付け
+        if (info.posCode) oldToNewPosCode.set(info.posCode, newVacant.positionCode ?? `_pos_${newVacant.rowId}`)
+        oldRowToNewRow.set(info.rowId, newVacant.rowId)
+
+        // 追加属性を設定
+        const updates: AfterValues = {}
+        if (info.officialCode) updates.officialPositionCode = info.officialCode
+        if (info.band)         updates.positionBand = info.band
+        if (Object.keys(updates).length > 0) appService.saveRow(newVacant.rowId, updates)
+
+        // 人を配属
+        appService.assignPersonToVacantPosition(newVacant.rowId, info.userId)
+      }
+
+      // Step2: レポートラインを再現（選択範囲内のポジション間のみ、それ以外はデフォルト上司）
+      for (const info of selectedRowInfos) {
+        const newRowId = oldRowToNewRow.get(info.rowId)
+        if (!newRowId) continue
+        const newMgrCode = info.mgrCode ? (oldToNewPosCode.get(info.mgrCode) ?? defaultMgrCode) : defaultMgrCode
+        if (newMgrCode) appService.saveRow(newRowId, { managerPositionCode: newMgrCode })
+      }
+
+      // Step3: 元ポジション廃止（チェック時）
+      if (bulkMoveRetireOriginal) {
+        for (const info of selectedRowInfos) {
+          const snap = appService.getSnapshot()
+          const vacantRow = snap.allocationList.find(r => r.rowId === info.rowId && !r.userId)
+          if (vacantRow) appService.removePosition(info.rowId)
+        }
+      }
+    }
+
+    setBulkMoveSourceId(null)
+    setBulkMoveSelectedIds(new Set())
+    setBulkMoveRetireOriginal(false)
   }
 
   // ── Sort button ───────────────────────────────────────────────
@@ -575,6 +821,124 @@ export function OrgOperationView() {
     )
   }
 
+  const isInternalPosCode = (s?: string) => !s || s.startsWith('_pos_')
+  const getPositionTitle = (row: AllocationRow): string =>
+    row.localJobTitle || row.officialPositionCode ||
+    (isInternalPosCode(row.positionCode) ? '' : (row.positionCode ?? '')) ||
+    '（役職未設定）'
+
+  // ── ポジション行レンダリング（after モード 組織図 用）────────
+  const renderPositionRows = (orgId: string) => {
+    const entries = positionTreeByOrgId.get(orgId) ?? []
+
+    return (
+      <div className="space-y-1 mb-2">
+        {entries.map(({ row, person, depth }) => {
+          const isVacant     = !person
+          const isSelected   = !isVacant && (isSelectMode ? selectedPersonIds.has(person!.id) : selectedPersonId === person!.id)
+          const isConcurrent = row.concurrentType === '兼務'
+
+          return (
+            <div key={row.rowId} className="flex items-stretch gap-1 group" style={{ paddingLeft: `${depth * 14}px` }}>
+
+              {/* 左枠: ポジション（ドラッグで席ごと移動、ホバーで削除ボタン表示） */}
+              <div
+                draggable
+                onDragStart={e => {
+                  const data: DragData = {
+                    dragType: 'position',
+                    personId: person?.id ?? '',
+                    fromOrgId: orgId, fromCompanyId: '',
+                    affiliationType: 'primary',
+                    fromRowId: row.rowId,
+                  }
+                  e.dataTransfer.setData('application/json', JSON.stringify(data))
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+                className="relative flex items-center gap-1 px-2 py-1 rounded-l bg-gray-100 border border-r-0 border-gray-200 text-xs text-gray-600 font-medium flex-shrink-0 cursor-grab active:cursor-grabbing hover:bg-gray-200 transition-colors"
+                style={{ minWidth: '72px', maxWidth: '130px' }}
+                title="ドラッグで別組織に席ごと移動"
+              >
+                <span className="text-gray-400 text-[9px] select-none">⠿</span>
+                <span className="truncate flex-1">{getPositionTitle(row)}</span>
+                {/* ポジション削除ボタン（ホバー時表示） */}
+                {!isSelectMode && (
+                  <button
+                    onClick={e => { e.stopPropagation(); removePosition(row.rowId) }}
+                    onMouseDown={e => e.stopPropagation()}
+                    className="opacity-0 group-hover:opacity-100 flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-100 transition-all text-[10px]"
+                    title="このポジション（席）を削除"
+                    draggable={false}
+                  >✕</button>
+                )}
+              </div>
+
+              {/* 右枠: 人 or 空席 */}
+              {isVacant ? (
+                <div
+                  className="flex-1 flex items-center px-2 py-1 rounded-r border-2 border-dashed border-gray-200 text-xs text-gray-400 transition-colors hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/30"
+                  onDragOver={e => { if (!e.dataTransfer.types.includes('application/json')) return; e.preventDefault(); e.stopPropagation() }}
+                  onDrop={e => handleDropOnVacantSlot(e, row.rowId)}
+                >
+                  （空席）← drop
+                </div>
+              ) : (
+                <div
+                  draggable={!isSelectMode}
+                  onDragStart={!isSelectMode ? e => {
+                    const data: DragData = {
+                      dragType: 'person',
+                      personId: person!.id, fromOrgId: orgId, fromCompanyId: '',
+                      affiliationType: isConcurrent ? 'concurrent' : 'primary',
+                      source: 'after', fromRowId: row.rowId,
+                    }
+                    e.dataTransfer.setData('application/json', JSON.stringify(data))
+                    e.dataTransfer.effectAllowed = 'move'
+                  } : undefined}
+                  onClick={() => isSelectMode ? togglePersonSelection(person!.id) : selectPerson(person!.id)}
+                  onDoubleClick={() => !isSelectMode && handlePersonDoubleClick(person!.id)}
+                  onContextMenu={e => !isSelectMode && handlePersonContextMenu(e, person!.id)}
+                  className={`flex-1 flex items-center gap-1 px-2 py-1 rounded-r border-2 text-xs select-none transition-all hover:shadow-sm ${
+                    isSelectMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
+                  } ${
+                    isSelected
+                      ? 'border-yellow-400 bg-yellow-50 ring-1 ring-yellow-300'
+                      : isConcurrent
+                      ? 'border-dashed border-purple-300 bg-purple-50'
+                      : 'border-blue-200 bg-blue-50'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</div>
+                    {(row.band || row.positionBand) && (
+                      <div className={`text-[10px] leading-tight ${isConcurrent ? 'text-purple-500' : 'text-blue-600'}`}>
+                        {row.positionBand ?? row.band}
+                      </div>
+                    )}
+                  </div>
+                  {/* [×] 人を外して空席に */}
+                  {!isSelectMode && (
+                    <button
+                      onClick={e => { e.stopPropagation(); unassignPersonFromPosition(row.rowId) }}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-[10px]"
+                      title="この人を席から外す（空席化）"
+                    >×</button>
+                  )}
+                  {isSelectMode && (
+                    <span className={`ml-1 w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center text-xs font-bold ${
+                      isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
+                    }`}>{isSelected ? '✓' : ''}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+      </div>
+    )
+  }
+
   // ── CollapsedOrgChip ──────────────────────────────────────────
   const CollapsedOrgChip = ({ orgId }: CollapsedOrgChipProps) => {
     const org = organizations.find(o => o.id === orgId)
@@ -619,19 +983,44 @@ export function OrgOperationView() {
           <span className="text-gray-400">▾</span>
           <span className="flex-1">{org.name}</span>
           {!isBefore && (
-            <button
-              onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId); setBulkMoveTargetId(''); setBulkMoveError(null) }}
-              className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
-              title="このボックスのメンバを別組織に一括移動"
-            >
-              ⇄ 移動
-            </button>
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); setAddPositionOrgId(orgId); setAddPositionTitle('') }}
+                className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                title="ポジションを追加（空席）"
+              >＋席</button>
+              <button
+                onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId); setBulkMoveTargetId(''); setBulkMoveError(null) }}
+                className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+                title="このボックスのメンバを別組織に一括移動"
+              >⇄ 移動</button>
+            </>
           )}
-          {renderSortButton(orgId)}
+          {isBefore && renderSortButton(orgId)}
         </div>
         <div className="p-2">
           {renderDepartedCards(orgId)}
-          {renderPersonCards(orgId, org.companyId)}
+          {isBefore ? renderPersonCards(orgId, org.companyId) : renderPositionRows(orgId)}
+          {!isBefore && addPositionOrgId === orgId && (
+            <div className="flex gap-1 mt-1">
+              <input
+                autoFocus
+                value={addPositionTitle}
+                onChange={e => setAddPositionTitle(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && addPositionTitle.trim()) {
+                    createVacantPosition(org.externalCode ?? '', addPositionTitle.trim())
+                    setAddPositionOrgId(null); setAddPositionTitle('')
+                  }
+                  if (e.key === 'Escape') { setAddPositionOrgId(null); setAddPositionTitle('') }
+                }}
+                placeholder="ポジション名（例: 部長）"
+                className="flex-1 text-xs px-2 py-1 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <button onClick={() => { if (addPositionTitle.trim()) createVacantPosition(org.externalCode ?? '', addPositionTitle.trim()); setAddPositionOrgId(null); setAddPositionTitle('') }} className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">追加</button>
+              <button onClick={() => { setAddPositionOrgId(null); setAddPositionTitle('') }} className="text-xs px-1.5 py-1 border border-gray-300 rounded text-gray-500 hover:bg-gray-50">✕</button>
+            </div>
+          )}
           {renderDropZone(orgId)}
           {childOrgIds.length > 0 && <div className="mt-2 space-y-1">{childOrgIds.map(id => <CollapsedOrgChip key={id} orgId={id} />)}</div>}
         </div>
@@ -662,19 +1051,61 @@ export function OrgOperationView() {
         }`}>
           <span className="flex-1">{org.name}</span>
           {!isBefore && (
-            <button
-              onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId); setBulkMoveTargetId(''); setBulkMoveError(null) }}
-              className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
-              title="このボックスのメンバを別組織に一括移動"
-            >
-              ⇄ 移動
-            </button>
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); setAddPositionOrgId(orgId); setAddPositionTitle('') }}
+                className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                title="ポジションを追加（空席）"
+              >
+                ＋席
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId); setBulkMoveTargetId(''); setBulkMoveError(null) }}
+                className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+                title="このボックスのメンバを別組織に一括移動"
+              >
+                ⇄ 移動
+              </button>
+            </>
           )}
-          {renderSortButton(orgId)}
+          {isBefore && renderSortButton(orgId)}
         </div>
         <div className="p-2">
           {renderDepartedCards(orgId)}
-          {renderPersonCards(orgId, org.companyId)}
+          {isBefore
+            ? renderPersonCards(orgId, org.companyId)
+            : renderPositionRows(orgId)
+          }
+          {/* ポジション追加インライン入力 */}
+          {!isBefore && addPositionOrgId === orgId && (
+            <div className="flex gap-1 mt-1">
+              <input
+                autoFocus
+                value={addPositionTitle}
+                onChange={e => setAddPositionTitle(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && addPositionTitle.trim()) {
+                    createVacantPosition(org.externalCode ?? '', addPositionTitle.trim())
+                    setAddPositionOrgId(null); setAddPositionTitle('')
+                  }
+                  if (e.key === 'Escape') { setAddPositionOrgId(null); setAddPositionTitle('') }
+                }}
+                placeholder="ポジション名（例: 部長）"
+                className="flex-1 text-xs px-2 py-1 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <button
+                onClick={() => {
+                  if (addPositionTitle.trim()) createVacantPosition(org.externalCode ?? '', addPositionTitle.trim())
+                  setAddPositionOrgId(null); setAddPositionTitle('')
+                }}
+                className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >追加</button>
+              <button
+                onClick={() => { setAddPositionOrgId(null); setAddPositionTitle('') }}
+                className="text-xs px-1.5 py-1 border border-gray-300 rounded text-gray-500 hover:bg-gray-50"
+              >✕</button>
+            </div>
+          )}
           {renderDropZone(orgId)}
           {childOrgIds.length > 0 && <div className="mt-2 space-y-1">{childOrgIds.map(id => <CollapsedOrgChip key={id} orgId={id} />)}</div>}
         </div>
@@ -985,13 +1416,40 @@ export function OrgOperationView() {
           <OrgBox orgId={focusedOrgId} depth={0} />
         ) : (
           <div className={`border-2 rounded-lg transition-all ${!isBefore && dragOverOrgId === focusedOrgId ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'}`}>
-            <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center">
+            <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center gap-1">
               <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
-              {renderSortButton(focusedOrgId)}
+              {!isBefore && (
+                <button
+                  onClick={() => { setAddPositionOrgId(focusedOrgId); setAddPositionTitle('') }}
+                  className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+                  title="ポジションを追加（空席）"
+                >＋席</button>
+              )}
+              {isBefore && renderSortButton(focusedOrgId)}
             </div>
             <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
               {renderDepartedCards(focusedOrgId)}
-              {renderPersonCards(focusedOrgId, focusedOrg.companyId)}
+              {isBefore ? renderPersonCards(focusedOrgId, focusedOrg.companyId) : renderPositionRows(focusedOrgId)}
+              {!isBefore && addPositionOrgId === focusedOrgId && (
+                <div className="flex gap-1 mt-1">
+                  <input
+                    autoFocus
+                    value={addPositionTitle}
+                    onChange={e => setAddPositionTitle(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && addPositionTitle.trim()) {
+                        createVacantPosition(focusedOrg.externalCode ?? '', addPositionTitle.trim())
+                        setAddPositionOrgId(null); setAddPositionTitle('')
+                      }
+                      if (e.key === 'Escape') { setAddPositionOrgId(null); setAddPositionTitle('') }
+                    }}
+                    placeholder="ポジション名（例: 部長）"
+                    className="flex-1 text-xs px-2 py-1 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  <button onClick={() => { if (addPositionTitle.trim()) createVacantPosition(focusedOrg.externalCode ?? '', addPositionTitle.trim()); setAddPositionOrgId(null); setAddPositionTitle('') }} className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">追加</button>
+                  <button onClick={() => { setAddPositionOrgId(null); setAddPositionTitle('') }} className="text-xs px-1.5 py-1 border border-gray-300 rounded text-gray-500 hover:bg-gray-50">✕</button>
+                </div>
+              )}
               {renderDropZone(focusedOrgId, true)}
             </div>
             <div className="px-3 pb-3 grid grid-cols-2 gap-3">
@@ -1116,55 +1574,185 @@ export function OrgOperationView() {
         )
       })()}
 
-      {/* ── 一括メンバ移動モーダル ──────────────────────────────────── */}
+      {/* ── 一括移動モーダル ─────────────────────────────────────────── */}
       {bulkMoveSourceId && (() => {
-        const sourceOrg   = allAfterOrgsUnscoped.find(o => o.id === bulkMoveSourceId)
-        const sourceCode  = sourceOrg?.externalCode
-        const memberCount = sourceCode ? allocationList.filter(r => r.departmentCode === sourceCode).length : 0
+        const sourceOrg    = allAfterOrgsUnscoped.find(o => o.id === bulkMoveSourceId)
         const moveableOrgs = allAfterOrgsUnscoped.filter(o => o.id !== bulkMoveSourceId)
+        const posEntries   = positionTreeByOrgId.get(bulkMoveSourceId) ?? []
+        const personList   = afterMembersByOrgId.get(bulkMoveSourceId) ?? []
 
-        const handleConfirm = () => {
-          if (!bulkMoveTargetId) { setBulkMoveError('移動先を選択してください'); return }
-          const op     = new BulkMoveToOrgOperation(bulkMoveSourceId, bulkMoveTargetId, `${sourceOrg?.name ?? ''} メンバ一括移動`)
-          const result = appService.executeOperation(op as Parameters<typeof appService.executeOperation>[0])
-          if (!result.ok) { setBulkMoveError(result.errors.map(e => e.message).join('、')); return }
-          setBulkMoveSourceId(null)
+        // 表示リスト（選択モードに応じて切り替え）
+        const listItems: Array<{ rowId: number; label: string; sub?: string }> = bulkMoveMode === 'positions'
+          ? posEntries.map(({ row, person }) => ({
+              rowId: row.rowId,
+              label: row.localJobTitle || row.officialPositionCode || `（${row.positionCode ?? '役職未設定'}）`,
+              sub:   person?.name ?? '（空席）',
+            }))
+          : personList.map(({ row, person }) => ({
+              rowId: row.rowId,
+              label: person.name,
+              sub:   row.localJobTitle || row.officialPositionCode || '（役職未設定）',
+            }))
+
+        const allChecked = listItems.length > 0 && listItems.every(i => bulkMoveSelectedIds.has(i.rowId))
+        const toggleAll  = () => {
+          if (allChecked) setBulkMoveSelectedIds(new Set())
+          else setBulkMoveSelectedIds(new Set(listItems.map(i => i.rowId)))
+        }
+        const toggleItem = (rowId: number) => {
+          setBulkMoveSelectedIds(prev => {
+            const next = new Set(prev)
+            next.has(rowId) ? next.delete(rowId) : next.add(rowId)
+            return next
+          })
         }
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setBulkMoveSourceId(null)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setBulkMoveSourceId(null); setBulkMoveSelectedIds(new Set()) }}>
+            <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              {/* ヘッダー */}
+              <div className="px-5 pt-5 pb-3 border-b border-gray-100">
+                <div className="text-sm font-bold text-gray-800 mb-2">
+                  {sourceOrg?.name} の移動
+                </div>
+                {/* モード切替 */}
+                <div className="flex gap-1 p-0.5 bg-gray-100 rounded-lg w-fit">
+                  {(['positions', 'persons'] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => { setBulkMoveMode(m); setBulkMoveSelectedIds(new Set()); setBulkMoveError(null) }}
+                      className={`px-3 py-1 text-xs font-medium rounded transition-colors ${bulkMoveMode === m ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      {m === 'positions' ? 'ポジションごと移動' : '人だけ移動（ポジション新設）'}
+                    </button>
+                  ))}
+                </div>
+                {bulkMoveMode === 'persons' && (
+                  <p className="text-xs text-gray-400 mt-1.5">移動先に同じ役職名でポジションを新設し、レポートラインを再現します</p>
+                )}
+              </div>
+
+              {/* 選択リスト */}
+              <div className="flex-1 overflow-y-auto px-5 py-3 min-h-0">
+                {listItems.length === 0 ? (
+                  <div className="text-xs text-gray-400 text-center py-4">対象がありません</div>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2 pb-2 border-b border-gray-100 mb-2 cursor-pointer">
+                      <input type="checkbox" checked={allChecked} onChange={toggleAll} className="accent-blue-600" />
+                      <span className="text-xs font-medium text-gray-600">全選択（{listItems.length}件）</span>
+                    </label>
+                    <div className="space-y-1">
+                      {listItems.map(item => (
+                        <label key={item.rowId} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={bulkMoveSelectedIds.has(item.rowId)}
+                            onChange={() => toggleItem(item.rowId)}
+                            className="accent-blue-600 flex-shrink-0"
+                          />
+                          <span className="text-xs font-medium text-gray-800 flex-1 truncate">{item.label}</span>
+                          {item.sub && <span className="text-xs text-gray-400 flex-shrink-0">{item.sub}</span>}
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* フッター */}
+              <div className="px-5 py-4 border-t border-gray-100 flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-500">移動先組織</label>
+                  <OrgCombobox
+                    allOrgs={moveableOrgs}
+                    value={bulkMoveTargetId || null}
+                    onChange={id => { setBulkMoveTargetId(id ?? ''); setBulkMoveError(null) }}
+                    placeholder="組織を選択…"
+                    variant="light"
+                    className="w-full"
+                  />
+                </div>
+                {bulkMoveMode === 'persons' && (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={bulkMoveRetireOriginal} onChange={e => setBulkMoveRetireOriginal(e.target.checked)} className="accent-blue-600" />
+                    <span className="text-xs text-gray-600">元のポジションを廃止する</span>
+                  </label>
+                )}
+                {bulkMoveError && <div className="text-xs text-red-600">{bulkMoveError}</div>}
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => { setBulkMoveSourceId(null); setBulkMoveSelectedIds(new Set()) }}
+                    className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={handleBulkMoveConfirm}
+                    disabled={!bulkMoveTargetId || bulkMoveSelectedIds.size === 0}
+                    className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    移動する（{bulkMoveSelectedIds.size}件）
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── 人移動ダイアログ（人ドラッグ → 組織エリアドロップ） ─────── */}
+      {personMoveDialog && (() => {
+        const person  = persons.find(p => p.id === personMoveDialog.personId)
+        const fromRow = personMoveDialog.fromRowId
+          ? allocationList.find(r => r.rowId === personMoveDialog.fromRowId)
+          : (allocationList.find(r => r.userId === person?.sfPersonId && !r.concurrentType)
+            ?? allocationList.find(r => r.userId === person?.sfPersonId))
+        const toOrg   = allAfterOrgsUnscoped.find(o => o.id === personMoveDialog.toOrgId)
+        const posTitle = fromRow?.localJobTitle || fromRow?.officialPositionCode || ''
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setPersonMoveDialog(null)}>
             <div className="bg-white rounded-xl shadow-2xl w-96 p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
-              <div className="text-sm font-bold text-gray-800">メンバを別組織に一括移動</div>
-              <div className="text-xs text-gray-600">
-                <span className="font-semibold text-gray-800">{sourceOrg?.name}</span> の
-                <span className="font-semibold text-gray-800"> {memberCount}名</span> を移動先組織に一括移動します。
-                <br />レポートラインは変更されません。
+              <div className="text-sm font-bold text-gray-800">別組織に移動</div>
+              <div className="text-xs text-gray-600 leading-relaxed">
+                <span className="font-semibold text-gray-800">{person?.name ?? '—'}</span> を{' '}
+                <span className="font-semibold text-gray-800">{toOrg?.name ?? '—'}</span> に移動します。
+                <br />
+                移動先に新規ポジションを作成し、元のポジション属性を引き継ぎます。
+                {posTitle && (
+                  <>
+                    <br />
+                    <span className="text-gray-400">ポジション名: </span>
+                    <span className="text-gray-700">{posTitle}</span>
+                  </>
+                )}
+                <br />
+                <span className="text-gray-400">レポートラインは移動先組織の最上位ポジションをデフォルトとします。</span>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">移動先組織</label>
-                <OrgCombobox
-                  allOrgs={moveableOrgs}
-                  value={bulkMoveTargetId || null}
-                  onChange={id => { setBulkMoveTargetId(id ?? ''); setBulkMoveError(null) }}
-                  placeholder="組織を選択…"
-                  variant="light"
-                  className="w-full"
-                />
-              </div>
-              {bulkMoveError && <div className="text-xs text-red-600">{bulkMoveError}</div>}
+              {fromRow?.positionCode && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pmRetireOriginal}
+                    onChange={e => setPmRetireOriginal(e.target.checked)}
+                    className="accent-blue-600"
+                  />
+                  <span className="text-xs text-gray-600">元のポジションを廃止する</span>
+                </label>
+              )}
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => setBulkMoveSourceId(null)}
+                  onClick={() => setPersonMoveDialog(null)}
                   className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
                 >
                   キャンセル
                 </button>
                 <button
-                  onClick={handleConfirm}
-                  disabled={!bulkMoveTargetId}
-                  className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={handlePersonMoveConfirm}
+                  className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700"
                 >
-                  移動する（{memberCount}名）
+                  移動する
                 </button>
               </div>
             </div>

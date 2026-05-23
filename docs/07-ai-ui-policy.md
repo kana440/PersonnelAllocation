@@ -76,12 +76,34 @@ AIは「発見」「説明」「条件付き一括処理」を担当する。UI�
 
 ---
 
-## 実装優先順位
+## 実装状況
 
-1. **Operationモデルの充実** — 何が変更可能か・リスト値は何かをコードで表現する。UIにもAIにも効く土台
-2. **自部門スコープUI** — 担当部門フィルタの追加
-3. **AIへのルール注入** — フィールド定義・制約をシステムプロンプトかツールで渡す
-4. **AIによる候補提案** — 昇格候補の提示など「発見」系機能
+| 優先事項 | 状態 | 備考 |
+|---|---|---|
+| Operation モデルの充実（FIELD_METADATA・FieldBinding） | ✅ 完了 | `allocationRow.ts` |
+| 自部門スコープ UI（scopeOrgId / スコープ別エクスポート） | ✅ 完了 | `useStore.ts` |
+| AI チャット UI（シナリオ 8種） | ✅ 完了 | `scenarios/` |
+| AI への Operation 注入（agentRunner + Tool Use） | ✅ 実装済み | Claude API 接続待ち |
+| AI によるポジション操作（assign / unassign 等） | 🚧 **未対応** | `aiTools` に未公開 |
+
+## AI-Position 対応ギャップ
+
+ポジション概念（空席・アサイン・解除）が導入されたが、**AI は現在ポジション操作を実行できない**。
+
+```
+現状:
+  UI  → useStore → HRApplicationService.createVacantPosition()  ← AI 不可
+  UI  → useStore → HRApplicationService.assignPersonToVacantPosition()  ← AI 不可
+
+あるべき姿（Step 1 完了後）:
+  AI  → aiTools.createVacantPosition()  → HRApplicationService
+  AI  → aiTools.assignToPosition()      → HRApplicationService
+  UI  → useStore                        → HRApplicationService  （変更なし）
+```
+
+この対称性の欠如により「〇〇部門に空席を作って」「△△さんをその席に配属して」という
+自然言語操作が AI に依頼できない。
+→ [next-steps](./06-next-steps.md) Step 1 で対応予定。
 
 ---
 

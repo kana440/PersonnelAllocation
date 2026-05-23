@@ -12,6 +12,15 @@ const EXPORT_FIELDS     = ALLOCATION_LIST_FIELDS.filter(f => f.key !== 'groupEmp
 
 const HEADER_SET = new Set(ALLOCATION_LIST_FIELDS.map(f => (f.header ?? f.key).trim()))
 
+function exportValue(row: AllocationRow, key: string): unknown {
+  const val = (row as Record<string, unknown>)[key]
+  if (key === 'positionCode') {
+    const s = typeof val === 'string' ? val : ''
+    return s.startsWith('_pos_') ? undefined : val
+  }
+  return val
+}
+
 function findHeaderRowIndex(raw: unknown[][]): number {
   let bestIdx = -1, bestScore = 1
   for (let i = 0; i < Math.min(10, raw.length); i++) {
@@ -76,7 +85,7 @@ async function buildWorkbook(
           EXPORT_FIELDS.forEach(f => {
             const col = headerTextToCol.get(f.header ?? f.key)
             if (col === undefined) return
-            const val = (row as Record<string, unknown>)[f.key]
+            const val = exportValue(row, f.key)
             if (val === undefined || val === null || val === '') return
             const style: CellStyle = origSheet[XLSX.utils.encode_cell({ r, c: col })]?.s ?? styleTemplate.get(col)
             ws[XLSX.utils.encode_cell({ r, c: col })] = { v: val, t: 's', ...(style !== undefined ? { s: style } : {}) }
@@ -118,7 +127,7 @@ function buildFreshSheet(rows: AllocationRow[]): XLSX.WorkSheet {
   const ws = XLSX.utils.aoa_to_sheet([
     ['本人情報 / 変更区分', ...fill(metaCount), 'After（発令後）', ...fill(afterCount), 'Before（発令前）', ...fill(prevCount), ...(auditCount > 0 ? ['除外', ...fill(auditCount)] : [])],
     EXPORT_FIELDS.map(f => f.header ?? f.key),
-    ...rows.map(row => EXPORT_FIELDS.map(f => (row as Record<string, unknown>)[f.key] ?? '')),
+    ...rows.map(row => EXPORT_FIELDS.map(f => exportValue(row, f.key) ?? '')),
   ])
   ws['!cols'] = EXPORT_FIELDS.map(f =>
     ['no'].includes(f.key) ? { wch: 4 } :

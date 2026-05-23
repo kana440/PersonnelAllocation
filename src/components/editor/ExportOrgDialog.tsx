@@ -26,6 +26,23 @@ export function ExportOrgDialog({ afterOrgs, rows, effectiveDate, scopeOrg, onCl
   const allOrgIds = useMemo(() => afterOrgs.map(o => o.id), [afterOrgs])
   const [selectedOrgIds, setSelectedOrgIds] = useState<Set<string>>(() => new Set(allOrgIds))
 
+  // Expand/collapse state — effective roots start expanded, children collapsed
+  const viewOrgIds = useMemo(() => new Set(afterOrgs.map(o => o.id)), [afterOrgs])
+  const effectiveRoots = useMemo(
+    () => afterOrgs.filter(o => !o.parentId || !viewOrgIds.has(o.parentId)),
+    [afterOrgs, viewOrgIds]
+  )
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
+    () => new Set(afterOrgs.filter(o => !o.parentId || !viewOrgIds.has(o.parentId)).map(o => o.id))
+  )
+  const toggleExpand = (orgId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev)
+      next.has(orgId) ? next.delete(orgId) : next.add(orgId)
+      return next
+    })
+  }
+
   // org externalCode (or id) → member count from rows
   const memberCountByCode = useMemo(() => {
     const map = new Map<string, number>()
@@ -76,45 +93,50 @@ export function ExportOrgDialog({ afterOrgs, rows, effectiveDate, scopeOrg, onCl
     onClose()
   }
 
-  // Find effective roots (orgs whose parent is not in scope)
-  const viewOrgIds = useMemo(() => new Set(afterOrgs.map(o => o.id)), [afterOrgs])
-  const effectiveRoots = useMemo(
-    () => afterOrgs.filter(o => !o.parentId || !viewOrgIds.has(o.parentId)),
-    [afterOrgs, viewOrgIds]
-  )
-
   const renderOrgNode = (org: Organization, depth: number): React.ReactNode => {
-    const children    = afterOrgs.filter(c => c.parentId === org.id)
-    const isSelected  = selectedOrgIds.has(org.id)
-    const directCount = memberCountByCode.get(org.externalCode ?? org.id) ?? 0
+    const children      = afterOrgs.filter(c => c.parentId === org.id)
+    const hasChildren   = children.length > 0
+    const isExpanded    = expandedNodes.has(org.id)
+    const isSelected    = selectedOrgIds.has(org.id)
+    const directCount   = memberCountByCode.get(org.externalCode ?? org.id) ?? 0
 
-    // Indeterminate: some but not all descendants selected
-    const descIds  = getDescendantIds(org.id, afterOrgs)
-    const anyDescSelected  = descIds.some(d => selectedOrgIds.has(d))
-    const allDescSelected  = descIds.every(d => selectedOrgIds.has(d))
-    const isIndeterminate  = !isSelected && anyDescSelected
+    // Three-state checkbox: fully checked / indeterminate / unchecked
+    // (computed from all descendants regardless of expand/collapse state)
+    const descIds        = getDescendantIds(org.id, afterOrgs)
+    const anyDescSel     = descIds.some(d => selectedOrgIds.has(d))
+    const allDescSel     = descIds.length > 0 && descIds.every(d => selectedOrgIds.has(d))
+    const isFullyChecked = isSelected || allDescSel
+    const isIndeterminate = !isFullyChecked && anyDescSel
 
     return (
       <div key={org.id}>
         <div
-          className={`flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}
-          style={{ paddingLeft: `${8 + depth * 16}px` }}
+          className={`flex items-center gap-1 py-1 rounded hover:bg-gray-50 transition-colors ${isFullyChecked ? 'bg-blue-50/50' : ''}`}
+          style={{ paddingLeft: `${8 + depth * 16}px`, paddingRight: '8px' }}
         >
+          {/* Expand/collapse toggle */}
+          <button
+            onClick={() => hasChildren && toggleExpand(org.id)}
+            className={`flex-shrink-0 w-4 h-4 flex items-center justify-center text-gray-400 text-[10px] rounded transition-colors ${hasChildren ? 'hover:text-gray-600 hover:bg-gray-200 cursor-pointer' : 'cursor-default opacity-0'}`}
+            tabIndex={-1}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
           <input
             type="checkbox"
-            checked={isSelected || (isIndeterminate && allDescSelected)}
+            checked={isFullyChecked}
             ref={el => { if (el) el.indeterminate = isIndeterminate }}
             onChange={() => toggleOrg(org.id)}
             className="flex-shrink-0 w-3.5 h-3.5 accent-blue-600"
           />
-          <span className={`text-xs flex-1 truncate ${isSelected ? 'text-gray-800 font-medium' : 'text-gray-600'}`}>
+          <span className={`text-xs flex-1 truncate ml-1 ${isFullyChecked ? 'text-gray-800 font-medium' : 'text-gray-600'}`}>
             {org.name}
           </span>
           {directCount > 0 && (
-            <span className="text-xs text-gray-400 flex-shrink-0">{directCount}名</span>
+            <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{directCount}名</span>
           )}
         </div>
-        {children.map(c => renderOrgNode(c, depth + 1))}
+        {hasChildren && isExpanded && children.map(c => renderOrgNode(c, depth + 1))}
       </div>
     )
   }
@@ -137,13 +159,19 @@ export function ExportOrgDialog({ afterOrgs, rows, effectiveDate, scopeOrg, onCl
           )}
         </div>
 
-        {/* Toggle all + count */}
+        {/* Toggle all + expand all + count */}
         <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-3 bg-gray-50">
-          <button
-            onClick={toggleAll}
-            className="text-xs text-blue-600 hover:underline"
-          >
+          <button onClick={toggleAll} className="text-xs text-blue-600 hover:underline">
             {allSelected ? 'すべて解除' : 'すべて選択'}
+          </button>
+          <span className="text-gray-300 text-xs">|</span>
+          <button
+            onClick={() => setExpandedNodes(
+              expandedNodes.size === allOrgIds.length ? new Set(effectiveRoots.map(o => o.id)) : new Set(allOrgIds)
+            )}
+            className="text-xs text-gray-500 hover:underline"
+          >
+            {expandedNodes.size === allOrgIds.length ? '折りたたむ' : 'すべて展開'}
           </button>
           <span className="text-gray-300 text-xs">|</span>
           <span className="text-xs text-gray-500">

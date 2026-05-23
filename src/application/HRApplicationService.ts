@@ -2,7 +2,7 @@ import type { Organization } from '../domain/schemas'
 import type { AllCodeLists } from '../domain/codeLists/aggregate'
 import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
 import type { AllocationRow } from '../domain/allocationRow'
-import { nextRowId } from '../domain/allocationRow'
+import { nextRowId, afterKeysByBinding } from '../domain/allocationRow'
 import type { AfterValues } from '../domain/allocationRow'
 import type { IDomainOperation, ValidationResult } from '../domain/operation/types'
 import { DirectEditOperation }  from '../domain/operation/handlers/directEdit'
@@ -55,6 +55,7 @@ export class HRApplicationService {
 
   private patterns:     IOperationPattern[]               = []
   private patternCache: Map<string, PatternDetectionResult> = new Map()
+  private cachedPersons: Person[] | null = null   // emit() ごとに無効化
   private listeners = new Set<() => void>()
 
   registerPatterns(patterns: IOperationPattern[]): void {
@@ -72,6 +73,7 @@ export class HRApplicationService {
     return () => this.listeners.delete(fn)
   }
   private emit(): void {
+    this.cachedPersons = null   // allocationList が変わったのでキャッシュ破棄
     this.rebuildPatternCache()
     this.listeners.forEach(fn => fn())
   }
@@ -142,12 +144,13 @@ export class HRApplicationService {
 
   // ── スナップショット取得 ───────────────────────────────────────
   getSnapshot(): DomainSnapshot {
+    if (!this.cachedPersons) this.cachedPersons = derivePersons(this.allocationList)
     return {
       allocationList:      this.allocationList,
       beforeOrganizations: this.beforeOrganizations,
       afterOrganizations:  this.afterOrganizations,
       codeLists:           this.codeLists,
-      persons:             derivePersons(this.allocationList),
+      persons:             this.cachedPersons,
       canUndo:             this.past.length > 0,
       canRedo:             this.future.length > 0,
       patternCache:        this.patternCache,
@@ -252,6 +255,149 @@ export class HRApplicationService {
 
     this.pushPast({ rowDiffs: [{ rowId: newRow.rowId, before: null, after: newRow }] })
     this.allocationList = [...this.allocationList, newRow]
+    this.emit()
+  }
+
+  // ── ポジション操作 ────────────────────────────────────────────
+
+  // 空席ポジションを新規作成（内部採番positionCode付き）
+  createVacantPosition(departmentCode: string, localJobTitle: string): void {
+    const rowId = nextRowId(this.allocationList)
+    const newRow: AllocationRow = {
+      rowId,
+      departmentCode,
+      localJobTitle,
+      positionCode: `_pos_${rowId}`,  // 内部採番ID（Excel出力時はblank）
+    } as AllocationRow
+    this.pushPast({ rowDiffs: [{ rowId: newRow.rowId, before: null, after: newRow }] })
+    this.allocationList = [...this.allocationList, newRow]
+    this.emit()
+  }
+
+  removePosition(rowId: number): void {
+    const row = this.allocationList.find(r => r.rowId === rowId)
+    if (!row) return
+
+    const before = this.allocationList
+
+    if (row.userId) {
+      // 在席中: 人を未アサイン状態に残してからポジション行を削除
+      // positionClears は 'both'(departmentCode) を含まないので組織はそのまま引き継ぐ
+      const positionClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
+      const allocClears    = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
+      const unassignedRow: AllocationRow = {
+        ...row,
+        rowId: nextRowId(this.allocationList),
+        ...positionClears,
+        ...allocClears,
+      }
+      this.allocationList = [
+        ...this.allocationList.filter(r => r.rowId !== rowId),
+        unassignedRow,
+      ]
+    } else {
+      // 空席: そのまま削除
+      this.allocationList = this.allocationList.filter(r => r.rowId !== rowId)
+    }
+
+    this.pushPast(this.computePatch(before, this.allocationList, this.afterOrganizations))
+    this.emit()
+  }
+
+  // 人をポジションから外す（ポジション↔人の紐付けを解除）
+  // 1行 → 空席ポジション行（元の行を更新）+ 未アサインメンバー行（新規追加）
+  unassignPersonFromPosition(occupiedRowId: number): void {
+    const row = this.allocationList.find(r => r.rowId === occupiedRowId)
+    if (!row || !row.userId) return
+
+    const personClears   = Object.fromEntries(afterKeysByBinding('person').map(k => [k, undefined]))
+    const positionClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
+    const allocClears    = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
+
+    // 空席ポジション行: position+both フィールドはそのまま、person+allocation フィールドをクリア
+    const vacantRow: AllocationRow = { ...row, userId: undefined, ...personClears, ...allocClears }
+
+    // 未アサインメンバー行（新規）: person+both フィールドはそのまま、position+allocation フィールドをクリア
+    // departmentCode は 'both' なので positionClears には含まれず、そのまま引き継ぐ
+    const unassignedRow: AllocationRow = {
+      ...row,
+      rowId: nextRowId([...this.allocationList, vacantRow]),
+      ...positionClears,
+      ...allocClears,
+    }
+
+    // 同組織に同じ人の別行が既にあれば未アサイン行は不要
+    const hasOtherRowInOrg = this.allocationList.some(
+      r => r.rowId !== occupiedRowId && r.userId === row.userId && r.departmentCode === row.departmentCode
+    )
+
+    const before = this.allocationList
+    const updated = this.allocationList.map(r => r.rowId === occupiedRowId ? vacantRow : r)
+    this.allocationList = hasOtherRowInOrg ? updated : [...updated, unassignedRow]
+
+    this.pushPast(this.computePatch(before, this.allocationList, this.afterOrganizations))
+    this.emit()
+  }
+
+  // 空席ポジションに人を配属（1回のUndo）
+  // Case A: 人が未アサイン行を持つ → 空席行に配属 + 未アサイン行を削除
+  // Case B: 人が別の在席行を持つ → 空席行に配属 + 元の在席行を空席化
+  assignPersonToVacantPosition(vacantRowId: number, personSfId: string): void {
+    const vacantRow = this.allocationList.find(r => r.rowId === vacantRowId)
+    if (!vacantRow || vacantRow.userId) return
+
+    const personRow = this.allocationList.find(r => r.userId === personSfId && !r.concurrentType)
+                   ?? this.allocationList.find(r => r.userId === personSfId)
+
+    const allocClears   = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
+    const personClears  = Object.fromEntries(afterKeysByBinding('person').map(k => [k, undefined]))
+    const before = this.allocationList
+
+    if (!personRow) {
+      // 人の行が存在しない → 空席行に userId だけセット
+      this.allocationList = this.allocationList.map(r =>
+        r.rowId === vacantRowId ? { ...r, userId: personSfId } : r
+      )
+    } else {
+      // filledRow: personRow を起点にして position/both フィールドを vacantRow で上書き
+      // これにより lastName/firstName/groupEmployeeId 等の名前情報が確実に引き継がれる
+      const positionAndBothFields = Object.fromEntries(
+        [...afterKeysByBinding('position'), ...afterKeysByBinding('both')]
+          .map(k => [k, vacantRow[k as keyof AllocationRow]])
+      )
+      const filledRow: AllocationRow = {
+        ...personRow,             // 人の全データ（名前・band等）を起点にする
+        rowId:    vacantRow.rowId, // ポジションのスロット（rowId）を継承
+        userId:   personSfId,
+        ...positionAndBothFields, // ポジションの組織・役職・コード等で上書き
+        ...allocClears,           // 新しい紐付けなので allocation はリセット
+      }
+
+      const isUnassigned = !personRow.positionCode  // 未アサイン行かどうか
+
+      if (isUnassigned) {
+        // Case A: 未アサイン行を削除し、空席行を配属行に置き換え
+        this.allocationList = [
+          ...this.allocationList.filter(r => r.rowId !== vacantRowId && r.rowId !== personRow.rowId),
+          filledRow,
+        ]
+      } else {
+        // Case B: 元の在席行を空席化し、空席行を配属行に置き換え
+        const vacatedPersonRow: AllocationRow = {
+          ...personRow,
+          userId: undefined,
+          ...personClears,
+          ...allocClears,
+        }
+        this.allocationList = this.allocationList.map(r => {
+          if (r.rowId === vacantRowId)     return filledRow
+          if (r.rowId === personRow.rowId) return vacatedPersonRow
+          return r
+        })
+      }
+    }
+
+    this.pushPast(this.computePatch(before, this.allocationList, this.afterOrganizations))
     this.emit()
   }
 

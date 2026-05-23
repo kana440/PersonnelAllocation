@@ -1,194 +1,120 @@
-# 次のステップ — 簡易実装と検証・判断ポイント
+# 次のステップ
 
 方針: **小さく作って動かして判断する**。
-アーキテクチャは仮説。実装してみてから簡素化・統合を判断する。
 
 ---
 
-## Step 1: `saveRow` エラー表示（小・1〜2時間）
+## 現在の実装状況サマリー
 
-**やること**:
-`RowEditorPanel` で `saveRow()` の戻り値を受け取り、エラーをインラインで表示する。
-
-```typescript
-// RowEditorPanel.tsx
-const result = saveRow(row.rowId, buffer as AfterValues)
-if (!result.ok) {
-  setSaveErrors(result.errors)  // 新しい state
-}
-```
-
-**判断ポイント**:
-`saveRow` は `DirectEditOperation.validate()` → `validateRow()` を呼ぶ。
-しかし実際に error が返るケースはほぼない（UI の disabled と入力補助で先に防ぐため）。
-
-→ **エラーが一度も出ないなら `validateRow()` の `error` レベルが厳しすぎるか、UI の disabled が重複している。**
-どちらかを削れる可能性がある。
-
----
-
-## Step 2: コードリスト値バリデーション追加（小・半日）
-
-**やること**:
-`validateRow()` の `_codeLists` を実際に使って、
-「組織コードがコードリストに存在するか」「等級コードが有効か」等を追加する。
-
-```typescript
-// validateRow.ts
-export function validateRow(row, orgs, codeLists): ValidationIssue[] {
-  return [
-    ...validateDepartmentCode(row, orgs),
-    ...validateBandCode(row, codeLists),       // ← 追加
-    ...validateEmploymentType(row, codeLists), // ← 追加
-    ...
-  ]
-}
-```
-
-**判断ポイント**:
-コードリストはユーザーが Excel からインポートしたものに依存する。
-インポートが不完全だとほぼ全行でエラーが出る可能性がある。
-
-→ **全部 `warning` にして `error` は「明らかに壊れている場合だけ」に絞るのが現実的かも確認する。**
-
----
-
-## Step 3: 操作ハンドラー 2〜3種類（中・2〜3日）
-
-**やること**:
-`MoveToOrg` と `Promote` を実装してみる。UIから呼べるようにする。
-
-```typescript
-// handlers/moveToOrg.ts
-export class MoveToOrgOperation implements IDomainOperation {
-  validate(ctx): ValidationResult { ... }
-  apply(ctx): OperationResult { ... }
-}
-```
-
-`useStore.ts` に `executeOperation` を公開:
-```typescript
-executeOperation: (op: IDomainOperation) => ValidationResult
-```
-
-**判断ポイント — アーキテクチャ簡素化の判断をここでする**:
-
-実装してみると `validate()` が「対象行が存在するか」「組織コードが有効か」だけになる操作が多い。
-`validateRow()` と内容が重複するなら:
-
-| 判断 | 条件 | 対応 |
-|---|---|---|
-| **分離を維持** | `validate()` に「この操作固有の前提チェック」が明確にある | 現状維持 |
-| **統合を検討** | `validate()` が `validateRow(apply結果)` と同等になる | `IDomainOperation` から `validate()` を除いて `apply()` 後に `validateRow()` を一括でかける設計に変更 |
-
-`validate()` を除いた場合のシンプルな代替:
-
-```typescript
-// 簡素版: apply してから validateRow にかける
-const applied = op.apply(ctx)
-const issues  = applied.updatedList.flatMap(r => validateRow(r, orgs, codeLists))
-const errors  = issues.filter(i => i.level === 'error')
-if (errors.length > 0) return { ok: false, errors }
-// OKなら checkpoint → state 更新
-```
-
-→ **操作ハンドラーを 2〜3個書いた後、`validate()` が独自ロジックを持つかどうかで判断する。**
-
----
-
-## Step 4: AI API 接続（中・2〜3日）
-
-**やること**:
-`AIChatDrawer` を Claude API（Tool Use）に実際に繋ぐ。
-
-### 2つのアプローチを検討
-
-**アプローチ A: Tool Use（構造的）**
-
-```
-AIChatDrawer → Claude API (tool_use) → aiTools.findPersons / executeOperation
-```
-
-- AI が操作を確実に実行できる
-- ハンドラー（Step 3）が整っていないと提案できる操作が限られる
-- 実装量: 多（ツール定義 JSON + ループ処理）
-
-**アプローチ B: コンテキスト注入（シンプル）**
-
-```
-AIChatDrawer → Claude API (通常の chat)
-  system prompt に現在の状態サマリーを注入
-  → AI は「田中さんを営業部に異動」等をテキストで提案
-  → ユーザーが確認して UI で操作する
-```
-
-- 実装がシンプル（ほぼ fetch + メッセージ管理のみ）
-- AI が直接状態を変更しないので安全
-- 操作ハンドラーが揃っていなくても使える
-
-**判断ポイント**:
-
-→ **まず B（コンテキスト注入）で動かして価値を確認してから A（Tool Use）に移行するかを決める。**
-「AI が操作を提案するだけで十分」ならBで完結する可能性もある。
-
----
-
-## Pattern Detection についての判断
-
-**現状**: `IOperationPattern`・`matchAllPatterns()`・`patternCache` が実装済みだが、
-パターン実装が 0 個・登録も呼ばれていない。完全に死んでいる。
-
-**選択肢**:
-
-| 選択肢 | 判断基準 |
+| 領域 | 状態 |
 |---|---|
-| **削除する** | AI が Tool Use で操作を判断するなら、パターン判定は AI に任せればよい（重複） |
-| **維持してStep 4後に判断** | AI なしで「Excel を読んだ時に操作種別を自動推定したい」なら必要 |
-
-→ **AI 接続（Step 4）が完成した後、パターン判定がまだ必要かを判断する。**
-不要なら `patternCache`・`registerPatterns()`・`operationPatterns/` を丸ごと削除する。
-
----
-
-## SuccessFactors への判断
-
-`IAllocationDataSource` / `IAllocationExporter` は定義したが現時点では使われていない。
-
-→ **SF が具体的な要件になってから実装する。今は ports/ のインターフェース定義だけで十分。**
-必要になった時にアダプターを追加するだけ。
+| Excel 基盤（import / export / Undo / Redo） | ✅ 完了 |
+| ポジション・人ドメインモデル（FIELD_METADATA） | ✅ 完了 |
+| ポジション操作（create / assign / unassign / remove） | ✅ 完了 |
+| 組織スコープ（scopeOrgId / スコープ別エクスポート） | ✅ 完了 |
+| AI チャット UI（シナリオ 8種 + agentRunner） | ✅ 完了 |
+| positionCode `_pos_` → Excel 出力 blank | ✅ 完了 |
 
 ---
 
-## アーキテクチャ全体の簡素化候補（Step 3 後に判断）
+## Step 1: aiTools にポジション操作を追加（中・半日）
 
-Step 3 まで終わった時点でこれらを判断する:
+**背景**: 現在 AI はポジション操作（空席作成・アサイン・解除）を呼べない。
+`createVacantPosition` 等は `HRApplicationService` の直接メソッドとして実装されており、
+`aiTools` に公開されていない。
 
+**やること**:
+
+```typescript
+// src/application/aiTools.ts に追加
+function findVacantPositions(query: { orgCode?: string }): VacantPositionResult[] { ... }
+function createVacantPosition(departmentCode: string, localJobTitle: string): void { ... }
+function assignToPosition(vacantRowId: number, personSfId: string): void { ... }
+function unassignFromPosition(rowId: number): void { ... }
+function removePosition(rowId: number): void { ... }
 ```
-削除候補:
-  src/domain/operationGroups/   ← barrel だけになっている。import 元を直接参照に変える
-  patternCache / registerPatterns  ← AI で代替できるなら削除
-  IDomainOperation.validate()  ← apply後にvalidateRowで代替できるなら削除
 
-統合候補:
-  IAllocationDataSource        ← SF が遠ければ ports/ から一時的に除去
-  createAITools(service)       ← テストを書かないなら singleton で十分
-```
+`agentRunner` のツール定義（JSON Schema）にも追加する。
+
+**影響**: AI が「〇〇部門に空席を作って」「△△さんをその席に配属して」を実行できるようになる。
+
+---
+
+## Step 2: ポジション操作を Undo 対象にする（中・半日）
+
+**背景**: `createVacantPosition` / `removePosition` / `assignPersonToVacantPosition` / `unassignPersonFromPosition`
+は `HRApplicationService` の直接メソッドで実装されており、`checkpoint()` を呼んでいないため Undo できない。
+
+**選択肢 A（推奨）**: 各操作を `IDomainOperation` として実装し、`executeOperation()` 経由に統一する。
+- `CreateVacantPositionOperation`, `AssignPersonOperation`, `UnassignPersonOperation`, `RemovePositionOperation` を追加
+- `HRApplicationService` の直接メソッドはこれらを呼ぶ薄いラッパーに変更
+
+**選択肢 B**: 直接メソッドに `checkpoint()` を追加するだけ。
+- 実装コストが低いが、IDomainOperation への統一という設計方針から外れる
+
+**判断ポイント**: AI から呼ぶ必要があるなら A（Tool Use で操作を指定しやすい）。
+UI のみなら B で十分。
+
+---
+
+## Step 3: Claude API 本番接続（中・1日）
+
+**背景**: `agentRunner.ts` は Claude API Tool Use ループとして実装済みだが、
+API キー・エンドポイント設定が未整備で `mockChatService` で代替されている。
+
+**やること**:
+- API キー設定 UI（または環境変数）を追加
+- `chatServiceFactory.ts` で本番/モックを切り替えるロジックを整備
+- agentRunner のツール定義に Step 1 で追加したポジション操作を登録
+
+---
+
+## Step 4: 削除済みパネル UI（大・1〜2日）
+
+**背景**: ドメインモデル上、削除済みのポジション・人はソフトデリート（削除フラグ）として保持される。
+UI からは消えるが、「削除済みパネル」から復活させたい。
+
+**やること**:
+- 削除済み行を収集する projection 関数を追加
+- 削除済みポジションを有効な空席に再配属できる UI
+- 削除済み人物（prevUserId あり）を有効なポジションに再配属できる UI
+
+---
+
+## Step 5: テスト環境セットアップ（小・2〜3時間）
+
+**背景**: 純粋関数が多くテスト容易な設計だが、テストが1本も書かれていない。
+
+**やること**:
+- Vitest + @testing-library/react のセットアップ
+- `rowDiff`, `copyBeforeToAfter`, `FIELD_METADATA` の単体テスト
+- `DirectEditOperation.validate()` / `apply()` のテスト
+- `derivePersons` のテスト
+
+---
+
+## Pattern Detection の判断
+
+`IOperationPattern` / `operationPatterns/` はインターフェースのみ定義されており実装ゼロ。
+
+→ AI（agentRunner）が Tool Use でパターンを判断できるなら**削除を検討**。
+AI なしで Excel 読み込み時に操作種別を自動推定したい場合は必要。
+Step 3（API 接続）完了後に判断する。
 
 ---
 
 ## 優先順位まとめ
 
 ```
-今すぐ着手:
-  Step 1: saveRow エラー表示         → 小。すぐわかる
-  Step 2: コードリスト値バリデーション → 小。実用性が上がる
+今すぐ着手可能:
+  Step 1: aiTools にポジション操作を追加    → AI-UI 対称性の確保
+  Step 5: テスト環境セットアップ             → 品質基盤
 
 次のスプリント:
-  Step 3: MoveToOrg + Promote ハンドラー → アーキテクチャ判断の材料になる
-  Step 4: AI 接続（まず B 方式）         → 価値検証
+  Step 2: ポジション操作を Undo 対象に       → ユーザー体験の完成
+  Step 3: Claude API 本番接続               → AI 機能の本番化
 
-Step 3+4 完了後:
-  → Pattern Detection の要否を判断
-  → IDomainOperation.validate() の要否を判断
-  → operationGroups barrel の削除
+その後:
+  Step 4: 削除済みパネル UI
+  SuccessFactors 連携（Phase 4 / 5）
 ```

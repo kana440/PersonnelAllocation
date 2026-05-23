@@ -6,6 +6,15 @@ import { getLastBuffer, getLastFileName } from '../state'
 const EXPORT_SHEET_NAME = '要員配置リスト'
 const EXPORT_FIELDS     = ALLOCATION_LIST_FIELDS.filter(f => f.key !== 'groupEmployeeId')
 
+function exportValue(row: AllocationRow, key: string): unknown {
+  const val = (row as Record<string, unknown>)[key]
+  if (key === 'positionCode') {
+    const s = typeof val === 'string' ? val : ''
+    return s.startsWith('_pos_') ? undefined : val
+  }
+  return val
+}
+
 function findHeaderRowIndex(ws: ExcelJS.Worksheet): number {
   const headerSet = new Set(ALLOCATION_LIST_FIELDS.map(f => (f.header ?? f.key).trim()))
   let bestIdx = -1, bestScore = 1
@@ -53,7 +62,7 @@ async function buildWorkbook(
           EXPORT_FIELDS.forEach(f => {
             const col = headerTextToCol.get(f.header ?? f.key)
             if (!col) return
-            const val = (row as Record<string, unknown>)[f.key]
+            const val = exportValue(row, f.key)
             excelRow.getCell(col).value = (val !== undefined && val !== null && val !== '') ? String(val) : null
           })
           excelRow.commit()
@@ -83,7 +92,7 @@ function addFreshSheet(wb: ExcelJS.Workbook, rows: AllocationRow[]): void {
   const ws = wb.addWorksheet(EXPORT_SHEET_NAME)
   ws.addRow(['本人情報 / 変更区分', ...fill(metaCount), 'After（発令後）', ...fill(afterCount), 'Before（発令前）', ...fill(prevCount), ...(auditCount > 0 ? ['除外', ...fill(auditCount)] : [])])
   ws.addRow(EXPORT_FIELDS.map(f => f.header ?? f.key))
-  rows.forEach(row => ws.addRow(EXPORT_FIELDS.map(f => (row as Record<string, unknown>)[f.key] ?? '')))
+  rows.forEach(row => ws.addRow(EXPORT_FIELDS.map(f => exportValue(row, f.key) ?? '')))
   EXPORT_FIELDS.forEach((f, i) => {
     const col = ws.getColumn(i + 1)
     col.width = ['no'].includes(f.key) ? 4 : ['userId', 'employeeNumber'].includes(f.key) ? 12 : ['lastName', 'firstName'].includes(f.key) ? 8 : ['memo', 'concurrentReason', 'prevConcurrentReason'].includes(f.key) ? 20 : 14
