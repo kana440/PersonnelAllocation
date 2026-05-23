@@ -1,7 +1,8 @@
 // 要員配置リストシートを unknown[][] から解析する純粋関数（ライブラリ非依存）
 
-import { ALLOCATION_LIST_FIELDS } from '../../../domain/csvImport/allocationList/labels'
-import type { AllocationList }    from '../../../domain/csvImport/allocationList/schema'
+import { ALLOCATION_LIST_FIELDS }                     from '../../../domain/csvImport/allocationList/labels'
+import { AllocationListSchema }                       from '../../../domain/csvImport/allocationList/schema'
+import type { AllocationList }                        from '../../../domain/csvImport/allocationList/schema'
 
 const headerToKey = new Map<string, keyof AllocationList>(
   ALLOCATION_LIST_FIELDS.flatMap(f => {
@@ -58,7 +59,7 @@ export function parseAllocationSheet(raw: unknown[][]): AllocationList[] {
     }
 
     if (!entry.no) continue
-    rows.push(entry as AllocationList)
+    rows.push(AllocationListSchema.parse(entry))
   }
   console.log('parsed rows:', rows.length)
   console.groupEnd()

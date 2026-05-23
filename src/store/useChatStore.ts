@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ChatMessage, PersonMatch } from '../components/ai/types'
+import type { ChatMessage, PersonMatch } from '../application/aiTypes'
 
 // Phase is owned here (not in AIView) so it survives mode switches
 export type ChatPhase =

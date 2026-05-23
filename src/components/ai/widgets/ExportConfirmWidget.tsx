@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PersonDiff } from '../types'
+import type { PersonDiff } from '../../../application/aiTypes'
 import { DiffTable } from '../../shared/DiffTable'
 
 interface Props {

@@ -1,4 +1,4 @@
-import type { PersonMatch } from '../types'
+import type { PersonMatch } from '../../../application/aiTypes'
 
 interface Props {
   persons: PersonMatch[]

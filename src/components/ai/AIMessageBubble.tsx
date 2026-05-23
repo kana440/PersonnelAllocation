@@ -1,4 +1,4 @@
-import type { ChatMessage, WidgetCallbacks } from './types'
+import type { ChatMessage, WidgetCallbacks } from '../../application/aiTypes'
 import { FilePickerWidget }    from './widgets/FilePickerWidget'
 import { ExcelHelpWidget }     from './widgets/ExcelHelpWidget'
 import { OrgInputWidget }      from './widgets/OrgInputWidget'

@@ -1,5 +1,5 @@
 import { delay } from './delay'
-import type { PersonDiff } from '../../../components/ai/types'
+import type { PersonDiff } from '../../../application/aiTypes'
 
 export const promotePersonsScenario = {
   async promptMessage(): Promise<string> {

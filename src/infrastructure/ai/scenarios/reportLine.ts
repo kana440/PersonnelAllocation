@@ -1,5 +1,5 @@
 import { delay } from './delay'
-import type { ReportLineMember } from '../../../components/ai/types'
+import type { ReportLineMember } from '../../../application/aiTypes'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import type { Organization } from '../../../domain/schemas'
 

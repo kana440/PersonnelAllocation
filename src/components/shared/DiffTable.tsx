@@ -1,4 +1,4 @@
-import type { PersonDiff } from '../ai/types'
+import type { PersonDiff } from '../../application/aiTypes'
 
 interface Props {
   diffs: PersonDiff[]

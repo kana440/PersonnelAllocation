@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { OrgTreeNode, PersonInfo } from '../ai/types'
+import type { OrgTreeNode, PersonInfo } from '../../application/aiTypes'
 
 interface Props {
   node: OrgTreeNode

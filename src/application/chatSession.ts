@@ -4,7 +4,7 @@
 // Stateless pattern: the full history is sent on every call, so the server
 // needs no session state. Swap out the IChatService to switch backends.
 
-import type { ChatMessage } from '../components/ai/types'
+import type { ChatMessage } from './aiTypes'
 import type { IChatService, APIMessage } from '../ports'
 
 const DEFAULT_SYSTEM_PROMPT =

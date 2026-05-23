@@ -1,4 +1,4 @@
-import type { OrgTreeNode } from '../types'
+import type { OrgTreeNode } from '../../../application/aiTypes'
 import { OrgTree } from '../../shared/OrgTree'
 
 interface Props {

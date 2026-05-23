@@ -12,7 +12,7 @@
 // NOT stored in the chat store — only the final user-visible reply is returned.
 
 import type { APIMessage } from '../../ports'
-import type { ChatMessage } from '../../components/ai/types'
+import type { ChatMessage } from '../../application/aiTypes'
 import type { OpenAICompatibleAdapter } from './openAICompatibleAdapter'
 import { toolRegistry } from './toolRegistry'
 import { buildAPIMessages } from '../../application/chatSession'

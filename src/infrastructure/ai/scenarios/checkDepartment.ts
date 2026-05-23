@@ -1,5 +1,5 @@
 import { delay } from './delay'
-import type { OrgTreeNode, PersonInfo } from '../../../components/ai/types'
+import type { OrgTreeNode, PersonInfo } from '../../../application/aiTypes'
 import type { Organization } from '../../../domain/schemas'
 import type { PersonSearchResult } from '../../../application/aiTools'
 

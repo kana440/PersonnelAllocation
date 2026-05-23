@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react'
-import type { ChatMessage, WidgetCallbacks } from './types'
+import type { ChatMessage, WidgetCallbacks } from '../../application/aiTypes'
 import { AIMessageBubble } from './AIMessageBubble'
 
 interface Props {

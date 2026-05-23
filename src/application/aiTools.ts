@@ -24,6 +24,14 @@ import type { ValidationResult, OperationError, IDomainOperation } from '../doma
 import type { AllocationRow }   from '../domain/allocationRow'
 import type { Person, Organization } from '../domain/schemas'
 
+export interface VacantPositionResult {
+  rowId:         number
+  positionCode:  string
+  orgCode:       string
+  orgName?:      string
+  localJobTitle: string
+}
+
 // ── Result types ─────────────────────────────────────────────────────────────
 
 export interface PersonSearchResult {
@@ -104,13 +112,63 @@ export function createAITools(service: HRApplicationService) {
 
   function undo(): void { service.undo() }
 
+  // ── Position search ───────────────────────────────────────────────────────
+
+  // 空席ポジションを検索する（AIがアサイン先を選ぶために使う）
+  function findVacantPositions(query: { orgCode?: string } = {}): VacantPositionResult[] {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+    return allocationList
+      .filter(r => !r.userId && !!r.positionCode)
+      .filter(r => !query.orgCode || r.departmentCode === query.orgCode)
+      .map(r => {
+        const org = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)
+        return {
+          rowId:         r.rowId,
+          positionCode:  r.positionCode!,
+          orgCode:       r.departmentCode ?? '',
+          orgName:       org?.name,
+          localJobTitle: r.localJobTitle ?? '',
+        }
+      })
+  }
+
+  // ── Position mutations ────────────────────────────────────────────────────
+  // これらは HRApplicationService の直接メソッドへの薄いラッパー。
+  // ロジックはドメイン側（HRApplicationService）に一元管理されており、AIとUIで共有される。
+
+  // 空席ポジションを新規作成。managerPositionCode を指定するとレポートラインも1操作で設定できる
+  function createVacantPosition(departmentCode: string, localJobTitle: string, managerPositionCode?: string): void {
+    service.createVacantPosition(departmentCode, localJobTitle, managerPositionCode ? { managerPositionCode } : undefined)
+  }
+
+  // 空席ポジションに人を配属（vacantRowId: 空席行のrowId, personUserId: sfPersonId/userId）
+  function assignPersonToVacantPosition(vacantRowId: number, personUserId: string): void {
+    service.assignPersonToVacantPosition(vacantRowId, personUserId)
+  }
+
+  // ポジションから人を外す（ポジションは空席化、人は未アサイン行として保持）
+  function unassignPersonFromPosition(rowId: number): void {
+    service.unassignPersonFromPosition(rowId)
+  }
+
+  // ポジションを削除（在席中の場合は人を未アサイン行に移してからポジション行を削除）
+  function removePosition(rowId: number): void {
+    service.removePosition(rowId)
+  }
+
   // ── Utility ──────────────────────────────────────────────────────────────
 
   function formatErrors(errors: OperationError[]): string {
     return errors.map(e => e.field ? `[${e.field}] ${e.message}` : e.message).join('\n')
   }
 
-  return { findPersons, findOrgs, getPersonRows, getRow, getOrgs, getPersons, validateOperation, executeOperation, undo, formatErrors }
+  return {
+    findPersons, findOrgs, getPersonRows, getRow, getOrgs, getPersons,
+    findVacantPositions,
+    validateOperation, executeOperation, undo,
+    createVacantPosition, assignPersonToVacantPosition, unassignPersonFromPosition, removePosition,
+    formatErrors,
+  }
 }
 
 // ── Default instance (production) ────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { ReportLineMember } from '../types'
+import type { ReportLineMember } from '../../../application/aiTypes'
 import { PersonTag } from '../../shared/PersonTag'
 
 interface Props {

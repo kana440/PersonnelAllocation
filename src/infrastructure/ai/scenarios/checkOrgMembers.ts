@@ -1,5 +1,5 @@
 import { delay } from './delay'
-import type { PersonInfo } from '../../../components/ai/types'
+import type { PersonInfo } from '../../../application/aiTypes'
 
 export interface OrgFound {
   orgName: string

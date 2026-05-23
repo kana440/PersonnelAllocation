@@ -15,7 +15,7 @@ import { reportLineScenario, buildReportLineMembers } from '../../infrastructure
 import { promotePersonsScenario }     from '../../infrastructure/ai/scenarios/promotePersons'
 import { checkImpactScenario, buildImpactGroups } from '../../infrastructure/ai/scenarios/checkImpact'
 import { exportExcelScenario, buildExportChangeSummary } from '../../infrastructure/ai/scenarios/exportExcel'
-import type { ChatWidget, PersonDiff, WidgetCallbacks } from './types'
+import type { ChatWidget, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
 import type { ChatPhase } from '../../store/useChatStore'
 
 export const WIDGET_PHASE_MAP: Partial<Record<ChatPhase, ChatWidget['type']>> = {

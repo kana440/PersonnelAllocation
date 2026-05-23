@@ -3,7 +3,7 @@ import { buildExportBuffer } from '../../excel/engine'
 import { toAllocationRows } from '../../allocationListMapper'
 import type { Organization } from '../../../domain/schemas'
 import type { AllocationRow } from '../../../domain/allocationRow'
-import type { PersonDiff } from '../../../components/ai/types'
+import type { PersonDiff } from '../../../application/aiTypes'
 
 export function buildExportChangeSummary(
   allRows: AllocationRow[],
