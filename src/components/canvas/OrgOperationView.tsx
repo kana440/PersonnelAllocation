@@ -23,22 +23,33 @@ type CanvasMode = '組織図' | 'レポートライン'
 
 export function OrgOperationView() {
   const store = useScopedStore()
-  const { afterOrganizations: allAfterOrgsUnscoped } = useStore()
+  const {
+    afterOrganizations: allAfterOrgsUnscoped,
+    isHistoryPreviewMode, historyPreviewPosition,
+    previewAllocationList, previewPersons, previewAfterOrganizations,
+    applyHistoryPreview, cancelHistoryPreview,
+    undoHistory,
+  } = useStore()
   const {
     focusedOrgId, focusOrg,
-    afterOrganizations: allAfterOrgs, persons,
-    allocationList,
+    afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
+    allocationList: scopedAllocList,
     selectedPersonId, selectPerson, enterEditMode, saveRow,
     mainCanvasMode, setMainCanvasMode,
     expandedChipIds, toggleChip,
     assignPersonToVacantPosition,
   } = store
 
+  // プレビューモード時は preview データを使って描画
+  const allAfterOrgs   = (isHistoryPreviewMode && previewAfterOrganizations) ? previewAfterOrganizations : scopedAfterOrgs
+  const persons        = (isHistoryPreviewMode && previewPersons)            ? previewPersons            : scopedPersons
+  const allocationList = (isHistoryPreviewMode && previewAllocationList)     ? previewAllocationList     : scopedAllocList
+
   const canvasMode    = mainCanvasMode
   const setCanvasMode = (mode: CanvasMode) => setMainCanvasMode(mode)
   const organizations = allAfterOrgs.filter(o => !o.isAbandoned)
 
-  const { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({
+  const { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId, positionContext } = useOrgViewData({
     allAfterOrgs, persons, allocationList,
   })
 
@@ -159,15 +170,23 @@ export function OrgOperationView() {
   const parentOrg  = focusedOrg.parentId ? organizations.find(o => o.id === focusedOrg.parentId) : null
   const childOrgs  = organizations.filter(o => o.parentId === focusedOrgId)
 
+  const previewLabel = historyPreviewPosition !== null
+    ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '')
+    : ''
+
   const ctxValue: OrgViewContextValue = {
-    organizations, positionTreeByOrgId, afterMembersByOrgId,
+    organizations, positionContext, positionTreeByOrgId, afterMembersByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
-    addPositionOrgId, setAddPositionOrgId, addPositionTitle, setAddPositionTitle,
-    topPositionCodeOfOrg, setBulkMoveSourceId, setConfirmDialog,
+    addPositionOrgId, addPositionTitle, setAddPositionTitle,
+    setAddPositionOrgId:  isHistoryPreviewMode ? () => {} : setAddPositionOrgId,
+    topPositionCodeOfOrg,
+    setBulkMoveSourceId:  isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
+    setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson,
+    isHistoryPreviewMode,
     handlePersonDoubleClick, handlePersonContextMenu,
     handlePositionContextMenu, handleDropPositionOnPosition,
     expandedChipIds, toggleChip,
@@ -239,8 +258,29 @@ export function OrgOperationView() {
           </div>
         </div>
 
+        {/* Preview banner */}
+        {isHistoryPreviewMode && (
+          <div className="flex-shrink-0 px-3 py-1.5 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
+            <span className="text-[11px] text-amber-700 flex-1 font-medium truncate">
+              🔍 プレビュー（読み取り専用）{previewLabel ? ` — ${previewLabel}` : ''}
+            </span>
+            <button
+              onClick={applyHistoryPreview}
+              className="flex-shrink-0 px-2.5 py-0.5 text-[10px] rounded bg-indigo-600 text-white hover:bg-indigo-700 font-medium transition-colors"
+            >この状態に戻す</button>
+            <button
+              onClick={cancelHistoryPreview}
+              className="flex-shrink-0 px-2.5 py-0.5 text-[10px] rounded bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+            >閉じる</button>
+          </div>
+        )}
+
         {/* Canvas */}
-        <div className="flex-1 overflow-y-auto p-3">
+        <div
+          className="flex-1 overflow-y-auto p-3"
+          onDragOverCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
+          onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
+        >
           {canvasMode === 'レポートライン' ? (
             <ReportLineView
               allocationList={allocationList}

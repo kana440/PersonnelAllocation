@@ -1,15 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { OrgSearchSidebar } from './components/sidebar/OrgSearchSidebar'
-import { OrgOperationView } from './components/canvas/OrgOperationView'
-import { EditView } from './components/editor/EditView'
-import { BottomPanel } from './components/editor/BottomPanel'
-import { AIChatDrawer } from './components/ai/AIChatDrawer'
-import { AIView } from './components/ai/AIView'
-import { SetupView } from './components/setup/SetupView'
+import { OrgSearchSidebar }  from './components/sidebar/OrgSearchSidebar'
+import { OrgOperationView }  from './components/canvas/OrgOperationView'
+import { FloatingEditor }    from './components/editor/FloatingEditor'
+import { HistoryPanel }      from './components/history/HistoryPanel'
+import { BottomPanel }       from './components/editor/BottomPanel'
+import { AIChatDrawer }      from './components/ai/AIChatDrawer'
+import { AIView }            from './components/ai/AIView'
+import { SetupView }         from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
-import { useStore } from './store/useStore'
-import { useCodeListStore } from './store/codeListStore'
-import { ScopeSelector } from './components/header/ScopeSelector'
+import { useStore }          from './store/useStore'
+import { useCodeListStore }  from './store/codeListStore'
+import { ScopeSelector }     from './components/header/ScopeSelector'
 import { MergeImportButton } from './components/header/MergeImportButton'
 
 const BOTTOM_MIN        = 36
@@ -25,8 +26,12 @@ const CHAT_MIN     = 240
 const CHAT_MAX     = 600
 const CHAT_DEFAULT = 320
 
+const HISTORY_MIN     = 160
+const HISTORY_MAX     = 400
+const HISTORY_DEFAULT = 220
+
 export default function App() {
-  const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo, editMode } = useStore()
+  const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
   const [appMode,       setAppMode]       = useState<'ai' | 'editor'>('ai')
@@ -36,6 +41,8 @@ export default function App() {
 
   const [isTreeOpen,      setIsTreeOpen]      = useState(true)
   const [isChatOpen,      setIsChatOpen]      = useState(false)
+  const [isHistoryOpen,   setIsHistoryOpen]   = useState(false)
+  const [historyWidth,    setHistoryWidth]    = useState(HISTORY_DEFAULT)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_DEFAULT)
   const [excelCollapsed,  setExcelCollapsed]  = useState(false)
@@ -96,6 +103,26 @@ export default function App() {
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }, [sidebarWidth])
+
+  // ── Drag-to-resize (history panel) ───────────────────────────────────────────
+  const historyDragState = useRef<{ startX: number; startW: number } | null>(null)
+
+  const handleHistoryResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    historyDragState.current = { startX: e.clientX, startW: historyWidth }
+    const onMove = (ev: MouseEvent) => {
+      if (!historyDragState.current) return
+      const delta = historyDragState.current.startX - ev.clientX
+      setHistoryWidth(Math.max(HISTORY_MIN, Math.min(HISTORY_MAX, historyDragState.current.startW + delta)))
+    }
+    const onUp = () => {
+      historyDragState.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [historyWidth])
 
   // ── Drag-to-resize (chat drawer) ──────────────────────────────────────────────
   const chatDragState = useRef<{ startX: number; startW: number } | null>(null)
@@ -174,6 +201,16 @@ export default function App() {
           </button>
           <div className="w-px h-4 bg-gray-600" />
           <button
+            onClick={() => setIsHistoryOpen(o => !o)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+              isHistoryOpen ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+            title="操作履歴パネル"
+          >
+            <span>⏱</span>
+            <span>履歴</span>
+          </button>
+          <button
             onClick={() => setIsChatOpen(o => !o)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
               isChatOpen ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -232,40 +269,43 @@ export default function App() {
             title="サイドバーを展開"
           >
             <span className="text-gray-400 text-xs">▶</span>
-            <span className="text-xs font-semibold text-blue-600" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', letterSpacing: '0.08em' }}>組織</span>
+            <span className="text-xs font-semibold text-blue-600" style={{ writingMode: 'vertical-rl', letterSpacing: '0.08em' }}>組織</span>
           </div>
         )}
 
-        {/* Main canvas: EditView が上にスライドオーバー */}
-        <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0 relative">
-          {/* 組織図ビュー: 常に背景として残る */}
-          <div
-            className="absolute inset-0"
-            style={{ pointerEvents: editMode ? 'none' : 'auto' }}
-          >
-            <OrgOperationView />
-          </div>
-          {/* 編集ビュー: 右からスライドオーバー */}
-          <div
-            className="absolute inset-0 z-10 bg-white transition-transform duration-300 ease-in-out"
-            style={{
-              transform: editMode ? 'translateX(0)' : 'translateX(100%)',
-              pointerEvents: editMode ? 'auto' : 'none',
-            }}
-          >
-            <EditView />
-          </div>
+        {/* Main canvas */}
+        <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0">
+          <OrgOperationView />
         </div>
 
         {/* AI Chat drawer */}
         {isChatOpen && (
           <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: chatWidth }}>
-            {/* Left-edge resize handle */}
             <div
               className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10"
               onMouseDown={handleChatResizeStart}
             />
             <AIChatDrawer onClose={() => setIsChatOpen(false)} />
+          </div>
+        )}
+
+        {/* History panel (right nav) */}
+        {isHistoryOpen ? (
+          <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: historyWidth }}>
+            <div
+              className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-300 transition-colors z-10"
+              onMouseDown={handleHistoryResizeStart}
+            />
+            <HistoryPanel onClose={() => setIsHistoryOpen(false)} />
+          </div>
+        ) : (
+          <div
+            className="flex-shrink-0 w-7 bg-white rounded-lg shadow flex flex-col items-center py-2 gap-1 cursor-pointer hover:bg-indigo-50 transition-colors"
+            onClick={() => setIsHistoryOpen(true)}
+            title="操作履歴を展開"
+          >
+            <span className="text-gray-400 text-xs">◀</span>
+            <span className="text-xs font-semibold text-indigo-600" style={{ writingMode: 'vertical-rl', letterSpacing: '0.08em' }}>履歴</span>
           </div>
         )}
       </div>
@@ -288,6 +328,9 @@ export default function App() {
           onToggleCollapse={toggleExcelCollapse}
         />
       </div>
+
+      {/* Floating editor — fixed, above all panels */}
+      <FloatingEditor />
 
     </div>
   )

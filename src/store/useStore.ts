@@ -96,6 +96,12 @@ interface Actions {
   // Undo / Redo
   undo: () => void
   redo: () => void
+  revertToHistoryIndex: (index: number, direction: 'past' | 'future') => void
+
+  // 履歴プレビュー
+  previewHistoryAt:    (position: number) => void
+  cancelHistoryPreview: () => void
+  applyHistoryPreview:  () => void
 
   reset: () => void
 
@@ -193,6 +199,10 @@ export const useStore = create<AppState>((set, get) => {
 
     undo: () => appService.undo(),
     redo: () => appService.redo(),
+    revertToHistoryIndex: (index, direction) => appService.revertToHistoryIndex(index, direction),
+    previewHistoryAt:    (position) => appService.previewHistoryAt(position),
+    cancelHistoryPreview: () => appService.cancelHistoryPreview(),
+    applyHistoryPreview:  () => appService.applyHistoryPreview(),
 
     reset: () => {
       appService.reset()

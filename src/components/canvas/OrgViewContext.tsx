@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Organization } from '../../domain/schemas'
 import type { Person } from '../../domain/schemas'
 import type { AllocationRow } from '../../domain/allocationRow'
+import type { PositionContext } from '../../application/positionPatterns'
 
 export interface DragData {
   dragType?:       'person' | 'position'
@@ -26,6 +27,7 @@ export interface MemberEntry {
 
 export interface OrgViewContextValue {
   organizations:            Organization[]
+  positionContext:          PositionContext
   positionTreeByOrgId:      Map<string, PositionEntry[]>
   afterMembersByOrgId:      Map<string, MemberEntry[]>
   dragOverOrgId:            string | null
@@ -49,6 +51,7 @@ export interface OrgViewContextValue {
   togglePersonSelection:    (id: string) => void
   selectedPersonId:         string | null
   selectPerson:             (id: string) => void
+  isHistoryPreviewMode:         boolean
   handlePersonDoubleClick:      (id: string) => void
   handlePersonContextMenu:      (e: React.MouseEvent, id: string) => void
   handlePositionContextMenu:    (e: React.MouseEvent, rowId: number) => void

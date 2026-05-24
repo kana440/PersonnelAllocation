@@ -2,7 +2,7 @@ import { useStore } from '../../store/useStore'
 import { rowDiff } from '../../domain/allocationRow'
 import { RowEditorPanel } from './RowEditorPanel'
 
-export function EditView() {
+export function EditView({ readOnly = false }: { readOnly?: boolean }) {
   const {
     allocationList, persons, afterOrganizations,
     selectedPersonId, selectedRowId,
@@ -93,7 +93,7 @@ export function EditView() {
         {/* エディタ */}
         <div className="flex-1 overflow-hidden min-h-0 bg-white">
           {selectedRowId !== null ? (
-            <RowEditorPanel />
+            <RowEditorPanel readOnly={readOnly} />
           ) : rows.length === 0 ? (
             <div className="flex items-center justify-center h-full text-xs text-gray-400">
               この人物の発令データがありません

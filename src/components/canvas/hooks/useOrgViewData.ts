@@ -3,6 +3,8 @@ import { buildOrgMap } from '../../../domain/projection/rows'
 import type { Organization, Person } from '../../../domain/schemas'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
+import { buildPositionContext } from '../../../application/positionPatterns'
+import type { PositionContext } from '../../../application/positionPatterns'
 
 interface UseOrgViewDataDeps {
   allAfterOrgs:   Organization[]
@@ -82,5 +84,10 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList }: UseOrg
     return result
   }, [afterOrgRowsById, personBySfId])
 
-  return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId }
+  const positionContext = useMemo<PositionContext>(
+    () => buildPositionContext(allocationList),
+    [allocationList],
+  )
+
+  return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId, positionContext }
 }

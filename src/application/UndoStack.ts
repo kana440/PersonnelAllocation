@@ -15,6 +15,13 @@ export interface StatePatch {
   rowDiffs:    RowDiff[]
   orgsBefore?: Organization[]   // set only when afterOrganizations changed
   orgsAfter?:  Organization[]
+  label?:      string           // 操作ラベル（履歴パネル表示用）
+}
+
+export interface HistoryEntry {
+  index:     number   // past 配列内インデックス（0 = 最古）
+  label:     string
+  direction: 'past' | 'future'
 }
 
 const MAX_UNDO = 50
@@ -42,6 +49,57 @@ export class UndoStack {
     const patch = this.future.pop()
     if (patch) this.past.push(patch)
     return patch
+  }
+
+  /**
+   * 時系列順（古い順）の全操作リスト。
+   * position = その操作を適用した後の "past 長"（1 始まり）。
+   * isPast = true → past に含まれる（適用済）、false → future に含まれる（redo 可能）。
+   */
+  getFullHistory(): HistoryEntry[] {
+    const result: HistoryEntry[] = []
+    this.past.forEach((p, i) =>
+      result.push({ index: i + 1, label: p.label ?? '操作', direction: 'past' })
+    )
+    // future は "最後に undo したものが末尾" なので、古い undo（最初に redo される）が末尾にある
+    // 時系列順: future[last-i] → position past.length + i + 1
+    ;[...this.future].reverse().forEach((p, i) =>
+      result.push({ index: this.past.length + i + 1, label: p.label ?? '操作', direction: 'future' })
+    )
+    return result
+  }
+
+  get pastLength(): number { return this.past.length }
+  get futureLength(): number { return this.future.length }
+
+  /**
+   * スタックを変更せずに、"past が targetPastLength 個適用された" 状態を計算して返す。
+   * targetPastLength < past.length → undo 方向、> past.length → redo 方向。
+   */
+  computeStateAt(
+    currentList: AllocationRow[],
+    currentOrgs: Organization[],
+    targetPastLength: number,
+  ): { allocationList: AllocationRow[]; afterOrganizations: Organization[] } {
+    let list = currentList
+    let orgs = currentOrgs
+
+    if (targetPastLength < this.past.length) {
+      for (let i = this.past.length - 1; i >= targetPastLength; i--) {
+        const r = this.applyPatch(list, orgs, this.past[i], 'undo')
+        list = r.allocationList; orgs = r.afterOrganizations
+      }
+    } else if (targetPastLength > this.past.length) {
+      const stepsForward = targetPastLength - this.past.length
+      for (let i = 0; i < stepsForward && i < this.future.length; i++) {
+        // future[last-i] = i 番目に redo される操作
+        const futureIdx = this.future.length - 1 - i
+        const r = this.applyPatch(list, orgs, this.future[futureIdx], 'redo')
+        list = r.allocationList; orgs = r.afterOrganizations
+      }
+    }
+
+    return { allocationList: list, afterOrganizations: orgs }
   }
 
   clear(): void {

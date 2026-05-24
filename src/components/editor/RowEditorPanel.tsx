@@ -28,7 +28,7 @@ const READONLY_FIELDS = new Set<string>([
   'groupEmployeeId', 'groupEmployeeNumber',
 ])
 
-export function RowEditorPanel() {
+export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
   const {
     allocationList, selectedRowId, saveRow,
     afterOrganizations, codeLists,
@@ -110,13 +110,19 @@ export function RowEditorPanel() {
           >
             {showAll ? '差分のみ' : '全件表示'}
           </button>
-          <button
-            onClick={handleSave}
-            disabled={!isDirty}
-            className="text-xs px-3 py-1 border rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {isDirty ? '● 保存' : '保存済'}
-          </button>
+          {readOnly ? (
+            <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 font-medium">
+              照会のみ
+            </span>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={!isDirty}
+              className="text-xs px-3 py-1 border rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {isDirty ? '● 保存' : '保存済'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -149,6 +155,7 @@ export function RowEditorPanel() {
                 value={(effectiveRow.transferReason as string | undefined) ?? ''}
                 onChange={v => handleChange('transferReason', v)}
                 options={transferReasonOptions}
+                disabled={readOnly}
                 hasIssue={issues.some(i => i.field === 'transferReason')}
               />
             </div>
@@ -160,7 +167,8 @@ export function RowEditorPanel() {
               type="text"
               value={(effectiveRow.memo as string | undefined) ?? ''}
               onChange={e => handleChange('memo', e.target.value)}
-              className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"
+              disabled={readOnly}
+              className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
             />
           </div>
           {/* 昇格・降格・給与等級変更（1行にまとめて） */}
@@ -170,21 +178,24 @@ export function RowEditorPanel() {
               type="text"
               value={(effectiveRow.promotionSign as string | undefined) ?? ''}
               onChange={e => handleChange('promotionSign', e.target.value)}
-              className="w-14 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"
+              disabled={readOnly}
+              className="w-14 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
             />
             <label className="text-xs text-gray-500 flex-shrink-0">降格事由</label>
             <input
               type="text"
               value={(effectiveRow.demotionReason as string | undefined) ?? ''}
               onChange={e => handleChange('demotionReason', e.target.value)}
-              className="w-28 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"
+              disabled={readOnly}
+              className="w-28 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
             />
             <label className="text-xs text-gray-500 flex-shrink-0">給与等級変更</label>
             <input
               type="text"
               value={(effectiveRow.payGradeChangeSign as string | undefined) ?? ''}
               onChange={e => handleChange('payGradeChangeSign', e.target.value)}
-              className="w-14 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"
+              disabled={readOnly}
+              className="w-14 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
             />
           </div>
           {/* メタフィールドのバリデーションメッセージ */}
@@ -223,7 +234,7 @@ export function RowEditorPanel() {
               onChange={v => handleChange(afterKey, v)}
               options={getOptions(key)}
               issues={issuesForField(issues, afterKey)}
-              readOnly={READONLY_FIELDS.has(key)}
+              readOnly={READONLY_FIELDS.has(key) || readOnly}
             />
           )
         })}

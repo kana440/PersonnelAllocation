@@ -3,6 +3,7 @@ import { useOrgView } from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import { appService } from '../../../application/HRApplicationService'
+import { detectPositionPatterns } from '../../../application/positionPatterns'
 
 // ── カラーパレット（ReportLineView と同系） ───────────────────────────────────
 const PALETTE = [
@@ -28,6 +29,7 @@ interface PositionRowsProps { orgId: string }
 export function PositionRows({ orgId }: PositionRowsProps) {
   const {
     positionTreeByOrgId,
+    positionContext,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDropOnVacantSlot,
     handleDropPositionOnPosition,
@@ -118,6 +120,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
     <div className="space-y-0.5 mb-2">
       {visibleEntries.map(({ row, person, depth }) => {
         const isVacant     = !person
+        const badges       = detectPositionPatterns(row, positionContext)
         const isSelected   = !isVacant && (
           isSelectMode ? selectedPersonIds.has(person!.id) : selectedPersonId === person!.id
         )
@@ -238,6 +241,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   }}
                   onDragLeave={() => setDragOverVacantRowId(null)}
                   onDrop={e => { setDragOverVacantRowId(null); handleDropOnVacantSlot(e, row.rowId) }}
+                  onContextMenu={e => handlePositionContextMenu(e, row.rowId)}
                 >
                   {dragOverVacantRowId === row.rowId ? 'ここにドロップ' : '（空席）← drop'}
                 </div>
@@ -271,7 +275,12 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   `}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</div>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</span>
+                      {badges.map(b => (
+                        <span key={b.kind} className={`flex-shrink-0 text-[9px] font-medium px-1 py-0.5 rounded ${b.color}`}>{b.label}</span>
+                      ))}
+                    </div>
                     {(row.band || row.positionBand) && (
                       <div className={`text-[10px] leading-tight ${isConcurrent ? 'text-purple-500' : 'text-gray-400'}`}>
                         {row.positionBand ?? row.band}
