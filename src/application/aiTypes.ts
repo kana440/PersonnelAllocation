@@ -53,12 +53,20 @@ export type ChatWidget =
   | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
 
+export interface ConfirmResult {
+  approved: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'ai'
   text: string
   widget?: ChatWidget
   isLoading?: boolean
+  /** LLM が提案した確認ウィジェットの確定コールバック。設定時は WidgetCallbacks より優先される。 */
+  llmConfirm?: () => void
+  /** LLM が提案した確認ウィジェットのキャンセルコールバック。設定時は WidgetCallbacks より優先される。 */
+  llmCancel?: () => void
 }
 
 export interface WidgetCallbacks {

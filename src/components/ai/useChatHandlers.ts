@@ -15,7 +15,7 @@ import { reportLineScenario, buildReportLineMembers } from '../../infrastructure
 import { promotePersonsScenario }     from '../../infrastructure/ai/scenarios/promotePersons'
 import { checkImpactScenario, buildImpactGroups } from '../../infrastructure/ai/scenarios/checkImpact'
 import { exportExcelScenario, buildExportChangeSummary } from '../../infrastructure/ai/scenarios/exportExcel'
-import type { ChatWidget, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
+import type { ChatWidget, ConfirmResult, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
 import type { ChatPhase } from '../../store/useChatStore'
 
 export const WIDGET_PHASE_MAP: Partial<Record<ChatPhase, ChatWidget['type']>> = {
@@ -75,16 +75,42 @@ export function useChatHandlers({
     const snapshot = useChatStore.getState().messages.filter(m => !m.isLoading)
     addMessage({ role: 'user', text })
     const id = addAILoading()
+
+    // confirm ツールが呼ばれたとき、ローディングバブルを確認ウィジェットに切り替え、
+    // ユーザーが操作するまで agentRunner のループを Promise で停止する。
+    const onConfirm = (widget: ChatWidget): Promise<ConfirmResult> =>
+      new Promise(resolve => {
+        updateMessage(id, {
+          isLoading:  false,
+          text:       '以下の内容を確認してください。',
+          widget,
+          llmConfirm: () => {
+            updateMessage(id, { isLoading: true, text: '適用中...', widget: undefined, llmConfirm: undefined, llmCancel: undefined })
+            resolve({ approved: true })
+          },
+          llmCancel: () => {
+            updateMessage(id, { isLoading: true, text: 'キャンセル処理中...', widget: undefined, llmConfirm: undefined, llmCancel: undefined })
+            resolve({ approved: false })
+          },
+        })
+      })
+
     try {
-      let reply: string
+      let replyText: string
+      let replyWidget: ChatWidget | undefined
       if (agentRunner) {
-        reply = await agentRunner.run(snapshot, text, label => updateMessage(id, { text: label }))
+        const result = await agentRunner.run(snapshot, text, {
+          onProgress: (label: string) => updateMessage(id, { text: label }),
+          onConfirm,
+        })
+        replyText   = result.text
+        replyWidget = result.widget
       } else {
-        reply = await chatSession.send(snapshot, text)
+        replyText = await chatSession.send(snapshot, text)
       }
-      updateMessage(id, { isLoading: false, text: reply })
+      updateMessage(id, { isLoading: false, text: replyText, widget: replyWidget, llmConfirm: undefined, llmCancel: undefined })
     } catch (err) {
-      updateMessage(id, { isLoading: false, text: `エラーが発生しました: ${String(err)}` })
+      updateMessage(id, { isLoading: false, text: `エラーが発生しました: ${String(err)}`, llmConfirm: undefined, llmCancel: undefined })
     }
   }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession])
 

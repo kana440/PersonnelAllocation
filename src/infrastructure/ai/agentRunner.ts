@@ -4,70 +4,124 @@
 //   1. Convert UI chat history to APIMessage[]
 //   2. Append the new user message
 //   3. Call the model (with tool definitions)
-//   4. If the model returns tool_calls: execute each, append results, go to 3
-//   5. If the model returns a text response: return it
-//   6. If MAX_ROUNDS is exceeded: return an error message
+//   4. If the model returns tool_calls: dispatch by kind, append results, go to 3
+//      - read    : 即時実行
+//      - render  : Widget を latestWidget に格納し、summary をLLMへ返す
+//      - confirm : onConfirm コールバックでUI停止 → 承認後に executeOnApprove
+//   5. If the model returns a text response: return { text, widget? }
+//   6. If MAX_ROUNDS is exceeded: return error message
 //
-// The tool_call / tool_result messages are kept in a local array and are
-// NOT stored in the chat store — only the final user-visible reply is returned.
+// tool_call / tool_result messages はローカル配列のみで保持し、
+// チャットストアには保存しない（最終テキストとウィジェットだけを返す）。
 
 import type { APIMessage } from '../../ports'
-import type { ChatMessage } from '../../application/aiTypes'
+import type { ChatMessage, ChatWidget, ConfirmResult } from '../../application/aiTypes'
 import type { OpenAICompatibleAdapter } from './openAICompatibleAdapter'
+import type { AITraceObserver } from './aiTrace'
+import { NoopTraceObserver } from './aiTrace'
 import { toolRegistry } from './toolRegistry'
 import { buildAPIMessages } from '../../application/chatSession'
 
 const MAX_ROUNDS = 10
 
-export class AgentRunner {
-  constructor(private readonly adapter: OpenAICompatibleAdapter) {}
+export interface AgentRunResult {
+  text:    string
+  widget?: ChatWidget
+}
 
-  /**
-   * Run one user turn with the agentic loop.
-   *
-   * @param history  — UI chat history before this message (used as context)
-   * @param userText — the new user message
-   * @param onProgress — optional callback called with a progress label while
-   *                     tools are executing (e.g. for updating the loading bubble)
-   */
+export interface AgentRunOptions {
+  onProgress?: (label: string) => void
+  /** confirm ツールが呼ばれたとき、UIでウィジェットを表示しユーザーの判断を待つ。
+   *  Promise が resolve するまで agentRunner のループは停止する。 */
+  onConfirm?: (widget: ChatWidget) => Promise<ConfirmResult>
+}
+
+export class AgentRunner {
+  private readonly observer: AITraceObserver
+
+  constructor(
+    private readonly adapter: OpenAICompatibleAdapter,
+    observer?: AITraceObserver,
+  ) {
+    this.observer = observer ?? new NoopTraceObserver()
+  }
+
   async run(
     history: ChatMessage[],
     userText: string,
-    onProgress?: (label: string) => void,
-  ): Promise<string> {
-    // Build the initial message list from the UI history + the new user message
+    options?: AgentRunOptions,
+  ): Promise<AgentRunResult> {
+    const { onProgress, onConfirm } = options ?? {}
     const messages: APIMessage[] = buildAPIMessages(history)
     messages.push({ role: 'user', content: userText })
 
+    let latestWidget: ChatWidget | undefined
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      this.observer.onEvent({ kind: 'request', round, messages: [...messages] })
+
       const result = await this.adapter.complete(messages, toolRegistry.definitions)
 
       // No tool calls → final text response
       if (!result.toolCalls || result.toolCalls.length === 0) {
-        return result.content ?? '（応答がありませんでした）'
+        const text = result.content ?? '（応答がありませんでした）'
+        this.observer.onEvent({ kind: 'response', text })
+        return { text, widget: latestWidget }
       }
 
       // Append the assistant's tool_call message
       messages.push({
-        role:        'assistant',
-        content:     result.content ?? '',
-        tool_calls:  result.toolCalls,
+        role:       'assistant',
+        content:    result.content ?? '',
+        tool_calls: result.toolCalls,
       })
 
-      // Execute each tool and append the results
       const toolNames = result.toolCalls.map(tc => tc.function.name).join(', ')
       onProgress?.(`ツール実行中: ${toolNames}…`)
 
       for (const call of result.toolCalls) {
-        const toolResult = toolRegistry.execute(call)
-        messages.push({
-          role:         'tool',
-          content:      toolResult.content,
-          tool_call_id: toolResult.toolCallId,
-        })
+        const args = (() => {
+          try { return JSON.parse(call.function.arguments) as Record<string, unknown> }
+          catch { return {} as Record<string, unknown> }
+        })()
+
+        this.observer.onEvent({ kind: 'tool_call', round, toolName: call.function.name, args })
+
+        const entry = toolRegistry.getEntry(call.function.name)
+        let content: string
+
+        if (entry?.kind === 'render') {
+          const { summary, widget } = entry.execute(args)
+          latestWidget = widget
+          content = JSON.stringify(summary)
+
+        } else if (entry?.kind === 'confirm') {
+          const { widget } = entry.buildProposal(args)
+          if (onConfirm) {
+            const confirmResult = await onConfirm(widget)
+            if (confirmResult.approved) {
+              const applyResult = entry.executeOnApprove(args)
+              content = JSON.stringify({ ok: true, result: applyResult })
+            } else {
+              content = JSON.stringify({ ok: false, cancelled: true, message: 'ユーザーが操作を取り消しました' })
+            }
+          } else {
+            content = JSON.stringify({ error: '確認ハンドラが設定されていません' })
+          }
+
+        } else {
+          // read tool (or unknown)
+          const toolResult = toolRegistry.execute(call)
+          content = toolResult.content
+        }
+
+        this.observer.onEvent({ kind: 'tool_result', round, toolName: call.function.name, result: content })
+        messages.push({ role: 'tool', content, tool_call_id: call.id })
       }
     }
 
-    return 'ツール呼び出しが上限（' + MAX_ROUNDS + ' 回）に達しました。処理を中断しました。'
+    const limitMsg = 'ツール呼び出しが上限（' + MAX_ROUNDS + ' 回）に達しました。処理を中断しました。'
+    this.observer.onEvent({ kind: 'response', text: limitMsg })
+    return { text: limitMsg, widget: latestWidget }
   }
 }
