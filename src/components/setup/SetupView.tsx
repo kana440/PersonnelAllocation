@@ -2,14 +2,15 @@ import { useRef, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
 import { SetupHelp } from './SetupHelp'
+import { OrgSelectStep } from './OrgSelectStep'
 
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'loading'; progress: string }
-  | { kind: 'done'; result: ImportedWorkbookResult }
+  | { kind: 'org-select'; result: ImportedWorkbookResult }
+  | { kind: 'scope-confirm'; result: ImportedWorkbookResult; orgId: string | null; orgName: string | null }
   | { kind: 'error'; message: string }
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export function SetupView({ onReady }: Props) {
-  const { loadExcelData } = useStore()
+  const { loadExcelData, setScopeOrgId } = useStore()
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
@@ -29,7 +30,8 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: '準備中...' })
     try {
       const result = await fn(onProgress)
-      if (result) setPhase({ kind: 'done', result })
+      // Skip 'done' phase; go directly to org selection
+      if (result) setPhase({ kind: 'org-select', result })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err) })
     }
@@ -44,11 +46,23 @@ export function SetupView({ onReady }: Props) {
 
   const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
 
-  const handleApply = async () => {
-    if (phase.kind !== 'done') return
-    setPhase({ kind: 'loading', progress: `データ適用中... (${phase.result.allocationRowCount.toLocaleString()} 行)` })
+  const handleOrgSelectAll = () => {
+    if (phase.kind !== 'org-select') return
+    setPhase({ kind: 'scope-confirm', result: phase.result, orgId: null, orgName: null })
+  }
+
+  const handleOrgSelectOrg = (id: string, name: string) => {
+    if (phase.kind !== 'org-select') return
+    setPhase({ kind: 'scope-confirm', result: phase.result, orgId: id, orgName: name })
+  }
+
+  const handleConfirm = async () => {
+    if (phase.kind !== 'scope-confirm') return
+    const { result, orgId } = phase
+    setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
     await tick()
-    await loadExcelData(phase.result)
+    await loadExcelData(result)
+    if (orgId) setScopeOrgId(orgId)
     onReady()
   }
 
@@ -66,11 +80,21 @@ export function SetupView({ onReady }: Props) {
           />
         )}
         {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
-        {phase.kind === 'done' && (
-          <ResultView
+        {phase.kind === 'org-select' && (
+          <OrgSelectStep
             result={phase.result}
-            onApply={handleApply}
-            onBack={() => setPhase({ kind: 'idle' })}
+            onSelectAll={handleOrgSelectAll}
+            onSelectOrg={handleOrgSelectOrg}
+          />
+        )}
+        {phase.kind === 'scope-confirm' && (
+          <ScopeConfirmView
+            orgName={phase.orgName}
+            onConfirm={handleConfirm}
+            onBack={() => {
+              if (phase.kind === 'scope-confirm')
+                setPhase({ kind: 'org-select', result: phase.result })
+            }}
           />
         )}
         {phase.kind === 'error' && (
@@ -81,7 +105,7 @@ export function SetupView({ onReady }: Props) {
   )
 }
 
-// ── 画面①: ファイル選択 ────────────────────────────────────────────
+// ── 画面①: ファイル選択 ────────────────────────��───────────────────
 
 function IdleView({ onFileClick, onSample, onHelp }: {
   onFileClick: () => void
@@ -130,7 +154,7 @@ function IdleView({ onFileClick, onSample, onHelp }: {
   )
 }
 
-// ── 画面②: 読み込み中 ─────────────────────────────────────────────
+// ── 画面②: 読み込み中 ─────────────────────────────���───────────────
 
 function LoadingView({ progress }: { progress: string }) {
   return (
@@ -141,104 +165,49 @@ function LoadingView({ progress }: { progress: string }) {
   )
 }
 
-// ── 画面③: 読み込み結果 ───────────────────────────────────────────
+// ── 画面④: スコープ確認 ─────────────────────────────��─────────────
 
-function ResultView({ result, onApply, onBack }: {
-  result: ImportedWorkbookResult
-  onApply: () => void
+function ScopeConfirmView({ orgName, onConfirm, onBack }: {
+  orgName: string | null
+  onConfirm: () => void
   onBack: () => void
 }) {
-  const codeListKeys = (Object.keys(CODE_LIST_LABELS) as (keyof typeof CODE_LIST_LABELS)[])
-    .filter(k => k !== 'orgMasterEntries')
-  const foundCodeListKeys = codeListKeys.filter(k => {
-    const val = result.codeLists[k]
-    return Array.isArray(val) && val.length > 0
-  })
-  const foundLabels = foundCodeListKeys.map(k => CODE_LIST_LABELS[k])
-  const codeListFound = result.sheetsFound.includes(SHEET_CODE_LISTS)
-
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-bold text-gray-800">読み込み完了</h2>
-        <p className="mt-0.5 text-xs text-gray-400">内容を確認して適用してください。</p>
+        <h2 className="text-base font-bold text-gray-800">開始スコープの確認</h2>
       </div>
 
-      <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-3 text-xs">
-        {/* 要員配置リスト */}
-        <ResultRow
-          label={SHEET_ALLOCATION}
-          found={result.sheetsFound.includes(SHEET_ALLOCATION)}
-          detail={`${result.allocationRowCount} 行`}
-        />
-
-        {/* 組織CD一覧 */}
-        <ResultRow
-          label={SHEET_ORG_MASTER}
-          found={result.sheetsFound.includes(SHEET_ORG_MASTER)}
-          detail={`${result.orgEntries.length} 組織`}
-        />
-
-        {/* 各種TBL（コードリスト） */}
-        <div className="flex items-start gap-2">
-          <span className={`text-base leading-none mt-0.5 ${codeListFound ? 'text-green-500' : 'text-gray-300'}`}>
-            {codeListFound ? '✓' : '—'}
-          </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-gray-400'}`}>
-                {SHEET_CODE_LISTS}
-              </span>
-              {codeListFound && (
-                <span className="text-gray-400">
-                  {foundCodeListKeys.length} / {codeListKeys.length} 種類
-                </span>
-              )}
-              {!codeListFound && (
-                <span className="text-gray-400 italic">シートが見つかりません</span>
-              )}
-            </div>
-            {foundLabels.length > 0 && (
-              <p className="text-gray-400 mt-1 leading-relaxed">
-                {foundLabels.join(' · ')}
-              </p>
-            )}
-          </div>
-        </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-4 text-center">
+        <p className="text-xs text-blue-500 mb-1">選択したスコープ</p>
+        <p className="text-base font-bold text-blue-800">
+          {orgName ?? '全組織（スコープなし）'}
+        </p>
       </div>
+
+      <p className="text-xs text-gray-500 text-center">
+        ※ スコープはツール起動後もヘッダーの「作業範囲」からいつでも変更できます
+      </p>
 
       <div className="space-y-2">
         <button
-          onClick={onApply}
+          onClick={onConfirm}
           className="w-full py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
         >
-          適用してアプリを開始
+          確定してアプリを開始
         </button>
         <button
           onClick={onBack}
           className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
-          ← 戻る
+          ← 戻る（スコープを変更）
         </button>
       </div>
     </div>
   )
 }
 
-function ResultRow({ label, found, detail }: { label: string; found: boolean; detail?: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`text-base leading-none ${found ? 'text-green-500' : 'text-gray-300'}`}>
-        {found ? '✓' : '—'}
-      </span>
-      <span className={`font-mono ${found ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
-      {found && detail && <span className="text-gray-400">{detail}</span>}
-      {!found && <span className="text-gray-400 italic">シートが見つかりません</span>}
-    </div>
-  )
-}
-
-// ── 画面④: エラー ─────────────────────────────────────────────────
+// ── エラー ─────────────────────��───────────────────────────────────
 
 function ErrorView({ message, onBack }: { message: string; onBack: () => void }) {
   return (

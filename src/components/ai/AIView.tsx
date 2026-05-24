@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
-import { IS_MOCK_MODE, DEFAULT_MODELS, createAgentRunner } from '../../infrastructure/ai/chatServiceFactory'
+import { IS_MOCK_MODE, DEFAULT_MODELS, createAgentRunner, createAdapter } from '../../infrastructure/ai/chatServiceFactory'
+import { WelcomeSession } from '../../application/welcomeSession'
 import { useChatHandlers } from './useChatHandlers'
 import { AIWelcomeScreen }  from './AIWelcomeScreen'
 import { AIMessageThread }  from './AIMessageThread'
@@ -11,10 +12,11 @@ const MOCK_MODEL = '__mock__'
 
 interface Props {
   onOpenEditor: () => void
+  onImportExcel?: () => void
   onDataLoaded?: () => void
 }
 
-export function AIView({ onOpenEditor, onDataLoaded }: Props) {
+export function AIView({ onOpenEditor, onImportExcel, onDataLoaded }: Props) {
   const { allocationList } = useStore()
   const { messages, phase, clearMessages, selectedModel, setSelectedModel } = useChatStore()
 
@@ -38,6 +40,13 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     [model],
   )
 
+  // Pre-data lightweight agent: same model, no tools
+  const welcomeSession = useMemo(() => {
+    if (model === MOCK_MODEL) return null
+    const adapter = createAdapter(model)
+    return adapter ? new WelcomeSession(adapter) : null
+  }, [model])
+
   const [logCopied, setLogCopied] = useState(false)
   const handleCopyLog = useCallback(async () => {
     if (!agentRunner) return
@@ -52,7 +61,7 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
   }, [clearMessages, agentRunner])
 
   const { widgetCallbacks, handlePromptClick, handleTextSubmit, isBusy, activeWidgetMsgId } =
-    useChatHandlers({ agentRunner, onDataLoaded })
+    useChatHandlers({ agentRunner, welcomeSession, onDataLoaded })
 
   const isDataLoaded = allocationList.length > 0
 
@@ -140,9 +149,19 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden min-h-0">
-        {messages.length === 0 ? (
+        {!isDataLoaded ? (
+          // Pre-data: always stay in welcome/bubble view (never switch to AIMessageThread)
           <AIWelcomeScreen
-            isDataLoaded={isDataLoaded}
+            isDataLoaded={false}
+            onPromptClick={handlePromptClick}
+            onImportExcel={onImportExcel}
+            messages={messages}
+            activeWidgetMsgId={activeWidgetMsgId}
+            callbacks={widgetCallbacks}
+          />
+        ) : messages.length === 0 ? (
+          <AIWelcomeScreen
+            isDataLoaded={true}
             onPromptClick={handlePromptClick}
           />
         ) : (
@@ -178,11 +197,9 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
       )}
 
       {/* Text input */}
-      {messages.length > 0 && (
-        <div className="flex-shrink-0">
-          <AIInput onSubmit={handleTextSubmit} disabled={isBusy || phase !== 'idle'} />
-        </div>
-      )}
+      <div className="flex-shrink-0">
+        <AIInput onSubmit={handleTextSubmit} disabled={isBusy || phase !== 'idle'} />
+      </div>
     </div>
   )
 }

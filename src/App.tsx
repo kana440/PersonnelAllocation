@@ -42,15 +42,15 @@ export default function App() {
   useEffect(() => { checkStorage() }, [checkStorage])
 
   const [isTreeOpen,      setIsTreeOpen]      = useState(true)
-  const [isChatOpen,      setIsChatOpen]      = useState(false)
+  const [isChatOpen,      setIsChatOpen]      = useState(true)
   const [isHistoryOpen,   setIsHistoryOpen]   = useState(false)
   const [historyWidth,    setHistoryWidth]    = useState(HISTORY_DEFAULT)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
-  const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_DEFAULT)
-  const [excelCollapsed,  setExcelCollapsed]  = useState(false)
+  const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_COLLAPSED)
+  const [excelCollapsed,  setExcelCollapsed]  = useState(true)
   const [sidebarWidth,    setSidebarWidth]    = useState(SIDEBAR_DEFAULT)
   const [chatWidth,       setChatWidth]       = useState(CHAT_DEFAULT)
-  const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
+  const prevBottomHeightRef = useRef(BOTTOM_COLLAPSED)
 
   const toggleExcelCollapse = useCallback(() => {
     if (excelCollapsed) {
@@ -155,6 +155,7 @@ export default function App() {
     return (
       <AIView
         onOpenEditor={() => setAppMode('editor')}
+        onImportExcel={() => setAppMode('editor')}
         onDataLoaded={() => setSessionReady(true)}
       />
     )
