@@ -18,7 +18,7 @@ import type { APIMessage } from '../../ports'
 import type { ChatMessage, ChatWidget, ConfirmResult } from '../../application/aiTypes'
 import type { OpenAICompatibleAdapter } from './openAICompatibleAdapter'
 import type { AITraceObserver } from './aiTrace'
-import { NoopTraceObserver } from './aiTrace'
+import { SummaryTraceObserver, CompositeTraceObserver } from './aiTrace'
 import { toolRegistry } from './toolRegistry'
 import { buildAPIMessages } from '../../application/chatSession'
 
@@ -30,29 +30,38 @@ export interface AgentRunResult {
 }
 
 export interface AgentRunOptions {
-  onProgress?: (label: string) => void
+  onProgress?:   (label: string) => void
   /** confirm ツールが呼ばれたとき、UIでウィジェットを表示しユーザーの判断を待つ。
    *  Promise が resolve するまで agentRunner のループは停止する。 */
-  onConfirm?: (widget: ChatWidget) => Promise<ConfirmResult>
+  onConfirm?:    (widget: ChatWidget) => Promise<ConfirmResult>
+  /** 呼び出し側がセッション固有コンテキスト（スコープ等）を追加するための system prompt 上書き。 */
+  systemPrompt?: string
 }
 
 export class AgentRunner {
+  private readonly summary:  SummaryTraceObserver
   private readonly observer: AITraceObserver
 
   constructor(
     private readonly adapter: OpenAICompatibleAdapter,
-    observer?: AITraceObserver,
+    extraObserver?: AITraceObserver,
   ) {
-    this.observer = observer ?? new NoopTraceObserver()
+    this.summary  = new SummaryTraceObserver()
+    this.observer = extraObserver
+      ? new CompositeTraceObserver([this.summary, extraObserver])
+      : this.summary
   }
+
+  getSessionLog():  string { return this.summary.getLog() }
+  clearSessionLog(): void  { this.summary.clear() }
 
   async run(
     history: ChatMessage[],
     userText: string,
     options?: AgentRunOptions,
   ): Promise<AgentRunResult> {
-    const { onProgress, onConfirm } = options ?? {}
-    const messages: APIMessage[] = buildAPIMessages(history)
+    const { onProgress, onConfirm, systemPrompt } = options ?? {}
+    const messages: APIMessage[] = buildAPIMessages(history, systemPrompt)
     messages.push({ role: 'user', content: userText })
 
     let latestWidget: ChatWidget | undefined

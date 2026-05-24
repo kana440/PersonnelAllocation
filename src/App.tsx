@@ -8,6 +8,7 @@ import { AIChatDrawer }      from './components/ai/AIChatDrawer'
 import { AIView }            from './components/ai/AIView'
 import { SetupView }         from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
+import { ReviewView }        from './components/review/ReviewView'
 import { useStore }          from './store/useStore'
 import { useCodeListStore }  from './store/codeListStore'
 import { ScopeSelector }     from './components/header/ScopeSelector'
@@ -36,6 +37,7 @@ export default function App() {
 
   const [appMode,       setAppMode]       = useState<'ai' | 'editor'>('ai')
   const [sessionReady,  setSessionReady]  = useState(false)
+  const [reviewMode,    setReviewMode]    = useState(false)
 
   useEffect(() => { checkStorage() }, [checkStorage])
 
@@ -184,6 +186,17 @@ export default function App() {
           <MergeImportButton />
           <div className="w-px h-4 bg-gray-600" />
           <button
+            onClick={() => setReviewMode(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
+              reviewMode ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-emerald-700 hover:text-white'
+            }`}
+            title="レビューモード（変更確認・バリデーション）"
+          >
+            <span>🔍</span>
+            <span>レビュー</span>
+          </button>
+          <div className="w-px h-4 bg-gray-600" />
+          <button
             onClick={undo}
             disabled={!canUndo}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
@@ -275,7 +288,10 @@ export default function App() {
 
         {/* Main canvas */}
         <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0">
-          <OrgOperationView />
+          {reviewMode
+            ? <ReviewView onClose={() => setReviewMode(false)} />
+            : <OrgOperationView />
+          }
         </div>
 
         {/* AI Chat drawer */}

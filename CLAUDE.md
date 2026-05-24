@@ -118,7 +118,31 @@ executeOperation(op)
 
 `src/application/aiTools.ts` が AI から呼べる関数群。新しい操作を AI に公開するときはここに追加し、`HRApplicationService` の既存メソッドに委譲する。ロジックを重複して書かない。
 
-シナリオは `src/infrastructure/ai/scenarios/`（8種）。
+**レビュー系ツール**（read-only）:
+- `getReviewSummary()` — 変更種別ごとの件数 + バリデーション問題件数
+- `getChangedPersons({ kinds? })` — 変更ありの人物リスト。変更種別でフィルタ可能
+- `getValidationIssues({ level? })` — バリデーション問題の一覧。`error` / `warning` でフィルタ可能
+
+シナリオは `src/infrastructure/ai/scenarios/`（9種）。レビュー系は `reviewSummary.ts`。
+
+---
+
+## コンポーネント設計ルール
+
+**1ファイルの上限は約 200 行**。超える場合はフォルダ構成に切り出す。
+
+```
+components/foo/
+  index.tsx      ← 外部向け export のみ（オーケストレーター）
+  SubPartA.tsx   ← 内部コンポーネント
+  SubPartB.tsx
+  types.ts       ← 共有型
+  helpers.ts     ← 純粋関数ヘルパー
+```
+
+**OrgTreePanel パターン**: レビューエリアで検索＋組織ツリーを使うときは
+`src/components/review/components/OrgTreePanel.tsx` を再利用する。
+コピーしてローカルに書かない。
 
 ---
 
@@ -137,3 +161,22 @@ executeOperation(op)
 - `FieldBinding` の分類は暫定。HR 運用ルールに合わせて要レビュー
 - 削除済みパネル UI（削除済みポジション・人の復活操作）
 - AI から位置操作（positionOps）を呼べるように `aiTools.ts` に未追加
+
+---
+
+## 業務フロー前提（仮説 / docs/10-business-flow-hypothesis.md 参照）
+
+> 詳細・未決定事項は docs/10-business-flow-hypothesis.md を参照。
+
+**重要な前提（仮説）**:
+
+- Excel は **before データのみ** で配布され、担当者が after を記入して返却する
+- インポート直後は after が空 → そのままでは全員「未アサイン」になる
+- `afterOrganizations` のコードは `beforeOrganizations` と **一部異なる**（廃止・分割・統合・改称）
+- 旧組織 → 新組織の継承関係は Excel に存在しない。ツール内で対応づける必要がある
+
+**これが意味すること（実装上の注意）**:
+
+- after の初期化は「before をそのままコピー」では不可。**組織継承マッピング**を経由する必要がある
+- 比較軸は「旧組織 ↔ 新組織」の 1:1 対応ではなく、人ベース・旧組織軸・新組織軸の 3 視点が必要
+- 将来的には配布・回収のマージ工程を撤廃する方向（`mergeExcelData` は段階的廃止対象）

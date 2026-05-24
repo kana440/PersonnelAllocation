@@ -1,9 +1,9 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
-import { ChatSession } from '../../application/chatSession'
+import { ChatSession, buildSystemPrompt } from '../../application/chatSession'
 import { DirectEditOperation } from '../../domain/operation/handlers/directEdit'
 import { mockApiService } from '../../infrastructure/ai/chatServiceFactory'
 import type { AgentRunner } from '../../infrastructure/ai/agentRunner'
@@ -17,6 +17,10 @@ import { checkImpactScenario, buildImpactGroups } from '../../infrastructure/ai/
 import { exportExcelScenario, buildExportChangeSummary } from '../../infrastructure/ai/scenarios/exportExcel'
 import type { ChatWidget, ConfirmResult, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
 import type { ChatPhase } from '../../store/useChatStore'
+
+const AFFIRMATIONS = ['進めて', 'はい', 'yes', 'ok', 'やって', '適用', '確認して']
+const isAffirmation = (text: string) =>
+  AFFIRMATIONS.some(a => text.trim().toLowerCase().includes(a.toLowerCase()))
 
 export const WIDGET_PHASE_MAP: Partial<Record<ChatPhase, ChatWidget['type']>> = {
   'awaiting-file':            'file-picker',
@@ -49,11 +53,22 @@ export function useChatHandlers({
     setPhase, setPendingPersons,
   } = useChatStore()
 
+  const buildCurrentSystemPrompt = useCallback(() => {
+    const { scopeOrgId, afterOrganizations } = useStore.getState()
+    const scopeOrg = scopeOrgId ? afterOrganizations.find(o => o.id === scopeOrgId) : null
+    return buildSystemPrompt(scopeOrg?.name, scopeOrg?.externalCode ?? undefined)
+  }, [])
+
   const chatSession = useMemo(() => new ChatSession(mockApiService), [])
 
-  const isBusy = !BUSY_EXEMPT_PHASES.includes(phase)
+  const [isAgentRunning, setIsAgentRunning] = useState(false)
 
-  const activeWidgetType = WIDGET_PHASE_MAP[phase]
+  const isBusy = isAgentRunning || !BUSY_EXEMPT_PHASES.includes(phase)
+
+  // Pending confirm: most recent message with llmConfirm set (agent loop awaiting user approval)
+  const pendingConfirmMsg = [...messages].reverse().find(m => !!m.llmConfirm) ?? null
+
+const activeWidgetType = WIDGET_PHASE_MAP[phase]
   let activeWidgetMsgId: string | null = null
   if (activeWidgetType) {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -95,13 +110,15 @@ export function useChatHandlers({
         })
       })
 
+    setIsAgentRunning(true)
     try {
       let replyText: string
       let replyWidget: ChatWidget | undefined
       if (agentRunner) {
         const result = await agentRunner.run(snapshot, text, {
-          onProgress: (label: string) => updateMessage(id, { text: label }),
+          onProgress:   (label: string) => updateMessage(id, { text: label }),
           onConfirm,
+          systemPrompt: buildCurrentSystemPrompt(),
         })
         replyText   = result.text
         replyWidget = result.widget
@@ -111,8 +128,10 @@ export function useChatHandlers({
       updateMessage(id, { isLoading: false, text: replyText, widget: replyWidget, llmConfirm: undefined, llmCancel: undefined })
     } catch (err) {
       updateMessage(id, { isLoading: false, text: `エラーが発生しました: ${String(err)}`, llmConfirm: undefined, llmCancel: undefined })
+    } finally {
+      setIsAgentRunning(false)
     }
-  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession])
+  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession, setIsAgentRunning])
 
   // ── import Excel ──────────────────────────────────────────────────────────────
   const startImportExcel = useCallback(async () => {
@@ -432,9 +451,16 @@ export function useChatHandlers({
   }, [isBusy, startImportExcel, startExcelHelp, startCheckOrgMembers, startCheckDepartment, startReportLine, startPromotePersons, startCheckImpact, startExportExcel])
 
   const handleTextSubmit = useCallback((text: string) => {
-    if (!text.trim() || isBusy) return
+    if (!text.trim()) return
+    // Pending confirm widget: intercept affirmation words and auto-confirm instead of starting a new run
+    if (pendingConfirmMsg?.llmConfirm && isAffirmation(text)) {
+      addMessage({ role: 'user', text })
+      pendingConfirmMsg.llmConfirm()
+      return
+    }
+    if (isBusy) return
     handleUnknownQuery(text)
-  }, [isBusy, handleUnknownQuery])
+  }, [isBusy, handleUnknownQuery, pendingConfirmMsg, isAffirmation, addMessage])
 
   return {
     widgetCallbacks,

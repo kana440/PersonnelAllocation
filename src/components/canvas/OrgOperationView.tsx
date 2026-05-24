@@ -72,7 +72,7 @@ export function OrgOperationView() {
 
   // ── Hooks ──────────────────────────────────────────────────────
   const { personMoveDialog, setPersonMoveDialog, handlePersonMoveConfirm } = usePersonMove({
-    persons, allocationList, afterOrgByCode, allAfterOrgsUnscoped,
+    persons, allocationList,
   })
 
   const {

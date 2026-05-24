@@ -49,7 +49,7 @@ export type ChatWidget =
   | { type: 'promote-confirm'; persons: PersonMatch[] }
   | { type: 'org-tree'; orgName: string; tree: OrgTreeNode }
   | { type: 'report-line'; managerName: string; managerOrgName: string; members: ReportLineMember[] }
-  | { type: 'diff-preview'; persons: PersonDiff[] }
+  | { type: 'diff-preview'; persons: PersonDiff[]; label?: string }
   | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
 

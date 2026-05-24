@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
 import { IS_MOCK_MODE, DEFAULT_MODELS, createAgentRunner } from '../../infrastructure/ai/chatServiceFactory'
@@ -37,6 +37,19 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
     () => model === MOCK_MODEL ? null : createAgentRunner(model),
     [model],
   )
+
+  const [logCopied, setLogCopied] = useState(false)
+  const handleCopyLog = useCallback(async () => {
+    if (!agentRunner) return
+    await navigator.clipboard.writeText(agentRunner.getSessionLog())
+    setLogCopied(true)
+    setTimeout(() => setLogCopied(false), 2000)
+  }, [agentRunner])
+
+  const handleClear = useCallback(() => {
+    clearMessages()
+    agentRunner?.clearSessionLog()
+  }, [clearMessages, agentRunner])
 
   const { widgetCallbacks, handlePromptClick, handleTextSubmit, isBusy, activeWidgetMsgId } =
     useChatHandlers({ agentRunner, onDataLoaded })
@@ -97,9 +110,18 @@ export function AIView({ onOpenEditor, onDataLoaded }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {agentRunner && messages.length > 0 && (
+            <button
+              onClick={handleCopyLog}
+              className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              title="AIデバッグログをクリップボードにコピー"
+            >
+              {logCopied ? '✓ コピー済み' : '📋 ログ'}
+            </button>
+          )}
           {messages.length > 0 && (
             <button
-              onClick={clearMessages}
+              onClick={handleClear}
               disabled={isBusy}
               className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
               title="会話履歴をクリア"

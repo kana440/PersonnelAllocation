@@ -1,0 +1,204 @@
+import { useState, useMemo, useEffect } from 'react'
+import { useStore } from '../../../store/useStore'
+import type { ReviewRow } from '../hooks/useReviewData'
+
+// 変更種別の定義（表示順）
+const ALL_KINDS = [
+  { key: 'transfer',    label: '組織異動', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'promotion',   label: '昇格',     color: 'bg-green-100 text-green-700 border-green-200' },
+  { key: 'demotion',    label: '降格',     color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { key: 'titleChange', label: '職位名変更', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { key: 'newHire',     label: '新規採用', color: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { key: 'termination', label: '退職',     color: 'bg-red-100 text-red-700 border-red-200' },
+  { key: 'concurrent',  label: '兼務',     color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+] as const
+
+interface Props {
+  rows:                ReviewRow[]
+  filterKind?:         string       // ダイジェストからのジャンプ時の初期選択
+  filterIssues?:       boolean
+  defaultChangedOnly?: boolean      // "変更あり" カードからのナビゲーション
+}
+
+function DiffCell({ before, after }: { before: string; after: string }) {
+  const changed = before !== after
+  return (
+    <td className="px-2 py-1.5 text-xs border-b border-gray-100 whitespace-nowrap">
+      {changed ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-blue-700 font-medium">{after || '—'}</span>
+          <span className="text-gray-400 line-through text-[10px]">{before || '—'}</span>
+        </div>
+      ) : (
+        <span className="text-gray-600">{after || '—'}</span>
+      )}
+    </td>
+  )
+}
+
+export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOnly }: Props) {
+  const { afterOrganizations, beforeOrganizations } = useStore()
+
+  const [showChangedOnly, setShowChangedOnly] = useState(!!filterKind || !!filterIssues || !!defaultChangedOnly)
+  const [showIssuesOnly,  setShowIssuesOnly]  = useState(!!filterIssues)
+  const [activeKinds,     setActiveKinds]     = useState<Set<string>>(
+    filterKind ? new Set([filterKind]) : new Set()
+  )
+  const [search, setSearch] = useState('')
+
+  // ダイジェストから再ナビゲーション時に同期
+  useEffect(() => {
+    if (filterKind) {
+      setActiveKinds(new Set([filterKind]))
+      setShowChangedOnly(true)
+    }
+  }, [filterKind])
+
+  const toggleKind = (key: string) =>
+    setActiveKinds(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  const afterOrgByCode  = useMemo(() =>
+    new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
+    [afterOrganizations]
+  )
+  const beforeOrgByCode = useMemo(() =>
+    new Map(beforeOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
+    [beforeOrganizations]
+  )
+
+  const filtered = useMemo(() => {
+    let list = rows
+    if (showChangedOnly) list = list.filter(r => r.changes.diffCount > 0)
+    if (showIssuesOnly)  list = list.filter(r => r.issues.length > 0)
+    if (activeKinds.size > 0) {
+      list = list.filter(r => [...activeKinds].some(k => r.changes.kinds.has(k as never)))
+    }
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(r =>
+        (r.row.lastName ?? '').toLowerCase().includes(q) ||
+        (r.row.firstName ?? '').toLowerCase().includes(q) ||
+        (r.row.userId ?? '').toLowerCase().includes(q) ||
+        (r.row.departmentCode ?? '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [rows, showChangedOnly, showIssuesOnly, activeKinds, search])
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+
+      {/* ── ツールバー row 1: 検索・チェックボックス ── */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-wrap">
+        <input
+          type="text"
+          placeholder="名前・ID・組織で絞り込み"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-xs w-48 focus:outline-none focus:ring-1 focus:ring-blue-300"
+        />
+        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={showChangedOnly} onChange={e => setShowChangedOnly(e.target.checked)} />
+          変更ありのみ
+        </label>
+        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={showIssuesOnly} onChange={e => setShowIssuesOnly(e.target.checked)} />
+          問題ありのみ
+        </label>
+        <span className="ml-auto text-xs text-gray-400">{filtered.length} 件</span>
+      </div>
+
+      {/* ── ツールバー row 2: 変更種別フィルター ── */}
+      <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-200 bg-gray-50 flex-wrap">
+        <span className="text-[10px] font-semibold text-gray-400 flex-shrink-0">変更種別:</span>
+        {ALL_KINDS.map(({ key, label, color }) => {
+          const active = activeKinds.has(key)
+          return (
+            <button
+              key={key}
+              onClick={() => toggleKind(key)}
+              className={`px-2 py-0.5 rounded border text-[10px] font-medium transition-all cursor-pointer select-none ${
+                active
+                  ? `${color} shadow-sm ring-1 ring-inset ring-current`
+                  : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {label}
+            </button>
+          )
+        })}
+        {activeKinds.size > 0 && (
+          <button
+            onClick={() => setActiveKinds(new Set())}
+            className="text-[10px] text-gray-400 hover:text-gray-600 ml-1 underline"
+          >
+            クリア
+          </button>
+        )}
+      </div>
+
+      {/* ── テーブル ── */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead className="sticky top-0 bg-gray-100 z-10">
+            <tr>
+              <th className="px-2 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">氏名</th>
+              <th className="px-2 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">ユーザーID</th>
+              <th className="px-2 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">組織（新→旧）</th>
+              <th className="px-2 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">職位名（新→旧）</th>
+              <th className="px-2 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">バンド（新→旧）</th>
+              <th className="px-2 py-2 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap">変更種別</th>
+              <th className="px-2 py-2 text-left font-medium text-red-600 border-b border-gray-200 whitespace-nowrap">問題</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(({ row, changes, issues }) => {
+              const afterOrgName  = row.departmentCode     ? (afterOrgByCode.get(row.departmentCode)?.name  ?? row.departmentCode)     : '—'
+              const beforeOrgName = row.prevDepartmentCode ? (beforeOrgByCode.get(row.prevDepartmentCode)?.name ?? row.prevDepartmentCode) : '—'
+              const hasIssue = issues.length > 0
+              return (
+                <tr key={row.rowId} className={hasIssue ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                  <td className="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap font-medium">{row.lastName}{row.firstName}</td>
+                  <td className="px-2 py-1.5 border-b border-gray-100 text-gray-500 whitespace-nowrap">{row.userId ?? '—'}</td>
+                  <DiffCell before={beforeOrgName} after={afterOrgName} />
+                  <DiffCell before={row.prevLocalJobTitle ?? ''} after={row.localJobTitle ?? ''} />
+                  <DiffCell before={row.prevBand ?? ''} after={row.band ?? ''} />
+                  <td className="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">
+                    <div className="flex flex-wrap gap-0.5">
+                      {ALL_KINDS.map(({ key, label, color }) =>
+                        changes.kinds.has(key as never) && (
+                          <span key={key} className={`px-1 py-0.5 rounded text-[10px] border ${color}`}>{label}</span>
+                        )
+                      )}
+                      {changes.bandMismatch && (
+                        <span className="px-1 py-0.5 rounded text-[10px] bg-amber-100 text-amber-700 border border-amber-200">⚠Band</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-2 py-1.5 border-b border-gray-100">
+                    {issues.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {issues.map((issue, i) => (
+                          <div key={i} className={`text-[10px] ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
+                            {issue.message}
+                          </div>
+                        ))}
+                      </div>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                </tr>
+              )
+            })}
+            {filtered.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">該当なし</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

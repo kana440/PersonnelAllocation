@@ -1,0 +1,109 @@
+import type { AllocationRow } from '../allocationRow'
+
+// バンド文字列から数値レベルを抽出（例: "M4" → 4, "G3" → 3, "4" → 4）
+export function parseBandLevel(band: string | undefined | null): number | null {
+  if (!band) return null
+  const m = band.trim().match(/(\d+)/)
+  if (!m) return null
+  const n = parseInt(m[1], 10)
+  return isNaN(n) ? null : n
+}
+
+// ポジションバンド範囲から [min, max] を抽出（例: "M4-M6" → [4, 6], "M4" → [4, 4]）
+export function parsePositionBandRange(positionBand: string | undefined | null): [number, number] | null {
+  if (!positionBand) return null
+  const parts = positionBand.trim().split(/[-~]/)
+  const nums = parts.map(p => parseBandLevel(p)).filter((n): n is number => n !== null)
+  if (nums.length === 0) return null
+  return [Math.min(...nums), Math.max(...nums)]
+}
+
+export type ChangeKind =
+  | 'transfer'       // 組織変更
+  | 'promotion'      // 昇格（bandレベル上昇）
+  | 'demotion'       // 降格（bandレベル下降）
+  | 'bandChange'     // バンド変更（昇降格以外）
+  | 'titleChange'    // 職位名変更
+  | 'positionChange' // ポジション変更
+  | 'newHire'        // 新規採用（prevUserId なし、userId あり）
+  | 'termination'    // 退職（userId なし）
+  | 'concurrent'     // 兼務
+
+export interface RowChanges {
+  kinds:        Set<ChangeKind>
+  bandMismatch: boolean  // band が positionBand 範囲外
+  diffCount:    number   // 変更フィールド数
+}
+
+export function detectChanges(row: AllocationRow): RowChanges {
+  const kinds = new Set<ChangeKind>()
+
+  // 組織変更
+  if ((row.departmentCode ?? '') !== (row.prevDepartmentCode ?? '')) {
+    kinds.add('transfer')
+  }
+
+  // バンド変更
+  const prevBandLevel  = parseBandLevel(row.prevBand)
+  const afterBandLevel = parseBandLevel(row.band)
+  if ((row.band ?? '') !== (row.prevBand ?? '')) {
+    if (prevBandLevel !== null && afterBandLevel !== null) {
+      if (afterBandLevel > prevBandLevel) kinds.add('promotion')
+      else if (afterBandLevel < prevBandLevel) kinds.add('demotion')
+      else kinds.add('bandChange')
+    } else {
+      kinds.add('bandChange')
+    }
+  }
+
+  // 職位名変更
+  if ((row.localJobTitle ?? '') !== (row.prevLocalJobTitle ?? '')) {
+    kinds.add('titleChange')
+  }
+
+  // ポジション変更
+  if ((row.positionCode ?? '') !== (row.prevPositionCode ?? '')) {
+    kinds.add('positionChange')
+  }
+
+  // 新規採用（before に userId がなく after にある）
+  if (!row.prevDepartmentCode && row.userId) {
+    kinds.add('newHire')
+  }
+
+  // 退職（userId がない）
+  if (row.prevDepartmentCode && !row.userId && !row.departmentCode) {
+    kinds.add('termination')
+  }
+
+  // 兼務
+  if (row.concurrentType === '兼務') {
+    kinds.add('concurrent')
+  }
+
+  // band が positionBand 範囲外かチェック
+  let bandMismatch = false
+  if (afterBandLevel !== null) {
+    const range = parsePositionBandRange(row.positionBand)
+    if (range) {
+      bandMismatch = afterBandLevel < range[0] || afterBandLevel > range[1]
+    }
+  }
+
+  // 変更フィールド数（簡易: 主要フィールドのみ）
+  const keyPairs: Array<[keyof AllocationRow, keyof AllocationRow]> = [
+    ['departmentCode', 'prevDepartmentCode'],
+    ['band', 'prevBand'],
+    ['localJobTitle', 'prevLocalJobTitle'],
+    ['positionCode', 'prevPositionCode'],
+    ['positionBand', 'prevPositionBand'],
+    ['concurrentType', 'prevConcurrentType'],
+    ['employmentType', 'prevEmploymentType'],
+  ]
+  let diffCount = 0
+  for (const [after, before] of keyPairs) {
+    if ((row[after] ?? '') !== (row[before] ?? '')) diffCount++
+  }
+
+  return { kinds, bandMismatch, diffCount }
+}

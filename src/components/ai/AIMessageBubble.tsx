@@ -85,6 +85,7 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
             {message.widget.type === 'diff-preview' && (
               <DiffPreviewWidget
                 persons={message.widget.persons}
+                label={message.widget.label}
                 isActive={isActiveWidget || !!message.llmConfirm}
                 onConfirm={message.llmConfirm ?? callbacks.onPromoteConfirm}
                 onCancel={message.llmCancel ?? callbacks.onPromoteCancel}

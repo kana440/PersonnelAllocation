@@ -23,6 +23,8 @@ import { appService, HRApplicationService } from './HRApplicationService'
 import type { ValidationResult, OperationError, IDomainOperation } from '../domain/operation/types'
 import type { AllocationRow }   from '../domain/allocationRow'
 import type { Person, Organization } from '../domain/schemas'
+import { detectChanges } from '../domain/review/changeDetection'
+import { validateRow }   from '../domain/validation/validateRow'
 
 export interface VacantPositionResult {
   rowId:         number
@@ -156,6 +158,87 @@ export function createAITools(service: HRApplicationService) {
     service.removePosition(rowId)
   }
 
+  // ── Review tools (read-only) ─────────────────────────────────────────────
+
+  /** 変更サマリーを返す。変更種別ごとの件数と問題件数を含む */
+  function getReviewSummary(): {
+    totalRows:    number
+    changedRows:  number
+    byKind:       Record<string, number>
+    errorCount:   number
+    warningCount: number
+  } {
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const byKind: Record<string, number> = {}
+    let changedRows = 0, errorCount = 0, warningCount = 0
+    for (const row of allocationList) {
+      const { diffCount, kinds } = detectChanges(row)
+      if (diffCount > 0) {
+        changedRows++
+        for (const k of kinds) byKind[k] = (byKind[k] ?? 0) + 1
+      }
+      for (const issue of validateRow(row, afterOrganizations, codeLists)) {
+        issue.level === 'error' ? errorCount++ : warningCount++
+      }
+    }
+    return { totalRows: allocationList.length, changedRows, byKind, errorCount, warningCount }
+  }
+
+  /** 特定の変更種別を持つ人のリストを返す */
+  function getChangedPersons(filter: { kinds?: string[] } = {}): Array<{
+    userId:   string
+    name:     string
+    orgName:  string
+    kinds:    string[]
+    rowId:    number
+  }> {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+    const results = []
+    for (const row of allocationList) {
+      if (!row.userId) continue
+      const { kinds } = detectChanges(row)
+      if (kinds.size === 0) continue
+      if (filter.kinds && !filter.kinds.some(k => kinds.has(k as never))) continue
+      const org = afterOrganizations.find(o => o.externalCode === row.departmentCode || o.id === row.departmentCode)
+      results.push({
+        userId:  row.userId,
+        name:    [row.lastName, row.firstName].filter(Boolean).join(' '),
+        orgName: org?.name ?? row.departmentCode ?? '',
+        kinds:   [...kinds],
+        rowId:   row.rowId,
+      })
+    }
+    return results
+  }
+
+  /** バリデーション問題を返す。level でフィルタ可能 */
+  function getValidationIssues(filter: { level?: 'error' | 'warning' } = {}): Array<{
+    rowId:   number
+    userId:  string
+    name:    string
+    field:   string
+    level:   string
+    message: string
+  }> {
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const results = []
+    for (const row of allocationList) {
+      const issues = validateRow(row, afterOrganizations, codeLists)
+      for (const issue of issues) {
+        if (filter.level && issue.level !== filter.level) continue
+        results.push({
+          rowId:   row.rowId,
+          userId:  row.userId ?? '',
+          name:    [row.lastName, row.firstName].filter(Boolean).join(' '),
+          field:   String(issue.field),
+          level:   issue.level,
+          message: issue.message,
+        })
+      }
+    }
+    return results
+  }
+
   // ── Utility ──────────────────────────────────────────────────────────────
 
   function formatErrors(errors: OperationError[]): string {
@@ -167,6 +250,7 @@ export function createAITools(service: HRApplicationService) {
     findVacantPositions,
     validateOperation, executeOperation, undo,
     createVacantPosition, assignPersonToVacantPosition, unassignPersonFromPosition, removePosition,
+    getReviewSummary, getChangedPersons, getValidationIssues,
     formatErrors,
   }
 }

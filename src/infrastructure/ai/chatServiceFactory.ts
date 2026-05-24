@@ -10,7 +10,7 @@
 import { MockApiService }           from './mockApiService'
 import { OpenAICompatibleAdapter }  from './openAICompatibleAdapter'
 import { AgentRunner }              from './agentRunner'
-import { ConsoleTraceObserver, NoopTraceObserver } from './aiTrace'
+import { ConsoleTraceObserver } from './aiTrace'
 
 const RAW_BASE_URL   = import.meta.env.VITE_AI_BASE_URL
 const API_KEY        = import.meta.env.VITE_AI_API_KEY        ?? ''
@@ -48,8 +48,8 @@ export function createAdapter(model: string): OpenAICompatibleAdapter | null {
 export function createAgentRunner(model: string): AgentRunner | null {
   const adapter = createAdapter(model)
   if (!adapter) return null
-  const observer = import.meta.env.DEV ? new ConsoleTraceObserver() : new NoopTraceObserver()
-  return new AgentRunner(adapter, observer)
+  const extraObserver = import.meta.env.DEV ? new ConsoleTraceObserver() : undefined
+  return new AgentRunner(adapter, extraObserver)
 }
 
 /** Singleton mock service used as the fallback for text-only queries. */
