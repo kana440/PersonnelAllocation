@@ -49,10 +49,12 @@ export interface OrgViewContextValue {
   togglePersonSelection:    (id: string) => void
   selectedPersonId:         string | null
   selectPerson:             (id: string) => void
-  handlePersonDoubleClick:  (id: string) => void
-  handlePersonContextMenu:  (e: React.MouseEvent, id: string) => void
-  expandedChipIds:          Set<string>
-  toggleChip:               (id: string) => void
+  handlePersonDoubleClick:      (id: string) => void
+  handlePersonContextMenu:      (e: React.MouseEvent, id: string) => void
+  handlePositionContextMenu:    (e: React.MouseEvent, rowId: number) => void
+  handleDropPositionOnPosition: (e: React.DragEvent, targetRowId: number) => void
+  expandedChipIds:              Set<string>
+  toggleChip:                   (id: string) => void
 }
 
 export const OrgViewContext = createContext<OrgViewContextValue | null>(null)

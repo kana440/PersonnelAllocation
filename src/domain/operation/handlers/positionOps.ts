@@ -123,6 +123,36 @@ export class UnassignPersonFromPositionOperation implements IDomainOperation {
   }
 }
 
+// ── SetPositionManager ───────────────────────────────────────────────────────
+
+export class SetPositionManagerOperation implements IDomainOperation {
+  readonly kind = 'SetPositionManager'
+
+  constructor(
+    private readonly rowId:               number,
+    private readonly managerPositionCode: string | undefined,
+  ) {}
+
+  validate(ctx: OperationContext): ValidationResult {
+    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
+      return fail(`行が見つかりません (rowId: ${this.rowId})`)
+    return ok()
+  }
+
+  apply(ctx: OperationContext): OperationResult {
+    const row   = ctx.allocationList.find(r => r.rowId === this.rowId)!
+    const label = this.managerPositionCode
+      ? `上司設定: ${row.localJobTitle ?? row.positionCode ?? ''}`
+      : `上司解除: ${row.localJobTitle ?? row.positionCode ?? ''}`
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === this.rowId ? { ...r, managerPositionCode: this.managerPositionCode } : r
+      ),
+      label,
+    }
+  }
+}
+
 // ── AssignPersonToPosition ───────────────────────────────────────────────────
 
 export class AssignPersonToPositionOperation implements IDomainOperation {

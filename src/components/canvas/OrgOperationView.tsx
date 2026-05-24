@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { MoveRowsToOrgOperation } from '../../domain/operation/handlers/moveRowsToOrg'
+import { MoveRowsToOrgOperation }      from '../../domain/operation/handlers/moveRowsToOrg'
+import { SetPositionManagerOperation } from '../../domain/operation/handlers/positionOps'
 import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
 import { ConfirmDialog }    from './modals/ConfirmDialog'
@@ -49,7 +50,8 @@ export function OrgOperationView() {
   } = useReportLine({ allocationList, personBySfId, afterOrgByCode, canvasMode, selectedPersonId })
 
   // ── UI state ───────────────────────────────────────────────────
-  const [contextMenu,       setContextMenu]       = useState<{ x: number; y: number; personId: string } | null>(null)
+  const [contextMenu,         setContextMenu]         = useState<{ x: number; y: number; personId: string } | null>(null)
+  const [positionContextMenu, setPositionContextMenu] = useState<{ x: number; y: number; rowId: number } | null>(null)
   const [confirmDialog,     setConfirmDialog]     = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [addPositionOrgId,  setAddPositionOrgId]  = useState<string | null>(null)
   const [addPositionTitle,  setAddPositionTitle]  = useState('')
@@ -88,6 +90,35 @@ export function OrgOperationView() {
     e.preventDefault(); e.stopPropagation()
     selectPerson(personId)
     setContextMenu({ x: e.clientX, y: e.clientY, personId })
+  }
+
+  const handlePositionContextMenu = (e: React.MouseEvent, rowId: number) => {
+    e.preventDefault(); e.stopPropagation()
+    setPositionContextMenu({ x: e.clientX, y: e.clientY, rowId })
+  }
+
+  const handleDropPositionOnPosition = (e: React.DragEvent, targetRowId: number) => {
+    e.preventDefault(); e.stopPropagation()
+    let data: { dragType?: string; fromRowId?: number }
+    try { data = JSON.parse(e.dataTransfer.getData('application/json')) as typeof data } catch { return }
+    if (data.dragType !== 'position' || !data.fromRowId || data.fromRowId === targetRowId) return
+
+    const sourceRow = allocationList.find(r => r.rowId === data.fromRowId)
+    const targetRow = allocationList.find(r => r.rowId === targetRowId)
+    if (!sourceRow?.positionCode || !targetRow?.positionCode) return
+
+    // 循環チェック: target が source の子孫なら設定しない
+    const mgrCodeByPosCode = new Map(
+      allocationList.filter(r => r.positionCode).map(r => [r.positionCode!, r.managerPositionCode])
+    )
+    let cur: string | undefined = targetRow.managerPositionCode
+    const seen = new Set<string>()
+    while (cur && !seen.has(cur)) {
+      if (cur === sourceRow.positionCode) return  // cycle
+      seen.add(cur); cur = mgrCodeByPosCode.get(cur)
+    }
+
+    appService.executeOperation(new SetPositionManagerOperation(data.fromRowId, targetRow.positionCode))
   }
 
   const togglePersonSelection = (personId: string) => setSelectedPersonIds(prev => {
@@ -138,6 +169,7 @@ export function OrgOperationView() {
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson,
     handlePersonDoubleClick, handlePersonContextMenu,
+    handlePositionContextMenu, handleDropPositionOnPosition,
     expandedChipIds, toggleChip,
   }
 
@@ -270,6 +302,33 @@ export function OrgOperationView() {
             </div>
           </>
         )}
+
+        {/* Position context menu */}
+        {positionContextMenu && (() => {
+          const row    = allocationList.find(r => r.rowId === positionContextMenu.rowId)
+          const person = row?.userId ? persons.find(p => p.sfPersonId === row.userId) : null
+          const title  = row?.localJobTitle || row?.officialPositionCode || row?.positionCode || '（役職未設定）'
+          return (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setPositionContextMenu(null)} onContextMenu={e => { e.preventDefault(); setPositionContextMenu(null) }} />
+              <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-40" style={{ left: positionContextMenu.x, top: positionContextMenu.y }}>
+                <div className="px-3 py-1.5 border-b border-gray-100">
+                  <div className="text-xs font-semibold text-gray-700 truncate">{title}</div>
+                  {person && <div className="text-[11px] text-gray-400 truncate">{person.name}</div>}
+                  {!person && <div className="text-[11px] text-gray-400">空席</div>}
+                </div>
+                {row && (
+                  <button
+                    onClick={() => { enterEditMode(row.rowId); setPositionContextMenu(null) }}
+                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
+                  >
+                    <span>✏️</span> 編集画面を開く
+                  </button>
+                )}
+              </div>
+            </>
+          )
+        })()}
 
         {/* 選択モード アクションバー */}
         {isSelectMode && selectedPersonIds.size > 0 && (

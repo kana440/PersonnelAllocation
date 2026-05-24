@@ -1,16 +1,37 @@
+import { useState, useMemo } from 'react'
 import { useOrgView } from '../OrgViewContext'
-import type { DragData } from '../OrgViewContext'
+import type { DragData, PositionEntry } from '../OrgViewContext'
+import type { AllocationRow } from '../../../domain/allocationRow'
 import { appService } from '../../../application/HRApplicationService'
 
-interface PositionRowsProps { orgId: string }
+// ── カラーパレット（ReportLineView と同系） ───────────────────────────────────
+const PALETTE = [
+  { border: 'border-l-blue-400',    posBg: 'bg-blue-50',    personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-emerald-400', posBg: 'bg-emerald-50', personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-violet-400',  posBg: 'bg-violet-50',  personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-amber-400',   posBg: 'bg-amber-50',   personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-cyan-400',    posBg: 'bg-cyan-50',    personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-rose-400',    posBg: 'bg-rose-50',    personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-teal-400',    posBg: 'bg-teal-50',    personBg: 'bg-white', personBorder: 'border-gray-200' },
+  { border: 'border-l-orange-400',  posBg: 'bg-orange-50',  personBg: 'bg-white', personBorder: 'border-gray-200' },
+]
 
 const isInternalPosCode = (s?: string) => !s || s.startsWith('_pos_')
+
+const getPositionTitle = (row: AllocationRow): string =>
+  row.localJobTitle || row.officialPositionCode ||
+  (isInternalPosCode(row.positionCode) ? '' : (row.positionCode ?? '')) ||
+  '（役職未設定）'
+
+interface PositionRowsProps { orgId: string }
 
 export function PositionRows({ orgId }: PositionRowsProps) {
   const {
     positionTreeByOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDropOnVacantSlot,
+    handleDropPositionOnPosition,
+    handlePositionContextMenu,
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson,
     handlePersonDoubleClick, handlePersonContextMenu,
@@ -19,127 +40,265 @@ export function PositionRows({ orgId }: PositionRowsProps) {
 
   const entries = positionTreeByOrgId.get(orgId) ?? []
 
-  const getPositionTitle = (row: import('../../../domain/allocationRow').AllocationRow): string =>
-    row.localJobTitle || row.officialPositionCode ||
-    (isInternalPosCode(row.positionCode) ? '' : (row.positionCode ?? '')) ||
-    '（役職未設定）'
+  // ── 折りたたみ状態 ──────────────────────────────────────────────────────────
+  const [collapsedPositions, setCollapsedPositions] = useState<Set<string>>(new Set())
+
+  // ポジション→ポジションドラッグ中のホバー先 rowId
+  const [dragOverPositionRowId, setDragOverPositionRowId] = useState<number | null>(null)
+
+  const toggleCollapse = (positionCode: string) =>
+    setCollapsedPositions(prev => {
+      const next = new Set(prev)
+      next.has(positionCode) ? next.delete(positionCode) : next.add(positionCode)
+      return next
+    })
+
+  // 子を持つポジションコードのセット
+  const parentPosCodes = useMemo(() => {
+    const set = new Set<string>()
+    for (const { row } of entries) {
+      if (row.managerPositionCode) set.add(row.managerPositionCode)
+    }
+    return set
+  }, [entries])
+
+  // 折りたたまれたサブツリーを除外したエントリ列（DFS順・skipDepth方式）
+  const visibleEntries = useMemo((): PositionEntry[] => {
+    const result: PositionEntry[] = []
+    let skipDepth: number | null = null
+    for (const entry of entries) {
+      if (skipDepth !== null) {
+        if (entry.depth > skipDepth) continue
+        else skipDepth = null
+      }
+      result.push(entry)
+      if (entry.row.positionCode && collapsedPositions.has(entry.row.positionCode)) {
+        skipDepth = entry.depth
+      }
+    }
+    return result
+  }, [entries, collapsedPositions])
+
+  // 折りたたみ時に隠れているポジション数・人数を集計
+  const subtreeStats = useMemo(() => {
+    const map = new Map<string, { positions: number; persons: number }>()
+    for (const posCode of collapsedPositions) {
+      let counting = false
+      let parentDepth = -1
+      let positions = 0
+      let persons = 0
+      for (const entry of entries) {
+        if (!counting) {
+          if (entry.row.positionCode === posCode) { counting = true; parentDepth = entry.depth }
+        } else {
+          if (entry.depth <= parentDepth) break
+          if (entry.row.positionCode) positions++
+          if (entry.person) persons++
+        }
+      }
+      map.set(posCode, { positions, persons })
+    }
+    return map
+  }, [entries, collapsedPositions])
+
+  // ルートポジションごとにカラーインデックスを割り当て
+  const colorByRowId = useMemo(() => {
+    const map = new Map<number, number>()
+    let idx = -1
+    for (const entry of entries) {
+      if (entry.depth === 0) idx++
+      map.set(entry.row.rowId, Math.max(0, idx) % PALETTE.length)
+    }
+    return map
+  }, [entries])
+
+  if (visibleEntries.length === 0) return null
 
   return (
-    <div className="space-y-1 mb-2">
-      {entries.map(({ row, person, depth }) => {
+    <div className="space-y-0.5 mb-2">
+      {visibleEntries.map(({ row, person, depth }) => {
         const isVacant     = !person
-        const isSelected   = !isVacant && (isSelectMode ? selectedPersonIds.has(person!.id) : selectedPersonId === person!.id)
+        const isSelected   = !isVacant && (
+          isSelectMode ? selectedPersonIds.has(person!.id) : selectedPersonId === person!.id
+        )
         const isConcurrent = row.concurrentType === '兼務'
+        const hasPosition  = !!row.positionCode
+        const hasChildren  = hasPosition && parentPosCodes.has(row.positionCode!)
+        const isCollapsed  = hasPosition && collapsedPositions.has(row.positionCode!)
+        const palette      = PALETTE[colorByRowId.get(row.rowId) ?? 0]
+        const posTitle     = getPositionTitle(row)
+        const stats        = isCollapsed && row.positionCode ? subtreeStats.get(row.positionCode) : undefined
+        const isPosDropTarget = dragOverPositionRowId === row.rowId
 
         return (
-          <div key={row.rowId} className="flex items-stretch gap-1 group" style={{ paddingLeft: `${depth * 14}px` }}>
+          <div
+            key={row.rowId}
+            style={{ paddingLeft: `${depth * 16}px` }}
+            className="flex items-center gap-0.5 group"
+          >
 
-            {/* 左枠: ポジション（ドラッグで席ごと移動） */}
-            <div
-              draggable
-              onDragStart={e => {
-                const data: DragData = {
-                  dragType: 'position',
-                  personId: person?.id ?? '',
-                  fromOrgId: orgId, fromCompanyId: '',
-                  affiliationType: 'primary',
-                  fromRowId: row.rowId,
-                }
-                e.dataTransfer.setData('application/json', JSON.stringify(data))
-                e.dataTransfer.effectAllowed = 'move'
-              }}
-              className="relative flex items-center gap-1 px-2 py-1 rounded-l bg-gray-100 border border-r-0 border-gray-200 text-xs text-gray-600 font-medium flex-shrink-0 cursor-grab active:cursor-grabbing hover:bg-gray-200 transition-colors"
-              style={{ minWidth: '72px', maxWidth: '130px' }}
-              title="ドラッグで別組織に席ごと移動"
+            {/* ── 折りたたみトグル ───────────────────────────────────────────── */}
+            <button
+              onClick={() => hasChildren && row.positionCode && toggleCollapse(row.positionCode)}
+              className={`w-4 flex-shrink-0 text-[10px] text-center leading-none transition-colors ${
+                hasChildren
+                  ? 'text-gray-400 hover:text-gray-600 cursor-pointer'
+                  : 'text-gray-200 cursor-default'
+              }`}
             >
-              <span className="text-gray-400 text-[9px] select-none">⠿</span>
-              <span className="truncate flex-1">{getPositionTitle(row)}</span>
-              {!isSelectMode && (
-                <button
-                  onClick={e => {
-                    e.stopPropagation()
-                    const label = getPositionTitle(row)
-                    setConfirmDialog({
-                      message: `「${label}」を削除しますか？${row.userId ? '\n在席中の人は未アサイン状態になります。' : ''}`,
-                      onConfirm: () => appService.removePosition(row.rowId),
-                    })
-                  }}
-                  onMouseDown={e => e.stopPropagation()}
-                  className="opacity-0 group-hover:opacity-100 flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-100 transition-all text-[10px]"
-                  title="このポジション（席）を削除"
-                  draggable={false}
-                >✕</button>
-              )}
-            </div>
+              {hasChildren ? (isCollapsed ? '▶' : '▼') : '·'}
+            </button>
 
-            {/* 右枠: 人 or 空席 */}
-            {isVacant ? (
-              <div
-                className={`flex-1 flex items-center px-2 py-1 rounded-r border-2 border-dashed text-xs transition-colors ${
-                  dragOverVacantRowId === row.rowId
-                    ? 'border-blue-400 bg-blue-100 text-blue-600'
-                    : 'border-gray-200 text-gray-400 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/30'
-                }`}
-                onDragOver={e => { if (!e.dataTransfer.types.includes('application/json')) return; e.preventDefault(); e.stopPropagation(); setDragOverVacantRowId(row.rowId) }}
-                onDragLeave={() => setDragOverVacantRowId(null)}
-                onDrop={e => { setDragOverVacantRowId(null); handleDropOnVacantSlot(e, row.rowId) }}
-              >
-                {dragOverVacantRowId === row.rowId ? 'ここにドロップ' : '（空席）← drop'}
-              </div>
-            ) : (
-              <div
-                draggable={!isSelectMode}
-                onDragStart={!isSelectMode ? e => {
-                  const data: DragData = {
-                    dragType: 'person',
-                    personId: person!.id, fromOrgId: orgId, fromCompanyId: '',
-                    affiliationType: isConcurrent ? 'concurrent' : 'primary',
-                    source: 'after', fromRowId: row.rowId,
-                  }
-                  e.dataTransfer.setData('application/json', JSON.stringify(data))
-                  e.dataTransfer.effectAllowed = 'move'
-                } : undefined}
-                onClick={() => isSelectMode ? togglePersonSelection(person!.id) : selectPerson(person!.id)}
-                onDoubleClick={() => !isSelectMode && handlePersonDoubleClick(person!.id)}
-                onContextMenu={e => !isSelectMode && handlePersonContextMenu(e, person!.id)}
-                className={`flex-1 flex items-center gap-1 px-2 py-1 rounded-r border-2 text-xs select-none transition-all hover:shadow-sm ${
-                  isSelectMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'
-                } ${
-                  isSelected
-                    ? 'border-yellow-400 bg-yellow-50 ring-1 ring-yellow-300'
-                    : isConcurrent
-                    ? 'border-dashed border-purple-300 bg-purple-50'
-                    : 'border-blue-200 bg-blue-50'
-                }`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</div>
-                  {(row.band || row.positionBand) && (
-                    <div className={`text-[10px] leading-tight ${isConcurrent ? 'text-purple-500' : 'text-blue-600'}`}>
-                      {row.positionBand ?? row.band}
-                    </div>
+            {/* 折りたたみ時サブツリー統計バッジ */}
+            {stats && (
+              <span className="text-[9px] text-gray-400 bg-gray-100 rounded px-1 whitespace-nowrap flex-shrink-0">
+                {stats.positions}席 {stats.persons}名
+              </span>
+            )}
+
+            {/* ── カード本体 ─────────────────────────────────────────────────── */}
+            <div className="flex items-stretch flex-1 min-w-0 shadow-sm hover:shadow transition-shadow">
+
+              {/* ポジション部（ドラッグで席ごと移動 / 別ポジションにドロップで上司設定） */}
+              {hasPosition && (
+                <div
+                  draggable
+                  onDragStart={e => {
+                    const data: DragData = {
+                      dragType: 'position',
+                      personId: person?.id ?? '',
+                      fromOrgId: orgId, fromCompanyId: '',
+                      affiliationType: 'primary',
+                      fromRowId: row.rowId,
+                    }
+                    e.dataTransfer.setData('application/json', JSON.stringify(data))
+                    e.dataTransfer.setData('application/x-position-drag', '')
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragOver={e => {
+                    if (!e.dataTransfer.types.includes('application/x-position-drag')) return
+                    e.preventDefault(); e.stopPropagation()
+                    setDragOverPositionRowId(row.rowId)
+                  }}
+                  onDragLeave={() => setDragOverPositionRowId(null)}
+                  onDrop={e => { setDragOverPositionRowId(null); handleDropPositionOnPosition(e, row.rowId) }}
+                  onContextMenu={e => handlePositionContextMenu(e, row.rowId)}
+                  title="ドラッグ→別組織に移動 / 別ポジションにドロップ→上司設定"
+                  className={`
+                    relative flex items-center gap-1 px-2 py-1
+                    border border-r-0
+                    border-l-4 ${palette.border}
+                    rounded-l ${palette.posBg}
+                    text-xs text-gray-600 font-medium
+                    flex-shrink-0 cursor-grab active:cursor-grabbing
+                    transition-all
+                    ${isPosDropTarget
+                      ? 'border-blue-400 ring-2 ring-blue-300 brightness-90'
+                      : 'border-gray-200 hover:brightness-95'
+                    }
+                  `}
+                  style={{ minWidth: '72px', maxWidth: '130px' }}
+                >
+                  <span className="text-gray-400 text-[9px] select-none">⠿</span>
+                  <span className="truncate flex-1">{posTitle}</span>
+                  {!isSelectMode && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        setConfirmDialog({
+                          message: `「${posTitle}」を削除しますか？${row.userId ? '\n在席中の人は未アサイン状態になります。' : ''}`,
+                          onConfirm: () => appService.removePosition(row.rowId),
+                        })
+                      }}
+                      onMouseDown={e => e.stopPropagation()}
+                      draggable={false}
+                      title="このポジション（席）を削除"
+                      className="opacity-0 group-hover:opacity-100 flex-shrink-0 w-3.5 h-3.5 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-100 transition-all text-[10px]"
+                    >✕</button>
                   )}
                 </div>
-                {!isSelectMode && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation()
-                      setConfirmDialog({
-                        message: `${person!.name} をポジションから外しますか？\n人は未アサイン状態になります。`,
-                        onConfirm: () => appService.unassignPersonFromPosition(row.rowId),
-                      })
-                    }}
-                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-[10px]"
-                    title="この人を席から外す（空席化）"
-                  >×</button>
-                )}
-                {isSelectMode && (
-                  <span className={`ml-1 w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center text-xs font-bold ${
-                    isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
-                  }`}>{isSelected ? '✓' : ''}</span>
-                )}
-              </div>
-            )}
+              )}
+
+              {/* 人部 / 空席ドロップゾーン */}
+              {isVacant ? (
+                <div
+                  className={`
+                    flex-1 flex items-center px-2 py-1 text-xs transition-colors
+                    ${hasPosition ? 'rounded-r border border-l-0' : `rounded border-l-4 ${palette.border}`}
+                    border-dashed
+                    ${dragOverVacantRowId === row.rowId
+                      ? 'border-blue-400 bg-blue-100 text-blue-600'
+                      : 'border-gray-300 text-gray-400 hover:border-blue-300 hover:text-blue-400 hover:bg-blue-50/30'
+                    }
+                  `}
+                  onDragOver={e => {
+                    if (!e.dataTransfer.types.includes('application/json')) return
+                    e.preventDefault(); e.stopPropagation()
+                    setDragOverVacantRowId(row.rowId)
+                  }}
+                  onDragLeave={() => setDragOverVacantRowId(null)}
+                  onDrop={e => { setDragOverVacantRowId(null); handleDropOnVacantSlot(e, row.rowId) }}
+                >
+                  {dragOverVacantRowId === row.rowId ? 'ここにドロップ' : '（空席）← drop'}
+                </div>
+              ) : (
+                <div
+                  draggable={!isSelectMode}
+                  onDragStart={!isSelectMode ? e => {
+                    const data: DragData = {
+                      dragType: 'person',
+                      personId: person!.id, fromOrgId: orgId, fromCompanyId: '',
+                      affiliationType: isConcurrent ? 'concurrent' : 'primary',
+                      source: 'after', fromRowId: row.rowId,
+                    }
+                    e.dataTransfer.setData('application/json', JSON.stringify(data))
+                    e.dataTransfer.effectAllowed = 'move'
+                  } : undefined}
+                  onClick={() => isSelectMode ? togglePersonSelection(person!.id) : selectPerson(person!.id)}
+                  onDoubleClick={() => !isSelectMode && handlePersonDoubleClick(person!.id)}
+                  onContextMenu={e => !isSelectMode && handlePersonContextMenu(e, person!.id)}
+                  className={`
+                    flex-1 flex items-center gap-2 px-2 py-1 text-xs select-none
+                    transition-all min-w-0
+                    ${hasPosition ? 'rounded-r border border-l-0' : `rounded border-l-4 ${palette.border}`}
+                    ${isSelectMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
+                    ${isSelected
+                      ? 'border-yellow-400 bg-yellow-50 ring-1 ring-yellow-300'
+                      : isConcurrent
+                      ? 'border-dashed border-purple-300 bg-purple-50'
+                      : `border-gray-200 ${palette.personBg}`
+                    }
+                  `}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</div>
+                    {(row.band || row.positionBand) && (
+                      <div className={`text-[10px] leading-tight ${isConcurrent ? 'text-purple-500' : 'text-gray-400'}`}>
+                        {row.positionBand ?? row.band}
+                      </div>
+                    )}
+                  </div>
+                  {!isSelectMode && hasPosition && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        setConfirmDialog({
+                          message: `${person!.name} をポジションから外しますか？\n人は未アサイン状態になります。`,
+                          onConfirm: () => appService.unassignPersonFromPosition(row.rowId),
+                        })
+                      }}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all text-[10px]"
+                      title="この人を席から外す（空席化）"
+                    >×</button>
+                  )}
+                  {isSelectMode && (
+                    <span className={`ml-1 w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center text-xs font-bold ${
+                      isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
+                    }`}>{isSelected ? '✓' : ''}</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )
       })}
