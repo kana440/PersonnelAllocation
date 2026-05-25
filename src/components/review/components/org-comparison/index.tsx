@@ -42,33 +42,30 @@ interface Props {
 }
 
 export function OrgComparison({ orgMatches }: Props) {
-  const { allocationList, beforeOrganizations, afterOrganizations } = useStore()
+  const { allocationList, beforeOrganizations, afterOrganizations, orgMapping, setOrgMapping: storeSetOrgMapping } = useStore()
 
-  const [step,    setStep]    = useState<1 | 2>(1)
-  const [mapping, setMapping] = useState<OrgMapping>(new Map())
+  const [step, setStep] = useState<1 | 2>(1)
+
+  const mapping: OrgMapping = orgMapping
 
   const setOrgMapping = useCallback((oldOrgId: string, newOrgIds: string[]) => {
-    setMapping(prev => new Map([...prev, [oldOrgId, newOrgIds]]))
-  }, [])
+    storeSetOrgMapping(new Map([...orgMapping, [oldOrgId, newOrgIds]]))
+  }, [orgMapping, storeSetOrgMapping])
 
   const removeOrgMapping = useCallback((oldOrgId: string) => {
-    setMapping(prev => {
-      const next = new Map(prev)
-      next.delete(oldOrgId)
-      return next
-    })
-  }, [])
+    const next = new Map(orgMapping)
+    next.delete(oldOrgId)
+    storeSetOrgMapping(next)
+  }, [orgMapping, storeSetOrgMapping])
 
   const autoGenerate = useCallback((orgIds: string[]) => {
-    setMapping(prev => {
-      const next = new Map(prev)
-      for (const orgId of orgIds) {
-        const match = orgMatches.get(orgId)
-        next.set(orgId, match?.afterOrg ? [match.afterOrg.id] : [])
-      }
-      return next
-    })
-  }, [orgMatches])
+    const next = new Map(orgMapping)
+    for (const orgId of orgIds) {
+      const match = orgMatches.get(orgId)
+      next.set(orgId, match?.afterOrg ? [match.afterOrg.id] : [])
+    }
+    storeSetOrgMapping(next)
+  }, [orgMapping, orgMatches, storeSetOrgMapping])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

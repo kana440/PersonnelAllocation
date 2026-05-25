@@ -1,16 +1,23 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
+import { buildOrgMatchIndex, orgMatchIndexToMapping } from '../../domain/review/orgMatching'
+import { getDescendantOrgIds } from '../../domain/orgScope'
 import { SetupHelp } from './SetupHelp'
 import { OrgSelectStep } from './OrgSelectStep'
-
+import { MappingStep } from '../review/components/org-comparison/MappingStep'
+import type { OrgMapping } from '../review/components/org-comparison/types'
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'loading'; progress: string }
   | { kind: 'org-select'; result: ImportedWorkbookResult }
-  | { kind: 'scope-confirm'; result: ImportedWorkbookResult; orgId: string | null; orgName: string | null }
+  | { kind: 'org-mapping'
+      result:      ImportedWorkbookResult
+      beforeOrgId: string | null
+      beforeOrgName: string | null
+      mapping:     OrgMapping }
   | { kind: 'error'; message: string }
 
 interface Props {
@@ -18,7 +25,7 @@ interface Props {
 }
 
 export function SetupView({ onReady }: Props) {
-  const { loadExcelData, setScopeOrgId } = useStore()
+  const { loadExcelData, setScopeWithMapping } = useStore()
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
@@ -30,7 +37,6 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: '準備中...' })
     try {
       const result = await fn(onProgress)
-      // Skip 'done' phase; go directly to org selection
       if (result) setPhase({ kind: 'org-select', result })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err) })
@@ -46,66 +52,122 @@ export function SetupView({ onReady }: Props) {
 
   const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
 
-  const handleOrgSelectAll = () => {
+  // 全組織: マッピングを自動生成して即開始
+  const handleOrgSelectAll = useCallback(async () => {
     if (phase.kind !== 'org-select') return
-    setPhase({ kind: 'scope-confirm', result: phase.result, orgId: null, orgName: null })
-  }
+    const { result } = phase
+    setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
+    await tick()
+    const index   = buildOrgMatchIndex(result.allocationList, result.beforeOrganizations, result.afterOrganizations)
+    const mapping = orgMatchIndexToMapping(index)
+    await loadExcelData(result)
+    setScopeWithMapping({ beforeOrgId: null, mapping })
+    onReady()
+  }, [phase, loadExcelData, setScopeWithMapping, onReady])
 
-  const handleOrgSelectOrg = (id: string, name: string) => {
+  // 特定組織: scope の before-org 配下に絞った自動マッピングを表示
+  const handleOrgSelectOrg = useCallback((id: string, name: string) => {
     if (phase.kind !== 'org-select') return
-    setPhase({ kind: 'scope-confirm', result: phase.result, orgId: id, orgName: name })
-  }
+    const { result } = phase
+    const scopeIds   = getDescendantOrgIds(id, result.beforeOrganizations)
+    const scopeBefore = result.beforeOrganizations.filter(o => scopeIds.has(o.id))
+    const index   = buildOrgMatchIndex(result.allocationList, scopeBefore, result.afterOrganizations)
+    const mapping = orgMatchIndexToMapping(index)
+    setPhase({ kind: 'org-mapping', result, beforeOrgId: id, beforeOrgName: name, mapping })
+  }, [phase])
 
-  const handleConfirm = async () => {
-    if (phase.kind !== 'scope-confirm') return
-    const { result, orgId } = phase
+  // マッピング確定 → データロード → 開始
+  const handleMappingConfirm = useCallback(async () => {
+    if (phase.kind !== 'org-mapping') return
+    const { result, beforeOrgId, mapping } = phase
     setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
     await tick()
     await loadExcelData(result)
-    if (orgId) setScopeOrgId(orgId)
+    setScopeWithMapping({ beforeOrgId, mapping })
     onReady()
-  }
+  }, [phase, loadExcelData, setScopeWithMapping, onReady])
+
+  const handleMappingSetEntry = useCallback((oldId: string, newIds: string[]) => {
+    if (phase.kind !== 'org-mapping') return
+    setPhase({ ...phase, mapping: new Map([...phase.mapping, [oldId, newIds]]) })
+  }, [phase])
+
+  const handleMappingRemoveEntry = useCallback((oldId: string) => {
+    if (phase.kind !== 'org-mapping') return
+    const next = new Map(phase.mapping)
+    next.delete(oldId)
+    setPhase({ ...phase, mapping: next })
+  }, [phase])
+
+  const handleMappingAutoGenerate = useCallback((orgIds: string[]) => {
+    if (phase.kind !== 'org-mapping') return
+    const { result, mapping } = phase
+    const index = buildOrgMatchIndex(result.allocationList, result.beforeOrganizations, result.afterOrganizations)
+    const next  = new Map(mapping)
+    for (const orgId of orgIds) {
+      const match = index.get(orgId)
+      next.set(orgId, match?.afterOrg ? [match.afterOrg.id] : [])
+    }
+    setPhase({ ...phase, mapping: next })
+  }, [phase])
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
       {showHelp && <SetupHelp onClose={() => setShowHelp(false)} />}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm" onChange={handleFile} className="hidden" />
 
-      <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">
-        {phase.kind === 'idle' && (
-          <IdleView
-            onFileClick={() => fileInputRef.current?.click()}
-            onSample={handleSample}
-            onHelp={() => setShowHelp(true)}
-          />
-        )}
-        {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
-        {phase.kind === 'org-select' && (
-          <OrgSelectStep
-            result={phase.result}
-            onSelectAll={handleOrgSelectAll}
-            onSelectOrg={handleOrgSelectOrg}
-          />
-        )}
-        {phase.kind === 'scope-confirm' && (
-          <ScopeConfirmView
-            orgName={phase.orgName}
-            onConfirm={handleConfirm}
-            onBack={() => {
-              if (phase.kind === 'scope-confirm')
-                setPhase({ kind: 'org-select', result: phase.result })
-            }}
-          />
-        )}
-        {phase.kind === 'error' && (
-          <ErrorView message={phase.message} onBack={() => setPhase({ kind: 'idle' })} />
-        )}
-      </div>
+      {phase.kind === 'org-mapping' ? (
+        // マッピングステップは全幅で表示
+        <div className="w-full max-w-4xl h-[80vh] bg-white rounded-xl shadow-lg flex flex-col overflow-hidden">
+          <div className="flex-shrink-0 px-5 py-3 border-b border-gray-100">
+            <h2 className="text-sm font-bold text-gray-800">組織マッピングの確認</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              旧組織と新組織の対応を確認・調整してください。自動提案済みです。
+            </p>
+          </div>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <MappingStep
+              mapping={phase.mapping}
+              beforeOrgs={phase.result.beforeOrganizations.filter(o =>
+                getDescendantOrgIds(phase.beforeOrgId!, phase.result.beforeOrganizations).has(o.id)
+              )}
+              afterOrgs={phase.result.afterOrganizations}
+              onSetMapping={handleMappingSetEntry}
+              onRemoveMapping={handleMappingRemoveEntry}
+              onAutoGenerate={handleMappingAutoGenerate}
+              onNext={handleMappingConfirm}
+              nextLabel="確定して開始 →"
+              onBack={() => phase.kind === 'org-mapping' && setPhase({ kind: 'org-select', result: phase.result })}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">
+          {phase.kind === 'idle' && (
+            <IdleView
+              onFileClick={() => fileInputRef.current?.click()}
+              onSample={handleSample}
+              onHelp={() => setShowHelp(true)}
+            />
+          )}
+          {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
+          {phase.kind === 'org-select' && (
+            <OrgSelectStep
+              result={phase.result}
+              onSelectAll={handleOrgSelectAll}
+              onSelectOrg={handleOrgSelectOrg}
+            />
+          )}
+          {phase.kind === 'error' && (
+            <ErrorView message={phase.message} onBack={() => setPhase({ kind: 'idle' })} />
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-// ── 画面①: ファイル選択 ────────────────────────��───────────────────
+// ── 画面①: ファイル選択 ───────────────────────────────────────────────
 
 function IdleView({ onFileClick, onSample, onHelp }: {
   onFileClick: () => void
@@ -154,7 +216,7 @@ function IdleView({ onFileClick, onSample, onHelp }: {
   )
 }
 
-// ── 画面②: 読み込み中 ─────────────────────────────���───────────────
+// ── 画面②: 読み込み中 ────────────────────────────────────────────────
 
 function LoadingView({ progress }: { progress: string }) {
   return (
@@ -165,49 +227,7 @@ function LoadingView({ progress }: { progress: string }) {
   )
 }
 
-// ── 画面④: スコープ確認 ─────────────────────────────��─────────────
-
-function ScopeConfirmView({ orgName, onConfirm, onBack }: {
-  orgName: string | null
-  onConfirm: () => void
-  onBack: () => void
-}) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-bold text-gray-800">開始スコープの確認</h2>
-      </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-4 text-center">
-        <p className="text-xs text-blue-500 mb-1">選択したスコープ</p>
-        <p className="text-base font-bold text-blue-800">
-          {orgName ?? '全組織（スコープなし）'}
-        </p>
-      </div>
-
-      <p className="text-xs text-gray-500 text-center">
-        ※ スコープはツール起動後もヘッダーの「作業範囲」からいつでも変更できます
-      </p>
-
-      <div className="space-y-2">
-        <button
-          onClick={onConfirm}
-          className="w-full py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          確定してアプリを開始
-        </button>
-        <button
-          onClick={onBack}
-          className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          ← 戻る（スコープを変更）
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── エラー ─────────────────────��───────────────────────────────────
+// ── エラー ───────────────────────────────────────────────────────────
 
 function ErrorView({ message, onBack }: { message: string; onBack: () => void }) {
   return (

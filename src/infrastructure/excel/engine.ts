@@ -1,15 +1,13 @@
-// ── エクスポートエンジン切り替え ──────────────────────────────────────────────
+// ── エンジン設定 ───────────────────────────────────────────────────────────────
 //
-// 2行ずつセットで切り替える（読み込み・書き込みは同じエンジンを使う）。
+// インポート: ExcelJS（書式・スタイル・VBA 情報を正確に解析）
+// エクスポート: xlsx（ExcelJS の writeBuffer は 1 分超かかるため xlsx に切替）
 //
-// ExcelJS 版: 書式・スタイルを保持。xlsm の VBA マクロは失われる。
-// xlsx 版:    cellStyles + bookVBA で書式・スタイル・VBA マクロの保持を試みる。
+// xlsx エクスポートは cellStyles: true + bookVBA: true で元ファイルの書式・マクロ
+// を保持する。ExcelJS と同等の書式再現性は持たないが、速度が 10〜100 倍速い。
 
 export { importFromFile, importFromUrl, importWorkbook } from './exceljs/importer'
-export { exportToXlsx, buildExportBuffer }              from './exceljs/exporter'
-
-// export { importFromFile, importFromUrl, importWorkbook } from './xlsx/importer'
-// export { exportToXlsx, buildExportBuffer }              from './xlsx/exporter'
+export { exportToXlsx, buildExportBuffer }              from './xlsx/exporter'
 
 // ── エンジン非依存の共有エクスポート ─────────────────────────────────────────
 export { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from './sheetNames'

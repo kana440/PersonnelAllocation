@@ -37,12 +37,14 @@ type CellStyle = XLSX.CellObject['s']
 async function buildWorkbook(
   rows: AllocationRow[],
   effectiveDate: string,
+  scopeName?: string,
 ): Promise<{ wb: XLSX.WorkBook; fileName: string; ext: string }> {
   const origBuffer   = getLastBuffer()
   const origFileName = getLastFileName()
   const baseName     = (origFileName ?? '発令一覧').replace(/\.[^.]+$/, '')
   const ext          = origFileName?.endsWith('.xlsm') ? 'xlsm' : 'xlsx'
-  const fileName     = origBuffer ? `${baseName}_${effectiveDate}.${ext}` : `発令一覧_${effectiveDate}.xlsx`
+  const scopeSuffix  = scopeName ? `_${scopeName.replace(/[/\\?*[\]:]/g, '_')}` : ''
+  const fileName     = origBuffer ? `${baseName}${scopeSuffix}_${effectiveDate}.${ext}` : `発令一覧${scopeSuffix}_${effectiveDate}.xlsx`
 
   if (origBuffer) {
     const wb         = XLSX.read(origBuffer, { type: 'array', cellStyles: true, bookVBA: true })
@@ -142,14 +144,15 @@ function buildFreshSheet(rows: AllocationRow[]): XLSX.WorkSheet {
 export async function buildExportBuffer(
   rows: AllocationRow[],
   effectiveDate: string,
+  scopeName?: string,
 ): Promise<{ buffer: ArrayBuffer; fileName: string }> {
-  const { wb, fileName, ext } = await buildWorkbook(rows, effectiveDate)
+  const { wb, fileName, ext } = await buildWorkbook(rows, effectiveDate, scopeName)
   const bookType = ext === 'xlsm' ? 'xlsm' : 'xlsx'
   return { buffer: XLSX.write(wb, { bookType, type: 'array' }) as ArrayBuffer, fileName }
 }
 
-export async function exportToXlsx(rows: AllocationRow[], effectiveDate: string): Promise<void> {
-  const { buffer, fileName } = await buildExportBuffer(rows, effectiveDate)
+export async function exportToXlsx(rows: AllocationRow[], effectiveDate: string, scopeName?: string): Promise<void> {
+  const { buffer, fileName } = await buildExportBuffer(rows, effectiveDate, scopeName)
   const ext      = fileName.endsWith('.xlsm') ? 'xlsm' : 'xlsx'
   const mimeType = ext === 'xlsm' ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   const blob = new Blob([buffer], { type: mimeType })

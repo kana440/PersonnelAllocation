@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
-import { useStore } from '../../../store/useStore'
+import { useScopedStore } from '../../../store/useScopedStore'
 import { validateRow, type ValidationIssue } from '../../../domain/validation/validateRow'
 import { detectChanges, type RowChanges } from '../../../domain/review/changeDetection'
-import { buildOrgMatchIndex, type OrgMatch } from '../../../domain/review/orgMatching'
 import type { AllocationRow } from '../../../domain/allocationRow'
 
 export interface ReviewRow {
@@ -12,8 +11,7 @@ export interface ReviewRow {
 }
 
 export interface ReviewData {
-  rows:       ReviewRow[]
-  orgMatches: Map<string, OrgMatch>
+  rows:        ReviewRow[]
   totalIssues: number
   summary: {
     transfers:    number
@@ -28,20 +26,43 @@ export interface ReviewData {
 }
 
 export function useReviewData(): ReviewData {
-  const { allocationList, afterOrganizations, beforeOrganizations, codeLists } = useStore()
+  const { allocationList, afterOrganizations, beforeOrganizations, codeLists, orgMapping } = useScopedStore()
 
-  const rows = useMemo((): ReviewRow[] =>
-    allocationList.map(row => ({
-      row,
-      changes: detectChanges(row),
-      issues:  validateRow(row, afterOrganizations, codeLists),
-    })),
-    [allocationList, afterOrganizations, codeLists]
+  // 旧組織ID → externalCode
+  const beforeCodeById = useMemo(
+    () => new Map(beforeOrganizations.filter(o => o.externalCode).map(o => [o.id, o.externalCode!])),
+    [beforeOrganizations]
+  )
+  // 新組織ID → externalCode
+  const afterCodeById = useMemo(
+    () => new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.id, o.externalCode!])),
+    [afterOrganizations]
   )
 
-  const orgMatches = useMemo(
-    () => buildOrgMatchIndex(allocationList, beforeOrganizations, afterOrganizations),
-    [allocationList, beforeOrganizations, afterOrganizations]
+  // "${beforeExternalCode}|${afterExternalCode}" のペア集合
+  const sameOrgPairs = useMemo((): Set<string> => {
+    const pairs = new Set<string>()
+    for (const [beforeId, afterIds] of orgMapping) {
+      const beforeCode = beforeCodeById.get(beforeId)
+      if (!beforeCode) continue
+      for (const afterId of afterIds) {
+        const afterCode = afterCodeById.get(afterId)
+        if (afterCode) pairs.add(`${beforeCode}|${afterCode}`)
+      }
+    }
+    return pairs
+  }, [orgMapping, beforeCodeById, afterCodeById])
+
+  const rows = useMemo((): ReviewRow[] =>
+    allocationList.map(row => {
+      const changes = detectChanges(row, sameOrgPairs)
+      return {
+        row,
+        changes,
+        issues: validateRow(row, afterOrganizations, codeLists, changes),
+      }
+    }),
+    [allocationList, afterOrganizations, codeLists, sameOrgPairs]
   )
 
   const summary = useMemo(() => {
@@ -62,5 +83,5 @@ export function useReviewData(): ReviewData {
 
   const totalIssues = useMemo(() => rows.reduce((acc, r) => acc + r.issues.length, 0), [rows])
 
-  return { rows, orgMatches, totalIssues, summary }
+  return { rows, totalIssues, summary }
 }

@@ -111,6 +111,20 @@ export function buildOrgMatchIndex(
   return result
 }
 
+/**
+ * buildOrgMatchIndex の結果を OrgMapping 形式（beforeOrgId → afterOrgId[]）に変換する。
+ * afterOrg が null（廃止）の場合は空配列を設定する。
+ */
+export function orgMatchIndexToMapping(
+  index: Map<string, OrgMatch>,
+): Map<string, string[]> {
+  const mapping = new Map<string, string[]>()
+  for (const [beforeOrgId, match] of index) {
+    mapping.set(beforeOrgId, match.afterOrg ? [match.afterOrg.id] : [])
+  }
+  return mapping
+}
+
 export function findBestAfterOrg(
   bOrgId:         string,
   allocationList: AllocationRow[],

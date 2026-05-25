@@ -3,15 +3,13 @@ import { useReviewData } from './hooks/useReviewData'
 import { ChangeDigest }        from './components/ChangeDigest'
 import { AttributeGrid }       from './components/AttributeGrid'
 import { ValidationDashboard } from './components/ValidationDashboard'
-import { OrgComparison }       from './components/org-comparison'
 
-type Tab = 'digest' | 'grid' | 'validation' | 'comparison'
+type Tab = 'digest' | 'grid' | 'validation'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'digest',     label: 'A. ダイジェスト' },
   { id: 'grid',       label: 'B. 属性グリッド' },
-  { id: 'validation', label: 'D. バリデーション' },
-  { id: 'comparison', label: 'C. 組織比較' },
+  { id: 'validation', label: 'C. バリデーション' },
 ]
 
 interface GridNavState {
@@ -94,9 +92,6 @@ export function ReviewView({ onClose }: Props) {
         )}
         {activeTab === 'validation' && (
           <ValidationDashboard rows={data.rows} onDrillDown={() => setActiveTab('grid')} />
-        )}
-        {activeTab === 'comparison' && (
-          <OrgComparison orgMatches={data.orgMatches} />
         )}
       </div>
     </div>

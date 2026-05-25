@@ -180,3 +180,31 @@ components/foo/
 - after の初期化は「before をそのままコピー」では不可。**組織継承マッピング**を経由する必要がある
 - 比較軸は「旧組織 ↔ 新組織」の 1:1 対応ではなく、人ベース・旧組織軸・新組織軸の 3 視点が必要
 - 将来的には配布・回収のマージ工程を撤廃する方向（`mergeExcelData` は段階的廃止対象）
+
+---
+
+## 実装仕様（specs/）
+
+機能実装の仕様は `specs/` フォルダに記述する。Issueから実装する場合は必ず対応するspecを読んでから作業する。
+
+| フォルダ/ファイル | 内容 | 主要ファイル |
+|---|---|---|
+| `specs/00-cross-cutting.md` | **変更種別ごとの横断的影響チェックリスト（実装時に必ず確認）** | — |
+| `specs/G1-fields/` | フィールド定義・入力種別・codeList対応 | `01-field-definitions.md` |
+| `specs/G2-domain/` | 業務ルール・バリデーション規則 | `01-business-rules.md`, `02-validation-rules.md` |
+| `specs/G3-ui/` | UI入力補助・レビュー表示仕様 | `01-row-editor-input-spec.md`, `02-review-display-spec.md` |
+| `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
+| `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |
+
+### specを読んで実装するときの手順
+
+1. `CLAUDE.md`（このファイル）を読む
+2. 対象の spec ファイルを読む（G1 → G2 → G3 の順が依存関係に沿っている）
+3. 実装する
+4. `npx tsc --noEmit` で型チェック
+5. specファイルの実装状況（✗ → ✓）を更新する
+
+### 未確認事項の扱い
+
+spec内の `❓` マークは業務確認待ち。確認が取れる前に実装しない。
+`TODO` は実装方針が決まっているが未着手のもの。

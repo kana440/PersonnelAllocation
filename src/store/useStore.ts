@@ -63,7 +63,10 @@ interface UIState {
   previousViewState:    PreviousViewState | null
   mainCanvasMode:       '組織図' | 'レポートライン'
   expandedChipIds:      Set<string>
-  scopeOrgId:           string | null   // 作業対象組織スコープ（null = 全件）
+  scopeOrgId:           string | null    // 主after-org（org chart フォーカス用、setScopeWithMappingが計算）
+  beforeScopeOrgId:     string | null    // スコープ選択の旧組織ID
+  afterScopeOrgIds:     string[]         // beforeScopeOrgId + orgMapping から導出したafter-org ID一覧
+  orgMapping:           Map<string, string[]>  // 旧組織ID → 新組織IDリスト
 }
 
 // ── アクション ────────────────────────────────────────────────────
@@ -124,8 +127,17 @@ interface Actions {
   toggleChip:               (orgId: string) => void
   selectPersonAndFocusOrg:  (personId: string) => void
 
-  // 作業スコープ
+  // 作業スコープ（後方互換：MergeImportButton 等が直接 after-org ID で呼ぶ）
   setScopeOrgId: (id: string | null) => void
+
+  // スコープ + org マッピングを一括設定（SetupView / ScopeMappingDialog が使う）
+  setScopeWithMapping: (params: {
+    beforeOrgId:    string | null
+    mapping:        Map<string, string[]>
+  }) => void
+
+  // 組織マッピング（旧組織ID → 新組織IDリスト）
+  setOrgMapping: (mapping: Map<string, string[]>) => void
 
   // 後方互換（既存コンポーネントが参照している場合のみ残す）
   setRawImportedRows: (rows: AllocationRow[]) => void
@@ -156,6 +168,9 @@ export const useStore = create<AppState>((set, get) => {
     mainCanvasMode:       '組織図',
     expandedChipIds:      new Set<string>(),
     scopeOrgId:           null,
+    beforeScopeOrgId:     null,
+    afterScopeOrgIds:     [],
+    orgMapping:           new Map<string, string[]>(),
 
     // ── アクション ────────────────────────────────────────────────
     loadExcelData: async (result) => {
@@ -276,13 +291,65 @@ export const useStore = create<AppState>((set, get) => {
       if (id) {
         const scopeIds = getDescendantOrgIds(id, afterOrganizations)
         if (!focusedOrgId || !scopeIds.has(focusedOrgId)) {
-          // Auto-focus the scope org so the org chart immediately shows content
           newFocusedOrgId = id
         }
       }
-      // When clearing scope (id = null), preserve existing focusedOrgId
       set({ scopeOrgId: id, focusedOrgId: newFocusedOrgId })
     },
+
+    setScopeWithMapping: ({ beforeOrgId, mapping }) => {
+      const { beforeOrganizations, afterOrganizations, focusedOrgId } = get()
+
+      let afterScopeOrgIds: string[] = []
+      let primaryAfterOrgId: string | null = null
+
+      if (beforeOrgId) {
+        const beforeScopeIds = getDescendantOrgIds(beforeOrgId, beforeOrganizations)
+        const afterIdSet = new Set<string>()
+
+        for (const bId of beforeScopeIds) {
+          let afterIds = mapping.get(bId) ?? []
+          // マッピング未設定の場合は externalCode で fallback
+          if (afterIds.length === 0 && !mapping.has(bId)) {
+            const bOrg = beforeOrganizations.find(o => o.id === bId)
+            const aOrg = bOrg?.externalCode
+              ? afterOrganizations.find(o => o.externalCode === bOrg.externalCode)
+              : undefined
+            if (aOrg) afterIds = [aOrg.id]
+          }
+          for (const aId of afterIds) {
+            getDescendantOrgIds(aId, afterOrganizations).forEach(id => afterIdSet.add(id))
+          }
+        }
+        afterScopeOrgIds = Array.from(afterIdSet)
+
+        // org chart フォーカス用: ルートの before-org に対応する最初の after-org
+        const rootAfterIds = mapping.get(beforeOrgId) ?? []
+        primaryAfterOrgId = rootAfterIds[0] ?? null
+        if (!primaryAfterOrgId) {
+          const bOrg = beforeOrganizations.find(o => o.id === beforeOrgId)
+          primaryAfterOrgId = bOrg?.externalCode
+            ? (afterOrganizations.find(o => o.externalCode === bOrg!.externalCode)?.id ?? null)
+            : null
+        }
+      }
+
+      const afterScopeIdSet = new Set(afterScopeOrgIds)
+      let newFocusedOrgId = focusedOrgId
+      if (primaryAfterOrgId && (!focusedOrgId || !afterScopeIdSet.has(focusedOrgId))) {
+        newFocusedOrgId = primaryAfterOrgId
+      }
+
+      set({
+        beforeScopeOrgId: beforeOrgId,
+        afterScopeOrgIds,
+        scopeOrgId:       primaryAfterOrgId,
+        orgMapping:       mapping,
+        focusedOrgId:     newFocusedOrgId,
+      })
+    },
+
+    setOrgMapping: (mapping) => set({ orgMapping: mapping }),
 
     setRawImportedRows: (_rows) => { /* no-op: 後方互換 */ },
 

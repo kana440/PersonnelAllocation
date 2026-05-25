@@ -5,8 +5,8 @@ import type { ReviewRow } from '../hooks/useReviewData'
 // 変更種別の定義（表示順）
 const ALL_KINDS = [
   { key: 'transfer',    label: '組織異動', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'promotion',   label: '昇格',     color: 'bg-green-100 text-green-700 border-green-200' },
-  { key: 'demotion',    label: '降格',     color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { key: 'promotion',   label: '昇級',     color: 'bg-green-100 text-green-700 border-green-200' },
+  { key: 'demotion',    label: '降級',     color: 'bg-orange-100 text-orange-700 border-orange-200' },
   { key: 'titleChange', label: '職位名変更', color: 'bg-purple-100 text-purple-700 border-purple-200' },
   { key: 'newHire',     label: '新規採用', color: 'bg-teal-100 text-teal-700 border-teal-200' },
   { key: 'termination', label: '退職',     color: 'bg-red-100 text-red-700 border-red-200' },

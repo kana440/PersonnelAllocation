@@ -43,20 +43,62 @@ export function ExportOrgDialog({ afterOrgs, rows, effectiveDate, scopeOrg, onCl
     })
   }
 
-  // org externalCode (or id) → member count from rows
-  const memberCountByCode = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const row of rows) {
-      if (row.departmentCode) map.set(row.departmentCode, (map.get(row.departmentCode) ?? 0) + 1)
-    }
-    return map
-  }, [rows])
-
-  // Map code → org for row filtering
+  // Map code → org for row filtering and count lookup
   const orgByCode = useMemo(() =>
     new Map(afterOrgs.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
     [afterOrgs]
   )
+
+  // orgId → direct member count from rows
+  const memberCountByOrgId = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const row of rows) {
+      if (!row.departmentCode) continue
+      const org = orgByCode.get(row.departmentCode)
+      if (org) map.set(org.id, (map.get(org.id) ?? 0) + 1)
+    }
+    return map
+  }, [rows, orgByCode])
+
+  // orgId → direct child org IDs
+  const childrenByParentId = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const org of afterOrgs) {
+      if (!org.parentId) continue
+      const arr = map.get(org.parentId) ?? []
+      arr.push(org.id)
+      map.set(org.parentId, arr)
+    }
+    return map
+  }, [afterOrgs])
+
+  // Total count (direct + all descendants) per org ID
+  const totalCountByOrgId = useMemo(() => {
+    const cache = new Map<string, number>()
+    const getTotal = (orgId: string): number => {
+      if (cache.has(orgId)) return cache.get(orgId)!
+      const direct = memberCountByOrgId.get(orgId) ?? 0
+      const total = direct + (childrenByParentId.get(orgId) ?? []).reduce((acc, id) => acc + getTotal(id), 0)
+      cache.set(orgId, total)
+      return total
+    }
+    for (const org of afterOrgs) getTotal(org.id)
+    return cache
+  }, [afterOrgs, memberCountByOrgId, childrenByParentId])
+
+  // Selected-only count (direct + descendants that are checked) per org ID
+  const selectedCountByOrgId = useMemo(() => {
+    const cache = new Map<string, number>()
+    const getSelected = (orgId: string): number => {
+      if (cache.has(orgId)) return cache.get(orgId)!
+      const direct = selectedOrgIds.has(orgId) ? (memberCountByOrgId.get(orgId) ?? 0) : 0
+      const total = direct + (childrenByParentId.get(orgId) ?? []).reduce((acc, id) => acc + getSelected(id), 0)
+      cache.set(orgId, total)
+      return total
+    }
+    for (const org of afterOrgs) getSelected(org.id)
+    return cache
+  }, [afterOrgs, memberCountByOrgId, childrenByParentId, selectedOrgIds])
 
   // Rows to actually export (filtered by selected orgs)
   const exportRows = useMemo(() => {
@@ -94,19 +136,25 @@ export function ExportOrgDialog({ afterOrgs, rows, effectiveDate, scopeOrg, onCl
   }
 
   const renderOrgNode = (org: Organization, depth: number): React.ReactNode => {
-    const children      = afterOrgs.filter(c => c.parentId === org.id)
-    const hasChildren   = children.length > 0
-    const isExpanded    = expandedNodes.has(org.id)
-    const isSelected    = selectedOrgIds.has(org.id)
-    const directCount   = memberCountByCode.get(org.externalCode ?? org.id) ?? 0
+    const children    = afterOrgs.filter(c => c.parentId === org.id)
+    const hasChildren = children.length > 0
+    const isExpanded  = expandedNodes.has(org.id)
+    const isSelected  = selectedOrgIds.has(org.id)
 
     // Three-state checkbox: fully checked / indeterminate / unchecked
-    // (computed from all descendants regardless of expand/collapse state)
-    const descIds        = getDescendantIds(org.id, afterOrgs)
-    const anyDescSel     = descIds.some(d => selectedOrgIds.has(d))
-    const allDescSel     = descIds.length > 0 && descIds.every(d => selectedOrgIds.has(d))
-    const isFullyChecked = isSelected || allDescSel
+    const descIds         = getDescendantIds(org.id, afterOrgs)
+    const anyDescSel      = descIds.some(d => selectedOrgIds.has(d))
+    const allDescSel      = descIds.length > 0 && descIds.every(d => selectedOrgIds.has(d))
+    const isFullyChecked  = isSelected || allDescSel
     const isIndeterminate = !isFullyChecked && anyDescSel
+
+    const totalCount  = totalCountByOrgId.get(org.id) ?? 0
+    const directCount = memberCountByOrgId.get(org.id) ?? 0
+    // Mixed selection → show selected-only count; otherwise → total
+    const displayCount = isIndeterminate
+      ? (selectedCountByOrgId.get(org.id) ?? 0)
+      : totalCount
+    const showDirect = hasChildren && directCount > 0 && directCount !== totalCount
 
     return (
       <div key={org.id}>
@@ -132,8 +180,13 @@ export function ExportOrgDialog({ afterOrgs, rows, effectiveDate, scopeOrg, onCl
           <span className={`text-xs flex-1 truncate ml-1 ${isFullyChecked ? 'text-gray-800 font-medium' : 'text-gray-600'}`}>
             {org.name}
           </span>
-          {directCount > 0 && (
-            <span className="text-xs text-gray-400 flex-shrink-0 ml-1">{directCount}名</span>
+          {displayCount > 0 && (
+            <span className="text-xs text-gray-400 flex-shrink-0 ml-1 tabular-nums">
+              {displayCount}名
+              {showDirect && (
+                <span className="text-[10px] text-gray-300 ml-0.5">（直下{directCount}）</span>
+              )}
+            </span>
           )}
         </div>
         {hasChildren && isExpanded && children.map(c => renderOrgNode(c, depth + 1))}

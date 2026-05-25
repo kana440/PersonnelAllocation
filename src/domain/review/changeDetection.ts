@@ -35,11 +35,25 @@ export interface RowChanges {
   diffCount:    number   // 変更フィールド数
 }
 
-export function detectChanges(row: AllocationRow): RowChanges {
+/**
+ * sameOrgPairs: Set of "${beforeExternalCode}|${afterExternalCode}" strings.
+ * If a person moves between orgs listed here, it is NOT treated as a transfer —
+ * the orgs are considered the same organisation under a different name/code.
+ */
+export function detectChanges(row: AllocationRow, sameOrgPairs?: Set<string>): RowChanges {
   const kinds = new Set<ChangeKind>()
 
-  // 組織変更
-  if ((row.departmentCode ?? '') !== (row.prevDepartmentCode ?? '')) {
+  const prevCode  = row.prevDepartmentCode ?? ''
+  const afterCode = row.departmentCode ?? ''
+  const deptChanged = prevCode !== afterCode
+
+  // 対応組織かチェック（ユーザー定義マッピングで same org 扱いにされた組織間）
+  const isCorrespondingOrg =
+    !deptChanged ||
+    (sameOrgPairs !== undefined && sameOrgPairs.has(`${prevCode}|${afterCode}`))
+
+  // 組織変更: 対応関係にない org への移動のみ transfer とする
+  if (deptChanged && !isCorrespondingOrg) {
     kinds.add('transfer')
   }
 

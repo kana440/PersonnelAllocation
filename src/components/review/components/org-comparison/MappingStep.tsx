@@ -75,9 +75,11 @@ interface Props {
   onRemoveMapping: (oldOrgId: string) => void
   onAutoGenerate:  (orgIds: string[]) => void
   onNext:          () => void
+  nextLabel?:      string   // デフォルト「比較プレビュー →」
+  onBack?:         () => void
 }
 
-export function MappingStep({ mapping, beforeOrgs, afterOrgs, onSetMapping, onRemoveMapping, onAutoGenerate, onNext }: Props) {
+export function MappingStep({ mapping, beforeOrgs, afterOrgs, onSetMapping, onRemoveMapping, onAutoGenerate, onNext, nextLabel = '比較プレビュー →', onBack }: Props) {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [collapsed,     setCollapsed]     = useState<Set<string>>(new Set())
 
@@ -165,11 +167,16 @@ export function MappingStep({ mapping, beforeOrgs, afterOrgs, onSetMapping, onRe
               className="text-xs px-2.5 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
             >⚡ 自動生成</button>
           )}
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+            >← 戻る</button>
+          )}
           <button
             onClick={onNext}
-            disabled={mapping.size === 0}
-            className="ml-auto text-xs px-4 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors font-medium"
-          >比較プレビュー →</button>
+            className="ml-auto text-xs px-4 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+          >{nextLabel}</button>
         </div>
 
         {selectedOrgId ? (

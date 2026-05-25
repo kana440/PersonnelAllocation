@@ -2,6 +2,7 @@ import type { AllocationRow } from '../allocationRow'
 import { BEFORE_AFTER_FIELD_PAIRS } from '../allocationRow'
 import type { Organization } from '../schemas'
 import type { AllCodeLists } from '../codeLists/aggregate'
+import type { RowChanges } from '../review/changeDetection'
 
 export type ValidationLevel = 'warning' | 'error'
 
@@ -59,6 +60,62 @@ function validateBandChangeReason(row: AllocationRow): ValidationIssue[] {
   return []
 }
 
+/**
+ * 昇級・降級（同一対応組織内のバンド変更）でポジションが変わっていない場合はエラー。
+ * ポジション未変更のまま band だけ変えることは HR 運用上許容されない。
+ * Excel 保存・出力は妨げない（呼び出し側が errors をブロックに使わない前提）。
+ */
+function validateBandChangeRequiresNewPosition(row: AllocationRow, changes?: RowChanges): ValidationIssue[] {
+  if (!changes) return []
+  const { kinds } = changes
+  // 昇級 or 降級 かつ transfer なし → 同一（対応）組織内のバンド変更
+  const isSameOrgBandChange =
+    (kinds.has('promotion') || kinds.has('demotion')) && !kinds.has('transfer')
+  if (!isSameOrgBandChange) return []
+
+  const positionChanged = (row.positionCode ?? '') !== (row.prevPositionCode ?? '')
+  if (positionChanged) return []
+
+  return [{
+    field:   'positionCode',
+    level:   'error',
+    message: '昇級・降級が検出されましたが、ポジションコードが変更されていません（新ポジションへの登録が必要です）',
+  }]
+}
+
+/** V04: 兼務の場合は兼務理由が必要 */
+function validateConcurrentReason(row: AllocationRow): ValidationIssue[] {
+  if (row.concurrentType === '兼務' && !row.concurrentReason) {
+    return [{
+      field:   'concurrentReason',
+      level:   'warning',
+      message: '兼務の場合は兼務理由を入力してください',
+    }]
+  }
+  return []
+}
+
+/** V50: 異動検知時に異動事由が未入力 / V05・V52: 降格検知時に降格理由が未入力 */
+function validateChangeReasons(row: AllocationRow, changes?: RowChanges): ValidationIssue[] {
+  if (!changes) return []
+  const issues: ValidationIssue[] = []
+  if (changes.kinds.has('transfer') && !row.transferReason) {
+    issues.push({
+      field:   'transferReason',
+      level:   'warning',
+      message: '異動が検出されましたが異動事由が未入力です',
+    })
+  }
+  if (changes.kinds.has('demotion') && !row.demotionReason) {
+    issues.push({
+      field:   'demotionReason',
+      level:   'warning',
+      message: '降級が検出されましたが降格理由が未入力です',
+    })
+  }
+  return issues
+}
+
 /** 出向先会社が設定されているが組織コードが未設定 */
 function validateSecondmentConsistency(row: AllocationRow): ValidationIssue[] {
   if (row.secondmentToCompany && !row.departmentCode) {
@@ -73,15 +130,19 @@ function validateSecondmentConsistency(row: AllocationRow): ValidationIssue[] {
 
 // ── メインバリデーション関数 ─────────────────────────────────────────────────
 export function validateRow(
-  row:       AllocationRow,
-  orgs:      Organization[],
+  row:        AllocationRow,
+  orgs:       Organization[],
   _codeLists: AllCodeLists,   // 将来: コードリスト値チェックに使用
+  changes?:   RowChanges,
 ): ValidationIssue[] {
   return [
     ...validateRequiredAfterFields(row),
     ...validateDepartmentCode(row, orgs),
     ...validateBandChangeReason(row),
     ...validateSecondmentConsistency(row),
+    ...validateConcurrentReason(row),
+    ...validateChangeReasons(row, changes),
+    ...validateBandChangeRequiresNewPosition(row, changes),
   ]
 }
 

@@ -8,13 +8,15 @@ interface Props {
   result: ImportedWorkbookResult
   onSelectAll: () => void
   onSelectOrg: (id: string, name: string) => void
+  hideDetails?: boolean
 }
 
-export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
+export function OrgSelectStep({ result, onSelectAll, onSelectOrg, hideDetails = false }: Props) {
   const [search, setSearch] = useState('')
   const [showDetails, setShowDetails] = useState(false)
 
-  const orgs = result.afterOrganizations
+  // 旧組織ツリーからスコープを選択する
+  const orgs = result.beforeOrganizations
   const viewOrgs = useMemo(() => orgs.filter(o => !o.isAbandoned), [orgs])
   const viewOrgIds = useMemo(() => new Set(viewOrgs.map(o => o.id)), [viewOrgs])
 
@@ -32,19 +34,48 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
     return s
   })
 
-  // Row count per org (direct rows only)
-  const rowCountByCode = useMemo(() => {
+  // externalCode → org lookup（prevDepartmentCode でカウント）
+  const orgByExtCode = useMemo(
+    () => new Map(viewOrgs.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
+    [viewOrgs]
+  )
+
+  // 旧組織ごとの直下行数（prevDepartmentCode 基準）
+  const directCountByOrgId = useMemo(() => {
     const map = new Map<string, number>()
     for (const row of result.allocationList) {
-      if (row.departmentCode) {
-        map.set(row.departmentCode, (map.get(row.departmentCode) ?? 0) + 1)
-      }
+      if (!row.prevDepartmentCode) continue
+      const org = orgByExtCode.get(row.prevDepartmentCode)
+      if (org) map.set(org.id, (map.get(org.id) ?? 0) + 1)
     }
     return map
-  }, [result.allocationList])
+  }, [result.allocationList, orgByExtCode])
 
-  const getCount = (org: Organization): number =>
-    org.externalCode ? (rowCountByCode.get(org.externalCode) ?? 0) : 0
+  // orgId → direct child org IDs
+  const childrenByParentId = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const org of viewOrgs) {
+      if (!org.parentId) continue
+      const arr = map.get(org.parentId) ?? []
+      arr.push(org.id)
+      map.set(org.parentId, arr)
+    }
+    return map
+  }, [viewOrgs])
+
+  // Total row count for org + all descendants (memoized recursively)
+  const totalCountByOrgId = useMemo(() => {
+    const cache = new Map<string, number>()
+    const getTotal = (orgId: string): number => {
+      if (cache.has(orgId)) return cache.get(orgId)!
+      const direct = directCountByOrgId.get(orgId) ?? 0
+      const total = direct + (childrenByParentId.get(orgId) ?? []).reduce((acc, id) => acc + getTotal(id), 0)
+      cache.set(orgId, total)
+      return total
+    }
+    for (const org of viewOrgs) getTotal(org.id)
+    return cache
+  }, [viewOrgs, directCountByOrgId, childrenByParentId])
 
   const searchLower = search.toLowerCase().trim()
   const searchResults = useMemo(
@@ -61,9 +92,12 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
   }
 
   const renderNode = (org: Organization, depth: number): React.ReactNode => {
-    const children = viewOrgs.filter(o => o.parentId === org.id)
+    const children   = viewOrgs.filter(o => o.parentId === org.id)
+    const hasChildren = children.length > 0
     const isExpanded = expandedIds.has(org.id)
-    const count = getCount(org)
+    const totalCount  = totalCountByOrgId.get(org.id) ?? 0
+    const directCount = directCountByOrgId.get(org.id) ?? 0
+    const showDirect  = hasChildren && directCount > 0 && directCount !== totalCount
 
     return (
       <div key={org.id}>
@@ -72,7 +106,7 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
             onClick={() => toggleExpand(org.id)}
             className="w-5 h-6 flex items-center justify-center text-gray-400 text-xs flex-shrink-0"
           >
-            {children.length > 0 ? (isExpanded ? '▾' : '▸') : ''}
+            {hasChildren ? (isExpanded ? '▾' : '▸') : ''}
           </button>
           <button
             onClick={() => onSelectOrg(org.id, org.name)}
@@ -80,8 +114,13 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
           >
             {org.name}
           </button>
-          {count > 0 && (
-            <span className="text-xs text-gray-400 flex-shrink-0 pr-3 tabular-nums">{count}</span>
+          {totalCount > 0 && (
+            <span className="text-xs text-gray-400 flex-shrink-0 pr-3 tabular-nums">
+              {totalCount}
+              {showDirect && (
+                <span className="text-[10px] text-gray-300 ml-0.5">（直下{directCount}）</span>
+              )}
+            </span>
           )}
         </div>
         {isExpanded && children.map(c => renderNode(c, depth + 1))}
@@ -133,7 +172,10 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
               ? <div className="text-xs text-gray-400 text-center py-6">該当なし</div>
               : <div className="py-1">
                   {searchResults.map(org => {
-                    const count = getCount(org)
+                    const total  = totalCountByOrgId.get(org.id) ?? 0
+                    const direct = directCountByOrgId.get(org.id) ?? 0
+                    const hasChildren = (childrenByParentId.get(org.id)?.length ?? 0) > 0
+                    const showDirect = hasChildren && direct > 0 && direct !== total
                     return (
                       <button
                         key={org.id}
@@ -141,7 +183,14 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
                         className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                       >
                         <span className="flex-1 text-left truncate">{org.name}</span>
-                        {count > 0 && <span className="text-xs text-gray-400 ml-2 tabular-nums">{count}</span>}
+                        {total > 0 && (
+                          <span className="text-xs text-gray-400 ml-2 tabular-nums">
+                            {total}
+                            {showDirect && (
+                              <span className="text-[10px] text-gray-300 ml-0.5">（直下{direct}）</span>
+                            )}
+                          </span>
+                        )}
                       </button>
                     )
                   })}
@@ -158,31 +207,33 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg }: Props) {
       </div>
 
       {/* Collapsible import details */}
-      <div className="border-t border-gray-100 pt-3">
-        <button
-          onClick={() => setShowDetails(v => !v)}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <span>{showDetails ? '▾' : '▸'}</span>
-          <span>読み込み結果の詳細を確認する</span>
-        </button>
-        {showDetails && (
-          <div className="mt-2 bg-gray-50 rounded-lg px-3 py-2 space-y-2 text-xs">
-            <DetailRow label={SHEET_ALLOCATION} found={result.sheetsFound.includes(SHEET_ALLOCATION)} detail={`${result.allocationRowCount} 行`} />
-            <DetailRow label={SHEET_ORG_MASTER}  found={result.sheetsFound.includes(SHEET_ORG_MASTER)}  detail={`${result.orgEntries.length} 組織`} />
-            <div className="flex items-start gap-1.5">
-              <span className={`${codeListFound ? 'text-green-500' : 'text-gray-300'}`}>{codeListFound ? '✓' : '—'}</span>
-              <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-gray-400'}`}>{SHEET_CODE_LISTS}</span>
-              {codeListFound && (
-                <span className="text-gray-400">
-                  {foundCodeListKeys.length}/{codeListKeys.length} 種 ({foundCodeListKeys.map(k => CODE_LIST_LABELS[k]).join('・')})
-                </span>
-              )}
-              {!codeListFound && <span className="text-gray-400 italic">シートなし</span>}
+      {!hideDetails && (
+        <div className="border-t border-gray-100 pt-3">
+          <button
+            onClick={() => setShowDetails(v => !v)}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <span>{showDetails ? '▾' : '▸'}</span>
+            <span>読み込み結果の詳細を確認する</span>
+          </button>
+          {showDetails && (
+            <div className="mt-2 bg-gray-50 rounded-lg px-3 py-2 space-y-2 text-xs">
+              <DetailRow label={SHEET_ALLOCATION} found={result.sheetsFound.includes(SHEET_ALLOCATION)} detail={`${result.allocationRowCount} 行`} />
+              <DetailRow label={SHEET_ORG_MASTER}  found={result.sheetsFound.includes(SHEET_ORG_MASTER)}  detail={`${result.orgEntries.length} 組織`} />
+              <div className="flex items-start gap-1.5">
+                <span className={`${codeListFound ? 'text-green-500' : 'text-gray-300'}`}>{codeListFound ? '✓' : '—'}</span>
+                <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-gray-400'}`}>{SHEET_CODE_LISTS}</span>
+                {codeListFound && (
+                  <span className="text-gray-400">
+                    {foundCodeListKeys.length}/{codeListKeys.length} 種 ({foundCodeListKeys.map(k => CODE_LIST_LABELS[k]).join('・')})
+                  </span>
+                )}
+                {!codeListFound && <span className="text-gray-400 italic">シートなし</span>}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

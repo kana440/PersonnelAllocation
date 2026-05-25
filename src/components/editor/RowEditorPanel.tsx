@@ -5,8 +5,11 @@ import { ALLOCATION_LIST_LABEL_MAP } from '../../domain/csvImport/allocationList
 import { validateRow, fieldsToShow, issuesForField } from '../../domain/validation/validateRow'
 import { RowEditorField } from './RowEditorField'
 import { ComboInput } from '../common/ComboInput'
+import { OrgCombobox } from '../common/OrgCombobox'
 import type { AllocationRow } from '../../domain/allocationRow'
 import type { AfterValues } from '../../domain/allocationRow'
+import type { Organization } from '../../domain/schemas'
+import type { ValidationIssue } from '../../domain/validation/validateRow'
 
 const FIELD_LABEL = Object.fromEntries(
   BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => [
@@ -15,18 +18,77 @@ const FIELD_LABEL = Object.fromEntries(
   ])
 )
 
+// codeListKey → AllCodeLists のプロパティ名
 const CODE_LIST_KEYS: Partial<Record<string, string>> = {
-  employmentType: 'employmentTypes',
-  concurrentType: 'concurrentTypes',
-  transferReason: 'transferReasons',
-  jobFamily:      'jobFamilies',
-  jobType:        'jobTypes',
+  // 既存
+  employmentType:       'employmentTypes',
+  concurrentType:       'concurrentTypes',
+  transferReason:       'transferReasons',
+  jobFamily:            'jobFamilies',
+  jobType:              'jobTypes',
+  // 追加: CodeEntry（.code プロパティ）
+  officialPositionCode: 'officialPositions',
+  payGrade:             'payGrades',
+  location:             'workLocations',
+  concurrentReason:     'concurrentReasons',
+  demotionReason:       'demotionReasons',
+  // 追加: string[] 配列
+  trainingPositionFlag:  'trainingPositions',
+  discretionaryWorkFlag: 'discretionaryWorkOptions',
 }
+
+// 有効値 Y/N の二値フラグフィールド
+// TODO: 業務確認待ち — "Y"/"N" が正しい格納値か確認
+const FLAG_FIELDS = new Set([
+  'positionUnionFlag', 'positionDiscretionaryWorkFlag',
+  'unionFlag', 'nonUnionAgreementFlag', 'leaveFlag',
+])
+const FLAG_OPTIONS = ['Y', 'N']
+
+// OrgCombobox で組織検索するフィールド（externalCode を格納する）
+const ORG_FIELDS = new Set(['departmentCode'])
 
 const READONLY_FIELDS = new Set<string>([
   'userId', 'employeeNumber', 'lastName', 'firstName',
   'groupEmployeeId', 'groupEmployeeNumber',
 ])
+
+// 組織コードフィールド専用行（OrgCombobox を使用）
+function OrgEditorRow({ label, orgId, prevVal, orgs, issues, readOnly, onChange }: {
+  label:    string
+  orgId:    string | null
+  prevVal:  string
+  orgs:     Organization[]
+  issues:   ValidationIssue[]
+  readOnly: boolean
+  onChange: (id: string | null) => void
+}) {
+  const hasError   = issues.some(i => i.level === 'error')
+  const hasWarning = issues.some(i => i.level === 'warning')
+  const rowBg = hasError ? 'bg-red-50' : hasWarning ? 'bg-orange-50' : orgId ? 'bg-blue-50' : ''
+  return (
+    <div className={`grid grid-cols-[8rem_1fr_1fr] gap-x-2 items-start px-3 py-1.5 border-b border-gray-100 ${rowBg}`}>
+      <div className="text-xs text-gray-500 leading-5 truncate pt-0.5">{label}</div>
+      <div className="space-y-0.5">
+        <OrgCombobox
+          allOrgs={orgs}
+          value={orgId}
+          onChange={readOnly ? () => {} : onChange}
+          variant="light"
+          placeholder="組織を選択…"
+        />
+        {issues.map((issue, i) => (
+          <div key={i} className={`text-xs ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
+            {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
+          </div>
+        ))}
+      </div>
+      <div className="text-xs text-gray-400 bg-gray-50 rounded px-2 py-1 leading-4 min-h-[26px] break-all">
+        {prevVal || <span className="text-gray-300">—</span>}
+      </div>
+    </div>
+  )
+}
 
 export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
   const {
@@ -71,11 +133,16 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   const getOptions = (key: string): string[] => {
+    if (FLAG_FIELDS.has(key)) return FLAG_OPTIONS
     const listKey = CODE_LIST_KEYS[key]
     if (!listKey) return []
     const list = (codeLists as unknown as Record<string, unknown>)[listKey]
-    if (Array.isArray(list)) return list.map((v: unknown) => String((v as Record<string, string>).value ?? v))
-    return []
+    if (!Array.isArray(list)) return []
+    return list.map((v: unknown) => {
+      if (typeof v === 'string') return v                           // string[] (trainingPositions 等)
+      const entry = v as Record<string, string>
+      return entry.code ?? entry.value ?? String(v)                // CodeEntry
+    })
   }
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
@@ -219,11 +286,33 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
       {/* ── フィールド一覧 ── */}
       <div className="flex-1 overflow-y-auto">
         {BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => {
-          const afterStr = (effectiveRow[afterKey] as string | undefined) ?? ''
-          const prevStr  = (row[prevKey]  as string | undefined) ?? ''
-          const key      = String(afterKey)
+          const afterStr    = (effectiveRow[afterKey] as string | undefined) ?? ''
+          const prevStr     = (row[prevKey]  as string | undefined) ?? ''
+          const key         = String(afterKey)
+          const isReadOnly  = READONLY_FIELDS.has(key) || readOnly
+          const fieldIssues = issuesForField(issues, afterKey)
 
           if (!showAll && !defaultFields.has(key)) return null
+
+          // 組織コード: OrgCombobox で検索
+          if (ORG_FIELDS.has(key)) {
+            const orgId = afterOrganizations.find(o => o.externalCode === afterStr)?.id ?? null
+            return (
+              <OrgEditorRow
+                key={key}
+                label={FIELD_LABEL[key] ?? key}
+                orgId={orgId}
+                prevVal={prevStr}
+                orgs={afterOrganizations}
+                issues={fieldIssues}
+                readOnly={isReadOnly}
+                onChange={id => {
+                  const org = afterOrganizations.find(o => o.id === id)
+                  handleChange(afterKey, org?.externalCode ?? '')
+                }}
+              />
+            )
+          }
 
           return (
             <RowEditorField
@@ -233,8 +322,8 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
               beforeVal={prevStr}
               onChange={v => handleChange(afterKey, v)}
               options={getOptions(key)}
-              issues={issuesForField(issues, afterKey)}
-              readOnly={READONLY_FIELDS.has(key) || readOnly}
+              issues={fieldIssues}
+              readOnly={isReadOnly}
             />
           )
         })}
