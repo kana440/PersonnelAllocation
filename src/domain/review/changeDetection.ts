@@ -39,8 +39,16 @@ export interface RowChanges {
  * sameOrgPairs: Set of "${beforeExternalCode}|${afterExternalCode}" strings.
  * If a person moves between orgs listed here, it is NOT treated as a transfer —
  * the orgs are considered the same organisation under a different name/code.
+ *
+ * jobLevelWarningMap: positionBand code → promotionDemotionWarningLevel (from codeLists.jobLevels).
+ * When provided, promotion/demotion is determined by comparing the warning levels of
+ * prevPositionBand and positionBand. Without it, falls back to parseBandLevel on band/prevBand.
  */
-export function detectChanges(row: AllocationRow, sameOrgPairs?: Set<string>): RowChanges {
+export function detectChanges(
+  row: AllocationRow,
+  sameOrgPairs?: Set<string>,
+  jobLevelWarningMap?: Map<string, number>,
+): RowChanges {
   const kinds = new Set<ChangeKind>()
 
   const prevCode  = row.prevDepartmentCode ?? ''
@@ -57,14 +65,24 @@ export function detectChanges(row: AllocationRow, sameOrgPairs?: Set<string>): R
     kinds.add('transfer')
   }
 
-  // バンド変更
-  const prevBandLevel  = parseBandLevel(row.prevBand)
-  const afterBandLevel = parseBandLevel(row.band)
-  if ((row.band ?? '') !== (row.prevBand ?? '')) {
-    if (prevBandLevel !== null && afterBandLevel !== null) {
-      if (afterBandLevel > prevBandLevel) kinds.add('promotion')
-      else if (afterBandLevel < prevBandLevel) kinds.add('demotion')
-      else kinds.add('bandChange')
+  // バンド変更（昇格・降格・バンド変更）
+  // positionBand の promotionDemotionWarningLevel（codeList）で判定する。
+  // map が渡されていない・コードが見つからない場合は bandChange として扱う。
+  const prevBandStr  = row.prevPositionBand ?? ''
+  const afterBandStr = row.positionBand ?? ''
+  const afterBandLevel = parseBandLevel(row.band) // bandMismatch チェック用
+
+  if (prevBandStr !== afterBandStr) {
+    if (jobLevelWarningMap && prevBandStr && afterBandStr) {
+      const prevLevel  = jobLevelWarningMap.get(prevBandStr)
+      const afterLevel = jobLevelWarningMap.get(afterBandStr)
+      if (prevLevel !== undefined && afterLevel !== undefined) {
+        if (afterLevel > prevLevel)      kinds.add('promotion')
+        else if (afterLevel < prevLevel) kinds.add('demotion')
+        else                             kinds.add('bandChange')
+      } else {
+        kinds.add('bandChange')
+      }
     } else {
       kinds.add('bandChange')
     }

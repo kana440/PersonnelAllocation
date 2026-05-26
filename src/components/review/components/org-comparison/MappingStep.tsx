@@ -1,8 +1,76 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { flattenOrgTree, getDescendantOrgIds } from '../../../../domain/orgScope'
 import type { Organization } from '../../../../domain/schemas'
 import { OrgTreePanel } from '../OrgTreePanel'
 import type { OrgMapping } from './types'
+
+// ── OrgPickerDropdown ─────────────────────────────────────────────────────────
+
+function OrgPickerDropdown({ available, onAdd }: {
+  available: { org: Organization; depth: number }[]
+  onAdd: (id: string) => void
+}) {
+  const [open,  setOpen]  = useState(false)
+  const [query, setQuery] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const filtered = useMemo(() => {
+    if (!query) return available
+    const q = query.toLowerCase()
+    return available.filter(({ org }) =>
+      org.name.toLowerCase().includes(q) || (org.externalCode ?? '').toLowerCase().includes(q)
+    )
+  }, [available, query])
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-[10px] border border-dashed border-blue-300 rounded px-1.5 py-0.5 text-blue-500 hover:border-blue-500 bg-white whitespace-nowrap"
+      >＋ 新組織</button>
+      {open && (
+        <div className="absolute right-0 top-full mt-0.5 z-50 bg-white border border-gray-200 rounded shadow-lg w-60 max-h-60 flex flex-col">
+          <div className="p-1.5 border-b border-gray-100">
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="名前・コードで検索…"
+              className="w-full text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+            />
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {filtered.length === 0 && (
+              <div className="text-[10px] text-gray-400 text-center py-3">該当なし</div>
+            )}
+            {filtered.map(({ org, depth }) => (
+              <button
+                key={org.id}
+                onClick={() => { onAdd(org.id); setOpen(false); setQuery('') }}
+                className="w-full text-left px-2 py-1 hover:bg-blue-50 flex items-center gap-1"
+                style={{ paddingLeft: `${8 + (query ? 0 : depth) * 12}px` }}
+              >
+                <span className="text-xs text-gray-700 truncate">{org.name}</span>
+                {org.externalCode && (
+                  <span className="flex-shrink-0 text-[9px] text-gray-400">[{org.externalCode}]</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── MappingTreeRow ────────────────────────────────────────────────────────────
 
@@ -37,26 +105,19 @@ function MappingTreeRow({ org, depth, hasChild, isCollapsed, newOrgIds, flatAfte
         {isAbandoned && <span className="flex-shrink-0 text-[9px] px-1 py-0.5 rounded bg-red-50 text-red-500 border border-red-200 ml-1">廃止</span>}
       </div>
 
-      {/* 右: 新組織チップ + 追加ドロップダウン */}
+      {/* 右: 新組織チップ + 追加ピッカー */}
       <div className="flex-shrink-0 flex flex-wrap items-center gap-1 max-w-[52%]">
-        {assigned && newOrgIds.map(id => (
-          <span key={id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-[10px] text-blue-700">
-            {afterOrgMap.get(id)?.name ?? id}
-            <button onClick={() => onRemove(id)} className="text-blue-400 hover:text-red-500 leading-none">×</button>
-          </span>
-        ))}
-        <select
-          value=""
-          onChange={e => { if (e.target.value) onAdd(e.target.value) }}
-          className="text-[10px] border border-dashed border-blue-300 rounded px-1 py-0.5 text-blue-500 focus:outline-none cursor-pointer hover:border-blue-500 bg-white"
-        >
-          <option value="">+ 新組織</option>
-          {available.map(({ org: o, depth: d }) => (
-            <option key={o.id} value={o.id}>
-              {'　'.repeat(d)}{o.name}{o.externalCode ? ` [${o.externalCode}]` : ''}
-            </option>
-          ))}
-        </select>
+        {assigned && newOrgIds.map(id => {
+          const o = afterOrgMap.get(id)
+          return (
+            <span key={id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-[10px] text-blue-700">
+              {o?.name ?? id}
+              {o?.externalCode && <span className="text-blue-400">[{o.externalCode}]</span>}
+              <button onClick={() => onRemove(id)} className="text-blue-400 hover:text-red-500 leading-none">×</button>
+            </span>
+          )
+        })}
+        <OrgPickerDropdown available={available} onAdd={onAdd} />
         {assigned && (
           <button onClick={onReset} title="マッピングをリセット" className="text-[9px] text-gray-300 hover:text-red-400 transition-colors">✕</button>
         )}

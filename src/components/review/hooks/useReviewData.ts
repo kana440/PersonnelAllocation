@@ -53,16 +53,22 @@ export function useReviewData(): ReviewData {
     return pairs
   }, [orgMapping, beforeCodeById, afterCodeById])
 
+  // positionBand code → promotionDemotionWarningLevel（昇降格ワーニング用チェック）
+  const jobLevelWarningMap = useMemo(
+    () => new Map((codeLists?.jobLevels ?? []).map(e => [e.code, e.promotionDemotionWarningLevel])),
+    [codeLists]
+  )
+
   const rows = useMemo((): ReviewRow[] =>
     allocationList.map(row => {
-      const changes = detectChanges(row, sameOrgPairs)
+      const changes = detectChanges(row, sameOrgPairs, jobLevelWarningMap)
       return {
         row,
         changes,
         issues: validateRow(row, afterOrganizations, codeLists, changes),
       }
     }),
-    [allocationList, afterOrganizations, codeLists, sameOrgPairs]
+    [allocationList, afterOrganizations, codeLists, sameOrgPairs, jobLevelWarningMap]
   )
 
   const summary = useMemo(() => {

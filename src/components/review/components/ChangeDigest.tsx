@@ -36,8 +36,8 @@ export function ChangeDigest({ data, onSelectTab }: Props) {
       label: '変更種別',
       stats: [
         { label: '組織異動', value: summary.transfers,   color: 'text-blue-600',   bgColor: 'bg-blue-50',   tab: 'grid', filterKind: 'transfer' },
-        { label: '昇級',    value: summary.promotions,  color: 'text-green-600',  bgColor: 'bg-green-50',  tab: 'grid', filterKind: 'promotion' },
-        { label: '降級',    value: summary.demotions,   color: 'text-orange-600', bgColor: 'bg-orange-50', tab: 'grid', filterKind: 'demotion' },
+        { label: '昇格',    value: summary.promotions,  color: 'text-green-600',  bgColor: 'bg-green-50',  tab: 'grid', filterKind: 'promotion' },
+        { label: '降格',    value: summary.demotions,   color: 'text-orange-600', bgColor: 'bg-orange-50', tab: 'grid', filterKind: 'demotion' },
         { label: '職位変更', value: summary.titleChanges,color: 'text-purple-600', bgColor: 'bg-purple-50', tab: 'grid', filterKind: 'titleChange' },
         { label: '新規採用', value: summary.newHires,    color: 'text-teal-600',   bgColor: 'bg-teal-50',   tab: 'grid', filterKind: 'newHire' },
         { label: '退職',    value: summary.terminations,color: 'text-red-600',    bgColor: 'bg-red-50',    tab: 'grid', filterKind: 'termination' },

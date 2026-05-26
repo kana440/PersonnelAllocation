@@ -38,13 +38,6 @@ export function ScopeMappingDialog({ onClose }: Props) {
     allocationRowCount: allocationList.length,
   }), [beforeOrganizations, afterOrganizations, allocationList, codeLists])
 
-  const handleSelectAll = useCallback(() => {
-    const index   = buildOrgMatchIndex(allocationList, beforeOrganizations, afterOrganizations)
-    const mapping = orgMatchIndexToMapping(index)
-    setScopeWithMapping({ beforeOrgId: null, mapping })
-    onClose()
-  }, [allocationList, beforeOrganizations, afterOrganizations, setScopeWithMapping, onClose])
-
   const handleSelectOrg = useCallback((id: string, name: string) => {
     const scopeIds    = getDescendantOrgIds(id, beforeOrganizations)
     const scopeBefore = beforeOrganizations.filter(o => scopeIds.has(o.id))
@@ -112,24 +105,11 @@ export function ScopeMappingDialog({ onClose }: Props) {
         {/* Body */}
         <div className={`${phase.kind === 'org-mapping' ? 'flex-1 overflow-hidden min-h-0' : 'p-5'}`}>
           {phase.kind === 'org-select' && (
-            <div className="space-y-4">
-              <button
-                onClick={handleSelectAll}
-                className="w-full py-2.5 text-sm font-semibold border-2 border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors"
-              >
-                🏢 全組織（スコープなし）
-              </button>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <div className="flex-1 h-px bg-gray-200" />
-                または組織を選択
-                <div className="flex-1 h-px bg-gray-200" />
-              </div>
-              <OrgSelectStep
-                result={fakeResult}
-                onSelectOrg={handleSelectOrg}
-                hideDetails
-              />
-            </div>
+            <OrgSelectStep
+              result={fakeResult}
+              onSelectOrg={handleSelectOrg}
+              hideDetails
+            />
           )}
           {phase.kind === 'org-mapping' && (
             <MappingStep

@@ -11,31 +11,25 @@
 //   - Adding a new detector = append one function to POSITION_DETECTORS.
 
 import type { AllocationRow } from '../domain/allocationRow'
+import { parseBandLevel } from '../domain/review/changeDetection'
 
 // ── Context (built once, reused by all detectors) ─────────────────────────────
 
 export interface PositionContext {
   /** positionCode → userId of the primary occupant BEFORE changes (from prevPositionCode) */
   prevOccupantByPosCode: Map<string, string>
-  /** positionCode → userId of the primary occupant AFTER changes (from positionCode) */
-  currOccupantByPosCode: Map<string, string>
 }
 
 export function buildPositionContext(list: AllocationRow[]): PositionContext {
   const prevOccupantByPosCode = new Map<string, string>()
-  const currOccupantByPosCode = new Map<string, string>()
 
   for (const row of list) {
     if (!row.userId) continue
-    // Before state: this person was in prevPositionCode before the change
     if (row.prevPositionCode && row.prevConcurrentType !== '兼務')
       prevOccupantByPosCode.set(row.prevPositionCode, row.userId)
-    // After state: this person is now in positionCode
-    if (row.positionCode && row.concurrentType !== '兼務')
-      currOccupantByPosCode.set(row.positionCode, row.userId)
   }
 
-  return { prevOccupantByPosCode, currOccupantByPosCode }
+  return { prevOccupantByPosCode }
 }
 
 // ── Badge type ────────────────────────────────────────────────────────────────
@@ -69,26 +63,30 @@ const successionDetector: PositionPatternDetector = (row, ctx) => {
   return { kind: 'succession', label: '着任', color: 'bg-indigo-100 text-indigo-700' }
 }
 
-// ── Detector: 離任（ポジションにいた人が別ポジション/未アサインへ移動） ───────
+// ── Detector: 昇格・降格（band の数値レベル変化） ─────────────────────────────
 //
-// Condition: Someone was in position X before (prevPositionCode=X),
-// but is now in a DIFFERENT position (positionCode ≠ X, or no positionCode).
-const departureDector: PositionPatternDetector = (row, ctx) => {
-  if (!row.prevPositionCode || !row.userId || row.prevConcurrentType === '兼務') return null
-  const movedAway = row.positionCode !== row.prevPositionCode
-  if (!movedAway) return null
-  // Confirm someone else (or vacancy) is now in that prev position
-  const nowInPrev = ctx.currOccupantByPosCode.get(row.prevPositionCode)
-  // If the same person is still the occupant (no change was recorded for that pos) skip
-  if (nowInPrev === row.userId) return null
-  return { kind: 'departure', label: '離任', color: 'bg-amber-100 text-amber-700' }
+// parseBandLevel は changeDetection.ts と共有。数値比較できない場合は「職位変更」。
+const bandChangeDetector: PositionPatternDetector = (row, _ctx) => {
+  if (!row.userId || row.concurrentType === '兼務') return null
+  const after  = row.band
+  const before = row.prevBand
+  if (!after || !before || after === before) return null
+
+  const afterLevel  = parseBandLevel(after)
+  const beforeLevel = parseBandLevel(before)
+
+  if (afterLevel !== null && beforeLevel !== null) {
+    if (afterLevel > beforeLevel) return { kind: 'promotion', label: '昇格', color: 'bg-green-100 text-green-700' }
+    if (afterLevel < beforeLevel) return { kind: 'demotion',  label: '降格', color: 'bg-orange-100 text-orange-700' }
+  }
+  return { kind: 'bandChange', label: '職位変更', color: 'bg-yellow-100 text-yellow-700' }
 }
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const POSITION_DETECTORS: PositionPatternDetector[] = [
   successionDetector,
-  departureDector,
+  bandChangeDetector,
 ]
 
 export function detectPositionPatterns(
