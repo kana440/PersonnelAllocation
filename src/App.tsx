@@ -32,7 +32,7 @@ const HISTORY_MAX     = 400
 const HISTORY_DEFAULT = 220
 
 export default function App() {
-  const { effectiveDate, setEffectiveDate, isLoading, undo, redo, canUndo, canRedo } = useStore()
+  const { isLoading, undo, redo, canUndo, canRedo } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
   const [appMode,       setAppMode]       = useState<'ai' | 'editor'>('ai')
@@ -172,16 +172,7 @@ export default function App() {
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <header className="bg-gray-800 text-white px-4 py-2 flex items-center gap-4 flex-shrink-0">
-        <h1 className="text-base font-bold tracking-tight">人事異動管理</h1>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">発令日</label>
-          <input
-            type="date"
-            value={effectiveDate}
-            onChange={e => setEffectiveDate(e.target.value)}
-            className="bg-gray-700 text-white text-sm px-2 py-0.5 rounded border border-gray-600"
-          />
-        </div>
+        <h1 className="text-base font-bold tracking-tight">要員配置リスト編集</h1>
         <ScopeSelector />
         <div className="ml-auto flex items-center gap-2">
           <MergeImportButton />

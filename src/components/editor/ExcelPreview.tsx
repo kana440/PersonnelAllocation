@@ -178,7 +178,7 @@ export function ExcelPreview() {
 
       {/* ── Toolbar ─────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 bg-gray-50">
-        <span className="text-xs font-semibold text-gray-600 flex-shrink-0">発令一覧</span>
+        <span className="text-xs font-semibold text-gray-600 flex-shrink-0">要員配置リスト（Excel形式プレビュー）</span>
         <span className="text-xs text-gray-400 flex-shrink-0">
           {rows.length.toLocaleString()} 件
         </span>

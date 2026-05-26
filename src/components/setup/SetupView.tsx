@@ -137,6 +137,7 @@ export function SetupView({ onReady }: Props) {
               onAutoGenerate={handleMappingAutoGenerate}
               onNext={handleMappingConfirm}
               nextLabel="確定して開始 →"
+              initialSelectedOrgId={phase.beforeOrgId ?? undefined}
               onBack={() => phase.kind === 'org-mapping' && setPhase({ kind: 'org-select', result: phase.result })}
             />
           </div>
@@ -178,7 +179,7 @@ function IdleView({ onFileClick, onSample, onHelp }: {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-gray-800">人事異動管理</h1>
+          <h1 className="text-lg font-bold text-gray-800">要員配置リスト編集</h1>
           <p className="mt-1 text-sm text-gray-600">要員配置リストのExcelファイルを選択してください。</p>
           <p className="mt-0.5 text-xs text-gray-400">
             <span className="font-mono">{SHEET_ALLOCATION}</span>・

@@ -131,6 +131,7 @@ export function ScopeMappingDialog({ onClose }: Props) {
               onAutoGenerate={handleMappingAutoGenerate}
               onNext={handleMappingConfirm}
               nextLabel="確定して適用 →"
+              initialSelectedOrgId={phase.beforeOrgId}
               onBack={() => setPhase({ kind: 'org-select' })}
             />
           )}

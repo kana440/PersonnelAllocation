@@ -68,19 +68,20 @@ function MappingTreeRow({ org, depth, hasChild, isCollapsed, newOrgIds, flatAfte
 // ── MappingStep ───────────────────────────────────────────────────────────────
 
 interface Props {
-  mapping:         OrgMapping
-  beforeOrgs:      Organization[]
-  afterOrgs:       Organization[]
-  onSetMapping:    (oldOrgId: string, newOrgIds: string[]) => void
-  onRemoveMapping: (oldOrgId: string) => void
-  onAutoGenerate:  (orgIds: string[]) => void
-  onNext:          () => void
-  nextLabel?:      string   // デフォルト「比較プレビュー →」
-  onBack?:         () => void
+  mapping:                OrgMapping
+  beforeOrgs:             Organization[]
+  afterOrgs:              Organization[]
+  onSetMapping:           (oldOrgId: string, newOrgIds: string[]) => void
+  onRemoveMapping:        (oldOrgId: string) => void
+  onAutoGenerate:         (orgIds: string[]) => void
+  onNext:                 () => void
+  nextLabel?:             string
+  onBack?:                () => void
+  initialSelectedOrgId?:  string
 }
 
-export function MappingStep({ mapping, beforeOrgs, afterOrgs, onSetMapping, onRemoveMapping, onAutoGenerate, onNext, nextLabel = '比較プレビュー →', onBack }: Props) {
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
+export function MappingStep({ mapping, beforeOrgs, afterOrgs, onSetMapping, onRemoveMapping, onAutoGenerate, onNext, nextLabel = '比較プレビュー →', onBack, initialSelectedOrgId }: Props) {
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(initialSelectedOrgId ?? null)
   const [collapsed,     setCollapsed]     = useState<Set<string>>(new Set())
 
   const flatAfterOrgs = useMemo(() => flattenOrgTree(afterOrgs), [afterOrgs])
@@ -88,13 +89,28 @@ export function MappingStep({ mapping, beforeOrgs, afterOrgs, onSetMapping, onRe
 
   const subtreeFlat = useMemo(() => {
     if (!selectedOrgId) return []
-    const flat    = flattenOrgTree(beforeOrgs)
+    const orgById = new Map(beforeOrgs.map(o => [o.id, o]))
     const descIds = getDescendantOrgIds(selectedOrgId, beforeOrgs)
-    const base    = flat.find(e => e.org.id === selectedOrgId)
-    if (!base) return []
-    return flat
-      .filter(e => descIds.has(e.org.id))
-      .map(e => ({ org: e.org, depth: e.depth - base.depth }))
+    // beforeOrgs is a subtree slice whose root may have a non-null parentId,
+    // so flattenOrgTree (which starts from parentId=null) returns nothing.
+    // Build the DFS list directly from selectedOrgId instead.
+    const childrenOf = new Map<string, Organization[]>()
+    for (const org of beforeOrgs) {
+      if (!descIds.has(org.id) || org.id === selectedOrgId) continue
+      const pid = org.parentId && descIds.has(org.parentId) ? org.parentId : selectedOrgId
+      const arr = childrenOf.get(pid) ?? []
+      arr.push(org)
+      childrenOf.set(pid, arr)
+    }
+    const result: { org: Organization; depth: number }[] = []
+    const visit = (id: string, depth: number) => {
+      const org = orgById.get(id)
+      if (!org) return
+      result.push({ org, depth })
+      for (const child of childrenOf.get(id) ?? []) visit(child.id, depth + 1)
+    }
+    visit(selectedOrgId, 0)
+    return result
   }, [selectedOrgId, beforeOrgs])
 
   const hasChildrenSet = useMemo(() => {

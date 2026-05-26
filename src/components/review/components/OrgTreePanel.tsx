@@ -42,7 +42,11 @@ export function OrgTreePanel({
 }: Props) {
   const [search,    setSearch]    = useState('')
   const [expanded,  setExpanded]  = useState<Set<string>>(new Set())
-  const [companyEx, setCompanyEx] = useState<Set<string>>(new Set())
+  const [companyEx, setCompanyEx] = useState<Set<string>>(() => {
+    const s = new Set<string>()
+    for (const org of orgs) if (org.companyId) s.add(org.companyId)
+    return s
+  })
 
   const { byParent, companies } = useMemo(() => buildTree(orgs), [orgs])
 
