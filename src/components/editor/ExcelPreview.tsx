@@ -22,7 +22,7 @@ const ROW_HEIGHT  = 33   // py-1.5 + text-xs の実測値
 const ROW_BUFFER  = 25   // ビューポート外に余分にレンダリングする行数
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function ExcelPreview() {
+export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
   const store = useScopedStore()
 
   // ── 検索（入力は即時反映、フィルタは 300ms デバウンス）────────
@@ -178,34 +178,28 @@ export function ExcelPreview() {
 
       {/* ── Toolbar ─────────────────────────────────────────── */}
       <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 bg-gray-50">
-        <span className="text-xs font-semibold text-gray-600 flex-shrink-0">要員配置リスト（Excel形式プレビュー）</span>
-        <span className="text-xs text-gray-400 flex-shrink-0">
-          {rows.length.toLocaleString()} 件
-        </span>
 
         {/* 検索バー */}
-        <div className="flex items-center gap-1 flex-1 max-w-xs">
+        <div className="flex items-center gap-1">
           <input
             type="text"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={handleSearchKeyDown}
-            placeholder="🔍 検索（Enter で次へ）"
-            className="flex-1 border border-gray-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-blue-400"
+            placeholder="🔍 氏名・ID・部署（Enter で次へ）"
+            className="w-64 border border-gray-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-blue-400"
           />
-          {searchInput && (
-            <span className="text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">
-              {matchIndices.length > 0
-                ? `${safeMatchIdx + 1}/${matchIndices.length}`
-                : '0件'}
-            </span>
-          )}
-          {searchInput && (
-            <button
-              onClick={() => { setSearchInput(''); setSearchTerm('') }}
-              className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0"
-            >✕</button>
-          )}
+          {searchInput ? (
+            <>
+              <span className="text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">
+                {matchIndices.length > 0 ? `${safeMatchIdx + 1}/${matchIndices.length}` : '0件'}
+              </span>
+              <button
+                onClick={() => { setSearchInput(''); setSearchTerm('') }}
+                className="text-gray-400 hover:text-gray-600 text-xs"
+              >✕</button>
+            </>
+          ) : null}
         </div>
 
         {/* 検索列選択 */}
@@ -237,23 +231,26 @@ export function ExcelPreview() {
             </div>
           )}
         </div>
+        <span className="text-xs text-gray-400 flex-shrink-0">{rows.length.toLocaleString()} 件</span>
 
-        <div className="ml-auto flex items-center gap-2">
-          {scopeOrg && (
-            <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-              スコープ: {scopeOrg.name}（{rows.length}行）
-            </span>
-          )}
-          <button
-            onClick={handleExport}
-            disabled={rows.length === 0}
-            className="flex items-center gap-1 px-2.5 py-1 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-          >
-            📤 エクスポート
-          </button>
-        </div>
+        {showExport && (
+          <div className="ml-auto flex items-center gap-2">
+            {scopeOrg && (
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                スコープ: {scopeOrg.name}（{rows.length}行）
+              </span>
+            )}
+            <button
+              onClick={handleExport}
+              disabled={rows.length === 0}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs border border-blue-300 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+            >
+              📤 エクスポート
+            </button>
+          </div>
+        )}
 
-        {exportDialogOpen && (
+        {showExport && exportDialogOpen && (
           <ExportOrgDialog
             afterOrgs={store.afterOrganizations}
             rows={rows}
@@ -340,7 +337,7 @@ export function ExcelPreview() {
               const baseBg = isRowSelected
                 ? 'bg-blue-100'
                 : isPersonSelected
-                ? 'bg-yellow-50'
+                ? 'bg-sky-50'
                 : changed
                 ? (i % 2 === 0 ? 'bg-orange-50' : 'bg-orange-100/60')
                 : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50')
@@ -381,8 +378,8 @@ export function ExcelPreview() {
                     setContextMenu({ x: e.clientX, y: e.clientY, personId: `p_${row.userId}` })
                   }}
                   className={`border-b border-gray-200 cursor-pointer ${
-                    isRowSelected    ? 'ring-2 ring-inset ring-blue-400' :
-                    isPersonSelected ? 'ring-1 ring-inset ring-yellow-300' :
+                    isRowSelected    ? 'ring-2 ring-inset ring-blue-500' :
+                    isPersonSelected ? 'ring-2 ring-inset ring-sky-400' :
                     isCurrent        ? 'ring-2 ring-inset ring-yellow-400' :
                     isMatch          ? 'ring-1 ring-inset ring-yellow-200' : ''
                   }`}

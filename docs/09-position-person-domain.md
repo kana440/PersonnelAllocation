@@ -141,14 +141,14 @@ export const FIELD_METADATA: ReadonlyArray<{
 
 | 行 | 変化 |
 |----|------|
-| 空席行 | `userId` をセット、`person` フィールドを未アサイン行からコピー、`allocation` フィールドを初期化 |
+| 空席行 | `userId` をセット、`person` フィールドを未アサイン行からコピー、`allocation` フィールドを初期化、`managerName` を managerPositionCode から再導出 |
 | 未アサイン行 | **削除** |
 
 **Case B: 人が別の在席行を持つ**
 
 | 行 | 変化 |
 |----|------|
-| 空席行 | `userId` をセット、`person` フィールドを元の在席行からコピー、`allocation` フィールドを初期化 |
+| 空席行 | `userId` をセット、`person` フィールドを元の在席行からコピー、`allocation` フィールドを初期化、`managerName` を managerPositionCode から再導出 |
 | 元の在席行 | `userId = undefined`、`allocation` フィールドをリセット（空席化） |
 
 ---
@@ -156,6 +156,7 @@ export const FIELD_METADATA: ReadonlyArray<{
 ### 操作3: ポジション新規作成
 
 1. **作成ボタン** → 内部採番 `positionCode`（`_pos_xxxx`）+ `userId = undefined` の空席行を追加
+   - `departmentCode` から `orgMasterEntries` を参照して `businessUnit`〜`team` を自動補完
 2. **人の配属** → 操作2（空席にドロップ）と同じフロー
 
 > 「1ドラッグで作成+配属」のUI（旧実装）はこの2ステップに分離する。
@@ -164,7 +165,8 @@ export const FIELD_METADATA: ReadonlyArray<{
 
 ### 操作4: 席ごと別組織移動（左枠ドラッグ）
 
-- 行の `departmentCode`（および `businessUnit` 等の `position` フィールド）を変更
+- 行の `departmentCode` を変更し、`businessUnit`〜`team` を `orgMasterEntries` から自動補完
+- `managerPositionCode` は意図的に維持する（担当者が手動で更新することを想定）
 - 行数は変わらない
 - 人も一緒に移動する
 

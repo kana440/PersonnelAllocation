@@ -4,6 +4,7 @@
 
 import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
+import { deriveOrgSubFields } from '../orgHelpers'
 
 export class MoveRowsToOrgOperation implements IDomainOperation {
   readonly kind = 'MoveRowsToOrg'
@@ -32,8 +33,9 @@ export class MoveRowsToOrgOperation implements IDomainOperation {
     const targetCode = targetOrg.externalCode ?? ''
     const rowIdSet   = new Set(this.rowIds)
 
+    const orgSubFields = deriveOrgSubFields(targetCode, ctx.codeLists)
     const updatedList = ctx.allocationList.map(r =>
-      rowIdSet.has(r.rowId) ? { ...r, departmentCode: targetCode } : r
+      rowIdSet.has(r.rowId) ? { ...r, departmentCode: targetCode, ...orgSubFields } : r
     )
 
     return { updatedList, label: this.label_ }

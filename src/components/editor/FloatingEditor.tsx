@@ -41,7 +41,7 @@ export function FloatingEditor() {
     window.addEventListener('mouseup', onUp)
   }, [pos])
 
-  // ── リサイズ（右下コーナー）────────────────────────────────────────────────
+  // ── リサイズ（右下コーナー・右端・下端）──────────────────────────────────
   const resizeRef = useRef<{ startX: number; startY: number; sw: number; sh: number } | null>(null)
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
@@ -63,6 +63,32 @@ export function FloatingEditor() {
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }, [size])
+
+  const onRightResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const startX = e.clientX, startW = size.w
+    const onMove = (ev: MouseEvent) =>
+      setSize(prev => ({ ...prev, w: Math.max(FLOAT_MIN_W, startW + ev.clientX - startX) }))
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [size.w])
+
+  const onBottomResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const startY = e.clientY, startH = size.h
+    const onMove = (ev: MouseEvent) =>
+      setSize(prev => ({ ...prev, h: Math.max(FLOAT_MIN_H, startH + ev.clientY - startY) }))
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [size.h])
 
   // Esc キーで閉じる
   useEffect(() => {
@@ -103,12 +129,24 @@ export function FloatingEditor() {
         <EditView readOnly={isHistoryPreviewMode} />
       </div>
 
-      {/* リサイズハンドル（右下） */}
+      {/* 右端リサイズハンドル */}
+      <div
+        className="absolute top-8 right-0 w-1.5 cursor-ew-resize"
+        style={{ bottom: '16px' }}
+        onMouseDown={onRightResizeStart}
+      />
+      {/* 下端リサイズハンドル */}
+      <div
+        className="absolute bottom-0 left-0 h-1.5 cursor-s-resize"
+        style={{ right: '16px' }}
+        onMouseDown={onBottomResizeStart}
+      />
+      {/* 右下コーナーリサイズハンドル */}
       <div
         data-resize="true"
         className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
         onMouseDown={onResizeStart}
-        style={{ background: 'linear-gradient(135deg, transparent 50%, #d1d5db 50%)' }}
+        style={{ background: 'linear-gradient(135deg, transparent 50%, #9ca3af 50%)' }}
       />
     </div>
   )

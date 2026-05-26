@@ -10,13 +10,52 @@
 
 ---
 
-## 1. 実装済み Tools（read-only）
+## 1. 実装済み Tools
+
+### 1.1 読み取り専用（read / render）
 
 | Tool名 | 説明 | 実装状況 |
 |---|---|---|
 | `getReviewSummary` | 変更種別ごとの件数 + バリデーション問題件数 | ✓ |
+| `getValidationDiagnosis` | 問題をフィールド別・修正方法別に集計。rowIds 付き。**操作後に優先使用** | ✓ |
 | `getChangedPersons` | 変更ありの人物リスト。kindsでフィルタ可能 | ✓ |
-| `getValidationIssues` | バリデーション問題の一覧。error/warningでフィルタ | ✓ |
+| `getValidationIssues` | バリデーション問題の詳細一覧（getValidationDiagnosis の下位版） | ✓ |
+| `findPersons` / `findOrgs` | 氏名・組織名のあいまい検索 | ✓ |
+| `getPersonRows` / `getRow` | rowId を指定して行データ取得 | ✓ |
+| `getOrgMembers` / `show_org_members` | 組織メンバー一覧（text / widget） | ✓ |
+
+### 1.2 書き込み（confirm — ユーザー確認後に実行）
+
+> 書き込みToolは必ず `appService.executeOperation()` または `appService.saveRow()` 経由。
+> ユーザーへの確認フローは toolRegistry.ts の `buildProposal` → `executeOnApprove` で実装。
+> Widget はすべて既存の `diff-preview` を再利用。
+
+| Tool名 | 操作 | 実装状況 |
+|---|---|---|
+| `propose_bulk_transfer` | 組織全員を別組織に一括異動 | ✓ |
+| `propose_transfer_person` | 一人を別組織に異動 | ✓ |
+| `propose_field_edit` | 1行・1フィールドを変更 | ✓ |
+| `propose_bulk_set_field` | **複数行・同一フィールドを一括設定**（getValidationDiagnosis の rowIds と組み合わせる） | ✓ |
+| `propose_create_position` | 空席ポジションを作成 | ✓ |
+| `propose_assign_person` | 人をポジションに配属 | ✓ |
+| `propose_set_manager_position` | 上司ポジションコードを設定（managerName 自動入力） | ✓ |
+| `propose_re_derive_manager_names` | 全行の managerName を在籍者の現姓名に一括再導出 | ✓ |
+| `propose_re_derive_org_sub_fields` | 全行の組織サブフィールドを orgMaster から一括再導出 | ✓ |
+| `propose_assign_position_codes` | 内部採番コード（_pos_…）に外部コード（P\d{8}）を割当。managerPositionCode も連動更新 | ✓ |
+
+### 1.3 読み取り（read）追加分
+
+| Tool名 | 説明 | 実装状況 |
+|---|---|---|
+| `getUnassignedPositions` | 内部採番コード（_pos_…）のままのポジション一覧。propose_assign_position_codes と組み合わせる | ✓ |
+
+### 1.4 UI直結ボタン（AIを通らない直接操作）
+
+| ボタン | 操作 | 備考 |
+|---|---|---|
+| 🔢 コード割当 | `PositionCodeAssignmentDialog` を開く | 3ステップ: 一覧コピー → 貼り付け → 確定 |
+| ↻上司姓名 | `reDeriveManagerNames()` 一括 | シンプルな一括操作はボタンで完結 |
+| ↻組織 | `reDeriveOrgSubFields()` 一括 | 同上 |
 
 ---
 
@@ -32,15 +71,11 @@
 
 ### 2.2 書き込み Tools（IDomainOperation 経由）
 
-> 書き込みToolは必ず `appService.executeOperation(new XxxOperation(...))` 経由で実装する。
-> 直接 allocationList を変更するToolは書かない。
-
 | Tool名 | 操作 | OperationClass | 優先度 |
 |---|---|---|---|
 | `setTransferReason` | 異動事由を設定 | `DirectEditOperation` | 🔴 高 |
 | `setDepartmentCode` | 組織コードを変更（異動） | `MoveRowsToOrgOperation` | 🔴 高 |
 | `setBandAndPosition` | バンド変更 + 新ポジション作成 | 新規作成必要 | 🟡 中 |
-| `setManagerPosition` | 上司ポジションコードを設定 | `DirectEditOperation` | 🟡 中 |
 | `bulkSetTransferReason` | 複数人の異動事由を一括設定 | `DirectEditOperation` x N | 🟢 低 |
 
 ---

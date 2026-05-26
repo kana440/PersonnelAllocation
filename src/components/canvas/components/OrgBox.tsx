@@ -1,6 +1,5 @@
 import { useOrgView } from '../OrgViewContext'
 import { PositionRows } from './PositionRows'
-import { appService } from '../../../application/HRApplicationService'
 
 export function DropZone({ orgId, compact = false }: { orgId: string; compact?: boolean }) {
   const { dragOverOrgId, afterMembersByOrgId } = useOrgView()
@@ -15,42 +14,13 @@ export function DropZone({ orgId, compact = false }: { orgId: string; compact?: 
   )
 }
 
-export function AddPositionInput({ orgId, orgCode }: { orgId: string; orgCode: string }) {
-  const { topPositionCodeOfOrg, addPositionTitle, setAddPositionTitle, setAddPositionOrgId } = useOrgView()
-
-  const doCreate = () => {
-    const title = addPositionTitle.trim()
-    if (!title) return
-    const topMgrCode = topPositionCodeOfOrg(orgId)
-    appService.createVacantPosition(orgCode, title, topMgrCode ? { managerPositionCode: topMgrCode } : undefined)
-    setAddPositionOrgId(null); setAddPositionTitle('')
-  }
-
-  return (
-    <div className="flex gap-1 mt-1">
-      <input
-        autoFocus
-        value={addPositionTitle}
-        onChange={e => setAddPositionTitle(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') doCreate()
-          if (e.key === 'Escape') { setAddPositionOrgId(null); setAddPositionTitle('') }
-        }}
-        placeholder="ポジション名（例: 部長）"
-        className="flex-1 text-xs px-2 py-1 border border-blue-400 rounded outline-none focus:ring-1 focus:ring-blue-400"
-      />
-      <button onClick={doCreate} className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">追加</button>
-      <button onClick={() => { setAddPositionOrgId(null); setAddPositionTitle('') }} className="text-xs px-1.5 py-1 border border-gray-300 rounded text-gray-500 hover:bg-gray-50">✕</button>
-    </div>
-  )
-}
 
 export function CollapsedOrgChip({ orgId }: { orgId: string }) {
   const {
     organizations, afterMembersByOrgId,
     dragOverOrgId, highlightedOrgId,
     handleDragOver, handleDragLeave, handleDrop,
-    addPositionOrgId, setAddPositionOrgId, setAddPositionTitle,
+    handleAddPosition,
     setBulkMoveSourceId, expandedChipIds, toggleChip,
   } = useOrgView()
 
@@ -96,7 +66,7 @@ export function CollapsedOrgChip({ orgId }: { orgId: string }) {
         <span className="text-gray-400">▾</span>
         <span className="flex-1">{org.name}</span>
         <button
-          onClick={e => { e.stopPropagation(); setAddPositionOrgId(orgId); setAddPositionTitle('') }}
+          onClick={e => { e.stopPropagation(); handleAddPosition(orgId, org.externalCode ?? org.id) }}
           className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
           title="ポジションを追加（空席）"
         >＋席</button>
@@ -108,7 +78,6 @@ export function CollapsedOrgChip({ orgId }: { orgId: string }) {
       </div>
       <div className="p-2">
         <PositionRows orgId={orgId} />
-        {addPositionOrgId === orgId && <AddPositionInput orgId={orgId} orgCode={org.externalCode ?? org.id} />}
         <DropZone orgId={orgId} />
         {childOrgIds.length > 0 && (
           <div className="mt-2 space-y-1">
@@ -125,7 +94,7 @@ export function OrgBox({ orgId, depth = 0 }: { orgId: string; depth?: number }) 
     organizations,
     dragOverOrgId, highlightedOrgId,
     handleDragOver, handleDragLeave, handleDrop,
-    addPositionOrgId, setAddPositionOrgId, setAddPositionTitle,
+    handleAddPosition,
     setBulkMoveSourceId,
   } = useOrgView()
 
@@ -151,7 +120,7 @@ export function OrgBox({ orgId, depth = 0 }: { orgId: string; depth?: number }) 
       }`}>
         <span className="flex-1">{org.name}</span>
         <button
-          onClick={e => { e.stopPropagation(); setAddPositionOrgId(orgId); setAddPositionTitle('') }}
+          onClick={e => { e.stopPropagation(); handleAddPosition(orgId, org.externalCode ?? org.id) }}
           className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
           title="ポジションを追加（空席）"
         >＋席</button>
@@ -163,7 +132,6 @@ export function OrgBox({ orgId, depth = 0 }: { orgId: string; depth?: number }) 
       </div>
       <div className="p-2">
         <PositionRows orgId={orgId} />
-        {addPositionOrgId === orgId && <AddPositionInput orgId={orgId} orgCode={org.externalCode ?? org.id} />}
         <DropZone orgId={orgId} />
         {childOrgIds.length > 0 && (
           <div className="mt-2 space-y-1">

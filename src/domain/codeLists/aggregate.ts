@@ -1,5 +1,6 @@
 // AllCodeLists — domain-level aggregate of all reference/master code lists.
 // Belongs in the domain layer because it defines valid value sets for domain fields.
+import type { CompanyEntry }        from './company'
 import type { CompanyFilterEntry }  from './companyFilter'
 import type { EmploymentTypeEntry } from './employmentType'
 import type { PayGradeEntry }       from './payGrade'
@@ -11,12 +12,15 @@ import type { TransferReasonEntry } from './transferReason'
 import type { ConcurrentReasonEntry } from './concurrentReason'
 import type { DemotionReasonEntry } from './demotionReason'
 import type { OrgMasterEntry }      from './orgMaster'
+import type { TrainingPositionEntry }  from './trainingPosition'
+import type { DiscretionaryWorkEntry } from './discretionaryWork'
 
 export interface AllCodeLists {
   // 組織マスタ
   orgMasterEntries:         OrgMasterEntry[]
 
-  // 会社・フィルタ
+  // 会社
+  companies:                CompanyEntry[]
   companyFilters:           CompanyFilterEntry[]
 
   // 雇用・給与
@@ -40,12 +44,13 @@ export interface AllCodeLists {
   demotionReasons:          DemotionReasonEntry[]
 
   // フォーム選択肢（純粋リスト）
-  trainingPositions:        string[]   // 業務研修ポジション (BI)
-  discretionaryWorkOptions: string[]   // 裁量労働／業務研修 (BM)
+  trainingPositions:        TrainingPositionEntry[]   // 業務研修ポジション (BI)
+  discretionaryWorkOptions: DiscretionaryWorkEntry[]  // 裁量労働／業務研修 (BM)
 }
 
 export const EMPTY_CODE_LISTS: AllCodeLists = {
   orgMasterEntries:         [],
+  companies:                [],
   companyFilters:           [],
   employmentTypes:          [],
   payGrades:                [],

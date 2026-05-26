@@ -1,19 +1,23 @@
 import { useState, useMemo } from 'react'
 import type { Organization } from '../../domain/schemas'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/types'
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
+import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_COMPANY } from '../../infrastructure/excel/engine'
 import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
 
 interface Props {
   result: ImportedWorkbookResult
-  onSelectAll: () => void
   onSelectOrg: (id: string, name: string) => void
   hideDetails?: boolean
+  onBack?: () => void
 }
 
-export function OrgSelectStep({ result, onSelectAll, onSelectOrg, hideDetails = false }: Props) {
+export function OrgSelectStep({ result, onSelectOrg, hideDetails = false, onBack }: Props) {
   const [search, setSearch] = useState('')
-  const [showDetails, setShowDetails] = useState(false)
+
+  const hasMissingMaster = [SHEET_ORG_MASTER, SHEET_COMPANY, SHEET_CODE_LISTS].some(
+    s => !result.sheetsFound.includes(s)
+  )
+  const [showDetails, setShowDetails] = useState(hasMissingMaster)
 
   // 旧組織ツリーからスコープを選択する
   const orgs = result.beforeOrganizations
@@ -130,7 +134,7 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg, hideDetails = 
 
   // Import result details for the collapsible section
   const codeListKeys = (Object.keys(CODE_LIST_LABELS) as (keyof typeof CODE_LIST_LABELS)[])
-    .filter(k => k !== 'orgMasterEntries')
+    .filter(k => k !== 'orgMasterEntries' && k !== 'companies')
   const foundCodeListKeys = codeListKeys.filter(k => {
     const val = result.codeLists[k]
     return Array.isArray(val) && val.length > 0
@@ -139,24 +143,22 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg, hideDetails = 
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-bold text-gray-800">作業スコープを選択</h2>
-        <p className="mt-0.5 text-xs text-gray-500">担当する組織を選んでください。全社担当の場合は「全組織から始める」を選択します。</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold text-gray-800">スコープ組織を選択</h2>
+          <p className="mt-0.5 text-xs text-gray-500">担当する組織を選んでください。子組織も含めて対象になります。</p>
+        </div>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            ← 戻る
+          </button>
+        )}
       </div>
 
-      <button
-        onClick={onSelectAll}
-        className="w-full py-2.5 text-sm font-semibold border-2 border-blue-300 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors"
-      >
-        🏢 全組織から始める（スコープなし）
-      </button>
-
       <div>
-        <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-          <div className="flex-1 h-px bg-gray-200" />
-          または組織を選択
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
 
         <input
           type="text"
@@ -211,24 +213,30 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg, hideDetails = 
         <div className="border-t border-gray-100 pt-3">
           <button
             onClick={() => setShowDetails(v => !v)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            className={`flex items-center gap-1 text-xs transition-colors ${
+              hasMissingMaster
+                ? 'text-red-500 hover:text-red-700 font-medium'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
           >
             <span>{showDetails ? '▾' : '▸'}</span>
             <span>読み込み結果の詳細を確認する</span>
+            {hasMissingMaster && !showDetails && <span className="ml-1">⚠ マスタ未取込</span>}
           </button>
           {showDetails && (
             <div className="mt-2 bg-gray-50 rounded-lg px-3 py-2 space-y-2 text-xs">
               <DetailRow label={SHEET_ALLOCATION} found={result.sheetsFound.includes(SHEET_ALLOCATION)} detail={`${result.allocationRowCount} 行`} />
-              <DetailRow label={SHEET_ORG_MASTER}  found={result.sheetsFound.includes(SHEET_ORG_MASTER)}  detail={`${result.orgEntries.length} 組織`} />
+              <DetailRow label={SHEET_ORG_MASTER} found={result.sheetsFound.includes(SHEET_ORG_MASTER)} detail={`${result.orgEntries.length} 組織`} isRequired />
+              <DetailRow label={SHEET_COMPANY}    found={result.sheetsFound.includes(SHEET_COMPANY)}    detail={`${result.codeLists.companies.length} 社`} isRequired />
               <div className="flex items-start gap-1.5">
-                <span className={`${codeListFound ? 'text-green-500' : 'text-gray-300'}`}>{codeListFound ? '✓' : '—'}</span>
-                <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-gray-400'}`}>{SHEET_CODE_LISTS}</span>
+                <span className={codeListFound ? 'text-green-500' : 'text-red-400'}>{codeListFound ? '✓' : '—'}</span>
+                <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-red-600'}`}>{SHEET_CODE_LISTS}</span>
                 {codeListFound && (
                   <span className="text-gray-400">
                     {foundCodeListKeys.length}/{codeListKeys.length} 種 ({foundCodeListKeys.map(k => CODE_LIST_LABELS[k]).join('・')})
                   </span>
                 )}
-                {!codeListFound && <span className="text-gray-400 italic">シートなし</span>}
+                {!codeListFound && <span className="text-red-500 italic font-medium">シートなし</span>}
               </div>
             </div>
           )}
@@ -238,13 +246,13 @@ export function OrgSelectStep({ result, onSelectAll, onSelectOrg, hideDetails = 
   )
 }
 
-function DetailRow({ label, found, detail }: { label: string; found: boolean; detail?: string }) {
+function DetailRow({ label, found, detail, isRequired }: { label: string; found: boolean; detail?: string; isRequired?: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`${found ? 'text-green-500' : 'text-gray-300'}`}>{found ? '✓' : '—'}</span>
-      <span className={`font-mono ${found ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+      <span className={found ? 'text-green-500' : isRequired ? 'text-red-400' : 'text-gray-300'}>{found ? '✓' : '—'}</span>
+      <span className={`font-mono ${found ? 'text-gray-700' : isRequired ? 'text-red-600' : 'text-gray-400'}`}>{label}</span>
       {found && detail && <span className="text-gray-400">{detail}</span>}
-      {!found && <span className="text-gray-400 italic">シートなし</span>}
+      {!found && <span className={`italic ${isRequired ? 'text-red-500 font-medium' : 'text-gray-400'}`}>シートなし</span>}
     </div>
   )
 }

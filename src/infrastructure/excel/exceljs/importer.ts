@@ -4,12 +4,12 @@ import type { AllocationRow }     from '../../../domain/allocationRow'
 import type { Organization }      from '../../../domain/schemas'
 import type { OrgMasterEntry }    from '../../../domain/codeLists/orgMaster'
 import { setLastWorkbook }        from '../state'
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../sheetNames'
+import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_COMPANY } from '../sheetNames'
 import type { ImportedWorkbookResult, ProgressCallback } from '../types'
 import { tick }                   from '../types'
 import { parseOrgMasterRaw, orgMasterToEntities } from '../shared/orgMasterParser'
 import { parseAllocationSheet }   from '../shared/allocationParser'
-import { parseCodeListsFromSheet } from '../../codeLists/parser'
+import { parseCodeListsFromSheet, parseCompanySheet } from '../../codeLists/parser'
 
 // ExcelJS セル値 → unknown（number/boolean 型を保持）
 function rawCellValue(v: ExcelJS.CellValue | undefined): unknown {
@@ -62,6 +62,12 @@ export async function importWorkbook(
     afterOrganizations  = entities.afterOrganizations
     codeLists = { ...codeLists, orgMasterEntries: orgEntries }
   } else { sheetsMissing.push(SHEET_ORG_MASTER) }
+
+  if (wb.getWorksheet(SHEET_COMPANY)) {
+    await report('会社マスタ（会社CD一覧）を解析中...')
+    sheetsFound.push(SHEET_COMPANY)
+    codeLists = { ...codeLists, companies: parseCompanySheet(worksheetToRaw(wb.getWorksheet(SHEET_COMPANY)!)) }
+  } else { sheetsMissing.push(SHEET_COMPANY) }
 
   let allocationList: AllocationRow[] = []
   if (wb.getWorksheet(SHEET_ALLOCATION)) {

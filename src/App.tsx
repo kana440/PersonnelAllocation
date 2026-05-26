@@ -8,11 +8,12 @@ import { AIChatDrawer }      from './components/ai/AIChatDrawer'
 import { AIView }            from './components/ai/AIView'
 import { SetupView }         from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
-import { ReviewView }        from './components/review/ReviewView'
+import { MaintenanceDialog }  from './components/maintenanceDialog'
 import { useStore }          from './store/useStore'
 import { useCodeListStore }  from './store/codeListStore'
 import { ScopeSelector }     from './components/header/ScopeSelector'
 import { MergeImportButton } from './components/header/MergeImportButton'
+import { useResizablePanel } from './hooks/useResizablePanel'
 
 const BOTTOM_MIN        = 36
 const BOTTOM_MAX_RATIO  = 0.65
@@ -31,26 +32,66 @@ const HISTORY_MIN     = 160
 const HISTORY_MAX     = 400
 const HISTORY_DEFAULT = 220
 
+// ── ヘッダーボタン ────────────────────────────────────────────────────────────
+interface HeaderButtonProps {
+  onClick: () => void
+  active?: boolean
+  activeClass?: string
+  disabled?: boolean
+  title?: string
+  children: React.ReactNode
+}
+function HeaderButton({ onClick, active, activeClass = 'bg-blue-600 text-white', disabled, title, children }: HeaderButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+        active ? activeClass : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function App() {
-  const { isLoading, undo, redo, canUndo, canRedo } = useStore()
+  const { isLoading, undo, redo, canUndo, canRedo, selectedPersonId } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
-  const [appMode,       setAppMode]       = useState<'ai' | 'editor'>('ai')
-  const [sessionReady,  setSessionReady]  = useState(false)
-  const [reviewMode,    setReviewMode]    = useState(false)
+  const [appMode,      setAppMode]      = useState<'ai' | 'editor'>('ai')
+  const [sessionReady, setSessionReady] = useState(false)
 
   useEffect(() => { checkStorage() }, [checkStorage])
 
-  const [isTreeOpen,      setIsTreeOpen]      = useState(true)
-  const [isChatOpen,      setIsChatOpen]      = useState(true)
-  const [isHistoryOpen,   setIsHistoryOpen]   = useState(false)
-  const [historyWidth,    setHistoryWidth]    = useState(HISTORY_DEFAULT)
-  const [clearDialogOpen, setClearDialogOpen] = useState(false)
-  const [bottomHeight,    setBottomHeight]    = useState(BOTTOM_COLLAPSED)
-  const [excelCollapsed,  setExcelCollapsed]  = useState(true)
-  const [sidebarWidth,    setSidebarWidth]    = useState(SIDEBAR_DEFAULT)
-  const [chatWidth,       setChatWidth]       = useState(CHAT_DEFAULT)
-  const prevBottomHeightRef = useRef(BOTTOM_COLLAPSED)
+  // エディタモードでデータ読み込み済みの場合、タブを閉じると警告を出す
+  useEffect(() => {
+    if (!sessionReady || appMode !== 'editor') return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = '' // Chrome/Edge で必要
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [sessionReady, appMode])
+
+  const [isTreeOpen,        setIsTreeOpen]        = useState(true)
+  const [isChatOpen,        setIsChatOpen]        = useState(true)
+  const [isHistoryOpen,     setIsHistoryOpen]     = useState(false)
+  const [clearDialogOpen,   setClearDialogOpen]   = useState(false)
+  const [maintenanceOpen,   setMaintenanceOpen]   = useState(false)
+  const [excelCollapsed,    setExcelCollapsed]    = useState(false)
+
+  const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
+
+  const [sidebarWidth,  , handleSidebarResizeStart]  = useResizablePanel(SIDEBAR_DEFAULT,  { min: SIDEBAR_MIN,  max: SIDEBAR_MAX,  axis: 'x' })
+  const [chatWidth,     , handleChatResizeStart]     = useResizablePanel(CHAT_DEFAULT,     { min: CHAT_MIN,     max: CHAT_MAX,     axis: 'x', invert: true })
+  const [historyWidth,  , handleHistoryResizeStart]  = useResizablePanel(HISTORY_DEFAULT,  { min: HISTORY_MIN,  max: HISTORY_MAX,  axis: 'x', invert: true })
+  const [bottomHeight, setBottomHeight, handleResizeStart] = useResizablePanel(
+    BOTTOM_DEFAULT,
+    { min: BOTTOM_MIN, max: () => window.innerHeight * BOTTOM_MAX_RATIO, axis: 'y', invert: true }
+  )
 
   const toggleExcelCollapse = useCallback(() => {
     if (excelCollapsed) {
@@ -61,91 +102,18 @@ export default function App() {
       setBottomHeight(BOTTOM_COLLAPSED)
       setExcelCollapsed(true)
     }
-  }, [excelCollapsed, bottomHeight])
+  }, [excelCollapsed, bottomHeight, setBottomHeight])
 
-  // ── Drag-to-resize (bottom panel) ────────────────────────────────────────────
-  const dragState = useRef<{ startY: number; startH: number } | null>(null)
-
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    dragState.current = { startY: e.clientY, startH: bottomHeight }
-
-    const onMove = (ev: MouseEvent) => {
-      if (!dragState.current) return
-      const delta = dragState.current.startY - ev.clientY
-      setBottomHeight(
-        Math.max(BOTTOM_MIN, Math.min(window.innerHeight * BOTTOM_MAX_RATIO, dragState.current.startH + delta))
-      )
+  // Canvas でメンバーを選択したとき、折りたたまれていれば自動展開
+  useEffect(() => {
+    if (!selectedPersonId) return
+    if (excelCollapsed) {
+      setBottomHeight(prevBottomHeightRef.current > BOTTOM_COLLAPSED ? prevBottomHeightRef.current : BOTTOM_DEFAULT)
+      setExcelCollapsed(false)
     }
-    const onUp = () => {
-      dragState.current = null
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [bottomHeight])
-
-  // ── Drag-to-resize (sidebar) ──────────────────────────────────────────────────
-  const sidebarDragState = useRef<{ startX: number; startW: number } | null>(null)
-
-  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    sidebarDragState.current = { startX: e.clientX, startW: sidebarWidth }
-    const onMove = (ev: MouseEvent) => {
-      if (!sidebarDragState.current) return
-      const delta = ev.clientX - sidebarDragState.current.startX
-      setSidebarWidth(Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, sidebarDragState.current.startW + delta)))
-    }
-    const onUp = () => {
-      sidebarDragState.current = null
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [sidebarWidth])
-
-  // ── Drag-to-resize (history panel) ───────────────────────────────────────────
-  const historyDragState = useRef<{ startX: number; startW: number } | null>(null)
-
-  const handleHistoryResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    historyDragState.current = { startX: e.clientX, startW: historyWidth }
-    const onMove = (ev: MouseEvent) => {
-      if (!historyDragState.current) return
-      const delta = historyDragState.current.startX - ev.clientX
-      setHistoryWidth(Math.max(HISTORY_MIN, Math.min(HISTORY_MAX, historyDragState.current.startW + delta)))
-    }
-    const onUp = () => {
-      historyDragState.current = null
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [historyWidth])
-
-  // ── Drag-to-resize (chat drawer) ──────────────────────────────────────────────
-  const chatDragState = useRef<{ startX: number; startW: number } | null>(null)
-
-  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    chatDragState.current = { startX: e.clientX, startW: chatWidth }
-    const onMove = (ev: MouseEvent) => {
-      if (!chatDragState.current) return
-      // dragging left → wider, dragging right → narrower
-      const delta = chatDragState.current.startX - ev.clientX
-      setChatWidth(Math.max(CHAT_MIN, Math.min(CHAT_MAX, chatDragState.current.startW + delta)))
-    }
-    const onUp = () => {
-      chatDragState.current = null
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [chatWidth])
+  // excelCollapsed / setBottomHeight は意図的に依存から外す（選択時のみ発火）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPersonId])
 
   if (!isChecked) return (
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
@@ -177,67 +145,56 @@ export default function App() {
         <div className="ml-auto flex items-center gap-2">
           <MergeImportButton />
           <div className="w-px h-4 bg-gray-600" />
-          <button
-            onClick={() => setReviewMode(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
-              reviewMode ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-emerald-700 hover:text-white'
-            }`}
-            title="レビューモード（変更確認・バリデーション）"
-          >
-            <span>🔍</span>
-            <span>レビュー</span>
-          </button>
+          <HeaderButton onClick={undo} disabled={!canUndo} title="元に戻す（保存単位）">
+            <span>↩</span><span>Undo</span>
+          </HeaderButton>
+          <HeaderButton onClick={redo} disabled={!canRedo} title="やり直し">
+            <span>Redo</span><span>↪</span>
+          </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />
-          <button
-            onClick={undo}
-            disabled={!canUndo}
-            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="元に戻す（保存単位）"
+          <HeaderButton
+            onClick={toggleExcelCollapse}
+            active={!excelCollapsed}
+            activeClass="bg-emerald-600 text-white"
+            title="レビューパネルを開閉する"
           >
-            ↩ Undo
-          </button>
-          <button
-            onClick={redo}
-            disabled={!canRedo}
-            className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="やり直し"
-          >
-            Redo ↪
-          </button>
-          <div className="w-px h-4 bg-gray-600" />
-          <button
+            <span>🔍</span><span>レビュー</span>
+          </HeaderButton>
+          <HeaderButton
             onClick={() => setIsHistoryOpen(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
-              isHistoryOpen ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+            active={isHistoryOpen}
+            activeClass="bg-indigo-600 text-white"
             title="操作履歴パネル"
           >
-            <span>⏱</span>
-            <span>履歴</span>
-          </button>
-          <button
+            <span>⏱</span><span>履歴</span>
+          </HeaderButton>
+          <HeaderButton
             onClick={() => setIsChatOpen(o => !o)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
-              isChatOpen ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
+            active={isChatOpen}
           >
-            <span>💬</span>
-            <span>AI アシスタント</span>
-          </button>
-          <button
+            <span>💬</span><span>AI アシスタント</span>
+          </HeaderButton>
+          <div className="w-px h-4 bg-gray-600" />
+          <HeaderButton
+            onClick={() => setMaintenanceOpen(true)}
+            title="上司姓名再導出・組織サブフィールド再導出・ポジションコード割当などのメンテナンス処理"
+          >
+            <span>🔧</span><span>メンテナンス</span>
+          </HeaderButton>
+          <div className="w-px h-4 bg-gray-600" />
+          <HeaderButton
             onClick={() => setAppMode('ai')}
-            className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-blue-700 hover:text-white transition-colors"
             title="AI アシスタントに切り替え"
           >
             AI ←
-          </button>
-          <button
+          </HeaderButton>
+          <HeaderButton
             onClick={() => setClearDialogOpen(true)}
-            className="flex items-center gap-1 px-3 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-red-700 hover:text-white transition-colors"
+            activeClass="bg-red-700 text-white"
             title="セッションをクリアして最初から始める"
           >
-            ↺ クリア
-          </button>
+            <span>↺</span><span>クリア</span>
+          </HeaderButton>
         </div>
       </header>
 
@@ -246,6 +203,10 @@ export default function App() {
           onCleared={() => { setClearDialogOpen(false); setSessionReady(false) }}
           onCancel={() => setClearDialogOpen(false)}
         />
+      )}
+
+      {maintenanceOpen && (
+        <MaintenanceDialog onClose={() => setMaintenanceOpen(false)} />
       )}
 
       {/* ── Upper area: sidebar + canvas + chat drawer ───────────── */}
@@ -261,7 +222,6 @@ export default function App() {
             <div className="flex-1 overflow-hidden">
               <OrgSearchSidebar />
             </div>
-            {/* Right-edge resize handle */}
             <div
               className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10"
               onMouseDown={handleSidebarResizeStart}
@@ -280,10 +240,7 @@ export default function App() {
 
         {/* Main canvas */}
         <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0">
-          {reviewMode
-            ? <ReviewView onClose={() => setReviewMode(false)} />
-            : <OrgOperationView />
-          }
+          <OrgOperationView />
         </div>
 
         {/* AI Chat drawer */}
@@ -329,7 +286,7 @@ export default function App() {
       {/* ── Bottom panel ────────────────────────────────────────── */}
       <div
         className="flex-shrink-0 bg-white rounded-lg shadow mx-1.5 mb-1.5 overflow-hidden"
-        style={{ height: bottomHeight }}
+        style={{ height: excelCollapsed ? BOTTOM_COLLAPSED : bottomHeight }}
       >
         <BottomPanel
           isCollapsed={excelCollapsed}

@@ -7,6 +7,7 @@ import type { AllocationRow } from '../domain/allocationRow'
 import type { Organization } from '../domain/schemas'
 import { getDescendantOrgIds } from '../domain/orgScope'
 import type { ImportMode, MergeResult } from '../domain/importMerge'
+import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 
 // ── org ナビゲーションヘルパー（ストアアクション用）───────────────
 function buildIdMap(orgs: Organization[]): Map<string, Organization> {
@@ -100,6 +101,14 @@ interface Actions {
   undo: () => void
   redo: () => void
   revertToHistoryIndex: (index: number, direction: 'past' | 'future') => void
+
+  // 一括再導出
+  reDeriveManagerNames: () => number
+  reDeriveOrgSubFields: () => number
+
+  // ポジションコード割当
+  getUnassignedPositions: () => UnassignedPosition[]
+  assignPositionCodes: (assignments: PositionCodeAssignment[]) => ValidationResult
 
   // 履歴プレビュー
   previewHistoryAt:    (position: number) => void
@@ -215,6 +224,10 @@ export const useStore = create<AppState>((set, get) => {
     undo: () => appService.undo(),
     redo: () => appService.redo(),
     revertToHistoryIndex: (index, direction) => appService.revertToHistoryIndex(index, direction),
+    reDeriveManagerNames: () => appService.reDeriveManagerNames(),
+    reDeriveOrgSubFields: () => appService.reDeriveOrgSubFields(),
+    getUnassignedPositions: () => appService.getUnassignedPositions(),
+    assignPositionCodes:    (assignments) => appService.assignPositionCodes(assignments),
     previewHistoryAt:    (position) => appService.previewHistoryAt(position),
     cancelHistoryPreview: () => appService.cancelHistoryPreview(),
     applyHistoryPreview:  () => appService.applyHistoryPreview(),

@@ -177,7 +177,8 @@ export function createAITools(service: HRApplicationService) {
         changedRows++
         for (const k of kinds) byKind[k] = (byKind[k] ?? 0) + 1
       }
-      for (const issue of validateRow(row, afterOrganizations, codeLists)) {
+      const changes = detectChanges(row)
+      for (const issue of validateRow(row, afterOrganizations, codeLists, changes, allocationList)) {
         issue.level === 'error' ? errorCount++ : warningCount++
       }
     }
@@ -223,7 +224,8 @@ export function createAITools(service: HRApplicationService) {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
     const results = []
     for (const row of allocationList) {
-      const issues = validateRow(row, afterOrganizations, codeLists)
+      const changes = detectChanges(row)
+      const issues = validateRow(row, afterOrganizations, codeLists, changes, allocationList)
       for (const issue of issues) {
         if (filter.level && issue.level !== filter.level) continue
         results.push({
@@ -239,6 +241,103 @@ export function createAITools(service: HRApplicationService) {
     return results
   }
 
+  // ── Validation diagnosis ─────────────────────────────────────────────────
+
+  /**
+   * バリデーション問題を「修正方法」でグループ化して返す。
+   * AI はこれを呼んでから propose_bulk_set_field や propose_re_derive_* を呼ぶ。
+   */
+  function getValidationDiagnosis(): {
+    summary: { errors: number; warnings: number }
+    byField: Array<{
+      field:           string
+      level:           'error' | 'warning'
+      count:           number
+      rowIds:          number[]
+      suggestedTool?:  string
+      suggestedAction?: string
+    }>
+  } {
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    type Entry = { level: 'error' | 'warning'; rowIds: Set<number> }
+    const fieldMap = new Map<string, Entry>()
+
+    for (const row of allocationList) {
+      const changes = detectChanges(row)
+      for (const issue of validateRow(row, afterOrganizations, codeLists, changes, allocationList)) {
+        const key = String(issue.field)
+        const existing = fieldMap.get(key)
+        if (existing) {
+          existing.rowIds.add(row.rowId)
+          if (issue.level === 'error') existing.level = 'error'
+        } else {
+          fieldMap.set(key, { level: issue.level, rowIds: new Set([row.rowId]) })
+        }
+      }
+    }
+
+    // フィールドごとにどのツールで修正できるかを付与
+    const FIELD_TOOL: Record<string, { tool: string; action: string }> = {
+      transferReason:       { tool: 'propose_bulk_set_field', action: '異動事由を一括設定できます' },
+      concurrentReason:     { tool: 'propose_bulk_set_field', action: '兼務理由を一括設定できます' },
+      managerPositionCode:  { tool: 'propose_bulk_set_field', action: 'propose_set_manager_position で個別修正 または propose_bulk_set_field で一括クリアできます' },
+      demotionReason:       { tool: 'propose_bulk_set_field', action: '降格事由を一括設定できます' },
+      secondmentFromCompany:       { tool: 'propose_bulk_set_field', action: '出向元会社を一括設定できます' },
+      secondmentFromEmployeeNumber: { tool: 'propose_bulk_set_field', action: '出向元社員番号を一括設定できます' },
+    }
+
+    let errors = 0, warnings = 0
+    const byField = Array.from(fieldMap.entries())
+      .map(([field, { level, rowIds }]) => {
+        const rowIdsArr = [...rowIds]
+        level === 'error' ? (errors += rowIdsArr.length) : (warnings += rowIdsArr.length)
+        const hint = FIELD_TOOL[field]
+        return {
+          field,
+          level,
+          count:           rowIdsArr.length,
+          rowIds:          rowIdsArr,
+          suggestedTool:   hint?.tool,
+          suggestedAction: hint?.action,
+        }
+      })
+      .sort((a, b) => (a.level === 'error' ? 0 : 1) - (b.level === 'error' ? 0 : 1) || b.count - a.count)
+
+    return { summary: { errors, warnings }, byField }
+  }
+
+  // ── Position code assignment ─────────────────────────────────────────────
+
+  /**
+   * 内部採番コード（_pos_…）のポジション一覧を返す。
+   * propose_assign_position_codes と組み合わせてコードを割り当てるために使う。
+   */
+  function getUnassignedPositions(): Array<{
+    rowId:          number
+    positionCode:   string
+    localJobTitle:  string
+    departmentCode: string
+    orgName:        string
+  }> {
+    return service.getUnassignedPositions()
+  }
+
+  // ── Manager position ─────────────────────────────────────────────────────
+
+  /**
+   * 上司ポジションコードを設定し、managerName も自動入力する。
+   * saveRow で直接 managerPositionCode を変更すると managerName が更新されないため、
+   * AI はこのツールを使うこと。
+   */
+  function setManagerPosition(rowId: number, managerPositionCode: string): ValidationResult {
+    const { allocationList } = service.getSnapshot()
+    const mgrRow  = allocationList.find(r => r.positionCode === managerPositionCode)
+    const managerName = mgrRow
+      ? [mgrRow.lastName, mgrRow.firstName].filter(Boolean).join(', ')
+      : ''
+    return service.saveRow(rowId, { managerPositionCode, managerName })
+  }
+
   // ── Utility ──────────────────────────────────────────────────────────────
 
   function formatErrors(errors: OperationError[]): string {
@@ -250,7 +349,13 @@ export function createAITools(service: HRApplicationService) {
     findVacantPositions,
     validateOperation, executeOperation, undo,
     createVacantPosition, assignPersonToVacantPosition, unassignPersonFromPosition, removePosition,
-    getReviewSummary, getChangedPersons, getValidationIssues,
+    setManagerPosition,
+    reDeriveManagerNames: () => service.reDeriveManagerNames(),
+    reDeriveOrgSubFields: () => service.reDeriveOrgSubFields(),
+    getUnassignedPositions,
+    assignPositionCodes: (assignments: import('../ports').PositionCodeAssignment[]) =>
+      service.assignPositionCodes(assignments),
+    getReviewSummary, getChangedPersons, getValidationIssues, getValidationDiagnosis,
     formatErrors,
   }
 }

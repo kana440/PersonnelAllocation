@@ -12,6 +12,19 @@
 > - 実装状況: ✓ 実装済み / ✗ 未実装 / ❓ 業務確認待ち
 > - レベル: `error` / `warning`
 
+
+## 2.エラーとワーニングの違い
+
+### 2.1 エラーコード体系
+
+- A系：未入力
+- B系：形式
+- C系：関連
+- D系：存在
+- E系：キー重複
+- F系：データ整合性
+- W系：ワーニング
+
 ---
 
 ## 1. 必須フィールド
@@ -32,12 +45,14 @@
 |---|---|---|---|---|---|
 | V10 | `departmentCode` | orgマスタに存在しない値 | `error` | 組織コード "${code}" はマスタに存在しません | ✓ |
 | V11 | `secondmentToCompany` | 設定あり かつ `departmentCode` 空 | `warning` | 出向先会社が設定されていますが出向先組織コードが未入力です | ✓ |
-| V12 | `officialPositionCode` | codeListに存在しない値 | `warning` | 役職コードがマスタに存在しません | ✗ |
-| V13 | `payGrade` | codeListに存在しない値 | `warning` | 給与等級がマスタに存在しません | ✗ |
-| V14 | `location` | codeListに存在しない値 | `warning` | 勤務場所がマスタに存在しません | ✗ |
-| V15 | `employmentType` | codeListに存在しない値 | `warning` | 雇用タイプがマスタに存在しません | ✗ |
-| V16 | `jobType` | 選択した `jobFamily` の子に含まれない | `warning` | ジョブタイプが選択したジョブファミリーと一致しません | ✗ |
-| V17 | `concurrentType` | codeListに存在しない値 | `warning` | 本務兼務区分がマスタに存在しません | ✗ |
+| V12 | `officialPositionCode` | codeListに存在しない値 | `warning` | 役職コード "${code}" はマスタに存在しません | ✓ |
+| V13 | `payGrade` | codeListに存在しない値 | `warning` | 給与等級 "${val}" はマスタに存在しません | ✓ |
+| V14 | `location` | codeListに存在しない値 | `warning` | 勤務場所 "${code}" はマスタに存在しません | ✓ |
+| V15 | `employmentType` | codeListに存在しない値 | `warning` | 雇用タイプ "${val}" はマスタに存在しません | ✓ |
+| V16 | `jobType` | 選択した `jobFamily` の子に含まれない | `warning` | ジョブタイプ "${val}" は選択したジョブファミリーの子に含まれません | ✓ |
+| V16a | `jobFamily` | jobFamilies マスタに存在しない | `warning` | ジョブファミリー "${val}" はマスタに存在しません | ✓ |
+| V16b | `band` / `positionBand` | jobLevels マスタに存在しない | `warning` | バンド "${val}" はマスタに存在しません | ✓ |
+| V17 | `concurrentType` | codeListに存在しない値 | `warning` | 本務兼務区分がマスタに存在しません | ✓ |
 
 ---
 
@@ -55,7 +70,7 @@
 
 | # | フィールド | 条件 | レベル | メッセージ | 実装状況 |
 |---|---|---|---|---|---|
-| V30 | `concurrentReason` | `concurrentType != '兼務'` かつ `concurrentReason` 設定あり | `warning` | 兼務区分が「兼務」でないのに兼務理由が設定されています | ✗ |
+| V30 | `concurrentReason` | `concurrentType != '兼務'` かつ `concurrentReason` 設定あり | `warning` | 兼務区分が「兼務」でないのに兼務理由が設定されています | ✓ |
 
 ---
 
@@ -63,8 +78,8 @@
 
 | # | フィールド | 条件 | レベル | メッセージ | 実装状況 |
 |---|---|---|---|---|---|
-| V40 | `secondmentFromCompany` | 設定あり かつ `secondmentFromEmployeeNumber` 空 | `warning` | 出向元会社社員番号が未入力です | ✗ |
-| V41 | `secondmentFromEmployeeNumber` | 設定あり かつ `secondmentFromCompany` 空 | `warning` | 出向元会社が未入力です | ✗ |
+| V40 | `secondmentFromEmployeeNumber` | `secondmentFromCompany` 設定あり かつ 空 | `warning` | 出向元会社が設定されていますが出向元社員番号が未入力です | ✓ |
+| V41 | `secondmentFromCompany` | `secondmentFromEmployeeNumber` 設定あり かつ 空 | `warning` | 出向元社員番号が設定されていますが出向元会社が未入力です | ✓ |
 
 ---
 
@@ -81,7 +96,22 @@
 
 ---
 
-## 7. 実装優先順位（提案）
+## 7. 形式チェック（B系）
+
+| # | フィールド | 条件 | レベル | メッセージ | 実装状況 |
+|---|---|---|---|---|---|
+| V60 | `employeeNumber` | 設定あり かつ `/^\d{7}$/` に不一致 | `warning` | 社員番号は7桁の半角数字で入力してください | ✓ |
+| V61 | `positionCode` | 設定あり かつ `_pos_` 始まりでない かつ `/^P\d{8}$/` に不一致 | `warning` | ポジションコードは「P」+ 8桁半角数字の形式で入力してください（例: P12345678） | ✓ |
+| V62 | `managerPositionCode` | 設定あり かつ allRows に存在しない positionCode | `warning` | 上司ポジションコード "${code}" が見つかりません | ✓ |
+| V63 | `managerPositionCode` | `managerPositionCode === positionCode`（自己参照） | `error` | 自分自身を上司ポジションに設定できません | ✓ |
+| V64 | `managerPositionCode` | 設定した上司が自ポジションの配下（循環参照） | `error` | 配下のポジションを上司に設定できません（循環参照） | ✓ |
+| V65 | `trainingPositionFlag` | 設定あり かつ `trainingPositions` リストに存在しない | `warning` | 業務研修ポジション "${val}" はリスト値と一致しません | ✓ |
+| V66 | `positionDiscretionaryWorkFlag` | 設定あり かつ `discretionaryWorkOptions` リストに存在しない | `warning` | ポジション_裁量労働区分 "${val}" はリスト値と一致しません | ✓ |
+| V67 | `discretionaryWorkFlag` | 設定あり かつ `discretionaryWorkOptions` リストに存在しない | `warning` | 裁量労働区分 "${val}" はリスト値と一致しません | ✓ |
+
+---
+
+## 8. 実装優先順位（提案）
 
 | 優先度 | ルール群 | 理由 |
 |---|---|---|

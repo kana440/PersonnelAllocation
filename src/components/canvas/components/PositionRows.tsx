@@ -4,6 +4,8 @@ import type { DragData, PositionEntry } from '../OrgViewContext'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import { appService } from '../../../application/HRApplicationService'
 import { detectPositionPatterns } from '../../../application/positionPatterns'
+import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
+import { CanvasFieldDiff } from './CanvasFieldDiff'
 
 // ── カラーパレット（ReportLineView と同系） ───────────────────────────────────
 const PALETTE = [
@@ -27,6 +29,7 @@ const getPositionTitle = (row: AllocationRow): string =>
 interface PositionRowsProps { orgId: string }
 
 export function PositionRows({ orgId }: PositionRowsProps) {
+  const displayFields = useCanvasDisplayStore(state => state.displayFields)
   const {
     positionTreeByOrgId,
     positionContext,
@@ -202,8 +205,15 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   `}
                   style={{ minWidth: '72px', maxWidth: '130px' }}
                 >
-                  <span className="text-gray-400 text-[9px] select-none">⠿</span>
-                  <span className="truncate flex-1">{posTitle}</span>
+                  <span className="text-gray-400 text-[9px] select-none flex-shrink-0">⠿</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{posTitle}</div>
+                    {!isInternalPosCode(row.positionCode) && (
+                      <div className="truncate text-[9px] text-gray-400 leading-tight tabular-nums">
+                        {row.positionCode}
+                      </div>
+                    )}
+                  </div>
                   {!isSelectMode && (
                     <button
                       onClick={e => {
@@ -275,17 +285,22 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   `}
                 >
                   <div className="flex-1 min-w-0">
+                    {/* 名前 + バッジ */}
                     <div className="flex items-center gap-1 min-w-0">
                       <span className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</span>
                       {badges.map(b => (
                         <span key={b.kind} className={`flex-shrink-0 text-[9px] font-medium px-1 py-0.5 rounded ${b.color}`}>{b.label}</span>
                       ))}
                     </div>
-                    {(row.band || row.positionBand) && (
-                      <div className={`text-[10px] leading-tight ${isConcurrent ? 'text-purple-500' : 'text-gray-400'}`}>
-                        {row.positionBand ?? row.band}
+                    {/* グループ + ユーザーID（固定） */}
+                    {(row.group || row.userId) && (
+                      <div className="flex items-center gap-1.5 text-[9px] text-gray-400 leading-tight">
+                        {row.group && <span className="truncate">{row.group}</span>}
+                        {row.userId && <span className="tabular-nums flex-shrink-0">{row.userId}</span>}
                       </div>
                     )}
+                    {/* 選択可能フィールド（変更前後の差分付き） */}
+                    <CanvasFieldDiff row={row} displayFields={displayFields} isConcurrent={isConcurrent} />
                   </div>
                   {!isSelectMode && hasPosition && (
                     <button

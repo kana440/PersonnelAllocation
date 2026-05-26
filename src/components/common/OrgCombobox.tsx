@@ -97,9 +97,12 @@ export function OrgCombobox({
           <button
             onMouseDown={e => e.preventDefault()}
             onClick={() => select(org.id)}
-            className={`flex-1 text-left text-xs py-0.5 truncate ${isSelected ? 'text-blue-700 font-semibold' : 'text-gray-700 hover:text-blue-600'}`}
+            className={`flex-1 text-left text-xs py-0.5 flex items-center gap-1 min-w-0 ${isSelected ? 'text-blue-700 font-semibold' : 'text-gray-700 hover:text-blue-600'}`}
           >
-            {org.name}
+            <span className="flex-1 truncate">{org.name}</span>
+            {org.externalCode && (
+              <span className="flex-shrink-0 text-[10px] font-normal tabular-nums text-gray-400">{org.externalCode}</span>
+            )}
           </button>
         </div>
         {isExpanded && children.map(c => renderOrgNode(c, depth + 1))}
@@ -163,7 +166,8 @@ export function OrgCombobox({
                       className={`w-full text-left px-2 py-1 rounded text-xs flex items-center gap-1.5 ${value === org.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-blue-50'}`}
                     >
                       <span className="flex-1 truncate">{org.name}</span>
-                      {parent && <span className="text-gray-400 flex-shrink-0 text-[10px] truncate max-w-[80px]">{parent.name}</span>}
+                      {org.externalCode && <span className="text-[10px] text-gray-400 flex-shrink-0 tabular-nums">{org.externalCode}</span>}
+                      {parent && <span className="text-gray-300 flex-shrink-0 text-[10px] truncate max-w-[70px]">{parent.name}</span>}
                     </button>
                   )
                 })

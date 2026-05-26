@@ -1,15 +1,12 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
-import { MoveRowsToOrgOperation }      from '../../domain/operation/handlers/moveRowsToOrg'
 import { SetPositionManagerOperation } from '../../domain/operation/handlers/positionOps'
 import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
-import { ConfirmDialog }    from './modals/ConfirmDialog'
-import { PersonMoveModal }  from './modals/PersonMoveModal'
-import { SelectMoveModal }  from './modals/SelectMoveModal'
-import { BulkMoveModal }    from './modals/BulkMoveModal'
 import { ReportLineView }   from './components/ReportLineView'
-import { OrgBox, DropZone, AddPositionInput } from './components/OrgBox'
+import { OrgBox, DropZone } from './components/OrgBox'
+import { PersonContextMenu, PositionContextMenu } from './CanvasContextMenus'
+import { CanvasModals }     from './CanvasModals'
 import { PositionRows }     from './components/PositionRows'
 import { OrgViewContext }   from './OrgViewContext'
 import type { OrgViewContextValue } from './OrgViewContext'
@@ -63,12 +60,12 @@ export function OrgOperationView() {
   // ── UI state ───────────────────────────────────────────────────
   const [contextMenu,         setContextMenu]         = useState<{ x: number; y: number; personId: string } | null>(null)
   const [positionContextMenu, setPositionContextMenu] = useState<{ x: number; y: number; rowId: number } | null>(null)
-  const [confirmDialog,     setConfirmDialog]     = useState<{ message: string; onConfirm: () => void } | null>(null)
-  const [addPositionOrgId,  setAddPositionOrgId]  = useState<string | null>(null)
-  const [addPositionTitle,  setAddPositionTitle]  = useState('')
-  const [isSelectMode,      setIsSelectMode]      = useState(false)
+  const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
+  const [isSelectMode,        setIsSelectMode]        = useState(false)
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set())
   const [moveModalOpen,     setMoveModalOpen]     = useState(false)
+  const [bulkActionModal,   setBulkActionModal]   = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
 
   // ── Hooks ──────────────────────────────────────────────────────
   const { personMoveDialog, setPersonMoveDialog, handlePersonMoveConfirm } = usePersonMove({
@@ -144,6 +141,14 @@ export function OrgOperationView() {
     return rows.find(r => !r.managerPositionCode || !posSet.has(r.managerPositionCode))?.positionCode
   }
 
+  const handleAddPosition = (orgId: string, orgCode: string) => {
+    const { allocationList: current } = appService.getSnapshot()
+    const newRowId = current.length === 0 ? 1 : Math.max(...current.map(r => r.rowId)) + 1
+    const topMgrCode = topPositionCodeOfOrg(orgId)
+    appService.createVacantPosition(orgCode, '', topMgrCode ? { managerPositionCode: topMgrCode } : undefined)
+    enterEditMode(newRowId)
+  }
+
   // ── Early returns ──────────────────────────────────────────────
   if (!focusedOrgId) {
     return (
@@ -179,8 +184,7 @@ export function OrgOperationView() {
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
-    addPositionOrgId, addPositionTitle, setAddPositionTitle,
-    setAddPositionOrgId:  isHistoryPreviewMode ? () => {} : setAddPositionOrgId,
+    handleAddPosition:    isHistoryPreviewMode ? () => {} : handleAddPosition,
     topPositionCodeOfOrg,
     setBulkMoveSourceId:  isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
     setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
@@ -246,7 +250,11 @@ export function OrgOperationView() {
             </div>
             {canvasMode === '組織図' && (
               <>
-                <span className="text-xs text-gray-400">Alt+ドロップ=兼務</span>
+                <button
+                  onClick={() => setFieldPickerOpen(true)}
+                  className="px-2 py-0.5 text-xs font-medium rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                  title="カードに表示するフィールドを設定"
+                >表示設定</button>
                 <button
                   onClick={() => { setIsSelectMode(m => !m); setSelectedPersonIds(new Set()) }}
                   className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
@@ -307,14 +315,13 @@ export function OrgOperationView() {
               <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center gap-1">
                 <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
                 <button
-                  onClick={() => { setAddPositionOrgId(focusedOrgId); setAddPositionTitle('') }}
+                  onClick={() => handleAddPosition(focusedOrgId, focusedOrg.externalCode ?? focusedOrg.id)}
                   className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
                   title="ポジションを追加（空席）"
                 >＋席</button>
               </div>
               <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
                 <PositionRows orgId={focusedOrgId} />
-                {addPositionOrgId === focusedOrgId && <AddPositionInput orgId={focusedOrgId} orgCode={focusedOrg.externalCode ?? focusedOrg.id} />}
                 <DropZone orgId={focusedOrgId} compact />
               </div>
               <div className="px-3 pb-3 grid grid-cols-2 gap-3">
@@ -324,121 +331,53 @@ export function OrgOperationView() {
           )}
         </div>
 
-        {/* Context menu */}
         {contextMenu && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null) }} />
-            <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-36" style={{ left: contextMenu.x, top: contextMenu.y }}>
-              {(() => { const p = persons.find(pp => pp.id === contextMenu.personId); return p ? <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500 truncate">{p.name}</div> : null })()}
-              <button onClick={() => { handlePersonDoubleClick(contextMenu.personId); setContextMenu(null) }} className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors">
-                <span>✏️</span> 編集画面を開く
-              </button>
-              {canvasMode === 'レポートライン' && (
-                <button
-                  onClick={() => { setReportLineRootId(contextMenu.personId); setExpandedNodes(prev => new Set([...prev, contextMenu.personId])); setContextMenu(null) }}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
-                ><span>📍</span> この人を起点に表示</button>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Position context menu */}
-        {positionContextMenu && (() => {
-          const row    = allocationList.find(r => r.rowId === positionContextMenu.rowId)
-          const person = row?.userId ? persons.find(p => p.sfPersonId === row.userId) : null
-          const title  = row?.localJobTitle || row?.officialPositionCode || row?.positionCode || '（役職未設定）'
-          return (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setPositionContextMenu(null)} onContextMenu={e => { e.preventDefault(); setPositionContextMenu(null) }} />
-              <div className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-40" style={{ left: positionContextMenu.x, top: positionContextMenu.y }}>
-                <div className="px-3 py-1.5 border-b border-gray-100">
-                  <div className="text-xs font-semibold text-gray-700 truncate">{title}</div>
-                  {person && <div className="text-[11px] text-gray-400 truncate">{person.name}</div>}
-                  {!person && <div className="text-[11px] text-gray-400">空席</div>}
-                </div>
-                {row && (
-                  <button
-                    onClick={() => { enterEditMode(row.rowId); setPositionContextMenu(null) }}
-                    className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
-                  >
-                    <span>✏️</span> 編集画面を開く
-                  </button>
-                )}
-              </div>
-            </>
-          )
-        })()}
-
-        {/* 選択モード アクションバー */}
-        {isSelectMode && selectedPersonIds.size > 0 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-gray-900 text-white rounded-full px-4 py-2 shadow-2xl text-xs">
-            <span className="font-semibold">{selectedPersonIds.size}名選択中</span>
-            <div className="w-px h-4 bg-gray-600" />
-            <button onClick={() => setMoveModalOpen(true)} className="px-2.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 font-medium transition-colors">組織を移動</button>
-            <button onClick={exitSelectMode} className="px-2.5 py-1 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">解除</button>
-          </div>
-        )}
-
-        {moveModalOpen && (
-          <SelectMoveModal
-            selectedCount={selectedPersonIds.size}
-            allOrgs={allAfterOrgsUnscoped}
-            onConfirm={targetOrgId => {
-              const rowIds: number[] = []
-              for (const personId of selectedPersonIds) {
-                const person = persons.find(p => p.id === personId)
-                if (!person?.sfPersonId) continue
-                const primary = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
-                             ?? allocationList.find(r => r.userId === person.sfPersonId)
-                if (primary) rowIds.push(primary.rowId)
-              }
-              const targetOrg = allAfterOrgsUnscoped.find(o => o.id === targetOrgId)
-              const result = appService.executeOperation(new MoveRowsToOrgOperation(rowIds, targetOrgId, `${rowIds.length}名 → ${targetOrg?.name ?? ''}`))
-              if (!result.ok) return
-              setMoveModalOpen(false); exitSelectMode()
-            }}
-            onCancel={() => setMoveModalOpen(false)}
+          <PersonContextMenu
+            x={contextMenu.x} y={contextMenu.y}
+            personId={contextMenu.personId}
+            persons={persons}
+            canvasMode={canvasMode}
+            onEdit={id => { handlePersonDoubleClick(id) }}
+            onReportRoot={id => { setReportLineRootId(id); setExpandedNodes(prev => new Set([...prev, id])) }}
+            onClose={() => setContextMenu(null)}
           />
         )}
 
-        {bulkMoveSourceId && (
-          <BulkMoveModal
-            sourceOrg={allAfterOrgsUnscoped.find(o => o.id === bulkMoveSourceId)}
-            moveableOrgs={allAfterOrgsUnscoped.filter(o => o.id !== bulkMoveSourceId)}
-            posEntries={positionTreeByOrgId.get(bulkMoveSourceId) ?? []}
-            personList={afterMembersByOrgId.get(bulkMoveSourceId) ?? []}
-            onConfirm={handleBulkMoveConfirm}
-            onCancel={() => setBulkMoveSourceId(null)}
+        {positionContextMenu && (
+          <PositionContextMenu
+            x={positionContextMenu.x} y={positionContextMenu.y}
+            rowId={positionContextMenu.rowId}
+            persons={persons}
+            allocationList={allocationList}
+            onEdit={rowId => enterEditMode(rowId)}
+            onClose={() => setPositionContextMenu(null)}
           />
         )}
 
-        {personMoveDialog && (() => {
-          const person  = persons.find(p => p.id === personMoveDialog.personId)
-          const fromRow = personMoveDialog.fromRowId
-            ? allocationList.find(r => r.rowId === personMoveDialog.fromRowId)
-            : (allocationList.find(r => r.userId === person?.sfPersonId && !r.concurrentType)
-              ?? allocationList.find(r => r.userId === person?.sfPersonId))
-          const toOrg = allAfterOrgsUnscoped.find(o => o.id === personMoveDialog.toOrgId)
-          return (
-            <PersonMoveModal
-              personName={person?.name ?? '—'}
-              toOrgName={toOrg?.name ?? '—'}
-              posTitle={fromRow?.localJobTitle || fromRow?.officialPositionCode || ''}
-              hasPosition={!!fromRow?.positionCode}
-              onConfirm={handlePersonMoveConfirm}
-              onCancel={() => setPersonMoveDialog(null)}
-            />
-          )
-        })()}
-
-        {confirmDialog && (
-          <ConfirmDialog
-            message={confirmDialog.message}
-            onConfirm={confirmDialog.onConfirm}
-            onCancel={() => setConfirmDialog(null)}
-          />
-        )}
+        <CanvasModals
+          isSelectMode={isSelectMode}
+          selectedPersonIds={selectedPersonIds}
+          exitSelectMode={exitSelectMode}
+          moveModalOpen={moveModalOpen}
+          setMoveModalOpen={setMoveModalOpen}
+          bulkActionModal={bulkActionModal}
+          setBulkActionModal={setBulkActionModal}
+          bulkMoveSourceId={bulkMoveSourceId}
+          setBulkMoveSourceId={setBulkMoveSourceId}
+          personMoveDialog={personMoveDialog}
+          setPersonMoveDialog={setPersonMoveDialog}
+          confirmDialog={confirmDialog}
+          setConfirmDialog={setConfirmDialog}
+          fieldPickerOpen={fieldPickerOpen}
+          setFieldPickerOpen={setFieldPickerOpen}
+          persons={persons}
+          allocationList={allocationList}
+          allAfterOrgsUnscoped={allAfterOrgsUnscoped}
+          positionTreeByOrgId={positionTreeByOrgId}
+          afterMembersByOrgId={afterMembersByOrgId}
+          handleBulkMoveConfirm={handleBulkMoveConfirm}
+          handlePersonMoveConfirm={handlePersonMoveConfirm}
+        />
 
       </div>
     </OrgViewContext.Provider>

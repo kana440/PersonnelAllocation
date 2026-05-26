@@ -6,6 +6,7 @@ import type { IDomainOperation, OperationContext, OperationResult, ValidationRes
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
+import { deriveOrgSubFields, deriveManagerName } from '../orgHelpers'
 
 // ── CreateVacantPosition ─────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export class CreateVacantPositionOperation implements IDomainOperation {
     const newRow: AllocationRow = {
       rowId,
       departmentCode: this.departmentCode,
+      ...deriveOrgSubFields(this.departmentCode, ctx.codeLists),
       localJobTitle:  this.localJobTitle,
       positionCode:   `_pos_${rowId}`,
       ...(this.extraFields ?? {}),
@@ -140,13 +142,16 @@ export class SetPositionManagerOperation implements IDomainOperation {
   }
 
   apply(ctx: OperationContext): OperationResult {
-    const row   = ctx.allocationList.find(r => r.rowId === this.rowId)!
+    const row         = ctx.allocationList.find(r => r.rowId === this.rowId)!
+    const managerName = deriveManagerName(this.managerPositionCode, ctx.allocationList)
     const label = this.managerPositionCode
       ? `上司設定: ${row.localJobTitle ?? row.positionCode ?? ''}`
       : `上司解除: ${row.localJobTitle ?? row.positionCode ?? ''}`
     return {
       updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId ? { ...r, managerPositionCode: this.managerPositionCode } : r
+        r.rowId === this.rowId
+          ? { ...r, managerPositionCode: this.managerPositionCode, managerName }
+          : r
       ),
       label,
     }
@@ -202,6 +207,11 @@ export class AssignPersonToPositionOperation implements IDomainOperation {
       userId: this.personSfId,
       ...positionAndBothFields,
       ...allocClears,
+      // managerName は allocation 扱いで消えるため、positionCode の上司を再導出
+      managerName: deriveManagerName(
+        vacantRow.managerPositionCode as string | undefined,
+        ctx.allocationList,
+      ),
     }
 
     const isUnassigned = !personRow.positionCode

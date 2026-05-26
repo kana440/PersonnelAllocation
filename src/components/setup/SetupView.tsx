@@ -52,20 +52,7 @@ export function SetupView({ onReady }: Props) {
 
   const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
 
-  // 全組織: マッピングを自動生成して即開始
-  const handleOrgSelectAll = useCallback(async () => {
-    if (phase.kind !== 'org-select') return
-    const { result } = phase
-    setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
-    await tick()
-    const index   = buildOrgMatchIndex(result.allocationList, result.beforeOrganizations, result.afterOrganizations)
-    const mapping = orgMatchIndexToMapping(index)
-    await loadExcelData(result)
-    setScopeWithMapping({ beforeOrgId: null, mapping })
-    onReady()
-  }, [phase, loadExcelData, setScopeWithMapping, onReady])
-
-  // 特定組織: scope の before-org 配下に絞った自動マッピングを表示
+  // 組織: scope の before-org 配下に絞った自動マッピングを表示
   const handleOrgSelectOrg = useCallback((id: string, name: string) => {
     if (phase.kind !== 'org-select') return
     const { result } = phase
@@ -155,8 +142,8 @@ export function SetupView({ onReady }: Props) {
           {phase.kind === 'org-select' && (
             <OrgSelectStep
               result={phase.result}
-              onSelectAll={handleOrgSelectAll}
               onSelectOrg={handleOrgSelectOrg}
+              onBack={() => setPhase({ kind: 'idle' })}
             />
           )}
           {phase.kind === 'error' && (

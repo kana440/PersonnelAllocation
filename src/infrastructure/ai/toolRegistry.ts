@@ -13,8 +13,10 @@ import { buildOrgTree } from './scenarios/checkDepartment'
 import { appService } from '../../application/HRApplicationService'
 import { DirectEditOperation } from '../../domain/operation/handlers/directEdit'
 import { BulkMoveToOrgOperation } from '../../domain/operation/handlers/bulkMoveToOrg'
+import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../../domain/operation/orgHelpers'
 import { CreateVacantPositionOperation, AssignPersonToPositionOperation } from '../../domain/operation/handlers/positionOps'
 import { TransferPersonOperation } from '../../domain/operation/handlers/transferPerson'
+import { AssignPositionCodesOperation } from '../../domain/operation/handlers/assignPositionCodes'
 import type { AfterValues } from '../../domain/allocationRow'
 import type { ToolDefinition, ToolCall } from '../../ports'
 
@@ -235,6 +237,20 @@ const TOOL_ENTRIES: ToolEntry[] = [
     },
   },
 
+  // ── Read: getValidationDiagnosis ─────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'getValidationDiagnosis',
+        description: 'バリデーション問題をフィールド別に集計し、修正方法（suggestedTool/suggestedAction）と対象 rowIds を返す。操作後や「バリデーションを確認して」と言われたときに優先して使う。getValidationIssues の上位版。',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    execute: () => aiTools.getValidationDiagnosis(),
+  },
+
   // ── Read: undo ───────────────────────────────────────────────────────────
   {
     kind: 'read',
@@ -409,6 +425,75 @@ const TOOL_ENTRIES: ToolEntry[] = [
       return result.ok
         ? { applied: true, name, field: LABELS[field], value }
         : { ok: false, error: !result.ok && result.errors?.[0]?.message }
+    },
+  },
+
+  // ── Confirm: propose_bulk_set_field ─────────────────────────────────────
+  // getValidationDiagnosis の suggestedTool で案内される主要ツール。
+  // propose_field_edit の複数行版。diff-preview を再利用。
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_bulk_set_field',
+        description: '複数行の同一フィールドを一括で同じ値に設定することをユーザーに提案し、確認を得てから実行する。getValidationDiagnosis で取得した rowIds をそのまま使える。transferReason の一括設定、concurrentReason の一括クリアなどに使う。',
+        parameters: {
+          type: 'object',
+          required: ['rowIds', 'field', 'value'],
+          properties: {
+            rowIds: {
+              type: 'array',
+              items: { type: 'number' },
+              description: '対象行の rowId 配列（getValidationDiagnosis.byField[].rowIds をそのまま使用可）',
+            },
+            field: {
+              type: 'string',
+              description: '変更するフィールド名（例: transferReason, concurrentReason, demotionReason, memo）',
+            },
+            value: {
+              type: 'string',
+              description: '設定する値。空文字はフィールドをクリアする',
+            },
+          },
+        },
+      },
+    },
+    buildProposal: args => {
+      const rowIds = args.rowIds as number[]
+      const field  = args.field  as string
+      const value  = args.value  as string
+      const { allocationList, afterOrganizations } = appService.getSnapshot()
+      const persons: PersonDiff[] = rowIds.flatMap(rowId => {
+        const row = allocationList.find(r => r.rowId === rowId)
+        if (!row) return []
+        const org    = afterOrganizations.find(o => o.externalCode === row.departmentCode || o.id === row.departmentCode)
+        const before = String(row[field as keyof typeof row] ?? '')
+        return [{
+          userId:  row.userId ?? '',
+          name:    ([row.lastName, row.firstName].filter(Boolean).join(' ') || row.positionCode) ?? '',
+          orgName: org?.name ?? row.departmentCode ?? '',
+          rowId,
+          before: { position: before || '（未設定）' },
+          after:  { position: value  || '（クリア）' },
+        }] satisfies PersonDiff[]
+      })
+      const label = `${field} を ${value || '（クリア）'} に一括設定（${persons.length}行）`
+      return { widget: { type: 'diff-preview', persons, label } as ChatWidget }
+    },
+    executeOnApprove: args => {
+      const rowIds = args.rowIds as number[]
+      const field  = args.field  as string
+      const value  = args.value  as string
+      const BLOCKED = new Set(['userId', 'employeeNumber', 'rowId', 'positionCode', 'prevPositionCode'])
+      if (BLOCKED.has(field)) return { ok: false, error: `フィールド "${field}" は一括変更できません` }
+      let applied = 0, failed = 0
+      for (const rowId of rowIds) {
+        const changes = { [field]: value || undefined } as AfterValues
+        const result  = appService.executeOperation(new DirectEditOperation(rowId, changes, `${field}: ${value || '（クリア）'}`))
+        result.ok ? applied++ : failed++
+      }
+      return { applied: true, appliedCount: applied, failedCount: failed }
     },
   },
 
@@ -698,6 +783,198 @@ const TOOL_ENTRIES: ToolEntry[] = [
       return result.ok
         ? { applied: true, newJobTitle, orgName: targetOrg.name }
         : { ok: false, error: result.errors?.[0]?.message }
+    },
+  },
+  // ── Confirm: propose_set_manager_position ────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_set_manager_position',
+        description: '上司ポジションコードをユーザーに提案し確認を得てから設定する。managerName も在席者の姓名から自動入力する。実行前に findPersons / getPersonRows で rowId と managerPositionCode（相手のポジションコード）を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['rowId', 'managerPositionCode'],
+          properties: {
+            rowId:               { type: 'number', description: '変更対象行の rowId' },
+            managerPositionCode: { type: 'string', description: '上司のポジションコード' },
+          },
+        },
+      },
+    },
+    buildProposal: args => {
+      const rowId               = args.rowId as number
+      const managerPositionCode = args.managerPositionCode as string
+      const { allocationList, afterOrganizations } = appService.getSnapshot()
+      const targetRow = allocationList.find(r => r.rowId === rowId)
+      const mgrRow    = allocationList.find(r => r.positionCode === managerPositionCode)
+      const mgrName   = mgrRow
+        ? [mgrRow.lastName, mgrRow.firstName].filter(Boolean).join(', ')
+        : managerPositionCode
+      const org = afterOrganizations.find(
+        o => o.externalCode === targetRow?.departmentCode || o.id === targetRow?.departmentCode
+      )
+      const person: PersonDiff = {
+        userId:  targetRow?.userId ?? '',
+        rowId,
+        name:    targetRow ? [targetRow.lastName, targetRow.firstName].filter(Boolean).join(' ') : String(rowId),
+        orgName: org?.name ?? targetRow?.departmentCode ?? '',
+        before:  { position: targetRow?.managerPositionCode ?? '（未設定）' },
+        after:   { position: managerPositionCode, orgName: mgrName },
+      }
+      return { widget: { type: 'diff-preview', persons: [person], label: '上司ポジション設定の確認' } as ChatWidget }
+    },
+    executeOnApprove: args => {
+      const rowId               = args.rowId as number
+      const managerPositionCode = args.managerPositionCode as string
+      const result = aiTools.setManagerPosition(rowId, managerPositionCode)
+      return result.ok
+        ? { applied: true, rowId, managerPositionCode }
+        : { ok: false, error: !result.ok && result.errors?.[0]?.message }
+    },
+  },
+
+  // ── Confirm: propose_re_derive_manager_names ─────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'propose_re_derive_manager_names',
+        description: '全行の managerName を、現在各ポジションに在籍している人の姓名に合わせて一括更新することをユーザーに提案する。上司ポジションの担当者が変わった後などに使う。',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    buildProposal: () => {
+      const { allocationList, afterOrganizations } = appService.getSnapshot()
+      const updated = reDeriveManagerNamesForList(allocationList)
+      const persons: PersonDiff[] = allocationList
+        .map((r, i) => ({ r, u: updated[i] }))
+        .filter(({ r, u }) => r !== u)
+        .map(({ r, u }) => ({
+          userId:  r.userId ?? '',
+          name:    ([r.lastName, r.firstName].filter(Boolean).join(' ') || r.positionCode) ?? '',
+          orgName: afterOrganizations.find(o => o.externalCode === r.departmentCode)?.name ?? r.departmentCode ?? '',
+          rowId:   r.rowId,
+          before:  { position: (r.managerName ?? '') || '（未設定）' },
+          after:   { position: (u.managerName ?? '') || '（未設定）' },
+        }))
+      const label = persons.length > 0
+        ? `上司姓名 一括再導出（${persons.length}行が対象）`
+        : '変更対象の行はありません'
+      return { widget: { type: 'diff-preview', persons, label } as ChatWidget }
+    },
+    executeOnApprove: () => {
+      const changed = aiTools.reDeriveManagerNames()
+      return { applied: true, changedCount: changed }
+    },
+  },
+
+  // ── Read: getUnassignedPositions ─────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'getUnassignedPositions',
+        description: '内部採番コード（_pos_…）のままになっているポジションの一覧を返す。propose_assign_position_codes と組み合わせて外部コードを割り当てるために使う。',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    execute: () => aiTools.getUnassignedPositions(),
+  },
+
+  // ── Confirm: propose_assign_position_codes ────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_assign_position_codes',
+        description: '内部採番コード（_pos_…）のポジションに外部コード（P + 8桁数字）を割り当てることをユーザーに提案し、確認を得てから実行する。managerPositionCode として参照している行も連動して更新される。実行前に getUnassignedPositions で rowId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['assignments'],
+          properties: {
+            assignments: {
+              type: 'array',
+              description: '割り当てリスト。rowId と newPositionCode のペアを複数指定できる。',
+              items: {
+                type: 'object',
+                required: ['rowId', 'newPositionCode'],
+                properties: {
+                  rowId:           { type: 'number', description: '対象行の rowId（getUnassignedPositions で取得）' },
+                  newPositionCode: { type: 'string', description: '割り当てる外部コード（P + 8桁数字、例: P12345678）' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    buildProposal: args => {
+      const assignments = args.assignments as Array<{ rowId: number; newPositionCode: string }>
+      const positions   = aiTools.getUnassignedPositions()
+      const { afterOrganizations } = appService.getSnapshot()
+      const persons: PersonDiff[] = assignments.flatMap(({ rowId, newPositionCode }) => {
+        const pos = positions.find(p => p.rowId === rowId)
+        if (!pos) return []
+        const org = afterOrganizations.find(o => (o.externalCode ?? o.id) === pos.departmentCode)
+        return [{
+          userId:  '',
+          name:    pos.localJobTitle || `（rowId: ${rowId}）`,
+          orgName: org?.name ?? pos.orgName,
+          rowId,
+          before:  { position: pos.positionCode },
+          after:   { position: newPositionCode },
+        }] satisfies PersonDiff[]
+      })
+      const label = `ポジションコード割当（${persons.length}件）`
+      return { widget: { type: 'diff-preview', persons, label } as ChatWidget }
+    },
+    executeOnApprove: args => {
+      const assignments = args.assignments as Array<{ rowId: number; newPositionCode: string }>
+      const result = appService.executeOperation(new AssignPositionCodesOperation(assignments))
+      return result.ok
+        ? { applied: true, count: assignments.length }
+        : { ok: false, error: result.errors?.[0]?.message }
+    },
+  },
+
+  // ── Confirm: propose_re_derive_org_sub_fields ─────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'propose_re_derive_org_sub_fields',
+        description: '全行の businessUnit/division/subDivision/group/team を、組織マスタから一括再導出することをユーザーに提案する。組織を移動した後などにサブフィールドがずれているときに使う。',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    buildProposal: () => {
+      const { allocationList, afterOrganizations, codeLists } = appService.getSnapshot()
+      const updated = reDeriveOrgSubFieldsForList(allocationList, codeLists)
+      const persons: PersonDiff[] = allocationList
+        .map((r, i) => ({ r, u: updated[i] }))
+        .filter(({ r, u }) => r !== u)
+        .map(({ r, u }) => ({
+          userId:  r.userId ?? '',
+          name:    ([r.lastName, r.firstName].filter(Boolean).join(' ') || r.positionCode) ?? '',
+          orgName: afterOrganizations.find(o => o.externalCode === r.departmentCode)?.name ?? r.departmentCode ?? '',
+          rowId:   r.rowId,
+          before:  { orgName: r.businessUnit ?? r.departmentCode ?? '' },
+          after:   { orgName: (u.businessUnit ?? u.departmentCode ?? '') },
+        }))
+      const label = persons.length > 0
+        ? `組織サブフィールド 一括再導出（${persons.length}行が対象）`
+        : '変更対象の行はありません'
+      return { widget: { type: 'diff-preview', persons, label } as ChatWidget }
+    },
+    executeOnApprove: () => {
+      const changed = aiTools.reDeriveOrgSubFields()
+      return { applied: true, changedCount: changed }
     },
   },
 ]

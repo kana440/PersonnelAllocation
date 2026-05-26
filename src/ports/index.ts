@@ -24,6 +24,32 @@ export interface ICodeListSource {
   load(): Promise<AllCodeLists | null>
 }
 
+// ── Position code port ───────────────────────────────────────────────────────
+
+export interface UnassignedPosition {
+  rowId:          number
+  positionCode:   string   // _pos_XXX 形式の内部採番コード
+  localJobTitle:  string
+  orgName:        string
+  departmentCode: string
+}
+
+export interface PositionCodeAssignment {
+  rowId:           number
+  newPositionCode: string  // P + 8桁数字（例: P12345678）
+}
+
+export interface IPositionCodePort {
+  /** 未割当ポジション一覧をクリップボード用 TSV にフォーマットする */
+  formatForExport(positions: UnassignedPosition[]): string
+  /** クリップボードからペーストされたテキストをパースして割り当てリストを返す */
+  parseImport(raw: string): PositionCodeAssignment[]
+  /** 利用可能なコードをソースから取得する（将来: DB/API 対応） */
+  fetchAvailable?(count: number): Promise<string[]>
+  /** 使用済みフラグを立てる（将来: DB/API 対応） */
+  markUsed?(codes: string[], memo: string): Promise<void>
+}
+
 // ── AI chat port (legacy drawer) ─────────────────────────────────────────────
 export interface ChatMessage {
   role: 'user' | 'ai'

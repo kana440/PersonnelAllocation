@@ -74,26 +74,40 @@
 
 ---
 
-## E. 組織マッピング・スコープ関連を変更するとき
+## E. ドメインオペレーションを追加・変更するとき
+
+> 対象: `src/domain/operation/handlers/` への Operation クラス追加
+
+| # | 領域 | 確認/更新先 | 必須度 |
+|---|---|---|---|
+| E1 | 自動補完 | `departmentCode` を変更する場合は `deriveOrgSubFields()` で org sub-fields を更新する | 必須 |
+| E2 | 自動補完 | `managerPositionCode` を設定する場合は `deriveManagerName()` で `managerName` を更新する | 必須 |
+| E3 | FieldBinding | `afterKeysByBinding('allocation')` で清される `managerName` を意図的に設定する場合は allocClears の後に配置する | 必須 |
+| E4 | Undo 対象 | `executeOperation()` 経由なら自動で Undo 対象 | 自動 |
+| E5 | AI Tools | AI から呼べるようにする場合は `aiTools.ts` と `toolRegistry.ts` に追加 | 要確認 |
+
+---
+
+## F. 組織マッピング・スコープ関連を変更するとき
 
 > 対象: `setScopeWithMapping`, `orgMapping`, `sameOrgPairs`, `useScopedStore`
 
 | # | 領域 | 確認/更新先 | 必須度 |
 |---|---|---|---|
-| E1 | 変更検知 | `sameOrgPairs` の計算に影響するか (`useReviewData.ts`) | 必須 |
-| E2 | スコープフィルタ | `useScopedStore.ts` のフィルタロジックに影響するか | 必須 |
-| E3 | Excel エクスポート | スコープに従った出力になっているか | 要確認 |
-| E4 | レビュー画面 | `useScopedStore` 経由で自動スコープ適用される | 自動 |
+| F1 | 変更検知 | `sameOrgPairs` の計算に影響するか (`useReviewData.ts`) | 必須 |
+| F2 | スコープフィルタ | `useScopedStore.ts` のフィルタロジックに影響するか | 必須 |
+| F3 | Excel エクスポート | スコープに従った出力になっているか | 要確認 |
+| F4 | レビュー画面 | `useScopedStore` 経由で自動スコープ適用される | 自動 |
 
 ---
 
-## F. スラッシュコマンド・自動化を追加・変更するとき
+## G. スラッシュコマンド・自動化を追加・変更するとき
 
 | # | 領域 | 確認/更新先 | 必須度 |
 |---|---|---|---|
-| F1 | コマンドファイル | `.claude/commands/xxx.md` を作成・更新 | 必須 |
-| F2 | このファイル | 該当するチェックリスト（A〜E）への参照を追加 | 必須 |
-| F3 | CLAUDE.md | specs/ 索引に反映が必要か | 要確認 |
+| G1 | コマンドファイル | `.claude/commands/xxx.md` を作成・更新 | 必須 |
+| G2 | このファイル | 該当するチェックリスト（A〜F）への参照を追加 | 必須 |
+| G3 | CLAUDE.md | specs/ 索引に反映が必要か | 要確認 |
 
 ---
 

@@ -2,6 +2,7 @@
 
 import type { AllCodeLists } from './types'
 import type {
+  CompanyEntry,
   CompanyFilterEntry,
   EmploymentTypeEntry,
   PayGradeEntry,
@@ -13,6 +14,8 @@ import type {
   TransferReasonEntry,
   ConcurrentReasonEntry,
   DemotionReasonEntry,
+  TrainingPositionEntry,
+  DiscretionaryWorkEntry,
 } from '../../domain/codeLists'
 
 // ── Column utilities ───────────────────────────────────────────────────────────
@@ -57,6 +60,7 @@ function dataRowIndices(raw: unknown[][], keyColLetter: string): number[] {
 // ── Human-readable labels (for SetupView UI) ──────────────────────────────────
 export const CODE_LIST_LABELS: Record<keyof AllCodeLists, string> = {
   orgMasterEntries:         '組織CD一覧',   // parsed by orgMasterParser, not this parser
+  companies:                '会社CD一覧',   // parsed by parseCompanySheet, not this parser
   companyFilters:           '会社絞込用',
   employmentTypes:          '雇用タイプ',
   payGrades:                '給与等級',
@@ -177,12 +181,6 @@ function parseJobLevels(raw: unknown[][]): JobLevelEntry[] {
   })
 }
 
-function parseSingleColumnList(raw: unknown[][], keyColLetter: string): string[] {
-  return dataRowIndices(raw, keyColLetter)
-    .map(r => cellStr(raw, r, colIdx(keyColLetter)))
-    .filter(Boolean)
-}
-
 function parseCodeEntryList<T extends { code: string; label: string }>(
   raw: unknown[][], keyColLetter: string
 ): T[] {
@@ -190,6 +188,42 @@ function parseCodeEntryList<T extends { code: string; label: string }>(
     const text = cellStr(raw, r, colIdx(keyColLetter))
     return { code: text, label: text } as T
   })
+}
+
+// ── 会社CD一覧シート（個別シート）──────────────────────────────────────────────
+// 列ヘッダーを最初の 5 行以内でスキャンして列位置を動的に決定する。
+// ヘッダーが見つからない場合は A=会社コード / B=会社名 / C=裁量対象サイン をデフォルトとする。
+export function parseCompanySheet(raw: unknown[][]): CompanyEntry[] {
+  const rowCount = raw.length
+  if (rowCount === 0) return []
+
+  let cCode = 0, cName = 1, cDiscretionary = 2
+  let dataStartRow = 1
+
+  const colCount = (raw[0]?.length ?? 0)
+  for (let r = 0; r <= Math.min(4, rowCount - 1); r++) {
+    let foundCode = false
+    for (let c = 0; c < Math.min(colCount, 20); c++) {
+      const h = cellStr(raw, r, c).replace(/\s/g, '')
+      if (!h) continue
+      if      (/会社コード|会社CD/.test(h)) { cCode = c; foundCode = true }
+      else if (/会社名/.test(h))            { cName = c }
+      else if (/裁量対象/.test(h))          { cDiscretionary = c }
+    }
+    if (foundCode) { dataStartRow = r + 1; break }
+  }
+
+  const entries: CompanyEntry[] = []
+  for (let r = dataStartRow; r < rowCount; r++) {
+    const code = cellStr(raw, r, cCode)
+    if (!code) continue
+    entries.push({
+      code,
+      label:                 cellStr(raw, r, cName),
+      isDiscretionaryTarget: cellBool(raw, r, cDiscretionary),
+    })
+  }
+  return entries
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -211,8 +245,8 @@ export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult 
     jobFamilies:              parseJobFamilies(raw),
     subJobFamilies:           parseSubJobFamilies(raw),
     jobLevels:                parseJobLevels(raw),
-    trainingPositions:        parseSingleColumnList(raw, 'BI'),
-    discretionaryWorkOptions: parseSingleColumnList(raw, 'BM'),
+    trainingPositions:        parseCodeEntryList<TrainingPositionEntry>(raw, 'BI'),
+    discretionaryWorkOptions: parseCodeEntryList<DiscretionaryWorkEntry>(raw, 'BM'),
     concurrentReasons:        parseCodeEntryList<ConcurrentReasonEntry>(raw, 'BQ'),
     demotionReasons:          parseCodeEntryList<DemotionReasonEntry>(raw, 'BS'),
   }

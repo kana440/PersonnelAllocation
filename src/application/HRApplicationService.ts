@@ -13,12 +13,15 @@ import {
   UnassignPersonFromPositionOperation,
   AssignPersonToPositionOperation,
 } from '../domain/operation/handlers/positionOps'
+import { AssignPositionCodesOperation } from '../domain/operation/handlers/assignPositionCodes'
+import type { PositionCodeAssignment } from '../ports'
 import { derivePersons } from '../domain/projection/rows'
 import type { Person } from '../domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
 import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
 import { mergeAllocationList } from '../domain/importMerge'
 import type { ImportMode, MergeResult } from '../domain/importMerge'
+import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../domain/operation/orgHelpers'
 import { UndoStack } from './UndoStack'
 import type { HistoryEntry } from './UndoStack'
 
@@ -229,6 +232,67 @@ export class HRApplicationService {
 
   assignPersonToVacantPosition(vacantRowId: number, personSfId: string): void {
     this.executeOperation(new AssignPersonToPositionOperation(vacantRowId, personSfId))
+  }
+
+  // ── ポジションコード割当 ──────────────────────────────────────────
+
+  /** _pos_XXX 形式の内部ポジションコードを持つ行を返す */
+  getUnassignedPositions(): Array<{
+    rowId:          number
+    positionCode:   string
+    localJobTitle:  string
+    departmentCode: string
+    orgName:        string
+  }> {
+    return this.allocationList
+      .filter(r => String(r.positionCode ?? '').startsWith('_pos_'))
+      .map(r => {
+        const org = this.afterOrganizations.find(
+          o => (o.externalCode ?? o.id) === r.departmentCode
+        )
+        return {
+          rowId:          r.rowId,
+          positionCode:   String(r.positionCode),
+          localJobTitle:  r.localJobTitle ?? '',
+          departmentCode: r.departmentCode ?? '',
+          orgName:        org?.name ?? r.departmentCode ?? '',
+        }
+      })
+  }
+
+  /** 内部採番コードを外部コードに置き換える（managerPositionCode も連動更新）*/
+  assignPositionCodes(assignments: PositionCodeAssignment[]): ValidationResult {
+    return this.executeOperation(new AssignPositionCodesOperation(assignments))
+  }
+
+  // ── 上司姓名の一括再導出 ────────────────────────────────────────
+  // managerPositionCode に在籍する人の現在の姓名を managerName に書き戻す。
+  // 単一の Undo エントリとして記録される。
+  reDeriveManagerNames(): number {
+    return this._reDeriveAndCommit(
+      reDeriveManagerNamesForList(this.allocationList),
+      '上司姓名 一括再導出',
+    )
+  }
+
+  reDeriveOrgSubFields(): number {
+    return this._reDeriveAndCommit(
+      reDeriveOrgSubFieldsForList(this.allocationList, this.codeLists),
+      '組織サブフィールド 一括再導出',
+    )
+  }
+
+  private _reDeriveAndCommit(updated: AllocationRow[], labelPrefix: string): number {
+    if (this.isPreviewMode) return 0
+    const before  = this.allocationList
+    const changed = updated.filter((r, i) => r !== before[i]).length
+    if (changed === 0) return 0
+    const patch = this.undoStack.computePatch(before, updated, this.afterOrganizations)
+    patch.label = `${labelPrefix} (${changed}行)`
+    this.undoStack.push(patch)
+    this.allocationList = updated
+    this.emit()
+    return changed
   }
 
   // ── 履歴プレビュー ────────────────────────────────────────────

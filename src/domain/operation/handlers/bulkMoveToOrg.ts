@@ -4,6 +4,7 @@
 
 import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
+import { deriveOrgSubFields } from '../orgHelpers'
 
 export class BulkMoveToOrgOperation implements IDomainOperation {
   readonly kind = 'BulkMoveToOrg'
@@ -38,9 +39,10 @@ export class BulkMoveToOrgOperation implements IDomainOperation {
     const sourceCode = sourceOrg.externalCode!
     const targetCode = targetOrg.externalCode ?? ''
 
+    const orgSubFields = deriveOrgSubFields(targetCode, ctx.codeLists)
     const updatedList = ctx.allocationList.map(r =>
       r.departmentCode === sourceCode
-        ? { ...r, departmentCode: targetCode }
+        ? { ...r, departmentCode: targetCode, ...orgSubFields }
         : r
     )
 

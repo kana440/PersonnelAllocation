@@ -92,36 +92,31 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── ツールバー row 1: 検索・チェックボックス ── */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50 flex-wrap">
+      {/* ── ツールバー（1行、横スクロール） ── */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 bg-gray-50 overflow-x-auto">
         <input
           type="text"
-          placeholder="名前・ID・組織で絞り込み"
+          placeholder="名前・ID・組織"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="border border-gray-300 rounded px-2 py-1 text-xs w-48 focus:outline-none focus:ring-1 focus:ring-blue-300"
+          className="flex-shrink-0 border border-gray-300 rounded px-2 py-0.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-blue-300"
         />
-        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer select-none">
+        <label className="flex items-center gap-1 text-[10px] text-gray-600 cursor-pointer select-none flex-shrink-0 whitespace-nowrap">
           <input type="checkbox" checked={showChangedOnly} onChange={e => setShowChangedOnly(e.target.checked)} />
-          変更ありのみ
+          変更のみ
         </label>
-        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer select-none">
+        <label className="flex items-center gap-1 text-[10px] text-gray-600 cursor-pointer select-none flex-shrink-0 whitespace-nowrap">
           <input type="checkbox" checked={showIssuesOnly} onChange={e => setShowIssuesOnly(e.target.checked)} />
-          問題ありのみ
+          問題のみ
         </label>
-        <span className="ml-auto text-xs text-gray-400">{filtered.length} 件</span>
-      </div>
-
-      {/* ── ツールバー row 2: 変更種別フィルター ── */}
-      <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-200 bg-gray-50 flex-wrap">
-        <span className="text-[10px] font-semibold text-gray-400 flex-shrink-0">変更種別:</span>
+        <div className="flex-shrink-0 w-px h-4 bg-gray-300 mx-0.5" />
         {ALL_KINDS.map(({ key, label, color }) => {
           const active = activeKinds.has(key)
           return (
             <button
               key={key}
               onClick={() => toggleKind(key)}
-              className={`px-2 py-0.5 rounded border text-[10px] font-medium transition-all cursor-pointer select-none ${
+              className={`flex-shrink-0 px-1.5 py-0.5 rounded border text-[10px] font-medium transition-all cursor-pointer select-none whitespace-nowrap ${
                 active
                   ? `${color} shadow-sm ring-1 ring-inset ring-current`
                   : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
@@ -134,11 +129,12 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
         {activeKinds.size > 0 && (
           <button
             onClick={() => setActiveKinds(new Set())}
-            className="text-[10px] text-gray-400 hover:text-gray-600 ml-1 underline"
+            className="flex-shrink-0 text-[10px] text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
           >
             クリア
           </button>
         )}
+        <span className="ml-auto flex-shrink-0 text-[10px] text-gray-400 pl-2 whitespace-nowrap">{filtered.length} 件</span>
       </div>
 
       {/* ── テーブル ── */}

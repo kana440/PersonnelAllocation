@@ -7,6 +7,7 @@ import type { IDomainOperation, OperationContext, OperationResult, ValidationRes
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
+import { deriveOrgSubFields, deriveManagerName } from '../orgHelpers'
 
 export class TransferPersonOperation implements IDomainOperation {
   readonly kind = 'TransferPerson'
@@ -43,13 +44,19 @@ export class TransferPersonOperation implements IDomainOperation {
     const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
     const newRowId    = nextRowId(ctx.allocationList)
 
+    const newManagerPositionCode = this.overrideFields?.managerPositionCode !== undefined
+      ? (this.overrideFields.managerPositionCode as string | undefined)
+      : topRow?.positionCode
     const newRow: AllocationRow = {
       ...sourceRow,
       rowId:               newRowId,
       positionCode:        `_pos_${newRowId}`,
       departmentCode:      targetCode,
-      managerPositionCode: topRow?.positionCode,
+      ...deriveOrgSubFields(targetCode, ctx.codeLists),
+      managerPositionCode: newManagerPositionCode,
       ...allocClears,
+      // managerName は allocClears で一度消えるため、positionCode 確定後に再セット
+      managerName:         deriveManagerName(newManagerPositionCode, ctx.allocationList),
       ...(this.overrideFields ?? {}),
     }
 

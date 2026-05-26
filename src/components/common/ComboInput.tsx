@@ -1,28 +1,47 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 
 interface Props {
-  value:       string
-  onChange:    (v: string) => void
-  options:     string[]
+  value:        string
+  onChange:     (v: string) => void
+  options:      string[]
   placeholder?: string
-  disabled?:   boolean
-  className?:  string
-  hasIssue?:   boolean  // warning=orange, error=red は呼び出し元で className で制御
+  disabled?:    boolean
+  className?:   string
+  hasIssue?:    boolean
 }
 
 export function ComboInput({ value, onChange, options, placeholder, disabled, className, hasIssue }: Props) {
-  const [open, setOpen] = useState(false)
-  const [input, setInput] = useState(value)
-  const ref = useRef<HTMLDivElement>(null)
+  const [open,   setOpen]   = useState(false)
+  const [input,  setInput]  = useState(value)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLInputElement>(null)
+  const dropdownRef  = useRef<HTMLDivElement>(null)
+  const [dropStyle, setDropStyle] = useState<React.CSSProperties>({})
 
-  // value が外から変わったときに追従
   useEffect(() => { setInput(value) }, [value])
 
-  // 外クリックで閉じる
+  // ドロップダウン位置を input の getBoundingClientRect から fixed 座標で計算
+  useLayoutEffect(() => {
+    if (!open || !inputRef.current) return
+    const rect   = inputRef.current.getBoundingClientRect()
+    const maxH   = 160
+    const below  = window.innerHeight - rect.bottom
+    const width  = Math.max(rect.width, 120)
+    if (below >= maxH || rect.top < maxH) {
+      setDropStyle({ top: rect.bottom + 2, left: rect.left, width })
+    } else {
+      setDropStyle({ bottom: window.innerHeight - rect.top + 2, left: rect.left, width })
+    }
+  }, [open])
+
+  // 外クリックで閉じる（fixed ドロップダウンも考慮）
   useEffect(() => {
     if (!open) return
     const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      if (
+        !containerRef.current?.contains(e.target as Node) &&
+        !dropdownRef.current?.contains(e.target as Node)
+      ) setOpen(false)
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
@@ -45,39 +64,31 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
   } ${className ?? ''}`
 
   return (
-    <div ref={ref} className="relative">
-      <div className="flex items-center">
-        <input
-          type="text"
-          value={input}
-          disabled={disabled}
-          placeholder={placeholder}
-          className={baseClass}
-          onChange={e => { setInput(e.target.value); setOpen(true) }}
-          onFocus={() => !disabled && setOpen(true)}
-          onBlur={() => {
-            // blur 時に確定（候補選択より後に発火するので少し遅延）
-            setTimeout(() => { onChange(input); setOpen(false) }, 150)
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Enter') { onChange(input); setOpen(false) }
-            if (e.key === 'Escape') { setInput(value); setOpen(false) }
-          }}
-        />
-        {!disabled && options.length > 0 && (
-          <button
-            type="button"
-            tabIndex={-1}
-            onMouseDown={e => { e.preventDefault(); setOpen(o => !o) }}
-            className="absolute right-1 text-gray-400 hover:text-gray-600 px-1"
-          >
-            ▾
-          </button>
-        )}
-      </div>
+    <div ref={containerRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={input}
+        disabled={disabled}
+        placeholder={placeholder}
+        className={baseClass}
+        onFocus={() => { if (!disabled) setOpen(true) }}
+        onChange={e => { setInput(e.target.value); setOpen(true); onChange(e.target.value) }}
+        onBlur={() => {
+          setTimeout(() => { onChange(input); setOpen(false) }, 150)
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter')  { onChange(input); setOpen(false) }
+          if (e.key === 'Escape') { setInput(value); setOpen(false) }
+        }}
+      />
 
       {open && filtered.length > 0 && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto">
+        <div
+          ref={dropdownRef}
+          className="fixed z-[9999] bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto"
+          style={dropStyle}
+        >
           {filtered.map(opt => (
             <button
               key={opt}

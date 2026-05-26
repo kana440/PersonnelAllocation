@@ -6,7 +6,7 @@ export function EditView({ readOnly = false }: { readOnly?: boolean }) {
   const {
     allocationList, persons, afterOrganizations,
     selectedPersonId, selectedRowId,
-    selectRow, exitEditMode, previousViewState,
+    selectRow,
   } = useStore()
 
   const person = persons.find(p => p.id === selectedPersonId)
@@ -18,32 +18,8 @@ export function EditView({ readOnly = false }: { readOnly?: boolean }) {
     ? allocationList.filter(r => r.rowId === selectedRowId)
     : []
 
-  const backLabel = previousViewState?.viewLabel ?? '戻る'
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
-
-      {/* ── ヘッダー ── */}
-      <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2">
-        <button
-          onClick={exitEditMode}
-          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors font-medium"
-        >
-          ← {backLabel}
-        </button>
-        {person && (
-          <>
-            <span className="text-gray-300">|</span>
-            <span className="text-xs font-semibold text-gray-700">{person.name}</span>
-            {person.sfPersonId && (
-              <span className="text-xs text-gray-400">({person.sfPersonId})</span>
-            )}
-          </>
-        )}
-        <span className="ml-auto text-xs text-gray-400">
-          編集ビュー
-        </span>
-      </div>
 
       {/* ── メイン ── */}
       <div className="flex flex-1 overflow-hidden min-h-0">
