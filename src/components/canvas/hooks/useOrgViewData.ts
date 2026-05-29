@@ -69,13 +69,7 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList }: UseOrg
           for (const c of children) if (c.rowId !== row.rowId) visit(c, depth + 1)
         }
       }
-      // 子を持つポジションを先頭に（部下ありが組織長と見なす）
-      const sortedRootRows = [...rootRows].sort((a, b) => {
-        const aHasChildren = a.positionCode ? childrenByMgrCode.has(a.positionCode) : false
-        const bHasChildren = b.positionCode ? childrenByMgrCode.has(b.positionCode) : false
-        return (bHasChildren ? 1 : 0) - (aHasChildren ? 1 : 0)
-      })
-      sortedRootRows.forEach(r => visit(r, 0))
+      rootRows.forEach(r => visit(r, 0))
       for (const row of rows) {
         if (!visited.has(row.rowId)) entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth: 0 })
       }

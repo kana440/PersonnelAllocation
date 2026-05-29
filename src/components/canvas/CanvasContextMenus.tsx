@@ -41,16 +41,17 @@ export function PersonContextMenu({ x, y, personId, persons, canvasMode, onEdit,
 }
 
 interface PositionMenuProps {
-  x:             number
-  y:             number
-  rowId:         number
-  persons:       Person[]
-  allocationList: AllocationRow[]
-  onEdit:        (rowId: number) => void
-  onClose:       () => void
+  x:               number
+  y:               number
+  rowId:           number
+  persons:         Person[]
+  allocationList:  AllocationRow[]
+  onEdit:          (rowId: number) => void
+  onChangeTitle:   (rowId: number) => void
+  onClose:         () => void
 }
 
-export function PositionContextMenu({ x, y, rowId, persons, allocationList, onEdit, onClose }: PositionMenuProps) {
+export function PositionContextMenu({ x, y, rowId, persons, allocationList, onEdit, onChangeTitle, onClose }: PositionMenuProps) {
   const row    = allocationList.find(r => r.rowId === rowId)
   const person = row?.userId ? persons.find(p => p.sfPersonId === row.userId) : null
   const title  = row?.localJobTitle || row?.officialPositionCode || row?.positionCode || '（役職未設定）'
@@ -69,6 +70,14 @@ export function PositionContextMenu({ x, y, rowId, persons, allocationList, onEd
             className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
           >
             <span>✏️</span> 編集画面を開く
+          </button>
+        )}
+        {row?.userId && (
+          <button
+            onClick={() => { onChangeTitle(rowId); onClose() }}
+            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
+          >
+            <span>🏷️</span> 役職変更
           </button>
         )}
       </div>

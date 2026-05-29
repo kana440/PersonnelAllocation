@@ -168,18 +168,25 @@ components/foo/
 
 > 詳細・未決定事項は docs/10-business-flow-hypothesis.md を参照。
 
-**重要な前提（仮説）**:
+**重要な前提**:
 
-- Excel は **before データのみ** で配布され、担当者が after を記入して返却する
+- Excel は **before データのみ** で配布され、組織担当が after を記入して返却する
+- Excel **A列**（ヘッダーなし）に担当者名（`assignee`）が入る。現在は読み飛ばしている列
 - インポート直後は after が空 → そのままでは全員「未アサイン」になる
 - `afterOrganizations` のコードは `beforeOrganizations` と **一部異なる**（廃止・分割・統合・改称）
 - 旧組織 → 新組織の継承関係は Excel に存在しない。ツール内で対応づける必要がある
 
+**2モードの設計**:
+
+- **管理者モード**（取りまとめ担当）: 全行表示。担当者割り当てウィザード・分割エクスポート・マージ・上司名補完を使用
+- **担当者モード**（組織担当）: 自分の `assignee` に一致する行のみ表示。新規行追加時は自動的に `assignee` が設定される
+
+**スコープ概念の廃止**: `scopeOrgId` / `setScopeWithMapping` ベースのスコープは担当者（`assignee`）フィールドに置き換わる。詳細は `specs/G6-workflow/01-assignee-workflow.md` を参照。
+
 **これが意味すること（実装上の注意）**:
 
 - after の初期化は「before をそのままコピー」では不可。**組織継承マッピング**を経由する必要がある
-- 比較軸は「旧組織 ↔ 新組織」の 1:1 対応ではなく、人ベース・旧組織軸・新組織軸の 3 視点が必要
-- 将来的には配布・回収のマージ工程を撤廃する方向（`mergeExcelData` は段階的廃止対象）
+- 上司ポジション欄は組織担当が氏名フリーテキストで記入 → マージ後に取りまとめ担当が `managerPositionCode` を補完する
 
 ---
 
@@ -195,6 +202,7 @@ components/foo/
 | `specs/G3-ui/` | UI入力補助・レビュー表示仕様 | `01-row-editor-input-spec.md`, `02-review-display-spec.md` |
 | `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
 | `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |
+| `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）** | `01-assignee-workflow.md` |
 
 ### specを読んで実装するときの手順
 

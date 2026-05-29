@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { OrgSearchSidebar }  from './components/sidebar/OrgSearchSidebar'
 import { OrgOperationView }  from './components/canvas/OrgOperationView'
 import { FloatingEditor }    from './components/editor/FloatingEditor'
@@ -10,9 +10,12 @@ import { SetupView }         from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { MaintenanceDialog }  from './components/maintenanceDialog'
 import { useStore }          from './store/useStore'
+import { useUserSession }    from './store/useUserSession'
 import { useCodeListStore }  from './store/codeListStore'
 import { ScopeSelector }     from './components/header/ScopeSelector'
 import { MergeImportButton } from './components/header/MergeImportButton'
+import { AssigneeWizard }    from './components/header/AssigneeWizard'
+import { SplitExportButton } from './components/header/SplitExportButton'
 import { useResizablePanel } from './hooks/useResizablePanel'
 
 const BOTTOM_MIN        = 36
@@ -31,6 +34,53 @@ const CHAT_DEFAULT = 320
 const HISTORY_MIN     = 160
 const HISTORY_MAX     = 400
 const HISTORY_DEFAULT = 220
+
+// ── 担当者割り当てウィザードボタン（管理者のみ表示）─────────────────────────
+function AssigneeWizardButton({ onOpen }: { onOpen: () => void }) {
+  const { capabilities } = useUserSession()
+  if (!capabilities.canAssignAssignees) return null
+  return (
+    <button
+      onClick={onOpen}
+      className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600"
+      title="担当者を一括で割り当てる"
+    >
+      <span>👤</span><span>担当者を割り当て</span>
+    </button>
+  )
+}
+
+// ── 管理者用担当者プレビューフィルタ（管理者のみ表示）───────────────────────
+function AdminAssigneeFilterSelect() {
+  const { capabilities }  = useUserSession()
+  const { allocationList, adminAssigneeFilter, setAdminAssigneeFilter } = useStore()
+  const assignees = useMemo(() => {
+    const names = new Set(allocationList.map(r => r.assignee).filter(Boolean) as string[])
+    return [...names].sort((a, b) => a.localeCompare(b, 'ja'))
+  }, [allocationList])
+  if (!capabilities.canSetAssigneeFilter || assignees.length === 0) return null
+  return (
+    <div className="flex items-center gap-1" title="担当者フィルタ（プレビュー）">
+      <select
+        value={adminAssigneeFilter ?? ''}
+        onChange={e => setAdminAssigneeFilter(e.target.value || null)}
+        className="text-xs bg-gray-700 text-gray-300 border border-gray-600 rounded px-2 py-0.5 hover:bg-gray-600 focus:outline-none max-w-[120px]"
+      >
+        <option value="">全担当者</option>
+        {assignees.map(a => <option key={a} value={a}>{a}</option>)}
+      </select>
+      {adminAssigneeFilter && (
+        <button
+          onClick={() => setAdminAssigneeFilter(null)}
+          className="text-gray-400 hover:text-gray-200 text-xs leading-none"
+          title="フィルタ解除"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  )
+}
 
 // ── ヘッダーボタン ────────────────────────────────────────────────────────────
 interface HeaderButtonProps {
@@ -82,6 +132,7 @@ export default function App() {
   const [clearDialogOpen,   setClearDialogOpen]   = useState(false)
   const [maintenanceOpen,   setMaintenanceOpen]   = useState(false)
   const [excelCollapsed,    setExcelCollapsed]    = useState(false)
+  const [assigneeWizardOpen, setAssigneeWizardOpen] = useState(false)
 
   const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
 
@@ -144,6 +195,9 @@ export default function App() {
         <ScopeSelector />
         <div className="ml-auto flex items-center gap-2">
           <MergeImportButton />
+          <AssigneeWizardButton onOpen={() => setAssigneeWizardOpen(true)} />
+          <SplitExportButton />
+          <AdminAssigneeFilterSelect />
           <div className="w-px h-4 bg-gray-600" />
           <HeaderButton onClick={undo} disabled={!canUndo} title="元に戻す（保存単位）">
             <span>↩</span><span>Undo</span>
@@ -207,6 +261,10 @@ export default function App() {
 
       {maintenanceOpen && (
         <MaintenanceDialog onClose={() => setMaintenanceOpen(false)} />
+      )}
+
+      {assigneeWizardOpen && (
+        <AssigneeWizard onClose={() => setAssigneeWizardOpen(false)} />
       )}
 
       {/* ── Upper area: sidebar + canvas + chat drawer ───────────── */}

@@ -141,5 +141,6 @@ export type AfterValues = Partial<
     | 'trainingPositionFlag' | 'nonUnionAgreementFlag' | 'positionUnionFlag'
     | 'unionFlag' | 'positionDiscretionaryWorkFlag' | 'discretionaryWorkFlag'
     | 'transferReason' | 'memo' | 'promotionSign' | 'demotionReason' | 'payGradeChangeSign'
+    | 'assignee'
   >
 >

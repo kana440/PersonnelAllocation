@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { SetPositionManagerOperation } from '../../domain/operation/handlers/positionOps'
+import { ReorderRowOperation }         from '../../domain/operation/handlers/reorderRow'
 import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
 import { ReportLineView }   from './components/ReportLineView'
@@ -35,6 +36,7 @@ export function OrgOperationView() {
     mainCanvasMode, setMainCanvasMode,
     expandedChipIds, toggleChip,
     assignPersonToVacantPosition,
+    assigneeWarnings,
   } = store
 
   // プレビューモード時は preview データを使って描画
@@ -66,6 +68,7 @@ export function OrgOperationView() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set())
   const [moveModalOpen,     setMoveModalOpen]     = useState(false)
   const [bulkActionModal,   setBulkActionModal]   = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
+  const [changeTitleRowId,  setChangeTitleRowId]  = useState<number | null>(null)
 
   // ── Hooks ──────────────────────────────────────────────────────
   const { personMoveDialog, setPersonMoveDialog, handlePersonMoveConfirm } = usePersonMove({
@@ -127,6 +130,11 @@ export function OrgOperationView() {
     }
 
     appService.executeOperation(new SetPositionManagerOperation(data.fromRowId, targetRow.positionCode))
+  }
+
+  const handleReorderRow = (rowId: number, beforeRowId: number | null) => {
+    if (isHistoryPreviewMode) return
+    appService.executeOperation(new ReorderRowOperation(rowId, beforeRowId))
   }
 
   const togglePersonSelection = (personId: string) => setSelectedPersonIds(prev => {
@@ -192,7 +200,7 @@ export function OrgOperationView() {
     selectedPersonId, selectPerson,
     isHistoryPreviewMode,
     handlePersonDoubleClick, handlePersonContextMenu,
-    handlePositionContextMenu, handleDropPositionOnPosition,
+    handlePositionContextMenu, handleDropPositionOnPosition, handleReorderRow,
     expandedChipIds, toggleChip,
   }
 
@@ -283,6 +291,22 @@ export function OrgOperationView() {
           </div>
         )}
 
+        {/* Assignee mode warning banner */}
+        {assigneeWarnings?.hasWarnings && (
+          <div className="flex-shrink-0 px-3 py-1.5 bg-amber-50 border-b border-amber-200 flex items-center gap-3 flex-wrap">
+            {assigneeWarnings.otherAssigneeCount > 0 && (
+              <span className="text-[11px] text-amber-700">
+                ⚠ {assigneeWarnings.otherAssigneeCount}行に別の担当者が設定されています（参照のみ）
+              </span>
+            )}
+            {assigneeWarnings.unassignedCount > 0 && (
+              <span className="text-[11px] text-amber-700">
+                ⚠ {assigneeWarnings.unassignedCount}行に担当者が設定されていません
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Canvas */}
         <div
           className="flex-1 overflow-y-auto p-3"
@@ -350,6 +374,7 @@ export function OrgOperationView() {
             persons={persons}
             allocationList={allocationList}
             onEdit={rowId => enterEditMode(rowId)}
+            onChangeTitle={rowId => { setChangeTitleRowId(rowId); setPositionContextMenu(null) }}
             onClose={() => setPositionContextMenu(null)}
           />
         )}
@@ -370,6 +395,8 @@ export function OrgOperationView() {
           setConfirmDialog={setConfirmDialog}
           fieldPickerOpen={fieldPickerOpen}
           setFieldPickerOpen={setFieldPickerOpen}
+          changeTitleRowId={changeTitleRowId}
+          setChangeTitleRowId={setChangeTitleRowId}
           persons={persons}
           allocationList={allocationList}
           allAfterOrgsUnscoped={allAfterOrgsUnscoped}

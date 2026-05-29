@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useOrgView } from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
 import type { AllocationRow } from '../../../domain/allocationRow'
@@ -37,6 +37,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
     handleDropOnVacantSlot,
     handleDropPositionOnPosition,
     handlePositionContextMenu,
+    handleReorderRow,
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson,
     handlePersonDoubleClick, handlePersonContextMenu,
@@ -50,6 +51,24 @@ export function PositionRows({ orgId }: PositionRowsProps) {
 
   // ポジション→ポジションドラッグ中のホバー先 rowId
   const [dragOverPositionRowId, setDragOverPositionRowId] = useState<number | null>(null)
+
+  // 並べ替えドラッグ状態（-1 = リスト末尾へのドロップを示す sentinel）
+  const [reorderDragActive,    setReorderDragActive]    = useState(false)
+  const [dropIndicatorRowId,   setDropIndicatorRowId]   = useState<number | null>(null)
+
+  const onReorderDragOver = useCallback((e: React.DragEvent, rowId: number | null) => {
+    if (!e.dataTransfer.types.includes('application/x-reorder-drag')) return
+    e.preventDefault(); e.stopPropagation()
+    setDropIndicatorRowId(rowId)
+  }, [])
+
+  const onReorderDrop = useCallback((e: React.DragEvent, beforeRowId: number | null) => {
+    if (!e.dataTransfer.types.includes('application/x-reorder-drag')) return
+    e.preventDefault(); e.stopPropagation()
+    const fromRowId = parseInt(e.dataTransfer.getData('application/x-reorder-drag'), 10)
+    if (!isNaN(fromRowId) && fromRowId !== beforeRowId) handleReorderRow(fromRowId, beforeRowId)
+    setReorderDragActive(false); setDropIndicatorRowId(null)
+  }, [handleReorderRow])
 
   const toggleCollapse = (positionCode: string) =>
     setCollapsedPositions(prev => {
@@ -140,8 +159,29 @@ export function PositionRows({ orgId }: PositionRowsProps) {
           <div
             key={row.rowId}
             style={{ paddingLeft: `${depth * 16}px` }}
-            className="flex items-center gap-0.5 group"
+            className="relative flex items-center gap-0.5 group"
+            onDragOver={e => onReorderDragOver(e, row.rowId)}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropIndicatorRowId(null) }}
+            onDrop={e => onReorderDrop(e, row.rowId)}
           >
+            {/* 並べ替えインジケーター（ここに挿入） */}
+            {dropIndicatorRowId === row.rowId && (
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-400 z-10 rounded pointer-events-none" />
+            )}
+
+            {/* ── 並べ替えグリップ ──────────────────────────────────────────── */}
+            <div
+              draggable
+              onDragStart={e => {
+                e.dataTransfer.setData('application/x-reorder-drag', String(row.rowId))
+                e.dataTransfer.effectAllowed = 'move'
+                e.stopPropagation()
+                setReorderDragActive(true)
+              }}
+              onDragEnd={() => { setReorderDragActive(false); setDropIndicatorRowId(null) }}
+              title="ドラッグして並べ替え"
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-[10px] text-gray-300 hover:text-gray-500 w-3 text-center select-none"
+            >⠿</div>
 
             {/* ── 折りたたみトグル ───────────────────────────────────────────── */}
             <button
@@ -326,6 +366,19 @@ export function PositionRows({ orgId }: PositionRowsProps) {
           </div>
         )
       })}
+      {/* 末尾ドロップゾーン：ドラッグ中のみ表示 */}
+      {reorderDragActive && (
+        <div
+          className={`h-5 mx-1 rounded border-2 border-dashed flex items-center justify-center text-[9px] transition-colors ${
+            dropIndicatorRowId === null
+              ? 'border-blue-400 bg-blue-50 text-blue-400'
+              : 'border-gray-200 text-gray-300'
+          }`}
+          onDragOver={e => onReorderDragOver(e, null)}
+          onDragLeave={() => setDropIndicatorRowId(null)}
+          onDrop={e => onReorderDrop(e, null)}
+        >末尾へ</div>
+      )}
     </div>
   )
 }

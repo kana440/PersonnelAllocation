@@ -20,7 +20,7 @@ import type { Person } from '../domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
 import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
 import { mergeAllocationList } from '../domain/importMerge'
-import type { ImportMode, MergeResult } from '../domain/importMerge'
+import type { ImportMode, AssigneeImportMode, MergeResult } from '../domain/importMerge'
 import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../domain/operation/orgHelpers'
 import { UndoStack } from './UndoStack'
 import type { HistoryEntry } from './UndoStack'
@@ -126,17 +126,16 @@ export class HRApplicationService {
   mergeExcelData(data: {
     allocationList: AllocationRow[]
     mode:           ImportMode
-    scopeOrgId:     string | null
+    assigneeMode:   AssigneeImportMode
   }): MergeResult {
     if (this.isPreviewMode) {
       return { rows: this.allocationList, added: 0, kept: this.allocationList.length, removed: 0 }
     }
     const result = mergeAllocationList({
-      existing:   this.allocationList,
-      incoming:   data.allocationList,
-      mode:       data.mode,
-      scopeOrgId: data.scopeOrgId,
-      afterOrgs:  this.afterOrganizations,
+      existing:     this.allocationList,
+      incoming:     data.allocationList,
+      mode:         data.mode,
+      assigneeMode: data.assigneeMode,
     })
     const before = this.allocationList
     this.allocationList = result.rows
@@ -199,6 +198,7 @@ export class HRApplicationService {
     departmentCode?: string
     companyId?:     string
     effectiveDate:  string
+    assignee?:      string
   }): void {
     if (this.isPreviewMode) return
     const newRow: AllocationRow = {
@@ -209,6 +209,7 @@ export class HRApplicationService {
       employeeNumber: opts.employeeNumber ?? '',
       employmentType: '正社員',
       departmentCode: opts.departmentCode ?? '',
+      assignee:       opts.assignee,
     } as AllocationRow
 
     this.undoStack.push({ rowDiffs: [{ rowId: newRow.rowId, before: null, after: newRow }], label: `新規採用: ${opts.lastName}${opts.firstName}` })

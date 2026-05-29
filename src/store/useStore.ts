@@ -6,8 +6,10 @@ import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '../domain/allocationRow'
 import type { Organization } from '../domain/schemas'
 import { getDescendantOrgIds } from '../domain/orgScope'
-import type { ImportMode, MergeResult } from '../domain/importMerge'
+import type { ImportMode, AssigneeImportMode, MergeResult } from '../domain/importMerge'
 import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
+import { DEFAULT_SESSION } from '../application/userSession'
+import type { UserSession } from '../application/userSession'
 
 // ── org ナビゲーションヘルパー（ストアアクション用）───────────────
 function buildIdMap(orgs: Organization[]): Map<string, Organization> {
@@ -68,6 +70,8 @@ interface UIState {
   beforeScopeOrgId:     string | null    // スコープ選択の旧組織ID
   afterScopeOrgIds:     string[]         // beforeScopeOrgId + orgMapping から導出したafter-org ID一覧
   orgMapping:           Map<string, string[]>  // 旧組織ID → 新組織IDリスト
+  userSession:          UserSession             // 現在のユーザーセッション（ロール + 担当者名）
+  adminAssigneeFilter:  string | null          // 管理者モードでの担当者プレビューフィルタ（UI表示用）
 }
 
 // ── アクション ────────────────────────────────────────────────────
@@ -81,7 +85,7 @@ interface Actions {
   selectRow: (rowId: number | null) => void
 
   // 追加インポート（マージ）
-  mergeExcelData: (data: { allocationList: AllocationRow[]; mode: ImportMode; scopeOrgId: string | null }) => MergeResult
+  mergeExcelData: (data: { allocationList: AllocationRow[]; mode: ImportMode; assigneeMode: AssigneeImportMode }) => MergeResult
 
   // ポジション操作
   createVacantPosition:         (departmentCode: string, localJobTitle: string) => void
@@ -148,6 +152,10 @@ interface Actions {
   // 組織マッピング（旧組織ID → 新組織IDリスト）
   setOrgMapping: (mapping: Map<string, string[]>) => void
 
+  // ユーザーセッション
+  setUserSession: (session: UserSession) => void
+  setAdminAssigneeFilter: (name: string | null) => void
+
   // 後方互換（既存コンポーネントが参照している場合のみ残す）
   setRawImportedRows: (rows: AllocationRow[]) => void
 }
@@ -180,6 +188,8 @@ export const useStore = create<AppState>((set, get) => {
     beforeScopeOrgId:     null,
     afterScopeOrgIds:     [],
     orgMapping:           new Map<string, string[]>(),
+    userSession:          DEFAULT_SESSION,
+    adminAssigneeFilter:  null,
 
     // ── アクション ────────────────────────────────────────────────
     loadExcelData: async (result) => {
@@ -196,7 +206,11 @@ export const useStore = create<AppState>((set, get) => {
 
     mergeExcelData: (data) => appService.mergeExcelData(data),
 
-    createVacantPosition:         (deptCode, title)          => appService.createVacantPosition(deptCode, title),
+    createVacantPosition:         (deptCode, title)          => {
+      const { userSession } = get()
+      const assignee = userSession.assigneeName ?? undefined
+      appService.createVacantPosition(deptCode, title, assignee ? { assignee } : undefined)
+    },
     removePosition:               (rowId)                    => appService.removePosition(rowId),
     assignPersonToVacantPosition: (vacantRowId, personSfId)  => appService.assignPersonToVacantPosition(vacantRowId, personSfId),
     unassignPersonFromPosition:   (rowId)                    => appService.unassignPersonFromPosition(rowId),
@@ -207,7 +221,7 @@ export const useStore = create<AppState>((set, get) => {
     selectRow: (rowId) => set({ selectedRowId: rowId }),
 
     addNewHire: ({ name, employeeNumber, orgId, companyId }) => {
-      const { effectiveDate } = get()
+      const { effectiveDate, userSession } = get()
       const userId = `new_${Date.now()}`
       const parts  = name.trim().split(/\s+/)
       appService.addNewHireRow({
@@ -218,6 +232,7 @@ export const useStore = create<AppState>((set, get) => {
         departmentCode: orgId,
         companyId,
         effectiveDate,
+        assignee:       userSession.assigneeName ?? undefined,
       })
     },
 
@@ -363,6 +378,9 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     setOrgMapping: (mapping) => set({ orgMapping: mapping }),
+
+    setUserSession: (session) => set({ userSession: session }),
+    setAdminAssigneeFilter: (name) => set({ adminAssigneeFilter: name }),
 
     setRawImportedRows: (_rows) => { /* no-op: 後方互換 */ },
 

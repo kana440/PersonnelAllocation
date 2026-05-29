@@ -11,9 +11,52 @@
 | Excel 基盤（import / export / Undo / Redo） | ✅ 完了 |
 | ポジション・人ドメインモデル（FIELD_METADATA） | ✅ 完了 |
 | ポジション操作（create / assign / unassign / remove） | ✅ 完了 |
-| 組織スコープ（scopeOrgId / スコープ別エクスポート） | ✅ 完了 |
 | AI チャット UI（シナリオ 8種 + agentRunner） | ✅ 完了 |
 | positionCode `_pos_` → Excel 出力 blank | ✅ 完了 |
+| **担当者フィールド（assignee）** | 🚧 未着手 |
+| **担当者ワークフロー（管理者/担当者モード）** | 🚧 未着手 |
+
+---
+
+## Step 0: 担当者ワークフロー実装（大・2〜3日）
+
+**背景**: 担当者（assignee）フィールドを軸にした分割配布・マージフローの実装。
+詳細仕様は `specs/G6-workflow/01-assignee-workflow.md` を参照。
+
+**やること（優先順）**:
+
+```
+0-A: AllocationRow に assignee フィールドを追加
+     - Excel A列（ヘッダーなし）から読み取り
+     - エクスポート時も A列に出力
+     - FIELD_METADATA に追加（binding: 'meta'）
+
+0-B: SetupView にモード選択を追加
+     - 「管理者として開く」/「担当者として開く」の選択
+     - 担当者モードでは AssigneeSelectStep（担当者選択画面）を挿入
+
+0-C: AssigneeSelectStep の実装
+     - 担当者リスト（Excel A列の値）をリスト化
+     - 組織名でも絞り込み可能
+     - 担当者ごとに「どの組織が何行か」を表示
+     - 未割当グループ（assignee が空の行）も表示
+
+0-D: 担当者モードのフィルタリング・ワーニング
+     - useScopedStore を担当者ベースに刷新（scopeOrgId → assignee）
+     - 他担当者行・未割当行のワーニング表示
+     - 新規行追加時に assignee を自動設定
+
+0-E: 担当者割り当てウィザード（管理者モード）
+     - 分割軸選択（統括部単位 / グループ単位 / 自由設定）
+     - 旧組織ツリーに担当者を割り当てるUI
+     - 未割当行の一覧と手動割り当て
+
+0-F: 担当者ごとの分割エクスポート（管理者モード）
+
+0-G: 上司名補完サポート機能（管理者モード）
+     - managerName（フリーテキスト）を人員データで検索
+     - 候補選択 → managerPositionCode を確定
+```
 
 ---
 
@@ -107,10 +150,11 @@ Step 3（API 接続）完了後に判断する。
 
 ```
 今すぐ着手可能:
-  Step 1: aiTools にポジション操作を追加    → AI-UI 対称性の確保
+  Step 0: 担当者ワークフロー実装             → 配布・マージフローの実現（最重要）
   Step 5: テスト環境セットアップ             → 品質基盤
 
 次のスプリント:
+  Step 1: aiTools にポジション操作を追加    → AI-UI 対称性の確保
   Step 2: ポジション操作を Undo 対象に       → ユーザー体験の完成
   Step 3: Claude API 本番接続               → AI 機能の本番化
 

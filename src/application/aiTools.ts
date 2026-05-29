@@ -23,6 +23,7 @@ import { appService, HRApplicationService } from './HRApplicationService'
 import type { ValidationResult, OperationError, IDomainOperation } from '../domain/operation/types'
 import type { AllocationRow }   from '../domain/allocationRow'
 import type { Person, Organization } from '../domain/schemas'
+import { ChangeTitleOperation, derivePersonGradeFields } from '../domain/operation/handlers/changeTitle'
 import { detectChanges } from '../domain/review/changeDetection'
 import { validateRow }   from '../domain/validation/validateRow'
 
@@ -322,6 +323,45 @@ export function createAITools(service: HRApplicationService) {
     return service.getUnassignedPositions()
   }
 
+  // ── 役職変更 ─────────────────────────────────────────────────────────────
+
+  /**
+   * 役職を変更する。新しい内部ポジションコードを採番し、旧ポジションを空席化、部下の上司コードも追従させる。
+   * rowId: 対象行の rowId（allocationList の行。人が在席している行を指定）
+   * suggestOnly: true を指定すると操作せず推奨値のみ返す（codeLists 未整備のため現在は空を返す）
+   */
+  function changeTitle(params: {
+    rowId:                number
+    officialPositionCode: string
+    localJobTitle:        string
+    positionBand:         string
+    band:                 string
+    payGrade:             string
+  }): ValidationResult {
+    const ctx = service.getSnapshot()
+    const suggested = derivePersonGradeFields(params.officialPositionCode, ctx)
+    return service.executeOperation(
+      new ChangeTitleOperation(
+        params.rowId,
+        params.officialPositionCode,
+        params.localJobTitle,
+        params.positionBand || suggested.positionBand || '',
+        params.band         || suggested.band         || '',
+        params.payGrade     || suggested.payGrade     || '',
+      )
+    )
+  }
+
+  /**
+   * officialPositionCode から推奨バンド・給与等級を返す。
+   * codeLists に役職→バンド変換が追加されたら値が埋まる。現時点では空を返す。
+   */
+  function suggestTitleFields(officialPositionCode: string): {
+    positionBand?: string; band?: string; payGrade?: string
+  } {
+    return derivePersonGradeFields(officialPositionCode, service.getSnapshot())
+  }
+
   // ── Manager position ─────────────────────────────────────────────────────
 
   /**
@@ -349,6 +389,7 @@ export function createAITools(service: HRApplicationService) {
     findVacantPositions,
     validateOperation, executeOperation, undo,
     createVacantPosition, assignPersonToVacantPosition, unassignPersonFromPosition, removePosition,
+    changeTitle, suggestTitleFields,
     setManagerPosition,
     reDeriveManagerNames: () => service.reDeriveManagerNames(),
     reDeriveOrgSubFields: () => service.reDeriveOrgSubFields(),

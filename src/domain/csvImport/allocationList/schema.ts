@@ -82,6 +82,11 @@ export const AllocationListSchema = z.object({
 
   // ── Audit ──────────────────────────────────────────────────────
   exclusionReason:                   z.string().optional(),
+
+  // ── Assignee ───────────────────────────────────────────────────
+  // A列（ヘッダーなし）から読み取る担当者名。マスタなし・ファイル内値をリスト化。
+  // prevAssignee は持たない（変更履歴を追わない）。
+  assignee:                          z.string().optional(),
 })
 
 export type AllocationList = z.infer<typeof AllocationListSchema>

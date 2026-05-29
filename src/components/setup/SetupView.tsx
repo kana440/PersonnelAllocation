@@ -2,22 +2,14 @@ import { useRef, useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import { buildOrgMatchIndex, orgMatchIndexToMapping } from '../../domain/review/orgMatching'
-import { getDescendantOrgIds } from '../../domain/orgScope'
 import { SetupHelp } from './SetupHelp'
-import { OrgSelectStep } from './OrgSelectStep'
-import { MappingStep } from '../review/components/org-comparison/MappingStep'
-import type { OrgMapping } from '../review/components/org-comparison/types'
+import { AssigneeSelectStep } from './AssigneeSelectStep'
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'loading'; progress: string }
-  | { kind: 'org-select'; result: ImportedWorkbookResult }
-  | { kind: 'org-mapping'
-      result:      ImportedWorkbookResult
-      beforeOrgId: string | null
-      beforeOrgName: string | null
-      mapping:     OrgMapping }
+  | { kind: 'mode-select'; result: ImportedWorkbookResult }
+  | { kind: 'assignee-select'; result: ImportedWorkbookResult }
   | { kind: 'error'; message: string }
 
 interface Props {
@@ -25,7 +17,7 @@ interface Props {
 }
 
 export function SetupView({ onReady }: Props) {
-  const { loadExcelData, setScopeWithMapping } = useStore()
+  const { loadExcelData, setScopeWithMapping, setUserSession } = useStore()
   const fileInputRef  = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
@@ -37,7 +29,7 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: '準備中...' })
     try {
       const result = await fn(onProgress)
-      if (result) setPhase({ kind: 'org-select', result })
+      if (result) setPhase({ kind: 'mode-select', result })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err) })
     }
@@ -52,105 +44,69 @@ export function SetupView({ onReady }: Props) {
 
   const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
 
-  // 組織: scope の before-org 配下に絞った自動マッピングを表示
-  const handleOrgSelectOrg = useCallback((id: string, name: string) => {
-    if (phase.kind !== 'org-select') return
+  // 管理者として開く → 全行をそのままロードして開始
+  const handleSelectAdmin = useCallback(async () => {
+    if (phase.kind !== 'mode-select') return
     const { result } = phase
-    const scopeIds   = getDescendantOrgIds(id, result.beforeOrganizations)
-    const scopeBefore = result.beforeOrganizations.filter(o => scopeIds.has(o.id))
-    const index   = buildOrgMatchIndex(result.allocationList, scopeBefore, result.afterOrganizations)
-    const mapping = orgMatchIndexToMapping(index)
-    setPhase({ kind: 'org-mapping', result, beforeOrgId: id, beforeOrgName: name, mapping })
-  }, [phase])
-
-  // マッピング確定 → データロード → 開始
-  const handleMappingConfirm = useCallback(async () => {
-    if (phase.kind !== 'org-mapping') return
-    const { result, beforeOrgId, mapping } = phase
+    setUserSession({ role: 'admin', assigneeName: null })
     setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
     await tick()
     await loadExcelData(result)
-    setScopeWithMapping({ beforeOrgId, mapping })
+    setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, loadExcelData, setScopeWithMapping, onReady])
+  }, [phase, setUserSession, loadExcelData, setScopeWithMapping, onReady])
 
-  const handleMappingSetEntry = useCallback((oldId: string, newIds: string[]) => {
-    if (phase.kind !== 'org-mapping') return
-    setPhase({ ...phase, mapping: new Map([...phase.mapping, [oldId, newIds]]) })
-  }, [phase])
+  // 担当者として開く → AssigneeSelectStep へ
+  const handleSelectAssigneeMode = useCallback(() => {
+    if (phase.kind !== 'mode-select') return
+    setUserSession({ role: 'assignee', assigneeName: null })
+    setPhase({ kind: 'assignee-select', result: phase.result })
+  }, [phase, setUserSession])
 
-  const handleMappingRemoveEntry = useCallback((oldId: string) => {
-    if (phase.kind !== 'org-mapping') return
-    const next = new Map(phase.mapping)
-    next.delete(oldId)
-    setPhase({ ...phase, mapping: next })
-  }, [phase])
-
-  const handleMappingAutoGenerate = useCallback((orgIds: string[]) => {
-    if (phase.kind !== 'org-mapping') return
-    const { result, mapping } = phase
-    const index = buildOrgMatchIndex(result.allocationList, result.beforeOrganizations, result.afterOrganizations)
-    const next  = new Map(mapping)
-    for (const orgId of orgIds) {
-      const match = index.get(orgId)
-      next.set(orgId, match?.afterOrg ? [match.afterOrg.id] : [])
-    }
-    setPhase({ ...phase, mapping: next })
-  }, [phase])
+  // 担当者選択確定 → データロード → 開始
+  const handleAssigneeSelect = useCallback(async (assigneeName: string) => {
+    if (phase.kind !== 'assignee-select') return
+    const { result } = phase
+    setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
+    await tick()
+    await loadExcelData(result)
+    setUserSession({ role: 'assignee', assigneeName: assigneeName || null })
+    setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
+    onReady()
+  }, [phase, loadExcelData, setUserSession, setScopeWithMapping, onReady])
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
       {showHelp && <SetupHelp onClose={() => setShowHelp(false)} />}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm" onChange={handleFile} className="hidden" />
 
-      {phase.kind === 'org-mapping' ? (
-        // マッピングステップは全幅で表示
-        <div className="w-full max-w-4xl h-[80vh] bg-white rounded-xl shadow-lg flex flex-col overflow-hidden">
-          <div className="flex-shrink-0 px-5 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-bold text-gray-800">組織マッピングの確認</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              旧組織と新組織の対応を確認・調整してください。自動提案済みです。
-            </p>
-          </div>
-          <div className="flex-1 overflow-hidden min-h-0">
-            <MappingStep
-              mapping={phase.mapping}
-              beforeOrgs={phase.result.beforeOrganizations.filter(o =>
-                getDescendantOrgIds(phase.beforeOrgId!, phase.result.beforeOrganizations).has(o.id)
-              )}
-              afterOrgs={phase.result.afterOrganizations}
-              onSetMapping={handleMappingSetEntry}
-              onRemoveMapping={handleMappingRemoveEntry}
-              onAutoGenerate={handleMappingAutoGenerate}
-              onNext={handleMappingConfirm}
-              nextLabel="確定して開始 →"
-              initialSelectedOrgId={phase.beforeOrgId ?? undefined}
-              onBack={() => phase.kind === 'org-mapping' && setPhase({ kind: 'org-select', result: phase.result })}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">
-          {phase.kind === 'idle' && (
-            <IdleView
-              onFileClick={() => fileInputRef.current?.click()}
-              onSample={handleSample}
-              onHelp={() => setShowHelp(true)}
-            />
-          )}
-          {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
-          {phase.kind === 'org-select' && (
-            <OrgSelectStep
-              result={phase.result}
-              onSelectOrg={handleOrgSelectOrg}
-              onBack={() => setPhase({ kind: 'idle' })}
-            />
-          )}
-          {phase.kind === 'error' && (
-            <ErrorView message={phase.message} onBack={() => setPhase({ kind: 'idle' })} />
-          )}
-        </div>
-      )}
+      <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">
+        {phase.kind === 'idle' && (
+          <IdleView
+            onFileClick={() => fileInputRef.current?.click()}
+            onSample={handleSample}
+            onHelp={() => setShowHelp(true)}
+          />
+        )}
+        {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
+        {phase.kind === 'mode-select' && (
+          <ModeSelectView
+            onAdmin={handleSelectAdmin}
+            onAssignee={handleSelectAssigneeMode}
+            onBack={() => setPhase({ kind: 'idle' })}
+          />
+        )}
+        {phase.kind === 'assignee-select' && (
+          <AssigneeSelectStep
+            result={phase.result}
+            onSelect={handleAssigneeSelect}
+            onBack={() => setPhase({ kind: 'mode-select', result: phase.result })}
+          />
+        )}
+        {phase.kind === 'error' && (
+          <ErrorView message={phase.message} onBack={() => setPhase({ kind: 'idle' })} />
+        )}
+      </div>
     </div>
   )
 }
@@ -204,7 +160,58 @@ function IdleView({ onFileClick, onSample, onHelp }: {
   )
 }
 
-// ── 画面②: 読み込み中 ────────────────────────────────────────────────
+// ── 画面②: モード選択 ────────────────────────────────────────────────
+
+function ModeSelectView({ onAdmin, onAssignee, onBack }: {
+  onAdmin: () => void
+  onAssignee: () => void
+  onBack: () => void
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold text-gray-800">どのモードで開きますか？</h2>
+          <p className="mt-0.5 text-xs text-gray-500">役割に応じてモードを選択してください。</p>
+        </div>
+        <button
+          onClick={onBack}
+          className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          ← 戻る
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <button
+          onClick={onAssignee}
+          className="w-full text-left px-4 py-4 border-2 border-blue-400 rounded-xl hover:bg-blue-50 transition-colors group"
+        >
+          <div className="text-sm font-semibold text-blue-700 group-hover:text-blue-800">
+            担当者として開く
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            自分の担当行のみ表示・編集します。担当者名を選択して開始します。
+          </div>
+        </button>
+
+        <button
+          onClick={onAdmin}
+          className="w-full text-left px-4 py-4 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors group"
+        >
+          <div className="text-sm font-semibold text-gray-700 group-hover:text-gray-800">
+            管理者として開く
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            全行を表示・管理します。担当者の割り当て・分割エクスポートが可能です。
+          </div>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── 画面③: 読み込み中 ────────────────────────────────────────────────
 
 function LoadingView({ progress }: { progress: string }) {
   return (

@@ -38,8 +38,13 @@ export function parseAllocationSheet(raw: unknown[][]): AllocationList[] {
   }
 
   const headers = (raw[headerIdx] as unknown[]).map(c => typeof c === 'string' ? c.trim() : '')
+
+  // A列（index 0）がヘッダーなし or 未知の場合、担当者列（assignee）として扱う
+  const assigneeColIdx = !headerToKey.has(headers[0]) ? 0 : -1
+
   console.log('mapped headers:', headers.filter(h => headerToKey.has(h)).length)
   console.log('unmapped headers (first 10):', headers.filter(h => h && !headerToKey.has(h)).slice(0, 10))
+  console.log('assignee column index:', assigneeColIdx)
 
   const rows: AllocationList[] = []
   for (let i = headerIdx + 1; i < raw.length; i++) {
@@ -53,6 +58,12 @@ export function parseAllocationSheet(raw: unknown[][]): AllocationList[] {
       const val = dataRow[idx]
       if (val !== '' && val != null) entry[key] = String(val)
     })
+
+    // A列（担当者）を読み取る
+    if (assigneeColIdx >= 0) {
+      const val = dataRow[assigneeColIdx]
+      if (val !== '' && val != null) entry['assignee'] = String(val)
+    }
 
     if (i === headerIdx + 1) {
       console.log('first data row (parsed keys):', Object.keys(entry))

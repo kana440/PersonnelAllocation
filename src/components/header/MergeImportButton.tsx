@@ -1,9 +1,9 @@
 import { useRef, useState, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
+import { useUserSession } from '../../store/useUserSession'
 import { importFromFile } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import type { ImportMode } from '../../domain/importMerge'
-import type { Organization } from '../../domain/schemas'
+import type { ImportMode, AssigneeImportMode } from '../../domain/importMerge'
 
 type Step =
   | { kind: 'idle' }
@@ -19,77 +19,50 @@ const MODE_OPTIONS: { mode: ImportMode; label: string; desc: string }[] = [
     desc:  '現在のデータをすべて削除し、インポートデータに置き換えます',
   },
   {
-    mode:  'scope-replace',
-    label: 'スコープ差し替え',
-    desc:  '現在の作業範囲（スコープ）内の行だけ置き換えます。スコープ外は変更しません',
-  },
-  {
     mode:  'append-new',
     label: '新規追記',
     desc:  '既存データに存在しない行だけを追加します（グループ社員ID＋所属コードで重複判定）',
   },
 ]
 
-interface RootSummary {
-  rootOrg:     Organization
-  orgCount:    number
-  personCount: number
-  rowCount:    number
+const ASSIGNEE_MODE_OPTIONS: { mode: AssigneeImportMode; label: string; desc: string }[] = [
+  {
+    mode:  'overwrite',
+    label: '担当者情報を上書き',
+    desc:  'インポートファイルのA列（担当者名）でセッションの担当者情報を置き換えます',
+  },
+  {
+    mode:  'preserve',
+    label: '担当者情報を保持',
+    desc:  '既存の担当者設定を維持します。担当者が未設定の行のみ、インポートファイルの値を使用します',
+  },
+]
+
+interface AssigneeSummary {
+  assignee: string
+  rowCount: number
 }
 
-function computeRootSummaries(result: ImportedWorkbookResult): RootSummary[] {
-  const { allocationList, afterOrganizations } = result
-  const orgByCode = new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
-  const orgById   = new Map(afterOrganizations.map(o => [o.id, o]))
-
-  const getRootOrg = (org: Organization): Organization => {
-    let cur = org
-    while (cur.parentId && orgById.has(cur.parentId)) cur = orgById.get(cur.parentId)!
-    return cur
+function computeAssigneeSummaries(result: ImportedWorkbookResult): AssigneeSummary[] {
+  const counts = new Map<string, number>()
+  for (const row of result.allocationList) {
+    const a = row.assignee || '（未割当）'
+    counts.set(a, (counts.get(a) ?? 0) + 1)
   }
-
-  const summaryMap = new Map<string, { rootOrg: Organization; orgIds: Set<string>; personIds: Set<string>; rowCount: number }>()
-
-  for (const row of allocationList) {
-    const org = row.departmentCode ? orgByCode.get(row.departmentCode) : null
-    if (!org) continue
-    const root = getRootOrg(org)
-    if (!summaryMap.has(root.id)) {
-      summaryMap.set(root.id, { rootOrg: root, orgIds: new Set(), personIds: new Set(), rowCount: 0 })
-    }
-    const s = summaryMap.get(root.id)!
-    s.orgIds.add(org.id)
-    if (row.userId) s.personIds.add(row.userId)
-    s.rowCount++
-  }
-
-  // Rows with no matching org
-  const unmatchedCount = allocationList.filter(r => r.departmentCode && !orgByCode.has(r.departmentCode)).length
-
-  const rows: RootSummary[] = [...summaryMap.values()].map(s => ({
-    rootOrg:     s.rootOrg,
-    orgCount:    s.orgIds.size,
-    personCount: s.personIds.size,
-    rowCount:    s.rowCount,
-  }))
-
-  if (unmatchedCount > 0) {
-    rows.push({
-      rootOrg:     { id: '_unmatched', name: '（組織マスタ未登録）', parentId: null, companyId: '', externalCode: '', isAbandoned: false } as Organization,
-      orgCount:    0,
-      personCount: 0,
-      rowCount:    unmatchedCount,
-    })
-  }
-
-  return rows
+  return [...counts.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'ja'))
+    .map(([assignee, rowCount]) => ({ assignee, rowCount }))
 }
 
 export function MergeImportButton() {
-  const { mergeExcelData, scopeOrgId } = useStore()
+  const { mergeExcelData } = useStore()
+  const { capabilities }   = useUserSession()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [step,         setStep]         = useState<Step>({ kind: 'idle' })
-  const [selectedMode, setSelectedMode] = useState<ImportMode>('replace-all')
+
+  if (!capabilities.canImport) return null
+  const [step,          setStep]          = useState<Step>({ kind: 'idle' })
+  const [selectedMode,  setSelectedMode]  = useState<ImportMode>('replace-all')
+  const [assigneeMode,  setAssigneeMode]  = useState<AssigneeImportMode>('overwrite')
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -99,7 +72,6 @@ export function MergeImportButton() {
     try {
       const result = await importFromFile(file, msg => setStep({ kind: 'loading', progress: msg }))
       if (result) {
-        setSelectedMode(scopeOrgId ? 'scope-replace' : 'replace-all')
         setStep({ kind: 'preview', result })
       } else {
         setStep({ kind: 'error', message: 'ファイルの読み込みに失敗しました' })
@@ -114,15 +86,15 @@ export function MergeImportButton() {
     const result = mergeExcelData({
       allocationList: step.result.allocationList,
       mode:           selectedMode,
-      scopeOrgId,
+      assigneeMode,
     })
     setStep({ kind: 'done', added: result.added, kept: result.kept, removed: result.removed })
   }
 
   const close = () => setStep({ kind: 'idle' })
 
-  const rootSummaries = useMemo(
-    () => step.kind === 'preview' ? computeRootSummaries(step.result) : [],
+  const assigneeSummaries = useMemo(
+    () => step.kind === 'preview' ? computeAssigneeSummaries(step.result) : [],
     [step]
   )
 
@@ -159,7 +131,7 @@ export function MergeImportButton() {
               </div>
             )}
 
-            {/* ── Preview + Mode select ── */}
+            {/* ── Preview ── */}
             {step.kind === 'preview' && (
               <>
                 <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -169,40 +141,32 @@ export function MergeImportButton() {
                   </div>
                 </div>
 
-                {/* Org summary table */}
+                {/* Assignee summary */}
                 <div className="flex-1 overflow-y-auto min-h-0">
+                  <div className="px-4 pt-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                    担当者サマリー（インポートファイル）
+                  </div>
                   <table className="w-full text-xs border-collapse">
                     <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                       <tr>
-                        <th className="text-left px-4 py-2 text-gray-500 font-medium">最上位組織</th>
-                        <th className="text-right px-3 py-2 text-gray-500 font-medium w-20">配下組織数</th>
-                        <th className="text-right px-3 py-2 text-gray-500 font-medium w-16">人数</th>
-                        <th className="text-right px-4 py-2 text-gray-500 font-medium w-16">行数</th>
+                        <th className="text-left px-4 py-2 text-gray-500 font-medium">担当者</th>
+                        <th className="text-right px-4 py-2 text-gray-500 font-medium w-20">行数</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rootSummaries.length === 0 ? (
+                      {assigneeSummaries.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
-                            組織情報が見つかりませんでした
+                          <td colSpan={2} className="px-4 py-6 text-center text-gray-400">
+                            担当者情報が見つかりませんでした
                           </td>
                         </tr>
                       ) : (
-                        rootSummaries.map((s, i) => (
-                          <tr key={s.rootOrg.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                            <td className="px-4 py-2 font-medium text-gray-800 truncate max-w-[220px]">
-                              {s.rootOrg.name}
-                              {s.rootOrg.externalCode && (
-                                <span className="ml-1.5 text-gray-400 font-normal text-[10px]">{s.rootOrg.externalCode}</span>
-                              )}
+                        assigneeSummaries.map((s, i) => (
+                          <tr key={s.assignee} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                            <td className={`px-4 py-2 truncate max-w-[320px] ${s.assignee === '（未割当）' ? 'text-gray-400 italic' : 'font-medium text-gray-800'}`}>
+                              {s.assignee}
                             </td>
-                            <td className="px-3 py-2 text-right text-gray-600">
-                              {s.orgCount > 0 ? s.orgCount.toLocaleString() : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-right text-gray-600">
-                              {s.personCount > 0 ? s.personCount.toLocaleString() : '—'}
-                            </td>
-                            <td className="px-4 py-2 text-right font-semibold text-gray-700">
+                            <td className="px-4 py-2 text-right tabular-nums text-gray-600">
                               {s.rowCount.toLocaleString()}
                             </td>
                           </tr>
@@ -212,42 +176,71 @@ export function MergeImportButton() {
                   </table>
                 </div>
 
-                {/* Mode select */}
-                <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0 space-y-3">
-                  <div className="text-xs font-semibold text-gray-600">インポートモード</div>
-                  <div className="flex flex-col gap-2">
-                    {MODE_OPTIONS.map(opt => (
-                      <label
-                        key={opt.mode}
-                        className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
-                          selectedMode === opt.mode
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="import-mode"
-                          value={opt.mode}
-                          checked={selectedMode === opt.mode}
-                          onChange={() => setSelectedMode(opt.mode)}
-                          className="mt-0.5 flex-shrink-0 accent-blue-600"
-                        />
-                        <div>
-                          <div className={`text-xs font-semibold ${selectedMode === opt.mode ? 'text-blue-700' : 'text-gray-700'}`}>
-                            {opt.label}
+                {/* Options */}
+                <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0 space-y-4">
+                  {/* Import mode */}
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 mb-2">インポートモード</div>
+                    <div className="flex flex-col gap-2">
+                      {MODE_OPTIONS.map(opt => (
+                        <label
+                          key={opt.mode}
+                          className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                            selectedMode === opt.mode
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="import-mode"
+                            value={opt.mode}
+                            checked={selectedMode === opt.mode}
+                            onChange={() => setSelectedMode(opt.mode)}
+                            className="mt-0.5 flex-shrink-0 accent-blue-600"
+                          />
+                          <div>
+                            <div className={`text-xs font-semibold ${selectedMode === opt.mode ? 'text-blue-700' : 'text-gray-700'}`}>
+                              {opt.label}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
-                        </div>
-                      </label>
-                    ))}
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
-                  {selectedMode === 'scope-replace' && !scopeOrgId && (
-                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      ⚠ 作業範囲（スコープ）が未設定です。ヘッダーでスコープを先に選択してください。
+                  {/* Assignee mode */}
+                  <div>
+                    <div className="text-xs font-semibold text-gray-600 mb-2">担当者情報の取り扱い</div>
+                    <div className="flex flex-col gap-2">
+                      {ASSIGNEE_MODE_OPTIONS.map(opt => (
+                        <label
+                          key={opt.mode}
+                          className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                            assigneeMode === opt.mode
+                              ? 'border-emerald-500 bg-emerald-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="assignee-mode"
+                            value={opt.mode}
+                            checked={assigneeMode === opt.mode}
+                            onChange={() => setAssigneeMode(opt.mode)}
+                            className="mt-0.5 flex-shrink-0 accent-emerald-600"
+                          />
+                          <div>
+                            <div className={`text-xs font-semibold ${assigneeMode === opt.mode ? 'text-emerald-700' : 'text-gray-700'}`}>
+                              {opt.label}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
+                          </div>
+                        </label>
+                      ))}
                     </div>
-                  )}
+                  </div>
 
                   <div className="flex justify-end gap-2 pt-1">
                     <button onClick={close} className="px-4 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50">
@@ -255,8 +248,7 @@ export function MergeImportButton() {
                     </button>
                     <button
                       onClick={handleApply}
-                      disabled={selectedMode === 'scope-replace' && !scopeOrgId}
-                      className="px-4 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                      className="px-4 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium"
                     >
                       適用する
                     </button>

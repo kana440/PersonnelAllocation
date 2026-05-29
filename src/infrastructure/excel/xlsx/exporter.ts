@@ -56,34 +56,58 @@ async function buildWorkbook(
 
       if (headerRowIdx >= 0) {
         const origHeaderRow   = raw[headerRowIdx] as unknown[]
-        const headerTextToCol = new Map<string, number>()
-        origHeaderRow.forEach((cell, col) => {
-          const text = typeof cell === 'string' ? cell.trim() : ''
-          if (text) headerTextToCol.set(text, col)
-        })
-
         const ws: XLSX.WorkSheet = { ...origSheet }
         const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1')
+
+        // sheet_to_json の列インデックスは range.s.c 相対なので絶対列番号に変換して格納
+        const headerTextToCol = new Map<string, number>()
+        origHeaderRow.forEach((cell, relCol) => {
+          const text = typeof cell === 'string' ? cell.trim() : ''
+          if (text) headerTextToCol.set(text, range.s.c + relCol)
+        })
+
+        // 絶対行番号: sheet_to_json のインデックスは range.s.r 相対
+        const absHeaderRow  = range.s.r + headerRowIdx
+        const absFirstDataRow = absHeaderRow + 1
 
         // 最初のデータ行のスタイルをテンプレートとして保存（元行数超過の新規行用）
         const styleTemplate = new Map<number, CellStyle>()
         if (raw.length > headerRowIdx + 1) {
           for (const col of headerTextToCol.values()) {
-            const s = origSheet[XLSX.utils.encode_cell({ r: headerRowIdx + 1, c: col })]?.s
+            const s = origSheet[XLSX.utils.encode_cell({ r: absFirstDataRow, c: col })]?.s
             if (s) styleTemplate.set(col, s)
           }
         }
 
-        // データ行を削除
-        for (let r = headerRowIdx + 1; r <= range.e.r; r++) {
-          for (let c = range.s.c; c <= range.e.c; c++) {
+        // 担当者列の検出: A列 (col=0) が既知ヘッダー列でなければ担当者列とみなす
+        // range.s.c > 0 の場合（データがB列以降から始まる）も col=0 を担当者列として扱う
+        const knownCols = new Set(headerTextToCol.values())
+        const assigneeCol = knownCols.has(0) ? -1 : 0
+
+        // スタイルテンプレートに担当者列も追加
+        if (assigneeCol >= 0 && raw.length > headerRowIdx + 1) {
+          const s = origSheet[XLSX.utils.encode_cell({ r: absFirstDataRow, c: assigneeCol })]?.s
+          if (s) styleTemplate.set(assigneeCol, s)
+        }
+
+        // データ行を削除（担当者列が範囲外の場合も含めてクリア）
+        const deleteStartCol = assigneeCol >= 0 ? Math.min(assigneeCol, range.s.c) : range.s.c
+        for (let r = absFirstDataRow; r <= range.e.r; r++) {
+          for (let c = deleteStartCol; c <= range.e.c; c++) {
             delete ws[XLSX.utils.encode_cell({ r, c })]
           }
         }
 
         // 新データを書き込み（元セルの書式を転記、なければテンプレート使用）
         rows.forEach((row, idx) => {
-          const r = headerRowIdx + 1 + idx
+          const r = absFirstDataRow + idx
+
+          // 担当者列を書き込む
+          if (assigneeCol >= 0 && row.assignee) {
+            const style: CellStyle = origSheet[XLSX.utils.encode_cell({ r, c: assigneeCol })]?.s ?? styleTemplate.get(assigneeCol)
+            ws[XLSX.utils.encode_cell({ r, c: assigneeCol })] = { v: row.assignee, t: 's', ...(style !== undefined ? { s: style } : {}) }
+          }
+
           EXPORT_FIELDS.forEach(f => {
             const col = headerTextToCol.get(f.header ?? f.key)
             if (col === undefined) return
@@ -94,8 +118,9 @@ async function buildWorkbook(
           })
         })
 
-        const lastDataRow = rows.length > 0 ? headerRowIdx + rows.length : headerRowIdx
-        ws['!ref'] = XLSX.utils.encode_range({ s: range.s, e: { r: lastDataRow, c: range.e.c } })
+        const lastDataRow  = rows.length > 0 ? absHeaderRow + rows.length : absHeaderRow
+        const rangeStartCol = assigneeCol >= 0 ? Math.min(assigneeCol, range.s.c) : range.s.c
+        ws['!ref'] = XLSX.utils.encode_range({ s: { r: range.s.r, c: rangeStartCol }, e: { r: lastDataRow, c: range.e.c } })
         wb.Sheets[EXPORT_SHEET_NAME] = ws
         return { wb, fileName, ext }
       }
@@ -126,18 +151,22 @@ function buildFreshSheet(rows: AllocationRow[]): XLSX.WorkSheet {
   const auditCount = EXPORT_FIELDS.length - metaCount - afterCount - prevCount
 
   const fill = (n: number) => Array(Math.max(0, n - 1)).fill('')
+  // A列（担当者）を先頭に付加する
   const ws = XLSX.utils.aoa_to_sheet([
-    ['本人情報 / 変更区分', ...fill(metaCount), 'After（発令後）', ...fill(afterCount), 'Before（発令前）', ...fill(prevCount), ...(auditCount > 0 ? ['除外', ...fill(auditCount)] : [])],
-    EXPORT_FIELDS.map(f => f.header ?? f.key),
-    ...rows.map(row => EXPORT_FIELDS.map(f => exportValue(row, f.key) ?? '')),
+    ['', '本人情報 / 変更区分', ...fill(metaCount), 'After（発令後）', ...fill(afterCount), 'Before（発令前）', ...fill(prevCount), ...(auditCount > 0 ? ['除外', ...fill(auditCount)] : [])],
+    ['', ...EXPORT_FIELDS.map(f => f.header ?? f.key)],
+    ...rows.map(row => [row.assignee ?? '', ...EXPORT_FIELDS.map(f => exportValue(row, f.key) ?? '')]),
   ])
-  ws['!cols'] = EXPORT_FIELDS.map(f =>
-    ['no'].includes(f.key) ? { wch: 4 } :
-    ['userId', 'employeeNumber'].includes(f.key) ? { wch: 12 } :
-    ['lastName', 'firstName'].includes(f.key) ? { wch: 8 } :
-    ['memo', 'concurrentReason', 'prevConcurrentReason'].includes(f.key) ? { wch: 20 } :
-    { wch: 14 }
-  )
+  ws['!cols'] = [
+    { wch: 12 }, // 担当者列
+    ...EXPORT_FIELDS.map(f =>
+      ['no'].includes(f.key) ? { wch: 4 } :
+      ['userId', 'employeeNumber'].includes(f.key) ? { wch: 12 } :
+      ['lastName', 'firstName'].includes(f.key) ? { wch: 8 } :
+      ['memo', 'concurrentReason', 'prevConcurrentReason'].includes(f.key) ? { wch: 20 } :
+      { wch: 14 }
+    ),
+  ]
   return ws
 }
 

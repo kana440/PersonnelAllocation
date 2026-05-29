@@ -53,6 +53,7 @@ export interface OrgViewContextValue {
   handlePersonContextMenu:      (e: React.MouseEvent, id: string) => void
   handlePositionContextMenu:    (e: React.MouseEvent, rowId: number) => void
   handleDropPositionOnPosition: (e: React.DragEvent, targetRowId: number) => void
+  handleReorderRow:             (rowId: number, beforeRowId: number | null) => void
   expandedChipIds:              Set<string>
   toggleChip:                   (id: string) => void
 }

@@ -24,7 +24,7 @@
 │  validation/         — バリデーション（純粋関数）                │
 │  codeLists/          — コードリスト集約                         │
 │  csvImport/          — Excel/CSV 解釈（純粋関数）               │
-│  orgScope.ts         — 組織スコープユーティリティ                │
+│  assignee.ts         — 担当者ユーティリティ（将来追加）          │
 ├──────────────────────────────────────────────────────────────────┤
 │ インフラ層         src/infrastructure/                           │
 │  excel/exceljs/exporter.ts  — Excel エクスポート（ExcelJS）     │
@@ -144,6 +144,7 @@ private codeLists:           AllCodeLists
 private past:                CoreState[]        ← Undo スタック
 private future:              CoreState[]        ← Redo スタック
 private cachedPersons:       Person[] | null    ← derivePersons キャッシュ（emit でクリア）
+private assigneeMode:        { kind: 'admin' } | { kind: 'assignee'; name: string }  ← モード（将来追加）
 ```
 
 ### DomainSnapshot（派生・再計算）
@@ -153,6 +154,7 @@ persons:             Person[]           ← allocationList から userId を ded
 canUndo:             boolean
 canRedo:             boolean
 organizations:       Organization[]    ← beforeOrganizations の後方互換エイリアス
+assignees:           string[]          ← allocationList の assignee 値をユニーク化（将来追加）
 ```
 
 > **注**: `Position` / `Affiliation` の派生ビューは廃止済み。

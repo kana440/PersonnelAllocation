@@ -88,16 +88,21 @@
 
 ---
 
-## F. 組織マッピング・スコープ関連を変更するとき
+## F. 担当者ワークフロー・フィルタ関連を変更するとき
 
-> 対象: `setScopeWithMapping`, `orgMapping`, `sameOrgPairs`, `useScopedStore`
+> 対象: `assignee` フィールド, `AssigneeSelectStep`, `useScopedStore`（担当者ベース）, 分割エクスポート
 
 | # | 領域 | 確認/更新先 | 必須度 |
 |---|---|---|---|
-| F1 | 変更検知 | `sameOrgPairs` の計算に影響するか (`useReviewData.ts`) | 必須 |
-| F2 | スコープフィルタ | `useScopedStore.ts` のフィルタロジックに影響するか | 必須 |
-| F3 | Excel エクスポート | スコープに従った出力になっているか | 要確認 |
-| F4 | レビュー画面 | `useScopedStore` 経由で自動スコープ適用される | 自動 |
+| F1 | フィールド定義 | `specs/G1-fields/01-field-definitions.md` の `assignee` 行を更新 | 必須 |
+| F2 | 担当者フィルタ | `useScopedStore.ts` のフィルタロジック（assignee ベース）に影響するか | 必須 |
+| F3 | Excel 読み取り | A列の読み取りロジック（`excelImport.ts` 相当）に影響するか | 必須 |
+| F4 | Excel エクスポート | A列への assignee 出力に影響するか | 必須 |
+| F5 | 変更検知 | `sameOrgPairs` の計算は組織マッピングに依存するため影響するか確認 | 要確認 |
+| F6 | ワーニング表示 | 他担当者行・未割当行のワーニング UI に影響するか | 要確認 |
+| F7 | 分割エクスポート | 担当者ごとの分割エクスポートロジックに影響するか | 要確認 |
+| F8 | 上司名補完 | `managerName` → `managerPositionCode` 補完フローに影響するか | 要確認 |
+| F9 | 担当者ウィザード | 分割軸選択・自動割り当てロジックに影響するか | 要確認 |
 
 ---
 

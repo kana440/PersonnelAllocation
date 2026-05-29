@@ -14,7 +14,8 @@ import {
   BulkManagerModal,
   BulkSecondmentModal,
 } from './modals/BulkActionModals'
-import { CanvasFieldPicker } from './CanvasFieldPicker'
+import { CanvasFieldPicker }  from './CanvasFieldPicker'
+import { ChangeTitleModal }  from './modals/ChangeTitleModal'
 
 interface PersonMoveDialogState {
   fromRowId: number | null
@@ -38,8 +39,10 @@ export interface CanvasModalsProps {
   setPersonMoveDialog:(v: PersonMoveDialogState | null) => void
   confirmDialog:      { message: string; onConfirm: () => void } | null
   setConfirmDialog:   (v: { message: string; onConfirm: () => void } | null) => void
-  fieldPickerOpen:    boolean
-  setFieldPickerOpen: (v: boolean) => void
+  fieldPickerOpen:      boolean
+  setFieldPickerOpen:   (v: boolean) => void
+  changeTitleRowId:     number | null
+  setChangeTitleRowId:  (v: number | null) => void
   // data
   persons:            Person[]
   allocationList:     AllocationRow[]
@@ -59,6 +62,7 @@ export function CanvasModals({
   personMoveDialog, setPersonMoveDialog,
   confirmDialog, setConfirmDialog,
   fieldPickerOpen, setFieldPickerOpen,
+  changeTitleRowId, setChangeTitleRowId,
   persons, allocationList, allAfterOrgsUnscoped,
   positionTreeByOrgId, afterMembersByOrgId,
   handleBulkMoveConfirm, handlePersonMoveConfirm,
@@ -173,6 +177,15 @@ export function CanvasModals({
       )}
 
       {fieldPickerOpen && <CanvasFieldPicker onClose={() => setFieldPickerOpen(false)} />}
+
+      {changeTitleRowId !== null && (
+        <ChangeTitleModal
+          rowId={changeTitleRowId}
+          allocationList={allocationList}
+          onDone={() => setChangeTitleRowId(null)}
+          onCancel={() => setChangeTitleRowId(null)}
+        />
+      )}
     </>
   )
 }

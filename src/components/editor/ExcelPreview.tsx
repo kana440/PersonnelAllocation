@@ -167,7 +167,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
   const visibleRows   = filteredRows.slice(startIdx, endIdx)
 
   const N   = DISPLAY_FIELDS.length
-  const COL_SPAN = 11 + N * 2 + 1   // メタ11 + After N + Before N + 除外1
+  const COL_SPAN = 12 + N * 2 + 1   // 担当者1 + メタ11 + After N + Before N + 除外1
   const thM = 'px-2 py-2 text-left whitespace-nowrap bg-gray-700 text-white text-xs'
   const thA = 'px-2 py-2 text-left whitespace-nowrap bg-green-900 text-white text-xs'
   const thB = 'px-2 py-2 text-left whitespace-nowrap bg-blue-900 text-white text-xs'
@@ -286,12 +286,14 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
         <table className="w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10">
             <tr>
+              <th colSpan={1}  className="px-2 py-1 text-center bg-purple-800 text-white border-r border-purple-700 text-xs font-bold">担当者</th>
               <th colSpan={11} className="px-2 py-1 text-center bg-gray-600 text-white border-r border-gray-500 text-xs font-bold">本人情報 / 変更区分</th>
               <th colSpan={N}  className="px-2 py-1 text-center bg-green-800 text-white border-r border-green-700 text-xs font-bold">After（発令後）</th>
               <th colSpan={N}  className="px-2 py-1 text-center bg-blue-800 text-white border-r border-blue-700 text-xs font-bold">Before（発令前）</th>
               <th colSpan={1}  className="px-2 py-1 text-center bg-red-800 text-white text-xs font-bold">除外</th>
             </tr>
             <tr>
+              <th className="px-2 py-2 text-left whitespace-nowrap bg-purple-900 text-white text-xs border-r border-purple-700">担当者</th>
               <th className={thM}>No</th>
               <th className={thM}>ユーザー/社員ID</th>
               <th className={thM}>グループ社員ID</th>
@@ -384,6 +386,9 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
                     isMatch          ? 'ring-1 ring-inset ring-yellow-200' : ''
                   }`}
                 >
+                  <td className="px-2 py-1.5 whitespace-nowrap text-xs bg-purple-50 border-r border-purple-100 font-medium text-purple-900">
+                    {row.assignee || <span className="text-gray-300">—</span>}
+                  </td>
                   <td className={`${tdM} text-gray-400`}>{row.no}</td>
                   <td className={`${tdM} font-mono text-gray-500`}>{v(row.userId)}</td>
                   <td className={`${tdM} font-mono text-gray-400`}>{v(row.groupEmployeeId)}</td>
