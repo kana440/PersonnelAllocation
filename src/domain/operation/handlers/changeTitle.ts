@@ -49,7 +49,7 @@ export class ChangeTitleOperation implements IDomainOperation {
 
     // 給与等級が変わる場合は変更サインを自動付与
     const payGradeChangeSign =
-      this.payGrade !== row.payGrade ? '○' : row.payGradeChangeSign
+      this.payGrade !== row.payGrade ? '1' : row.payGradeChangeSign
 
     // 1. 対象行を更新（prevXxx はスプレッドで保持）
     const updatedRow: AllocationRow = {

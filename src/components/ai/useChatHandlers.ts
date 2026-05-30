@@ -58,8 +58,16 @@ export function useChatHandlers({
 
   const buildCurrentSystemPrompt = useCallback(() => {
     const { scopeOrgId, afterOrganizations } = useStore.getState()
+    const { chatContextRowIds } = useChatStore.getState()
     const scopeOrg = scopeOrgId ? afterOrganizations.find(o => o.id === scopeOrgId) : null
-    return buildSystemPrompt(scopeOrg?.name, scopeOrg?.externalCode ?? undefined)
+    const rowCtxs  = chatContextRowIds
+      .map(id => aiTools.getRowContext(id))
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+    return buildSystemPrompt(
+      scopeOrg?.name,
+      scopeOrg?.externalCode ?? undefined,
+      rowCtxs.length > 0 ? rowCtxs : undefined,
+    )
   }, [])
 
   const chatSession = useMemo(() => new ChatSession(mockApiService), [])
@@ -338,7 +346,7 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     let applied = 0
     for (const p of pendingPersons) {
       const result = appService.executeOperation(
-        new DirectEditOperation(p.rowId, { promotionSign: '昇格' }, `${p.name} 昇格`)
+        new DirectEditOperation(p.rowId, { promotionSign: '1' }, `${p.name} 昇格`)
       )
       if (result.ok) applied++
     }

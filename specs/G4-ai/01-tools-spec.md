@@ -23,12 +23,17 @@
 | `findPersons` / `findOrgs` | 氏名・組織名のあいまい検索 | ✓ |
 | `getPersonRows` / `getRow` | rowId を指定して行データ取得 | ✓ |
 | `getOrgMembers` / `show_org_members` | 組織メンバー一覧（text / widget） | ✓ |
+| `getFieldOptions` | 指定行・フィールドの有効選択肢を返す。VALUE_RULES 条件付きルール（F1/F2/F3）を自動適用。自己修復時の値確認に使う | ✓ |
 
 ### 1.2 書き込み（confirm — ユーザー確認後に実行）
 
 > 書き込みToolは必ず `appService.executeOperation()` または `appService.saveRow()` 経由。
 > ユーザーへの確認フローは toolRegistry.ts の `buildProposal` → `executeOnApprove` で実装。
 > Widget はすべて既存の `diff-preview` を再利用。
+
+書き込みツールの戻り値は `AIOperationResult` 型（`src/application/aiTools.ts` で定義）。
+操作成功時は `{ ok: true, postValidation: Array<{ rowId, issues }> }` を返す。
+`postValidation` は変更された行のうちバリデーション問題がある行のみ含む（問題なければ空配列）。
 
 | Tool名 | 操作 | 実装状況 |
 |---|---|---|

@@ -216,6 +216,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                       fromOrgId: orgId, fromCompanyId: '',
                       affiliationType: 'primary',
                       fromRowId: row.rowId,
+                      rowId:     row.rowId,
                     }
                     e.dataTransfer.setData('application/json', JSON.stringify(data))
                     e.dataTransfer.setData('application/x-position-drag', '')
@@ -304,6 +305,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                       personId: person!.id, fromOrgId: orgId, fromCompanyId: '',
                       affiliationType: isConcurrent ? 'concurrent' : 'primary',
                       source: 'after', fromRowId: row.rowId,
+                      rowId:   row.rowId,
                     }
                     e.dataTransfer.setData('application/json', JSON.stringify(data))
                     e.dataTransfer.effectAllowed = 'move'

@@ -22,6 +22,8 @@
 │  operation/          — IDomainOperation インターフェース         │
 │  projection/         — 派生ビュー（純粋関数）                   │
 │  validation/         — バリデーション（純粋関数）                │
+│  valueRules.ts       — VALUE_RULES（許容値制約の単一定義ソース） │
+│  optionFilter/       — 選択肢生成・絞り込み（valueRules.ts 導出）│
 │  codeLists/          — コードリスト集約                         │
 │  csvImport/          — Excel/CSV 解釈（純粋関数）               │
 │  assignee.ts         — 担当者ユーティリティ（将来追加）          │

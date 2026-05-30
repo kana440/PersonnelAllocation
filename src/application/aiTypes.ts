@@ -53,6 +53,14 @@ export type ChatWidget =
   | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
 
+/** 選択中の行のコンテキスト情報。AI のシステムプロンプトに注入する */
+export interface SelectedRowContext {
+  rowId:   number
+  name:    string
+  orgName: string
+  issues:  Array<{ field: string; level: 'error' | 'warning'; message: string }>
+}
+
 export interface ConfirmResult {
   approved: boolean
 }

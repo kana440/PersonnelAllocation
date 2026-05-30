@@ -24,7 +24,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
   const entries: OrgMasterEntry[] = []
 
   let cCode = colIdx('B'), cParent = -1, cName = -1
-  let cCompany = -1, cPhase = -1, cOrgLevel = -1
+  let cCompany = -1, cCompanyCode = -1, cPhase = -1, cOrgLevel = -1
   let cBu = colIdx('C'), cDiv = colIdx('D'), cDept = colIdx('E')
   let cGroup = colIdx('F'), cTeam = colIdx('G')
   let cCostCenter = -1, cWorkLocation = -1
@@ -40,6 +40,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
       if      (/^組織コード$|^コード$/.test(h))               { cCode = c; foundCode = true }
       else if (/上位組織コード|親組織コード/.test(h))          { cParent = c }
       else if (/組織名|名称/.test(h))                          { cName = c }
+      else if (/^会社コード$/i.test(h))                        { cCompanyCode = c }
       else if (/会社名|^会社$/i.test(h))                       { cCompany = c }
       else if (/発令区分|前後フラグ|フェーズ/i.test(h))        { cPhase = c }
       else if (/ビジネスユニット|^BU$/i.test(h))               { cBu = c }
@@ -59,6 +60,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
     if (!code) continue
     entries.push({
       code,
+      companyCode:       cCompanyCode >= 0 ? (cellStr(raw, r, cCompanyCode) || undefined) : undefined,
       parentCode:        cParent      >= 0 ? (cellStr(raw, r, cParent)       || undefined) : undefined,
       name:              cName        >= 0 ? (cellStr(raw, r, cName)          || undefined) : undefined,
       company:           cCompany     >= 0 ? cellStr(raw, r, cCompany) : '',

@@ -61,17 +61,39 @@ type Organization, Person, Company ...（Zod 由来）
 
 ## Module B: Validation
 
-**場所**: `src/domain/validation/validateRow.ts`
+**場所**: `src/domain/validation/`（複数ファイルに分割）, `src/domain/valueRules.ts`, `src/domain/optionFilter/`
 
 **責務**: `AllocationRow` 1行の整合性をチェックする。エラー・警告を返す。
+また、`VALUE_RULES` を単一ソースとしてバリデーション（存在チェック）と UI 選択肢絞り込みの両方を導出する。
 
 **依存**: Module A のみ
 
+**ファイル構成**:
+
+| ファイル | 役割 |
+|---|---|
+| `validateRow.ts` | オーケストレーター（各 validate* を呼び出して結果を集約） |
+| `types.ts` | `ValidationIssue` / `ValidationLevel` 型定義 |
+| `validateRequired.ts` | A 系（必須項目チェック） |
+| `validateFormat.ts` | B 系（形式チェック） |
+| `validateRelated.ts` | C 系（関連・整合性）: C1 組織階層 / C2 勤務地・コストセンター / C3 非組合協定 / C4 出向 |
+| `validateExistence.ts` | D 系（コードリスト存在チェック）: `VALUE_RULES` から導出 |
+| `validateKeys.ts` | E 系（キー重複チェック） |
+| `validateConsistency.ts` | G 系（整合性エラー）+ W 系（ワーニング）: G1 昇降格時ポジション未変更 / W2 2段階昇降格 |
+| `valueRules.ts` | `VALUE_RULES` 配列 — 許容値制約の単一定義ソース。`SuggestionRule \| ConstraintRule` の discriminated union。`validateExistence.ts`・`validateRelated.ts`（F1-F4）・`optionFilter/` の 3 箇所が参照する |
+| `optionFilter/index.ts` | `buildBaseOptions()` / `filterOptions()` / `getFieldOptions()` — UI の選択肢生成・行状態による絞り込み |
+
 **公開 API**:
 ```typescript
+// validateRow.ts
 function validateRow(row, orgs, codeLists): ValidationIssue[]
 function issuesForField(issues, field): ValidationIssue[]
 function fieldsToShow(row, issues): Set<keyof AllocationRow>
+
+// optionFilter/index.ts
+function buildBaseOptions(field, codeLists): OptionItem[]
+function filterOptions(field, row, base, codeLists): OptionItem[]
+function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
 ```
 
 **テスト方法**: 完全な純粋関数。任意の `AllocationRow` を渡して即テスト可能
@@ -274,7 +296,7 @@ function exportValue(row, key): unknown {
 
 新しいモジュールを追加・変更するとき、以下を確認する:
 
-- [ ] ドメイン層（operation/, validation/, projection/, codeLists/）は外部ライブラリに依存していないか
+- [ ] ドメイン層（operation/, validation/, projection/, codeLists/, optionFilter/）は外部ライブラリに依存していないか
 - [ ] 操作ハンドラーの `validate()` と `apply()` は純粋関数か（副作用なし・同じ入力 → 同じ出力）
 - [ ] AI と Web UI は同じ `executeOperation()` を通っているか（またはその計画があるか）
 - [ ] AI から呼ぶ操作は `aiTools` に公開されているか

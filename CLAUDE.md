@@ -18,6 +18,13 @@ src/components/  src/store/      ← UI層（Reactコンポーネント + Zustan
 src/application/                 ← アプリケーション層
 src/infrastructure/              ← インフラ層（Excel・AI・LocalStorage）
 src/domain/                      ← ドメイン層（外部依存ゼロ。Zodのみ可）
+  allocationRow.ts               ← AllocationRow 型・FIELD_METADATA
+  valueRules.ts                  ← VALUE_RULES（許容値制約の単一定義ソース）
+  optionFilter/                  ← 選択肢生成・絞り込み（valueRules から導出）
+  validation/                    ← バリデーション A〜G・W 系（純粋関数）
+  operation/                     ← IDomainOperation ハンドラー群
+  codeLists/                     ← コードリスト型定義・集約
+  csvImport/                     ← Excel/CSV 解釈（純粋関数）
 src/ports/                       ← インターフェース定義
 ```
 
@@ -146,6 +153,39 @@ components/foo/
 
 ---
 
+## 値制約・選択肢の追加方法（VALUE_RULES）
+
+`src/domain/valueRules.ts` がフィールドの許容値制約の**単一定義ソース**。
+バリデーション（D2系・C4系・F系）とオプション絞り込みの両方がここから自動導出される。
+
+```typescript
+// 推奨値（選択肢に表示するがバリデーションなし）
+{ kind: 'suggestion', field: 'transferReason',
+  source: cl => cl.transferReasons.map(e => e.label) }
+
+// 制約（選択肢 + リスト外はエラー）
+{ kind: 'constraint', field: 'officialPositionCode',
+  source: cl => cl.officialPositions.map(e => e.label),
+  message: _ => '役職は有効な選択肢から選択してください' }
+
+// 条件付き制約（when が true のとき source に絞る）
+// when は (row, codeLists) => boolean
+// source は (codeLists, row?) => string[]
+{ kind: 'constraint', field: 'band',
+  when: (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
+  source: cl => cl.jobLevels.filter(e => e.isOutsourceAcceptance).map(e => e.label),
+  message: _ => 'バンドは雇用タイプに対応する選択肢から選択してください' }
+```
+
+**ルール追加時の自動伝播**:
+- `validateExistence.ts` — `when` なし constraint → D2系として自動評価
+- `validateRelated.ts` — `when` あり constraint → C/F系として自動評価
+- `optionFilter/index.ts` — 全ルール → UI ドロップダウンの選択肢に自動反映
+
+**W系（ワーニング）は VALUE_RULES に乗らない**。`validateConsistency.ts` にカスタム関数として実装し `level: 'warning'` で返す。
+
+---
+
 ## やってはいけないこと
 
 - `src/domain/` 内で `appService` / `useStore` / React を import する
@@ -153,6 +193,7 @@ components/foo/
 - `prevXxx` フィールドを操作中に書き換える（before 状態は不変）
 - `positionCode` が `_pos_` 始まりかどうかチェックせず Excel 出力する
 - `IDomainOperation` を使わず `HRApplicationService` に直接ドメインロジックを書く
+- バリデーションとオプション絞り込みを別々に実装する（`VALUE_RULES` を使う）
 
 ---
 

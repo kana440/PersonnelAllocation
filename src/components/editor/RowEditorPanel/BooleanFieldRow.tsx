@@ -37,8 +37,17 @@ export function BooleanFieldRow({ label, afterVal, prevVal, issues, readOnly, on
           </div>
         ))}
       </div>
-      <div className="text-xs text-gray-400 bg-gray-50 rounded px-2 py-1 leading-4 min-h-[26px]">
-        {prevVal === '1' ? 'あり' : prevVal ? prevVal : <span className="text-gray-300">—</span>}
+      <div className="text-xs bg-gray-50 rounded px-2 py-1 min-h-[26px] flex items-center">
+        <label className="flex items-center gap-1.5 text-xs text-gray-400 select-none cursor-not-allowed">
+          <input
+            type="checkbox"
+            checked={prevVal === '1'}
+            disabled
+            readOnly
+            className="accent-blue-600"
+          />
+          <span>{prevVal === '1' ? 'あり' : 'なし'}</span>
+        </label>
       </div>
     </div>
   )

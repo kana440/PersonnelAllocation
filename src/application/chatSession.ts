@@ -4,7 +4,7 @@
 // Stateless pattern: the full history is sent on every call, so the server
 // needs no session state. Swap out the IChatService to switch backends.
 
-import type { ChatMessage } from './aiTypes'
+import type { ChatMessage, SelectedRowContext } from './aiTypes'
 import type { IChatService, APIMessage } from '../ports'
 
 const BASE_SYSTEM_PROMPT =
@@ -19,15 +19,44 @@ const BASE_SYSTEM_PROMPT =
   '- 「組織図を見せて」「全体像を見せて」には getOrgTree を使う。\n' +
   '- スコープ（作業対象組織）が設定されている場合、操作対象はそのスコープ内に限定される。\n'
 
+export type { SelectedRowContext }  // aiTypes.ts で定義。後方互換のため re-export
+
 /**
  * Build a system prompt for the current session.
  * Pass scope info so the AI knows which organization the user is working in.
+ * Pass selectedRow so the AI knows which row the user is focused on.
  */
-export function buildSystemPrompt(scopeOrgName?: string, scopeOrgCode?: string): string {
-  if (!scopeOrgName) return BASE_SYSTEM_PROMPT
-  return BASE_SYSTEM_PROMPT +
-    `\n## 現在の作業スコープ\n作業対象組織: ${scopeOrgName}（コード: ${scopeOrgCode ?? '不明'}）\n` +
-    'この組織とその配下が主な操作対象です。'
+export function buildSystemPrompt(
+  scopeOrgName?:  string,
+  scopeOrgCode?:  string,
+  selectedRows?:  SelectedRowContext[],
+): string {
+  let prompt = BASE_SYSTEM_PROMPT
+  if (scopeOrgName) {
+    prompt +=
+      `\n## 現在の作業スコープ\n作業対象組織: ${scopeOrgName}（コード: ${scopeOrgCode ?? '不明'}）\n` +
+      'この組織とその配下が主な操作対象です。'
+  }
+  if (selectedRows && selectedRows.length > 0) {
+    const label = selectedRows.length === 1 ? '現在選択中の行' : `現在選択中の行（${selectedRows.length}件）`
+    prompt += `\n\n## ${label}\n`
+    for (const row of selectedRows) {
+      prompt += `- rowId: ${row.rowId}、氏名: ${row.name}、組織: ${row.orgName}`
+      if (row.issues.length > 0) {
+        prompt += `\n  バリデーション問題:\n` +
+          row.issues.map(i => `  - [${i.level}] ${i.field}: ${i.message}`).join('\n') + '\n'
+      } else {
+        prompt += `（バリデーション問題なし）\n`
+      }
+    }
+    const hasIssues = selectedRows.some(r => r.issues.length > 0)
+    if (hasIssues) {
+      prompt +=
+        'ユーザーが「このレコードのエラーを解消して」と依頼した場合、' +
+        '上記の問題を修正するための操作（getFieldOptions → propose_field_edit）を順に実行すること。'
+    }
+  }
+  return prompt
 }
 
 export function buildAPIMessages(

@@ -1,8 +1,11 @@
 import { BEFORE_AFTER_FIELD_PAIRS, FIELD_METADATA } from '../../../domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '../../../domain/csvImport/allocationList/labels'
-import { CONCURRENT_TYPES } from '../../../domain/codeLists/concurrentType'
-import { UNION_MEMBER_CODES } from '../../../domain/codeLists/unionMember'
 import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
+import type { AllocationRow } from '../../../domain/allocationRow'
+import { buildBaseOptions, getFieldOptions } from '../../../domain/optionFilter'
+
+
+// ── 表示メタ ─────────────────────────────────────────────────────────────────
 
 // Excel 列順表示ラベル（before キーの日本語名を after キーとして使う）
 export const FIELD_LABEL: Record<string, string> = Object.fromEntries(
@@ -31,30 +34,19 @@ export const BEFORE_KEY_FOR: Record<string, string> = Object.fromEntries(
   FIELD_METADATA.map(f => [String(f.after), String(f.before)])
 )
 
-// codeListKey → AllCodeLists のプロパティ名
-export const CODE_LIST_KEYS: Partial<Record<string, string>> = {
-  employmentType:                'employmentTypes',
-  transferReason:                'transferReasons',
-  jobFamily:                     'jobFamilies',
-  officialPositionCode:          'officialPositions',
-  payGrade:                      'payGrades',
-  positionBand:                  'jobLevels',
-  band:                          'jobLevels',
-  location:                      'workLocations',
-  concurrentReason:              'concurrentReasons',
-  demotionReason:                'demotionReasons',
-  secondmentFromCompany:         'companies',
-  trainingPositionFlag:          'trainingPositions',
-  positionDiscretionaryWorkFlag: 'discretionaryWorkOptions',
-  discretionaryWorkFlag:         'discretionaryWorkOptions',
-}
+// ── UI フィールド分類 ─────────────────────────────────────────────────────────
 
 // Y/N フラグフィールド（現在は未使用; 将来の Y/N 系フィールド向けに残す）
 export const FLAG_FIELDS  = new Set<string>()
 export const FLAG_OPTIONS = ['Y', 'N']
 
-// "1"/"" チェックボックスフィールド
-export const BOOLEAN_1_FIELDS = new Set(['nonUnionAgreementFlag', 'leaveFlag'])
+// "1"/"0" チェックボックスフィールド（Excel データ入力規則と対応）
+export const BOOLEAN_1_FIELDS = new Set([
+  'nonUnionAgreementFlag',
+  'leaveFlag',
+  'promotionSign',
+  'payGradeChangeSign',
+])
 
 // OrgCombobox で組織検索するフィールド
 export const ORG_FIELDS = new Set(['departmentCode'])
@@ -62,44 +54,26 @@ export const ORG_FIELDS = new Set(['departmentCode'])
 // 人名検索でポジションコードをセットするフィールド
 export const MANAGER_POS_FIELDS = new Set(['managerPositionCode'])
 
-// 編集不可フィールド（個人識別子）
+// 編集不可フィールド（計算値のみ）
 export const READONLY_FIELDS = new Set<string>([
-  'userId', 'employeeNumber', 'lastName', 'firstName',
   'groupEmployeeId', 'groupEmployeeNumber',
 ])
 
-/** フィールドに対応する選択肢リストを返す純粋関数 */
-export function getOptions(key: string, codeLists: AllCodeLists, currentJobFamily?: string): string[] {
+// ── 選択肢生成 ────────────────────────────────────────────────────────────────
+
+/**
+ * フィールドに対応する選択肢リストを返す。
+ * ドメイン層の getFieldOptions / buildBaseOptions に委譲する。
+ * FLAG_FIELDS（Y/N 系）のみここで処理。
+ */
+export function getOptions(
+  key:              string,
+  codeLists:        AllCodeLists,
+  currentJobFamily?: string,
+  row?:             AllocationRow,
+): string[] {
   if (FLAG_FIELDS.has(key)) return FLAG_OPTIONS
-  if (key === 'concurrentType') return [...CONCURRENT_TYPES]
-  if (key === 'positionUnionFlag' || key === 'unionFlag') return [...UNION_MEMBER_CODES]
-
-  if (key === 'jobType') {
-    const parentEntry = codeLists.jobFamilies.find(jf => jf.label === currentJobFamily)
-    const filtered = parentEntry
-      ? codeLists.subJobFamilies.filter(s => s.jobFamilyCode === parentEntry.code)
-      : codeLists.subJobFamilies
-    return filtered.map(s => s.label)
-  }
-
-  const listKey = CODE_LIST_KEYS[key]
-  if (!listKey) return []
-  const list = (codeLists as unknown as Record<string, unknown>)[listKey]
-  if (!Array.isArray(list)) return []
-  return list.map((v: unknown) => {
-    if (typeof v === 'string') return v
-    const entry = v as Record<string, string>
-    return entry.label ?? entry.code ?? String(v)
-  })
+  if (row) return getFieldOptions(key, row, codeLists, currentJobFamily)
+  return buildBaseOptions(key, codeLists, currentJobFamily)
 }
 
-/** band + jobType.compensationCategory から給与等級を自動導出する純粋関数 */
-export function derivePayGrade(jobTypeLabel: string, bandLabel: string, codeLists: AllCodeLists): string {
-  if (!jobTypeLabel || !bandLabel) return ''
-  const subJobFamily = codeLists.subJobFamilies.find(s => s.label === jobTypeLabel)
-  if (!subJobFamily?.compensationCategory) return ''
-  const pg = codeLists.payGrades.find(
-    p => p.compensationCategory === subJobFamily.compensationCategory && p.band === bandLabel
-  )
-  return pg?.label ?? ''
-}

@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { useScopedStore } from '../../store/useScopedStore'
+import { useChatStore } from '../../store/useChatStore'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 import type { AllocationRow } from '../../infrastructure/allocationListMapper'
 import { exportToXlsx } from '../../infrastructure/excel/engine'
@@ -353,6 +354,10 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
                 if (!matchedPerson) return
                 selectPersonAndFocusOrg(matchedPerson.id)
                 selectRow(row.rowId)
+                // チャットコンテキストを更新（案1: クリックで全クリア → 1件セット）
+                if (row.rowId != null) {
+                  useChatStore.getState().setChatContext([row.rowId])
+                }
               }
 
               const handleRowDragStart = (e: React.DragEvent) => {
@@ -363,6 +368,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
                   fromCompanyId:   row._meta.companyId ?? '',
                   affiliationType: 'primary',
                   source:          'excel',
+                  rowId:           row.rowId,   // チャットへのドロップ用
                 }))
                 e.dataTransfer.effectAllowed = 'move'
               }

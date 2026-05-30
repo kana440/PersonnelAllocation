@@ -11,8 +11,11 @@ interface Props {
 }
 
 export function ComboInput({ value, onChange, options, placeholder, disabled, className, hasIssue }: Props) {
-  const [open,   setOpen]   = useState(false)
-  const [input,  setInput]  = useState(value)
+  const [open,  setOpen]  = useState(false)
+  const [input, setInput] = useState(value)
+  // true = ユーザーが文字入力した → options を絞り込む
+  // false = 開いた直後 or 選択後 → options を全件表示
+  const [typed, setTyped] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
   const dropdownRef  = useRef<HTMLDivElement>(null)
@@ -20,13 +23,12 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
 
   useEffect(() => { setInput(value) }, [value])
 
-  // ドロップダウン位置を input の getBoundingClientRect から fixed 座標で計算
   useLayoutEffect(() => {
     if (!open || !inputRef.current) return
-    const rect   = inputRef.current.getBoundingClientRect()
-    const maxH   = 160
-    const below  = window.innerHeight - rect.bottom
-    const width  = Math.max(rect.width, 120)
+    const rect  = inputRef.current.getBoundingClientRect()
+    const maxH  = 160
+    const below = window.innerHeight - rect.bottom
+    const width = Math.max(rect.width, 120)
     if (below >= maxH || rect.top < maxH) {
       setDropStyle({ top: rect.bottom + 2, left: rect.left, width })
     } else {
@@ -34,7 +36,6 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
     }
   }, [open])
 
-  // 外クリックで閉じる（fixed ドロップダウンも考慮）
   useEffect(() => {
     if (!open) return
     const close = (e: MouseEvent) => {
@@ -47,12 +48,14 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
     return () => document.removeEventListener('mousedown', close)
   }, [open])
 
-  const filtered = options.filter(o =>
-    !input || o.toLowerCase().includes(input.toLowerCase())
-  )
+  // typed のときだけ絞り込む。未タイプ（開いた直後）は全件表示。
+  const filtered = typed
+    ? options.filter(o => o.toLowerCase().includes(input.toLowerCase()))
+    : options
 
   const commit = (v: string) => {
     setInput(v)
+    setTyped(false)
     onChange(v)
     setOpen(false)
   }
@@ -72,14 +75,27 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
         disabled={disabled}
         placeholder={placeholder}
         className={baseClass}
-        onFocus={() => { if (!disabled) setOpen(true) }}
-        onChange={e => { setInput(e.target.value); setOpen(true); onChange(e.target.value) }}
+        onFocus={() => {
+          if (disabled) return
+          setTyped(false)   // 開いた瞬間は全件表示
+          setOpen(true)
+        }}
+        onChange={e => {
+          setInput(e.target.value)
+          setTyped(true)    // 文字入力が始まったら絞り込みモード
+          setOpen(true)
+          onChange(e.target.value)
+        }}
         onBlur={() => {
-          setTimeout(() => { onChange(input); setOpen(false) }, 150)
+          setTimeout(() => {
+            onChange(input)
+            setTyped(false)
+            setOpen(false)
+          }, 150)
         }}
         onKeyDown={e => {
-          if (e.key === 'Enter')  { onChange(input); setOpen(false) }
-          if (e.key === 'Escape') { setInput(value); setOpen(false) }
+          if (e.key === 'Enter')  { onChange(input); setTyped(false); setOpen(false) }
+          if (e.key === 'Escape') { setInput(value); setTyped(false); setOpen(false) }
         }}
       />
 

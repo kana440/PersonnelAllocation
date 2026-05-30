@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
+import { useChatStore } from '../../store/useChatStore'
 import { SetPositionManagerOperation } from '../../domain/operation/handlers/positionOps'
 import { ReorderRowOperation }         from '../../domain/operation/handlers/reorderRow'
 import { appService } from '../../application/HRApplicationService'
@@ -71,6 +72,17 @@ export function OrgOperationView() {
   const [changeTitleRowId,  setChangeTitleRowId]  = useState<number | null>(null)
 
   // ── Hooks ──────────────────────────────────────────────────────
+  // selectPerson をラップしてチャットコンテキストも更新（案1: クリックで全クリア→1件）
+  const handleSelectPerson = useCallback((personId: string) => {
+    selectPerson(personId)
+    const p = persons.find(q => q.id === personId)
+    if (p?.sfPersonId) {
+      const rows = allocationList.filter(r => r.userId === p.sfPersonId)
+      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+      if (primary) useChatStore.getState().setChatContext([primary.rowId])
+    }
+  }, [selectPerson, persons, allocationList])
+
   const { personMoveDialog, setPersonMoveDialog, handlePersonMoveConfirm } = usePersonMove({
     persons, allocationList,
   })
@@ -197,7 +209,7 @@ export function OrgOperationView() {
     setBulkMoveSourceId:  isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
     setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
     isSelectMode, selectedPersonIds, togglePersonSelection,
-    selectedPersonId, selectPerson,
+    selectedPersonId, selectPerson: handleSelectPerson,
     isHistoryPreviewMode,
     handlePersonDoubleClick, handlePersonContextMenu,
     handlePositionContextMenu, handleDropPositionOnPosition, handleReorderRow,

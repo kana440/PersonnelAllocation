@@ -3,6 +3,7 @@
 // 上位組織コード列があればそれを使い、なければ BU/部門/… 列名から推定する
 export interface OrgMasterEntry {
   code:              string          // 組織コード
+  companyCode?:      string          // 会社コード（Excel「会社コード」列。CompanyFilterEntry.code と対応）
   parentCode?:       string          // 上位組織コード（Excel に列がある場合）
   name?:             string          // 組織名
   company:            string          // 会社名

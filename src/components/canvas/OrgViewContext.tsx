@@ -12,6 +12,8 @@ export interface DragData {
   affiliationType: 'primary' | 'concurrent'
   source?:         'before' | 'after' | 'reportLine' | 'sidebar' | 'excel'
   fromRowId?:      number
+  /** キャンバス外のドロップ先（チャット等）向けの統一フィールド */
+  rowId?:          number
 }
 
 export interface PositionEntry {
