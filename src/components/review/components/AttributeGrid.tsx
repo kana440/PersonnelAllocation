@@ -1,17 +1,21 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../../../store/useStore'
 import type { ReviewRow } from '../hooks/useReviewData'
+import type { EditPattern } from '../../../application/editPatterns'
 
-// 変更種別の定義（表示順）
-const ALL_KINDS = [
-  { key: 'transfer',    label: '組織異動', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'promotion',   label: '昇格',     color: 'bg-green-100 text-green-700 border-green-200' },
-  { key: 'demotion',    label: '降格',     color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { key: 'titleChange', label: '職位名変更', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { key: 'newHire',     label: '新規採用', color: 'bg-teal-100 text-teal-700 border-teal-200' },
-  { key: 'termination', label: '退職',     color: 'bg-red-100 text-red-700 border-red-200' },
-  { key: 'concurrent',  label: '兼務',     color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-] as const
+// フィルターチップ定義（EditPattern + newHire/termination）
+type FilterKey = EditPattern | 'newHire' | 'termination'
+const ALL_FILTER_CHIPS: { key: FilterKey; label: string; color: string }[] = [
+  { key: 'orgTransfer',       label: '組織異動',        color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'promotionDemotion', label: '昇降格',          color: 'bg-green-100 text-green-700 border-green-200' },
+  { key: 'jobTypeChange',     label: 'ジョブタイプ変更', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { key: 'vacantPositionMove',label: 'ポジション異動',  color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { key: 'secondmentRelease', label: '出向解除',        color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { key: 'newHire',           label: '新規採用',        color: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { key: 'termination',       label: '退職',            color: 'bg-red-100 text-red-700 border-red-200' },
+]
+
+const EDIT_PATTERNS = new Set<string>(['orgTransfer','promotionDemotion','jobTypeChange','vacantPositionMove','secondmentRelease','resignation'])
 
 interface Props {
   rows:                ReviewRow[]
@@ -75,7 +79,11 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
     if (showChangedOnly) list = list.filter(r => r.changes.diffCount > 0)
     if (showIssuesOnly)  list = list.filter(r => r.issues.length > 0)
     if (activeKinds.size > 0) {
-      list = list.filter(r => [...activeKinds].some(k => r.changes.kinds.has(k as never)))
+      list = list.filter(r => [...activeKinds].some(k =>
+        EDIT_PATTERNS.has(k)
+          ? r.activePatterns.has(k as EditPattern)
+          : r.changes.kinds.has(k as never)
+      ))
     }
     if (search) {
       const q = search.toLowerCase()
@@ -110,7 +118,7 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
           問題のみ
         </label>
         <div className="flex-shrink-0 w-px h-4 bg-gray-300 mx-0.5" />
-        {ALL_KINDS.map(({ key, label, color }) => {
+        {ALL_FILTER_CHIPS.map(({ key, label, color }) => {
           const active = activeKinds.has(key)
           return (
             <button
@@ -152,7 +160,7 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
             </tr>
           </thead>
           <tbody>
-            {filtered.map(({ row, changes, issues }) => {
+            {filtered.map(({ row, changes, activePatterns, issues }) => {
               const afterOrgName  = row.departmentCode     ? (afterOrgByCode.get(row.departmentCode)?.name  ?? row.departmentCode)     : '—'
               const beforeOrgName = row.prevDepartmentCode ? (beforeOrgByCode.get(row.prevDepartmentCode)?.name ?? row.prevDepartmentCode) : '—'
               const hasIssue = issues.length > 0
@@ -165,11 +173,14 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
                   <DiffCell before={row.prevBand ?? ''} after={row.band ?? ''} />
                   <td className="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">
                     <div className="flex flex-wrap gap-0.5">
-                      {ALL_KINDS.map(({ key, label, color }) =>
-                        changes.kinds.has(key as never) && (
-                          <span key={key} className={`px-1 py-0.5 rounded text-[10px] border ${color}`}>{label}</span>
-                        )
-                      )}
+                      {ALL_FILTER_CHIPS.map(({ key, label, color }) => {
+                        const hit = EDIT_PATTERNS.has(key)
+                          ? activePatterns.has(key as EditPattern)
+                          : changes.kinds.has(key as never)
+                        return hit
+                          ? <span key={key} className={`px-1 py-0.5 rounded text-[10px] border ${color}`}>{label}</span>
+                          : null
+                      })}
                       {changes.bandMismatch && (
                         <span className="px-1 py-0.5 rounded text-[10px] bg-amber-100 text-amber-700 border border-amber-200">⚠Band</span>
                       )}

@@ -2,12 +2,15 @@ import { useRef, useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
+import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
+import type { AllCodeLists } from '../../domain/codeLists/aggregate'
 import { SetupHelp } from './SetupHelp'
 import { AssigneeSelectStep } from './AssigneeSelectStep'
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'loading'; progress: string }
+  | { kind: 'done'; result: ImportedWorkbookResult }
   | { kind: 'mode-select'; result: ImportedWorkbookResult }
   | { kind: 'assignee-select'; result: ImportedWorkbookResult }
   | { kind: 'error'; message: string }
@@ -29,7 +32,7 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: '準備中...' })
     try {
       const result = await fn(onProgress)
-      if (result) setPhase({ kind: 'mode-select', result })
+      if (result) setPhase({ kind: 'done', result })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err) })
     }
@@ -42,7 +45,16 @@ export function SetupView({ onReady }: Props) {
     await runImport(onProgress => importFromFile(file, onProgress))
   }
 
+  const handleFileDrop = async (file: File) => {
+    await runImport(onProgress => importFromFile(file, onProgress))
+  }
+
   const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
+
+  const handleDone = useCallback(() => {
+    if (phase.kind !== 'done') return
+    setPhase({ kind: 'mode-select', result: phase.result })
+  }, [phase])
 
   // 管理者として開く → 全行をそのままロードして開始
   const handleSelectAdmin = useCallback(async () => {
@@ -84,16 +96,24 @@ export function SetupView({ onReady }: Props) {
         {phase.kind === 'idle' && (
           <IdleView
             onFileClick={() => fileInputRef.current?.click()}
+            onFileDrop={handleFileDrop}
             onSample={handleSample}
             onHelp={() => setShowHelp(true)}
           />
         )}
         {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
+        {phase.kind === 'done' && (
+          <ResultView
+            result={phase.result}
+            onNext={handleDone}
+            onBack={() => setPhase({ kind: 'idle' })}
+          />
+        )}
         {phase.kind === 'mode-select' && (
           <ModeSelectView
             onAdmin={handleSelectAdmin}
             onAssignee={handleSelectAssigneeMode}
-            onBack={() => setPhase({ kind: 'idle' })}
+            onBack={() => phase.kind === 'mode-select' && setPhase({ kind: 'done', result: phase.result })}
           />
         )}
         {phase.kind === 'assignee-select' && (
@@ -113,11 +133,34 @@ export function SetupView({ onReady }: Props) {
 
 // ── 画面①: ファイル選択 ───────────────────────────────────────────────
 
-function IdleView({ onFileClick, onSample, onHelp }: {
+function IdleView({ onFileClick, onFileDrop, onSample, onHelp }: {
   onFileClick: () => void
+  onFileDrop: (file: File) => void
   onSample: () => void
   onHelp: () => void
 }) {
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounter = useRef(0)
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current++
+    setIsDragOver(true)
+  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current--
+    if (dragCounter.current === 0) setIsDragOver(false)
+  }
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault() }
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current = 0
+    setIsDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) onFileDrop(file)
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -137,12 +180,19 @@ function IdleView({ onFileClick, onSample, onHelp }: {
         >?</button>
       </div>
 
-      <button
+      <div
         onClick={onFileClick}
-        className="w-full py-3 text-sm font-semibold border-2 border-dashed border-blue-400 rounded-xl text-blue-600 hover:bg-blue-50 transition-colors"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        className={`w-full py-3 text-sm font-semibold border-2 border-dashed rounded-xl text-center cursor-pointer transition-colors select-none
+          ${isDragOver
+            ? 'border-blue-600 bg-blue-100 text-blue-700'
+            : 'border-blue-400 text-blue-600 hover:bg-blue-50'}`}
       >
-        Excelファイルを選択して開始
-      </button>
+        {isDragOver ? 'ここにドロップ' : 'Excelファイルを選択して開始'}
+      </div>
 
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-gray-200" />
@@ -218,6 +268,94 @@ function LoadingView({ progress }: { progress: string }) {
     <div className="flex flex-col items-center justify-center py-14 space-y-4">
       <div className="w-9 h-9 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
       <p className="text-sm text-gray-500">{progress}</p>
+    </div>
+  )
+}
+
+// ── 読み込み結果 ──────────────────────────────────────────────────────
+
+function ResultView({ result, onNext, onBack }: {
+  result: ImportedWorkbookResult
+  onNext: () => void
+  onBack: () => void
+}) {
+  const codeListKeys = (Object.keys(CODE_LIST_LABELS) as (keyof AllCodeLists)[])
+    .filter(k => k !== 'orgMasterEntries')
+  const foundCodeListKeys = codeListKeys.filter(k => {
+    const val = result.codeLists[k]
+    return Array.isArray(val) && val.length > 0
+  })
+  const foundLabels = foundCodeListKeys.map(k => CODE_LIST_LABELS[k])
+  const codeListFound = result.sheetsFound.includes(SHEET_CODE_LISTS)
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-bold text-gray-800">読み込み完了</h2>
+        <p className="mt-0.5 text-xs text-gray-400">内容を確認してモードを選択してください。</p>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-3 text-xs">
+        <ResultRow
+          label={SHEET_ALLOCATION}
+          found={result.sheetsFound.includes(SHEET_ALLOCATION)}
+          detail={`${result.allocationRowCount} 行`}
+        />
+        <ResultRow
+          label={SHEET_ORG_MASTER}
+          found={result.sheetsFound.includes(SHEET_ORG_MASTER)}
+          detail={`${result.orgEntries.length} 組織`}
+        />
+        <div className="flex items-start gap-2">
+          <span className={`text-base leading-none mt-0.5 ${codeListFound ? 'text-green-500' : 'text-gray-300'}`}>
+            {codeListFound ? '✓' : '—'}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-gray-400'}`}>
+                {SHEET_CODE_LISTS}
+              </span>
+              {codeListFound && (
+                <span className="text-gray-400">{foundCodeListKeys.length} / {codeListKeys.length} 種類</span>
+              )}
+              {!codeListFound && (
+                <span className="text-gray-400 italic">シートが見つかりません</span>
+              )}
+            </div>
+            {foundLabels.length > 0 && (
+              <p className="text-gray-400 mt-1 leading-relaxed">{foundLabels.join(' · ')}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <button
+          onClick={onNext}
+          className="w-full py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+        >
+          モードを選択 →
+        </button>
+        <button
+          onClick={onBack}
+          className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          ← 戻る
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ResultRow({ label, found, detail }: { label: string; found: boolean; detail?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`text-base leading-none ${found ? 'text-green-500' : 'text-gray-300'}`}>
+        {found ? '✓' : '—'}
+      </span>
+      <span className={`font-mono ${found ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
+      {found && detail && <span className="text-gray-400">{detail}</span>}
+      {!found && <span className="text-gray-400 italic">シートが見つかりません</span>}
     </div>
   )
 }

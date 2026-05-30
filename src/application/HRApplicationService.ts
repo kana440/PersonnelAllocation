@@ -13,6 +13,19 @@ import {
   UnassignPersonFromPositionOperation,
   AssignPersonToPositionOperation,
 } from '../domain/operation/handlers/positionOps'
+import {
+  OrgTransferOperation,
+  PromotionOperation,
+  JobTypeChangeOperation,
+  ResignationOperation,
+  VacantPositionMoveOperation,
+  SecondmentReleaseOperation,
+} from '../domain/operation/handlers/patternOps'
+import type {
+  PromotionFields,
+  JobTypeFields,
+  SecondmentReleaseFields,
+} from '../domain/operation/handlers/patternOps'
 import { AssignPositionCodesOperation } from '../domain/operation/handlers/assignPositionCodes'
 import type { PositionCodeAssignment } from '../ports'
 import { derivePersons } from '../domain/projection/rows'
@@ -264,6 +277,38 @@ export class HRApplicationService {
   /** 内部採番コードを外部コードに置き換える（managerPositionCode も連動更新）*/
   assignPositionCodes(assignments: PositionCodeAssignment[]): ValidationResult {
     return this.executeOperation(new AssignPositionCodesOperation(assignments))
+  }
+
+  // ── 業務パターン操作（Web パターンダイアログ・AI 共通エントリポイント）────
+
+  /** 組織異動：departmentCode を変更し org sub-fields を自動補完する */
+  executeOrgTransfer(rowId: number, departmentCode: string): ValidationResult {
+    return this.executeOperation(new OrgTransferOperation(rowId, departmentCode))
+  }
+
+  /** 昇降格：役職・バンド・給与等級などを更新する */
+  executePromotion(rowId: number, fields: PromotionFields): ValidationResult {
+    return this.executeOperation(new PromotionOperation(rowId, fields))
+  }
+
+  /** ジョブタイプ変更：jobFamily / jobType を更新する */
+  executeJobTypeChange(rowId: number, fields: JobTypeFields): ValidationResult {
+    return this.executeOperation(new JobTypeChangeOperation(rowId, fields))
+  }
+
+  /** 退職設定：異動事由を退職値に設定し、メモを更新する */
+  executeResignation(rowId: number, transferReason: string, memo?: string): ValidationResult {
+    return this.executeOperation(new ResignationOperation(rowId, transferReason, memo))
+  }
+
+  /** 空きポジション異動：person を sourceRow から targetRow の空席に移動する */
+  executeVacantPositionMove(sourceRowId: number, targetRowId: number): ValidationResult {
+    return this.executeOperation(new VacantPositionMoveOperation(sourceRowId, targetRowId))
+  }
+
+  /** 出向解除：雇用タイプ・出向先などを更新する（prev が出向の行のみ有効）*/
+  executeSecondmentRelease(rowId: number, fields: SecondmentReleaseFields): ValidationResult {
+    return this.executeOperation(new SecondmentReleaseOperation(rowId, fields))
   }
 
   // ── 上司姓名の一括再導出 ────────────────────────────────────────

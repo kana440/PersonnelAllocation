@@ -274,6 +274,65 @@ export function createWriteMethods(service: HRApplicationService) {
       : { ok: false, error: result.errors?.[0]?.message ?? 'エラー' }
   }
 
+  // ── Pattern operations (AI coarse-grained, same path as Web dialogs) ─────────
+
+  function executeOrgTransfer(rowId: number, departmentCode: string): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result     = service.executeOrgTransfer(rowId, departmentCode)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executePromotion(rowId: number, fields: {
+    officialPositionCode?: string
+    localJobTitle?:        string
+    positionBand?:         string
+    band?:                 string
+    payGrade?:             string
+  }): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result     = service.executePromotion(rowId, fields)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeJobTypeChange(rowId: number, fields: {
+    jobFamily?: string
+    jobType?:   string
+  }): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result     = service.executeJobTypeChange(rowId, fields)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeResignation(rowId: number, transferReason: string, memo?: string): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result     = service.executeResignation(rowId, transferReason, memo)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeVacantPositionMove(sourceRowId: number, targetRowId: number): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result     = service.executeVacantPositionMove(sourceRowId, targetRowId)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeSecondmentRelease(rowId: number, fields: {
+    employmentType?:        string
+    secondmentToCompany?:   string
+    secondmentFromCompany?: string
+    transferReason?:        string
+    memo?:                  string
+  }): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result     = service.executeSecondmentRelease(rowId, fields)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
   // ── Utility ───────────────────────────────────────────────────────────────
 
   function formatErrors(errors: OperationError[]): string {
@@ -289,6 +348,8 @@ export function createWriteMethods(service: HRApplicationService) {
     reDeriveManagerNames, reDeriveOrgSubFields,
     executeBulkTransfer, executeFieldEdit, executeBulkSetField,
     executeTransferPersons, executeSetPromotion, executeChangePosition,
+    executeOrgTransfer, executePromotion, executeJobTypeChange,
+    executeResignation, executeVacantPositionMove, executeSecondmentRelease,
     formatErrors,
   }
 }

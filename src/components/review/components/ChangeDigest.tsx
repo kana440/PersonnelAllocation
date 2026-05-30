@@ -1,5 +1,5 @@
 import type { ReviewData } from '../hooks/useReviewData'
-import type { ChangeKind } from '../../../domain/review/changeDetection'
+import type { EditPattern } from '../../../application/editPatterns'
 
 interface Props {
   data:        ReviewData
@@ -8,12 +8,12 @@ interface Props {
 }
 
 interface Stat {
-  label:       string
-  value:       number
-  color:       string
-  bgColor:     string
-  tab?:        string
-  filterKind?: ChangeKind
+  label:        string
+  value:        number
+  color:        string
+  bgColor:      string
+  tab?:         string
+  filterKind?:  EditPattern | 'newHire' | 'termination'
 }
 
 export function ChangeDigest({ data, onSelectTab }: Props) {
@@ -21,26 +21,28 @@ export function ChangeDigest({ data, onSelectTab }: Props) {
 
   const changedRows   = rows.filter(r => r.changes.diffCount > 0).length
   const unchangedRows = rows.length - changedRows
+  const p = (key: EditPattern) => summary.byPattern.get(key) ?? 0
 
   // 3グループに分けて区切り線で視覚的に整理
   const groups: { label: string; stats: Stat[] }[] = [
     {
       label: '概要',
       stats: [
-        { label: '総レコード', value: rows.length,     color: 'text-gray-700',   bgColor: 'bg-gray-50' },
-        { label: '変更あり',  value: changedRows,     color: 'text-blue-700',   bgColor: 'bg-blue-50',   tab: 'grid' },
-        { label: '変更なし',  value: unchangedRows,   color: 'text-gray-400',   bgColor: 'bg-gray-50' },
+        { label: '総レコード', value: rows.length,   color: 'text-gray-700', bgColor: 'bg-gray-50' },
+        { label: '変更あり',  value: changedRows,   color: 'text-blue-700', bgColor: 'bg-blue-50',  tab: 'grid' },
+        { label: '変更なし',  value: unchangedRows, color: 'text-gray-400', bgColor: 'bg-gray-50' },
       ],
     },
     {
-      label: '変更種別',
+      label: '操作パターン',
       stats: [
-        { label: '組織異動', value: summary.transfers,   color: 'text-blue-600',   bgColor: 'bg-blue-50',   tab: 'grid', filterKind: 'transfer' },
-        { label: '昇格',    value: summary.promotions,  color: 'text-green-600',  bgColor: 'bg-green-50',  tab: 'grid', filterKind: 'promotion' },
-        { label: '降格',    value: summary.demotions,   color: 'text-orange-600', bgColor: 'bg-orange-50', tab: 'grid', filterKind: 'demotion' },
-        { label: '職位変更', value: summary.titleChanges,color: 'text-purple-600', bgColor: 'bg-purple-50', tab: 'grid', filterKind: 'titleChange' },
-        { label: '新規採用', value: summary.newHires,    color: 'text-teal-600',   bgColor: 'bg-teal-50',   tab: 'grid', filterKind: 'newHire' },
-        { label: '退職',    value: summary.terminations,color: 'text-red-600',    bgColor: 'bg-red-50',    tab: 'grid', filterKind: 'termination' },
+        { label: '組織異動',        value: p('orgTransfer'),       color: 'text-blue-600',   bgColor: 'bg-blue-50',   tab: 'grid', filterKind: 'orgTransfer' },
+        { label: '昇降格',          value: p('promotionDemotion'), color: 'text-green-600',  bgColor: 'bg-green-50',  tab: 'grid', filterKind: 'promotionDemotion' },
+        { label: 'ジョブタイプ変更', value: p('jobTypeChange'),     color: 'text-purple-600', bgColor: 'bg-purple-50', tab: 'grid', filterKind: 'jobTypeChange' },
+        { label: 'ポジション異動',  value: p('vacantPositionMove'),color: 'text-cyan-600',   bgColor: 'bg-cyan-50',   tab: 'grid', filterKind: 'vacantPositionMove' },
+        { label: '出向解除',        value: p('secondmentRelease'), color: 'text-amber-600',  bgColor: 'bg-amber-50',  tab: 'grid', filterKind: 'secondmentRelease' },
+        { label: '新規採用',        value: summary.newHires,       color: 'text-teal-600',   bgColor: 'bg-teal-50',   tab: 'grid', filterKind: 'newHire' },
+        { label: '退職',            value: summary.terminations,   color: 'text-red-600',    bgColor: 'bg-red-50',    tab: 'grid', filterKind: 'termination' },
       ],
     },
     {

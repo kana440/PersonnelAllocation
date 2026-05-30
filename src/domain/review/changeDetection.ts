@@ -66,16 +66,29 @@ export function detectChanges(
   }
 
   // バンド変更（昇格・降格・バンド変更）
-  // positionBand の promotionDemotionWarningLevel（codeList）で判定する。
-  // map が渡されていない・コードが見つからない場合は bandChange として扱う。
-  const prevBandStr  = row.prevPositionBand ?? ''
-  const afterBandStr = row.positionBand ?? ''
+  // まず band（人のバンド）の数値比較で昇降格を判定する。
+  // band が比較できない場合は positionBand の promotionDemotionWarningLevel で判定し、
+  // それも使えない場合は bandChange として扱う。
   const afterBandLevel = parseBandLevel(row.band) // bandMismatch チェック用
 
-  if (prevBandStr !== afterBandStr) {
-    if (jobLevelWarningMap && prevBandStr && afterBandStr) {
-      const prevLevel  = jobLevelWarningMap.get(prevBandStr)
-      const afterLevel = jobLevelWarningMap.get(afterBandStr)
+  const prevPersonLevel  = parseBandLevel(row.prevBand)
+  const afterPersonLevel = parseBandLevel(row.band)
+  const personBandChanged = (row.prevBand ?? '') !== (row.band ?? '')
+
+  const prevPosBandStr  = row.prevPositionBand ?? ''
+  const afterPosBandStr = row.positionBand ?? ''
+  const posBandChanged  = prevPosBandStr !== afterPosBandStr
+
+  if (personBandChanged || posBandChanged) {
+    // band の数値で昇降格を判定（最優先）
+    if (personBandChanged && prevPersonLevel !== null && afterPersonLevel !== null) {
+      if (afterPersonLevel > prevPersonLevel)      kinds.add('promotion')
+      else if (afterPersonLevel < prevPersonLevel) kinds.add('demotion')
+      else                                         kinds.add('bandChange')
+    } else if (posBandChanged && jobLevelWarningMap && prevPosBandStr && afterPosBandStr) {
+      // positionBand の warningLevel で判定（フォールバック）
+      const prevLevel  = jobLevelWarningMap.get(prevPosBandStr)
+      const afterLevel = jobLevelWarningMap.get(afterPosBandStr)
       if (prevLevel !== undefined && afterLevel !== undefined) {
         if (afterLevel > prevLevel)      kinds.add('promotion')
         else if (afterLevel < prevLevel) kinds.add('demotion')

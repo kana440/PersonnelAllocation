@@ -126,6 +126,33 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [sessionReady, appMode])
 
+  // Ctrl+Z / Cmd+Z → Undo、Ctrl+Y / Cmd+Shift+Z → Redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // input / textarea / select にフォーカスがある場合はブラウザデフォルトに委ねる
+      if (e.target instanceof Element) {
+        const tag = e.target.tagName.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+        if ((e.target as HTMLElement).isContentEditable) return
+      }
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) return
+
+      const isUndo = e.key === 'z' && !e.shiftKey
+      const isRedo = e.key === 'y' || (e.key === 'z' && e.shiftKey)
+
+      if (isUndo) {
+        e.preventDefault()
+        if (canUndo) undo()
+      } else if (isRedo) {
+        e.preventDefault()
+        if (canRedo) redo()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo, redo, canUndo, canRedo])
+
   const [isTreeOpen,        setIsTreeOpen]        = useState(true)
   const [isChatOpen,        setIsChatOpen]        = useState(true)
   const [isHistoryOpen,     setIsHistoryOpen]     = useState(false)
@@ -199,10 +226,10 @@ export default function App() {
           <SplitExportButton />
           <AdminAssigneeFilterSelect />
           <div className="w-px h-4 bg-gray-600" />
-          <HeaderButton onClick={undo} disabled={!canUndo} title="元に戻す（保存単位）">
+          <HeaderButton onClick={undo} disabled={!canUndo} title="元に戻す (Ctrl+Z)">
             <span>↩</span><span>Undo</span>
           </HeaderButton>
-          <HeaderButton onClick={redo} disabled={!canRedo} title="やり直し">
+          <HeaderButton onClick={redo} disabled={!canRedo} title="やり直し (Ctrl+Y)">
             <span>Redo</span><span>↪</span>
           </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />

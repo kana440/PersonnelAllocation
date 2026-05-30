@@ -8,6 +8,14 @@ import { useScopedStore } from '../../store/useScopedStore'
 import { ReportLineView }   from './components/ReportLineView'
 import { OrgBox, DropZone } from './components/OrgBox'
 import { PersonContextMenu, PositionContextMenu } from './CanvasContextMenus'
+import { RowContextMenu } from './RowContextMenu'
+import { OrgTransferDialog }       from './patternDialogs/OrgTransferDialog'
+import { PromotionDialog }         from './patternDialogs/PromotionDialog'
+import { JobTypeDialog }           from './patternDialogs/JobTypeDialog'
+import { ResignationDialog }       from './patternDialogs/ResignationDialog'
+import { VacantPositionDialog }    from './patternDialogs/VacantPositionDialog'
+import { SecondmentReleaseDialog } from './patternDialogs/SecondmentReleaseDialog'
+import type { EditPattern }   from '../../application/editPatterns'
 import { CanvasModals }     from './CanvasModals'
 import { PositionRows }     from './components/PositionRows'
 import { OrgViewContext }   from './OrgViewContext'
@@ -69,7 +77,9 @@ export function OrgOperationView() {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set())
   const [moveModalOpen,     setMoveModalOpen]     = useState(false)
   const [bulkActionModal,   setBulkActionModal]   = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
-  const [changeTitleRowId,  setChangeTitleRowId]  = useState<number | null>(null)
+  const [changeTitleRowId,   setChangeTitleRowId]   = useState<number | null>(null)
+  const [rowContextMenu,     setRowContextMenu]     = useState<{ x: number; y: number; rowId: number } | null>(null)
+  const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
 
   // ── Hooks ──────────────────────────────────────────────────────
   // selectPerson をラップしてチャットコンテキストも更新（案1: クリックで全クリア→1件）
@@ -108,6 +118,12 @@ export function OrgOperationView() {
     if (!firstRow) return
     enterEditMode(firstRow.rowId)
   }
+
+  const handleRowDoubleClick = useCallback((e: React.MouseEvent, rowId: number) => {
+    e.preventDefault(); e.stopPropagation()
+    if (isHistoryPreviewMode) return
+    setRowContextMenu({ x: e.clientX, y: e.clientY, rowId })
+  }, [isHistoryPreviewMode])
 
   const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
     e.preventDefault(); e.stopPropagation()
@@ -211,7 +227,7 @@ export function OrgOperationView() {
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson: handleSelectPerson,
     isHistoryPreviewMode,
-    handlePersonDoubleClick, handlePersonContextMenu,
+    handlePersonDoubleClick, handleRowDoubleClick, handlePersonContextMenu,
     handlePositionContextMenu, handleDropPositionOnPosition, handleReorderRow,
     expandedChipIds, toggleChip,
   }
@@ -366,6 +382,41 @@ export function OrgOperationView() {
             </div>
           )}
         </div>
+
+        {rowContextMenu && (() => {
+          const row = allocationList.find(r => r.rowId === rowContextMenu.rowId)
+          return row ? (
+            <RowContextMenu
+              x={rowContextMenu.x} y={rowContextMenu.y}
+              row={row}
+              onEditPattern={(pattern, rowId) => {
+                setRowContextMenu(null)
+                setActivePatternDialog({ pattern, rowId })
+              }}
+              onDirectEdit={rowId => { enterEditMode(rowId) }}
+              onClose={() => setRowContextMenu(null)}
+            />
+          ) : null
+        })()}
+
+        {activePatternDialog?.pattern === 'orgTransfer' && (
+          <OrgTransferDialog       rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
+        )}
+        {activePatternDialog?.pattern === 'promotionDemotion' && (
+          <PromotionDialog         rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
+        )}
+        {activePatternDialog?.pattern === 'jobTypeChange' && (
+          <JobTypeDialog           rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
+        )}
+        {activePatternDialog?.pattern === 'resignation' && (
+          <ResignationDialog       rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
+        )}
+        {activePatternDialog?.pattern === 'vacantPositionMove' && (
+          <VacantPositionDialog    rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
+        )}
+        {activePatternDialog?.pattern === 'secondmentRelease' && (
+          <SecondmentReleaseDialog rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
+        )}
 
         {contextMenu && (
           <PersonContextMenu

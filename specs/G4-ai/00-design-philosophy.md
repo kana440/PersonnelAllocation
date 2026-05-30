@@ -116,7 +116,7 @@ execute: args => aiTools.getPersonDetail(args.userId as string) // ← OK
 
 ---
 
-## 5. Web と AI の対称性について
+## 5. Web と AI の対称性・非対称性について
 
 ### 対称性が成り立つ層
 
@@ -132,7 +132,41 @@ execute: args => aiTools.getPersonDetail(args.userId as string) // ← OK
 | バリデーション表示 | 毎描画（`validateRow` 直接呼び出し） | `getValidationDiagnosis()`（集約） |
 | 選択肢生成 | `getFieldOptions` を `getOptions()` 経由で毎描画 | `getFieldOptions()` をツールとして呼ぶ |
 | 確認ゲート | 保存ボタン（UI ボタン） | `confirm` ツール（チャット内確認） |
-| 編集単位 | フィールド単位→まとめて保存 | 業務意図単位（1ツール = 1操作） |
+| 編集単位 | フィールド単位→インクリメンタル | 業務意図単位（1ツール = 1操作） |
+
+### 操作粒度の意図的な差異
+
+Web と AI は「同じパイプラインを通る」が、**操作の粒度は意図的に異なる**。
+
+```
+Web（インクリメンタル編集）          AI（業務意図単位）
+──────────────────────────         ──────────────────────────
+saveRow(rowId, {band: 'M4'})        executeOrgTransfer(userId, deptCode)
+saveRow(rowId, {payGrade: 'G3'})    → validate + 複数フィールド一括更新
+saveRow(rowId, {localJobTitle: …})    + 派生フィールド自動補完
+  ↓（3回のUndoエントリ）                ↓（1回のUndoエントリ）
+```
+
+**Web がインクリメンタルな理由**：
+- フィールド単位で即時フィードバック（バリデーション・選択肢）を得られる
+- ユーザーがフォーム上で何度も試行錯誤できる
+- 保存ボタンが確認ゲートになる
+
+**AI が業務意図単位な理由**：
+- LLM とのターンアラウンドを最小化するため、1ツール呼び出しで完結する
+- 「組織異動」「昇降格」などの業務的意味が明確になる
+- Undo が業務操作単位になる（細かいフィールド編集履歴が残らない）
+
+**実装方針**：
+
+- Web の細粒度編集：`appService.saveRow()` → `DirectEditOperation`（既存）
+- AI の粗粒度操作：`appService.executeOrgTransfer()` などの意味的メソッド
+  → 内部では `executeOperation(new XxxOperation(...))` を呼ぶ
+  → `aiTools.ts` がこれを AI に公開する
+
+パターンダイアログ（UI）は AI の粗粒度操作と同じメソッドを呼んでも良い。
+操作の意味的まとまり（複数フィールド + 派生補完）を UI で使いたいときは
+`appService.executeOrgTransfer()` を呼ぶことで、AI と同じコードパスを共有できる。
 
 ### Web の状態（React State・buffer）をドメインに染み出させない
 

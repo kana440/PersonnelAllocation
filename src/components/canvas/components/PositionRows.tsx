@@ -40,7 +40,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
     handleReorderRow,
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson,
-    handlePersonDoubleClick, handlePersonContextMenu,
+    handleRowDoubleClick, handlePersonContextMenu,
     setConfirmDialog,
   } = useOrgView()
 
@@ -229,8 +229,9 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   }}
                   onDragLeave={() => setDragOverPositionRowId(null)}
                   onDrop={e => { setDragOverPositionRowId(null); handleDropPositionOnPosition(e, row.rowId) }}
+                  onDoubleClick={e => handleRowDoubleClick(e, row.rowId)}
                   onContextMenu={e => handlePositionContextMenu(e, row.rowId)}
-                  title="ドラッグ→別組織に移動 / 別ポジションにドロップ→上司設定"
+                  title="ダブルクリック：変更メニュー / ドラッグ→別組織に移動 / 別ポジションにドロップ→上司設定"
                   className={`
                     relative flex items-center gap-1 px-2 py-1
                     border border-r-0
@@ -292,6 +293,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   }}
                   onDragLeave={() => setDragOverVacantRowId(null)}
                   onDrop={e => { setDragOverVacantRowId(null); handleDropOnVacantSlot(e, row.rowId) }}
+                  onDoubleClick={e => handleRowDoubleClick(e, row.rowId)}
                   onContextMenu={e => handlePositionContextMenu(e, row.rowId)}
                 >
                   {dragOverVacantRowId === row.rowId ? 'ここにドロップ' : '（空席）← drop'}
@@ -311,7 +313,7 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                     e.dataTransfer.effectAllowed = 'move'
                   } : undefined}
                   onClick={() => isSelectMode ? togglePersonSelection(person!.id) : selectPerson(person!.id)}
-                  onDoubleClick={() => !isSelectMode && handlePersonDoubleClick(person!.id)}
+                  onDoubleClick={e => !isSelectMode && handleRowDoubleClick(e, row.rowId)}
                   onContextMenu={e => !isSelectMode && handlePersonContextMenu(e, person!.id)}
                   className={`
                     flex-1 flex items-center gap-2 px-2 py-1 text-xs select-none

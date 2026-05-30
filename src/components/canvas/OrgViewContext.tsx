@@ -52,6 +52,7 @@ export interface OrgViewContextValue {
   selectPerson:             (id: string) => void
   isHistoryPreviewMode:         boolean
   handlePersonDoubleClick:      (id: string) => void
+  handleRowDoubleClick:         (e: React.MouseEvent, rowId: number) => void
   handlePersonContextMenu:      (e: React.MouseEvent, id: string) => void
   handlePositionContextMenu:    (e: React.MouseEvent, rowId: number) => void
   handleDropPositionOnPosition: (e: React.DragEvent, targetRowId: number) => void
