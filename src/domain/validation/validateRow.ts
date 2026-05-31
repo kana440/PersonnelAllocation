@@ -10,6 +10,7 @@ import { runRelated }     from './validateRelated'
 import { runExistence }   from './validateExistence'
 import { runKeys }        from './validateKeys'
 import { runConsistency } from './validateConsistency'
+import type { FieldStrictness } from '../optionStrictness'
 
 export type { ValidationLevel, ValidationIssue } from './types'
 
@@ -18,11 +19,12 @@ export type { ValidationLevel, ValidationIssue } from './types'
 //   transferReason の noCheckRequired === true → E系（キー重複）のみ
 //   それ以外 → A/B/D/E/F 全系を実行
 export function validateRow(
-  row:       AllocationRow,
-  orgs:      Organization[],
-  codeLists: AllCodeLists,
-  changes?:  RowChanges,
-  allRows?:  AllocationRow[],
+  row:        AllocationRow,
+  orgs:       Organization[],
+  codeLists:  AllCodeLists,
+  changes?:   RowChanges,
+  allRows?:   AllocationRow[],
+  overrides?: Partial<Record<string, FieldStrictness>>,
 ): ValidationIssue[] {
   const reasonEntry = codeLists.transferReasons.find(r => r.label === row.transferReason)
 
@@ -33,8 +35,8 @@ export function validateRow(
   return [
     ...runRequired(row, codeLists),
     ...runFormat(row),
-    ...runRelated(row, codeLists),
-    ...runExistence(row, orgs, codeLists),
+    ...runRelated(row, codeLists, overrides),
+    ...runExistence(row, orgs, codeLists, overrides),
     ...(allRows ? runKeys(row, allRows) : []),
     ...runConsistency(row, codeLists, changes),
   ]

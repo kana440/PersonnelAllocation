@@ -6,6 +6,14 @@ import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../codeLists/aggregate'
 import { VALUE_RULES, getEffectiveSource } from '../valueRules'
 
+/** 条件付きルールが適用されたときの有効・無効の分類結果 */
+export interface OptionsGroup {
+  /** 現在の行状態に対して有効な選択肢 */
+  valid:   string[]
+  /** ベースリストには存在するが現在の条件では非推奨な選択肢 */
+  invalid: string[]
+}
+
 // ── ベース選択肢の組み立て ───────────────────────────────────────────────────
 
 /**
@@ -58,8 +66,35 @@ export function filterOptions(
 // ── 主エントリポイント ───────────────────────────────────────────────────────
 
 /**
- * ベース選択肢の組み立てと絞り込みを合成した主エントリポイント。
- * UI 層の getOptions() はこれを呼ぶ。
+ * 有効・無効に分類した選択肢グループを返す。
+ * 条件付きルールが適用される場合: valid = 条件合致、invalid = ベースのうち条件非合致
+ * 条件付きルールがない場合: valid = ベース全件、invalid = []
+ */
+export function getGroupedFieldOptions(
+  field:             string,
+  row:               AllocationRow,
+  codeLists:         AllCodeLists,
+  currentJobFamily?: string,
+): OptionsGroup {
+  const base = buildBaseOptions(field, codeLists, currentJobFamily)
+  const hasConditional = VALUE_RULES.some(
+    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
+  )
+  if (!hasConditional) return { valid: base, invalid: [] }
+
+  const effective = getEffectiveSource(field as keyof AllocationRow, row, codeLists)
+  if (!effective || effective.length === 0) return { valid: base, invalid: [] }
+
+  const effectiveSet = new Set(effective)
+  return {
+    valid:   effective,
+    invalid: base.filter(o => !effectiveSet.has(o)),
+  }
+}
+
+/**
+ * 後方互換ラッパー: valid → invalid の順でフラットに返す。
+ * AI ツール等の既存呼び出し側向け。
  */
 export function getFieldOptions(
   field:             string,
@@ -67,14 +102,6 @@ export function getFieldOptions(
   codeLists:         AllCodeLists,
   currentJobFamily?: string,
 ): string[] {
-  // 条件付きルールが適用される場合は直接返す（ベース構築不要）
-  const hasConditional = VALUE_RULES.some(
-    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
-  )
-  if (hasConditional) {
-    const effective = getEffectiveSource(field as keyof AllocationRow, row, codeLists)  // passes row to source
-    if (effective) return effective
-  }
-
-  return buildBaseOptions(field, codeLists, currentJobFamily)
+  const { valid, invalid } = getGroupedFieldOptions(field, row, codeLists, currentJobFamily)
+  return [...valid, ...invalid]
 }

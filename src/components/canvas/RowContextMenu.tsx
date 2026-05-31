@@ -1,7 +1,18 @@
 import { detectChanges }         from '../../domain/review/changeDetection'
-import { deriveEditPatternState, EDIT_PATTERN_META } from '../../application/editPatterns'
-import type { EditPattern }       from '../../application/editPatterns'
+import { deriveEditPatterns, EDIT_PATTERN_META } from '../../domain/editPattern'
+import type { EditPattern }       from '../../domain/editPattern'
 import type { AllocationRow }     from '../../domain/allocationRow'
+import { useStore }               from '../../store/useStore'
+
+// 雇用タイプバッジ（出向受入のみ表示）
+function useEmpBadge(row: AllocationRow): { label: string; cls: string } | null {
+  const { codeLists } = useStore()
+  const et = row.employmentType as string | undefined
+  if (!et) return null
+  const entry = codeLists.employmentTypes.find(e => e.label === et || e.code === et)
+  if (!entry?.isOutsourceAcceptance) return null
+  return { label: '出向受入', cls: 'bg-orange-100 text-orange-700' }
+}
 
 interface Props {
   x:             number
@@ -19,8 +30,11 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
   const clampedX = Math.min(x, window.innerWidth  - MENU_W - 8)
   const clampedY = Math.min(y, window.innerHeight - MENU_H - 8)
 
+  const { codeLists } = useStore()
+  const empBadge = useEmpBadge(row)
+
   const { kinds } = detectChanges(row)
-  const { active, available } = deriveEditPatternState(kinds, row)
+  const { active, available } = deriveEditPatterns(kinds, row, codeLists)
 
   const name          = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'
   const posTitle      = row.localJobTitle || row.officialPositionCode || row.positionCode || ''
@@ -40,11 +54,18 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
         {/* ヘッダー */}
         <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
           <div className="flex items-start justify-between gap-1">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-gray-800 truncate">{name}</div>
-              {posTitle && (
-                <div className="text-[10px] text-gray-400 truncate">{posTitle}</div>
-              )}
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                {empBadge && (
+                  <span className={`flex-shrink-0 text-[9px] font-medium px-1 py-0.5 rounded ${empBadge.cls}`}>
+                    {empBadge.label}
+                  </span>
+                )}
+                {posTitle && (
+                  <span className="text-[10px] text-gray-400 truncate">{posTitle}</span>
+                )}
+              </div>
             </div>
             <button
               onClick={onClose}

@@ -5,7 +5,7 @@
 // HRApplicationService.executeOperation() is the single execution entry point.
 //
 // To add a new operation kind:
-//   1. Implement IDomainOperation in src/domain/operation/handlers/
+//   1. Implement EditCommand in src/domain/operation/handlers/
 //   2. Pass an instance to HRApplicationService.executeOperation() — no registry needed
 
 import type { AllocationRow } from '../allocationRow'
@@ -41,7 +41,7 @@ export interface OperationResult {
 
 // ── Operation interface ──────────────────────────────────────────────────────
 
-export interface IDomainOperation {
+export interface EditCommand {
   readonly kind: string
 
   // Pure function: checks whether this operation is valid against current state.

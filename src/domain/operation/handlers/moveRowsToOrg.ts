@@ -2,11 +2,11 @@
 // departmentCode (after) is updated; managerPositionCode is intentionally left unchanged.
 // Use case: user selects individual people from the canvas and moves them to another org.
 
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import { deriveOrgSubFields } from '../orgHelpers'
 
-export class MoveRowsToOrgOperation implements IDomainOperation {
+export class MoveRowsToOrgOperation implements EditCommand {
   readonly kind = 'MoveRowsToOrg'
 
   constructor(

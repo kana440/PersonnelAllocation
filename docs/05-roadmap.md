@@ -49,7 +49,7 @@ Phase 1: Excel 基盤 ──→ Phase 2: ドメイン操作 ──→ Phase 3: A
 | 空席への人アサイン（A/B ケース） | ✅ | 〃 |
 | ポジション↔人の紐付け解除（1行→2行分割） | ✅ | 〃 |
 | 内部 positionCode（`_pos_` プレフィックス）の Excel 出力 blank 判定 | ✅ | exceljs/xlsx 両エクスポーター |
-| IDomainOperation としての異動・昇格ハンドラー | 🚧 | 将来追加（現在は DirectEdit で代替） |
+| EditCommand としての異動・昇格ハンドラー | 🚧 | 将来追加（現在は DirectEdit で代替） |
 | ポジション操作を Undo 対象に（checkpoint 経由化） | 🚧 | 現在は Undo 対象外 |
 | 削除済みパネル UI | 🚧 | 未着手 |
 

@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "depcruise": "depcruise --config .dependency-cruiser.cjs src"
+    "depcruise": "depcruise --config .dependency-cruiser.cjs src",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
@@ -28,6 +30,7 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.4.5",
-    "vite": "^8.0.14"
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
   }
 }

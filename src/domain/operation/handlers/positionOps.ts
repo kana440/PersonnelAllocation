@@ -1,8 +1,8 @@
 // Position operations — create, remove, assign, unassign.
-// Each class implements IDomainOperation: validate() checks preconditions,
+// Each class implements EditCommand: validate() checks preconditions,
 // apply() returns the new state as a pure transformation.
 
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
@@ -10,7 +10,7 @@ import { deriveOrgSubFields, deriveManagerName } from '../orgHelpers'
 
 // ── CreateVacantPosition ─────────────────────────────────────────────────────
 
-export class CreateVacantPositionOperation implements IDomainOperation {
+export class CreateVacantPositionOperation implements EditCommand {
   readonly kind = 'CreateVacantPosition'
 
   constructor(
@@ -43,7 +43,7 @@ export class CreateVacantPositionOperation implements IDomainOperation {
 
 // ── RemovePosition ───────────────────────────────────────────────────────────
 
-export class RemovePositionOperation implements IDomainOperation {
+export class RemovePositionOperation implements EditCommand {
   readonly kind = 'RemovePosition'
 
   constructor(private readonly rowId: number) {}
@@ -85,7 +85,7 @@ export class RemovePositionOperation implements IDomainOperation {
 
 // ── UnassignPersonFromPosition ───────────────────────────────────────────────
 
-export class UnassignPersonFromPositionOperation implements IDomainOperation {
+export class UnassignPersonFromPositionOperation implements EditCommand {
   readonly kind = 'UnassignPersonFromPosition'
 
   constructor(private readonly occupiedRowId: number) {}
@@ -127,7 +127,7 @@ export class UnassignPersonFromPositionOperation implements IDomainOperation {
 
 // ── SetPositionManager ───────────────────────────────────────────────────────
 
-export class SetPositionManagerOperation implements IDomainOperation {
+export class SetPositionManagerOperation implements EditCommand {
   readonly kind = 'SetPositionManager'
 
   constructor(
@@ -160,7 +160,7 @@ export class SetPositionManagerOperation implements IDomainOperation {
 
 // ── AssignPersonToPosition ───────────────────────────────────────────────────
 
-export class AssignPersonToPositionOperation implements IDomainOperation {
+export class AssignPersonToPositionOperation implements EditCommand {
   readonly kind = 'AssignPersonToPosition'
 
   constructor(

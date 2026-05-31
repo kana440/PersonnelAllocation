@@ -9,9 +9,24 @@
 import type { AllocationRow } from './allocationRow'
 import type { AllCodeLists } from './codeLists/aggregate'
 import type { ValidationIssue } from './validation/types'
+import type { FieldStrictness } from './optionStrictness'
+import { resolveFieldStrictness } from './optionStrictness'
 import { CONCURRENT_TYPES } from './codeLists/concurrentType'
 import { UNION_MEMBER_CODE, UNION_MEMBER_CODES } from './codeLists/unionMember'
 import { DISCRETIONARY_YES, DISCRETIONARY_NO } from './codeLists/discretionaryWork'
+
+// code・label どちらで格納されていても照合できるルックアップ
+export function findEmpType(cl: AllCodeLists, row: AllocationRow) {
+  const v = row.employmentType as string | undefined
+  if (!v) return undefined
+  return cl.employmentTypes.find(e => e.label === v || e.code === v)
+}
+
+export function findTransferReason(cl: AllCodeLists, row: AllocationRow) {
+  const v = row.transferReason as string | undefined
+  if (!v) return undefined
+  return cl.transferReasons.find(e => e.label === v || e.code === v)
+}
 
 // ── 型定義 ───────────────────────────────────────────────────────────────────
 
@@ -120,30 +135,30 @@ export const VALUE_RULES: ValueRule[] = [
 
   // F1: 雇用タイプが出向受入のとき、対応バンド・給与等級に限定
   { kind: 'constraint', field: 'band',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isOutsourceAcceptance,
     source:  cl  => cl.jobLevels.filter(e => e.isOutsourceAcceptance).map(e => e.label),
     message: _   => 'バンドは雇用タイプに対応する選択肢から選択してください' },
 
   { kind: 'constraint', field: 'payGrade',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isOutsourceAcceptance,
     source:  cl  => cl.payGrades.filter(e => e.isOutsourceAcceptance).map(e => e.label),
     message: _   => '給与等級は雇用タイプに対応する選択肢から選択してください' },
 
   // F2: 雇用タイプが社員かつ userId === groupEmployeeId のとき、対応バンド・給与等級・ポジション_バンドに限定
   { kind: 'constraint', field: 'band',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmployee
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmployee
                        && !!row.userId && row.userId === row.groupEmployeeId,
     source:  cl  => cl.jobLevels.filter(e => e.isEmployee).map(e => e.label),
     message: _   => 'バンドは雇用タイプに対応する選択肢から選択してください' },
 
   { kind: 'constraint', field: 'positionBand',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmployee
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmployee
                        && !!row.userId && row.userId === row.groupEmployeeId,
     source:  cl  => cl.jobLevels.filter(e => e.isEmployee).map(e => e.label),
     message: _   => 'ポジション_バンドは雇用タイプに対応する選択肢から選択してください' },
 
   { kind: 'constraint', field: 'payGrade',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmployee
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmployee
                        && !!row.userId && row.userId === row.groupEmployeeId,
     source:  (cl, row) => {
       // ① isEmployee フラグ
@@ -166,35 +181,35 @@ export const VALUE_RULES: ValueRule[] = [
 
   // F3: 雇用タイプが雇用延長のとき、対応バンド（JobClassification）・給与等級・ポジション_バンド（Position）に限定
   { kind: 'constraint', field: 'band',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmploymentExtension,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmploymentExtension,
     source:  cl  => cl.jobLevels.filter(e => e.isEmploymentExtensionJobClassification).map(e => e.label),
     message: _   => 'バンドは雇用タイプに対応する選択肢から選択してください' },
 
   { kind: 'constraint', field: 'positionBand',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmploymentExtension,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmploymentExtension,
     source:  cl  => cl.jobLevels.filter(e => e.isEmploymentExtensionPosition).map(e => e.label),
     message: _   => 'ポジション_バンドは雇用タイプに対応する選択肢から選択してください' },
 
   { kind: 'constraint', field: 'payGrade',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmploymentExtension,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmploymentExtension,
     source:  cl  => cl.payGrades.filter(e => e.isEmploymentExtension).map(e => e.label),
     message: _   => '給与等級は雇用タイプに対応する選択肢から選択してください' },
 
   // F4: 申請区分の兼務チェックサインが立っているとき、給与等級を兼務対応に限定・休職フラグは設定不可
   { kind: 'constraint', field: 'payGrade',
-    when:    (row, cl) => !!cl.transferReasons.find(e => e.label === row.transferReason)?.concurrentCheckSign,
+    when:    (row, cl) => !!findTransferReason(cl, row)?.concurrentCheckSign,
     source:  cl  => cl.payGrades.filter(e => e.isConcurrent).map(e => e.label),
     message: _   => '給与等級は兼務に対応する選択肢から選択してください' },
 
   { kind: 'constraint', field: 'leaveFlag',
-    when:    (row, cl) => !!cl.transferReasons.find(e => e.label === row.transferReason)?.concurrentCheckSign,
+    when:    (row, cl) => !!findTransferReason(cl, row)?.concurrentCheckSign,
     source:  _   => ['0'],
     message: _   => '兼務の場合、休職フラグは設定できません' },
 
   // positionUnionFlag: F1/F2 — positionBand の isEmployeeOrAcceptedUnionMember=false なら非組合員のみ
   { kind: 'constraint', field: 'positionUnionFlag',
     when:    (row, cl) => {
-      const et = cl.employmentTypes.find(e => e.label === row.employmentType)
+      const et = findEmpType(cl, row)
       return !!et?.isOutsourceAcceptance
           || (!!et?.isEmployee && !!row.userId && row.userId === row.groupEmployeeId)
     },
@@ -207,7 +222,7 @@ export const VALUE_RULES: ValueRule[] = [
 
   // positionUnionFlag: F3 — positionBand の isEmploymentExtensionUnionMember=false なら非組合員のみ
   { kind: 'constraint', field: 'positionUnionFlag',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmploymentExtension,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmploymentExtension,
     source:  (cl, row) => {
       const pos = cl.jobLevels.find(e => e.label === (row?.positionBand as string | undefined))
       return (pos && !pos.isEmploymentExtensionUnionMember)
@@ -217,13 +232,13 @@ export const VALUE_RULES: ValueRule[] = [
 
   // unionFlag: F1（出向受入）— 常に非組合員
   { kind: 'constraint', field: 'unionFlag',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isOutsourceAcceptance,
     source:  _   => [UNION_MEMBER_CODE.NON_MEMBER],
     message: _   => '労働組合員は有効な選択肢から選択してください' },
 
   // unionFlag: F2（社員）— band の isEmployeeOrAcceptedUnionMember=false なら非組合員のみ
   { kind: 'constraint', field: 'unionFlag',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmployee
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmployee
                        && !!row.userId && row.userId === row.groupEmployeeId,
     source:  (cl, row) => {
       const band = cl.jobLevels.find(e => e.label === (row?.band as string | undefined))
@@ -234,7 +249,7 @@ export const VALUE_RULES: ValueRule[] = [
 
   // unionFlag: F3（雇用延長）— band の isEmploymentExtensionUnionMember=false なら非組合員のみ
   { kind: 'constraint', field: 'unionFlag',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isEmploymentExtension,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isEmploymentExtension,
     source:  (cl, row) => {
       const band = cl.jobLevels.find(e => e.label === (row?.band as string | undefined))
       return (band && !band.isEmploymentExtensionUnionMember)
@@ -283,7 +298,7 @@ export const VALUE_RULES: ValueRule[] = [
 
   // ポジション_裁量労働対象 — F1（出向受入）: 役職・jobType・出向元会社のフラグがすべて有効なら「はい」を許可
   { kind: 'constraint', field: 'positionDiscretionaryWorkFlag',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isOutsourceAcceptance,
     source:  (cl, row) => {
       if (!row) return [DISCRETIONARY_YES, DISCRETIONARY_NO]
       const position  = cl.officialPositions.find(e => e.label === (row.officialPositionCode as string | undefined))
@@ -299,7 +314,7 @@ export const VALUE_RULES: ValueRule[] = [
   // ポジション_裁量労働対象 — F2/F3（社員/雇用延長）: positionBand（会社ロジック）・jobType のフラグが有効なら「はい」を許可
   { kind: 'constraint', field: 'positionDiscretionaryWorkFlag',
     when:    (row, cl) => {
-      const et = cl.employmentTypes.find(e => e.label === row.employmentType)
+      const et = findEmpType(cl, row)
       return (!!et?.isEmployee && !!row.userId && row.userId === row.groupEmployeeId)
           || !!et?.isEmploymentExtension
     },
@@ -320,7 +335,7 @@ export const VALUE_RULES: ValueRule[] = [
 
   // 裁量労働対象（人）— F1（出向受入）: 役職・jobType・出向元会社のフラグがすべて有効なら「はい」を許可
   { kind: 'constraint', field: 'discretionaryWorkFlag',
-    when:    (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
+    when:    (row, cl) => !!findEmpType(cl, row)?.isOutsourceAcceptance,
     source:  (cl, row) => {
       if (!row) return [DISCRETIONARY_YES, DISCRETIONARY_NO]
       const position  = cl.officialPositions.find(e => e.label === (row.officialPositionCode as string | undefined))
@@ -336,7 +351,7 @@ export const VALUE_RULES: ValueRule[] = [
   // 裁量労働対象（人）— F2/F3（社員/雇用延長）: バンド（会社ロジック考慮）・jobType のフラグが有効なら「はい」を許可
   { kind: 'constraint', field: 'discretionaryWorkFlag',
     when:    (row, cl) => {
-      const et = cl.employmentTypes.find(e => e.label === row.employmentType)
+      const et = findEmpType(cl, row)
       return (!!et?.isEmployee && !!row.userId && row.userId === row.groupEmployeeId)
           || !!et?.isEmploymentExtension
     },
@@ -376,9 +391,10 @@ function getNoAutoCreate(row: AllocationRow, cl: AllCodeLists): boolean {
  * - when が false なら空を返す
  */
 export function evaluateConstraint(
-  rule:      ConstraintRule,
-  row:       AllocationRow,
-  codeLists: AllCodeLists,
+  rule:       ConstraintRule,
+  row:        AllocationRow,
+  codeLists:  AllCodeLists,
+  overrides?: Partial<Record<string, FieldStrictness>>,
 ): ValidationIssue[] {
   if (rule.when && !rule.when(row, codeLists)) return []
   const allowed = rule.source(codeLists, row)
@@ -386,6 +402,9 @@ export function evaluateConstraint(
   const val = row[rule.field] as string | undefined
   if (!val) return []
   if (allowed.includes(val)) return []
+
+  const strictness = resolveFieldStrictness(String(rule.field), overrides ?? {})
+  if (strictness !== 'strict') return []
   return [{ field: rule.field, level: 'error', message: rule.message(val) }]
 }
 

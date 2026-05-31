@@ -2,8 +2,10 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { ComboInput } from '../../common/ComboInput'
-import { getFieldOptions } from '../../../domain/optionFilter'
+import { getGroupedFieldOptions } from '../../../domain/optionFilter'
 import { validateRow } from '../../../domain/validation/validateRow'
+import { resolveFieldStrictness } from '../../../domain/optionStrictness'
+import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
 import type { AllocationRow } from '../../../domain/allocationRow'
 
 interface Props {
@@ -15,6 +17,7 @@ const FIELD_KEYS = new Set(['employmentType', 'secondmentToCompany', 'secondment
 
 export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
   const { allocationList, codeLists, afterOrganizations } = useStore()
+  const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
   const defaultReason = useMemo(() => {
@@ -38,9 +41,9 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList)
+    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList])
+  }, [effectiveRow, afterOrganizations, codeLists, allocationList, overrides])
 
   if (!row || !effectiveRow) return null
 
@@ -85,7 +88,7 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
             const fieldIssues = issues.filter(i => i.field as string === key)
             const hasError    = fieldIssues.some(i => i.level === 'error')
             const hasWarning  = fieldIssues.some(i => i.level === 'warning')
-            const options     = getFieldOptions(key, effectiveRow, codeLists)
+            const { valid, invalid } = getGroupedFieldOptions(key, effectiveRow, codeLists)
 
             return (
               <div key={key}>
@@ -97,7 +100,9 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
                     <ComboInput
                       value={afterVal}
                       onChange={v => setBuffer(prev => ({ ...prev, [key]: v }))}
-                      options={options}
+                      options={valid}
+                      invalidOptions={invalid}
+                      strictness={resolveFieldStrictness(key, overrides)}
                       hasIssue={hasError || hasWarning}
                     />
                     {fieldIssues.map((issue, i) => (

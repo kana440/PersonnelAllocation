@@ -7,7 +7,7 @@ import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
 import { ReportLineView }   from './components/ReportLineView'
 import { OrgBox, DropZone } from './components/OrgBox'
-import { PersonContextMenu, PositionContextMenu } from './CanvasContextMenus'
+import { PersonContextMenu } from './CanvasContextMenus'
 import { RowContextMenu } from './RowContextMenu'
 import { OrgTransferDialog }       from './patternDialogs/OrgTransferDialog'
 import { PromotionDialog }         from './patternDialogs/PromotionDialog'
@@ -15,7 +15,7 @@ import { JobTypeDialog }           from './patternDialogs/JobTypeDialog'
 import { ResignationDialog }       from './patternDialogs/ResignationDialog'
 import { VacantPositionDialog }    from './patternDialogs/VacantPositionDialog'
 import { SecondmentReleaseDialog } from './patternDialogs/SecondmentReleaseDialog'
-import type { EditPattern }   from '../../application/editPatterns'
+import type { EditPattern }   from '../../domain/editPattern'
 import { CanvasModals }     from './CanvasModals'
 import { PositionRows }     from './components/PositionRows'
 import { OrgViewContext }   from './OrgViewContext'
@@ -57,7 +57,7 @@ export function OrgOperationView() {
   const setCanvasMode = (mode: CanvasMode) => setMainCanvasMode(mode)
   const organizations = allAfterOrgs.filter(o => !o.isAbandoned)
 
-  const { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId, positionContext } = useOrgViewData({
+  const { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({
     allAfterOrgs, persons, allocationList,
   })
 
@@ -70,7 +70,6 @@ export function OrgOperationView() {
 
   // ── UI state ───────────────────────────────────────────────────
   const [contextMenu,         setContextMenu]         = useState<{ x: number; y: number; personId: string } | null>(null)
-  const [positionContextMenu, setPositionContextMenu] = useState<{ x: number; y: number; rowId: number } | null>(null)
   const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
   const [isSelectMode,        setIsSelectMode]        = useState(false)
@@ -129,11 +128,6 @@ export function OrgOperationView() {
     e.preventDefault(); e.stopPropagation()
     selectPerson(personId)
     setContextMenu({ x: e.clientX, y: e.clientY, personId })
-  }
-
-  const handlePositionContextMenu = (e: React.MouseEvent, rowId: number) => {
-    e.preventDefault(); e.stopPropagation()
-    setPositionContextMenu({ x: e.clientX, y: e.clientY, rowId })
   }
 
   const handleDropPositionOnPosition = (e: React.DragEvent, targetRowId: number) => {
@@ -216,7 +210,7 @@ export function OrgOperationView() {
     : ''
 
   const ctxValue: OrgViewContextValue = {
-    organizations, positionContext, positionTreeByOrgId, afterMembersByOrgId,
+    organizations, positionTreeByOrgId, afterMembersByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
@@ -227,8 +221,8 @@ export function OrgOperationView() {
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson: handleSelectPerson,
     isHistoryPreviewMode,
-    handlePersonDoubleClick, handleRowDoubleClick, handlePersonContextMenu,
-    handlePositionContextMenu, handleDropPositionOnPosition, handleReorderRow,
+    handlePersonDoubleClick, handleRowDoubleClick,
+    handleDropPositionOnPosition, handleReorderRow,
     expandedChipIds, toggleChip,
   }
 
@@ -430,17 +424,6 @@ export function OrgOperationView() {
           />
         )}
 
-        {positionContextMenu && (
-          <PositionContextMenu
-            x={positionContextMenu.x} y={positionContextMenu.y}
-            rowId={positionContextMenu.rowId}
-            persons={persons}
-            allocationList={allocationList}
-            onEdit={rowId => enterEditMode(rowId)}
-            onChangeTitle={rowId => { setChangeTitleRowId(rowId); setPositionContextMenu(null) }}
-            onClose={() => setPositionContextMenu(null)}
-          />
-        )}
 
         <CanvasModals
           isSelectMode={isSelectMode}

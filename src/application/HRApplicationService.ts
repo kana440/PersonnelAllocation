@@ -4,8 +4,9 @@ import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
 import type { AllocationRow } from '../domain/allocationRow'
 import { nextRowId } from '../domain/allocationRow'
 import type { AfterValues } from '../domain/allocationRow'
-import type { IDomainOperation, ValidationResult } from '../domain/operation/types'
+import type { EditCommand, ValidationResult } from '../domain/operation/types'
 import { fail } from '../domain/operation/types'
+import type { EditScenario } from '../domain/editScenario'
 import { DirectEditOperation }  from '../domain/operation/handlers/directEdit'
 import {
   CreateVacantPositionOperation,
@@ -159,28 +160,40 @@ export class HRApplicationService {
     return result
   }
 
-  // ── 操作の実行（差分をスタックに積む）────────────────────────
-  executeOperation(op: IDomainOperation): ValidationResult {
+  // ── EditScenario 実行（複合操作・Undo単位）────────────────────────
+  executeScenario(macro: EditScenario): ValidationResult {
     if (this.isPreviewMode) return fail('プレビュー中は編集できません')
-    const ctx = {
+    if (macro.commands.length === 0) return fail('操作が空です')
+
+    const beforeList = this.allocationList
+    const beforeOrgs = this.afterOrganizations
+
+    // 各 Command を順に validate → 前の apply 結果を次の Context として渡す
+    let ctx = {
       allocationList:     this.allocationList,
       afterOrganizations: this.afterOrganizations,
       codeLists:          this.codeLists,
     }
-    const result = op.validate(ctx)
-    if (!result.ok) return result
+    for (const cmd of macro.commands) {
+      const vr = cmd.validate(ctx)
+      if (!vr.ok) return vr
+      const applied = cmd.apply(ctx)
+      ctx = { ...ctx, allocationList: applied.updatedList, afterOrganizations: applied.updatedOrgs ?? ctx.afterOrganizations }
+    }
 
-    const beforeList = this.allocationList
-    const beforeOrgs = this.afterOrganizations
-    const applied    = op.apply(ctx)
-
-    const patch = this.undoStack.computePatch(beforeList, applied.updatedList, beforeOrgs, applied.updatedOrgs)
-    patch.label = applied.label
-    this.undoStack.push(patch)
-    this.allocationList = applied.updatedList
-    if (applied.updatedOrgs) this.afterOrganizations = applied.updatedOrgs
+    const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    const finalOrgs = ctx.afterOrganizations !== beforeOrgs ? ctx.afterOrganizations : undefined
+    const patch = this.undoStack.computePatch(beforeList, ctx.allocationList, beforeOrgs, finalOrgs)
+    this.undoStack.push({ ...patch, label: macro.label, txId })
+    this.allocationList     = ctx.allocationList
+    this.afterOrganizations = ctx.afterOrganizations
     this.emit()
-    return result
+    return { ok: true }
+  }
+
+  // ── 単一操作の実行（executeScenario の後方互換ラッパー）────────────
+  executeOperation(op: EditCommand): ValidationResult {
+    return this.executeScenario({ label: op.kind, commands: [op] })
   }
 
   // ── 行の直接編集（Undo なし・プレビュー/AI 内部用）────────────
@@ -230,7 +243,7 @@ export class HRApplicationService {
     this.emit()
   }
 
-  // ── ポジション操作（positionOps.ts の IDomainOperation に委譲）────
+  // ── ポジション操作（positionOps.ts の EditCommand に委譲）────
 
   createVacantPosition(departmentCode: string, localJobTitle: string, extraFields?: Partial<AllocationRow>): void {
     this.executeOperation(new CreateVacantPositionOperation(departmentCode, localJobTitle, extraFields))

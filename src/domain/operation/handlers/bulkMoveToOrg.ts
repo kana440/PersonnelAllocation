@@ -2,11 +2,11 @@
 // Only departmentCode (after) is updated; managerPositionCode is intentionally left unchanged.
 // Use case: org renaming / restructuring where all members move together as a unit.
 
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import { deriveOrgSubFields } from '../orgHelpers'
 
-export class BulkMoveToOrgOperation implements IDomainOperation {
+export class BulkMoveToOrgOperation implements EditCommand {
   readonly kind = 'BulkMoveToOrg'
 
   constructor(

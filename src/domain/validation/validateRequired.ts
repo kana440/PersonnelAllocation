@@ -1,6 +1,7 @@
 import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../codeLists/aggregate'
 import type { ValidationIssue } from './types'
+import { findEmpType, findTransferReason } from '../valueRules'
 
 /** A1-0: 申請区分（異動事由）は常に必須 */
 function checkA1_0(row: AllocationRow): ValidationIssue[] {
@@ -66,7 +67,7 @@ function checkA2(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
 /** A3: 雇用タイプが出向受入 → 出向元会社・出向元社員番号は必須 */
 function checkA3(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   if (!row.employmentType) return []
-  const entry = codeLists.employmentTypes.find(e => e.label === row.employmentType)
+  const entry = findEmpType(codeLists, row)
   if (!entry?.isOutsourceAcceptance) return []
   const issues: ValidationIssue[] = []
   if (!row.secondmentFromCompany)
@@ -79,7 +80,7 @@ function checkA3(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
 /** A4: 申請区分（異動事由）の兼務チェックサイン → 兼務理由は必須 */
 function checkA4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   if (!row.transferReason) return []
-  const entry = codeLists.transferReasons.find(e => e.label === row.transferReason)
+  const entry = findTransferReason(codeLists, row)
   if (!entry?.concurrentCheckSign) return []
   if (row.concurrentReason) return []
   return [{ field: 'concurrentReason', level: 'error', message: '兼務チェックサインが設定されている場合、兼務理由は必須です' }]

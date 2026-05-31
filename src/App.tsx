@@ -12,10 +12,12 @@ import { MaintenanceDialog }  from './components/maintenanceDialog'
 import { useStore }          from './store/useStore'
 import { useUserSession }    from './store/useUserSession'
 import { useCodeListStore }  from './store/codeListStore'
-import { ScopeSelector }     from './components/header/ScopeSelector'
-import { MergeImportButton } from './components/header/MergeImportButton'
-import { AssigneeWizard }    from './components/header/AssigneeWizard'
-import { SplitExportButton } from './components/header/SplitExportButton'
+import { ScopeSelector }          from './components/header/ScopeSelector'
+import { MergeImportButton }      from './components/header/MergeImportButton'
+import { AssigneeWizard }         from './components/header/AssigneeWizard'
+import { SplitExportButton }      from './components/header/SplitExportButton'
+import { CodeListBrowserPanel }      from './components/codelistBrowser'
+import { StrictnessSettingsPanel }   from './components/settings/StrictnessSettingsPanel'
 import { useResizablePanel } from './hooks/useResizablePanel'
 
 const BOTTOM_MIN        = 36
@@ -156,10 +158,12 @@ export default function App() {
   const [isTreeOpen,        setIsTreeOpen]        = useState(true)
   const [isChatOpen,        setIsChatOpen]        = useState(true)
   const [isHistoryOpen,     setIsHistoryOpen]     = useState(false)
-  const [clearDialogOpen,   setClearDialogOpen]   = useState(false)
-  const [maintenanceOpen,   setMaintenanceOpen]   = useState(false)
-  const [excelCollapsed,    setExcelCollapsed]    = useState(false)
-  const [assigneeWizardOpen, setAssigneeWizardOpen] = useState(false)
+  const [clearDialogOpen,      setClearDialogOpen]      = useState(false)
+  const [maintenanceOpen,      setMaintenanceOpen]      = useState(false)
+  const [excelCollapsed,       setExcelCollapsed]       = useState(false)
+  const [assigneeWizardOpen,   setAssigneeWizardOpen]   = useState(false)
+  const [codeListBrowserOpen,   setCodeListBrowserOpen]   = useState(false)
+  const [strictnessSettingsOpen, setStrictnessSettingsOpen] = useState(false)
 
   const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
 
@@ -257,6 +261,20 @@ export default function App() {
           </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />
           <HeaderButton
+            onClick={() => setCodeListBrowserOpen(o => !o)}
+            active={codeListBrowserOpen}
+            title="コードリスト・組織マスタなどのテーブルを照会"
+          >
+            <span>📋</span><span>テーブル参照</span>
+          </HeaderButton>
+          <HeaderButton
+            onClick={() => setStrictnessSettingsOpen(o => !o)}
+            active={strictnessSettingsOpen}
+            title="フィールドごとの選択肢の厳密さ設定"
+          >
+            <span>⚙</span><span>入力制約</span>
+          </HeaderButton>
+          <HeaderButton
             onClick={() => setMaintenanceOpen(true)}
             title="上司姓名再導出・組織サブフィールド再導出・ポジションコード割当などのメンテナンス処理"
           >
@@ -288,6 +306,14 @@ export default function App() {
 
       {maintenanceOpen && (
         <MaintenanceDialog onClose={() => setMaintenanceOpen(false)} />
+      )}
+
+      {codeListBrowserOpen && (
+        <CodeListBrowserPanel onClose={() => setCodeListBrowserOpen(false)} />
+      )}
+
+      {strictnessSettingsOpen && (
+        <StrictnessSettingsPanel onClose={() => setStrictnessSettingsOpen(false)} />
       )}
 
       {assigneeWizardOpen && (

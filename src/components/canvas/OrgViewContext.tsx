@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Organization } from '../../domain/schemas'
 import type { Person } from '../../domain/schemas'
 import type { AllocationRow } from '../../domain/allocationRow'
-import type { PositionContext } from '../../application/positionPatterns'
+import type { EditPattern } from '../../domain/editPattern'
 
 export interface DragData {
   dragType?:       'person' | 'position'
@@ -17,9 +17,10 @@ export interface DragData {
 }
 
 export interface PositionEntry {
-  row:    AllocationRow
-  person: Person | null
-  depth:  number
+  row:            AllocationRow
+  person:         Person | null
+  depth:          number
+  activePatterns: Set<EditPattern>
 }
 
 export interface MemberEntry {
@@ -29,7 +30,6 @@ export interface MemberEntry {
 
 export interface OrgViewContextValue {
   organizations:            Organization[]
-  positionContext:          PositionContext
   positionTreeByOrgId:      Map<string, PositionEntry[]>
   afterMembersByOrgId:      Map<string, MemberEntry[]>
   dragOverOrgId:            string | null
@@ -53,8 +53,6 @@ export interface OrgViewContextValue {
   isHistoryPreviewMode:         boolean
   handlePersonDoubleClick:      (id: string) => void
   handleRowDoubleClick:         (e: React.MouseEvent, rowId: number) => void
-  handlePersonContextMenu:      (e: React.MouseEvent, id: string) => void
-  handlePositionContextMenu:    (e: React.MouseEvent, rowId: number) => void
   handleDropPositionOnPosition: (e: React.DragEvent, targetRowId: number) => void
   handleReorderRow:             (rowId: number, beforeRowId: number | null) => void
   expandedChipIds:              Set<string>

@@ -10,7 +10,7 @@ Module A: Core Types
     ↑
 Module B: Validation ─────────────────────────────┐
     ↑                                             │
-Module C: Operation Abstraction (IDomainOperation) │
+Module C: Operation Abstraction (EditCommand) │
     ↑                                             │
 Module D: Projection (派生ビュー)                  │
     ↑                                             │
@@ -102,33 +102,47 @@ function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
 
 ## Module C: Operation Abstraction
 
-**場所**: `src/domain/operation/types.ts`, `src/domain/operation/handlers/`
+**場所**: `src/domain/operation/`, `src/domain/editPattern/`, `src/domain/editScenario/`
 
-**責務**: 「意味のある HR 操作」の抽象インターフェースと具体実装を提供する
+**責務**: 業務操作の抽象インターフェース・分類ラベル・複合操作を提供する
 
 **依存**: Module A + Module B
 
+**設計思想**: `docs/12-operation-framework.md` を参照
+
 **公開 API**:
 ```typescript
-interface IDomainOperation {
+// EditCommand — 単行の原子操作
+interface EditCommand {
   kind: string
   validate(ctx: OperationContext): ValidationResult  // 純粋関数
   apply(ctx: OperationContext): OperationResult      // 純粋関数
 }
+
+// EditScenario — 複合操作（玉突き人事等）
+interface EditScenario {
+  label: string
+  commands: EditCommand[]
+}
+
+// EditPattern — 分類ラベル（表示・集計・メニュー用）
+type EditPattern = 'orgTransfer' | 'promotionDemotion' | 'resignation' | ...
+
 function ok(): ValidationOk
 function fail(...messages): ValidationError
 function failField(field, message): ValidationError
 ```
 
-**現在の実装**:
+**主なハンドラー**:
 
-| ハンドラー | ファイル | 説明 |
+| ハンドラー | ファイル | EditPattern |
 |---|---|---|
-| `DirectEditOperation` | `handlers/directEdit.ts` | 1行の after フィールドを直接書き換え |
-
-**注**: ポジション操作（createVacant / assign / unassign / remove）は現在 `HRApplicationService`
-の直接メソッドとして実装されており、IDomainOperation ではない。
-→ Undo 対応と AI Tool Use のために将来 IDomainOperation 化を検討中（[next-steps](./06-next-steps.md) Step 2）。
+| `DirectEditOperation` | `handlers/directEdit.ts` | — |
+| `PromotionOperation` | `handlers/patternOps.ts` | `promotionDemotion` |
+| `OrgTransferOperation` | `handlers/patternOps.ts` | `orgTransfer` |
+| `ResignationOperation` | `handlers/patternOps.ts` | `resignation` |
+| `VacantPositionMoveOperation` | `handlers/patternOps.ts` | `vacantPositionMove` |
+| `SecondmentReleaseOperation` | `handlers/patternOps.ts` | `secondmentRelease` |
 
 ---
 
@@ -173,13 +187,14 @@ class HRApplicationService {
   loadExcelData(data): void
   mergeExcelData(data): MergeResult
 
-  // IDomainOperation 経由の変更（Undo 対象）
-  executeOperation(op: IDomainOperation): ValidationResult
+  // 操作の実行（Undo 対象）
+  executeScenario(s: EditScenario): ValidationResult   // 統一エントリポイント
+  executeOperation(op: EditCommand): ValidationResult  // 後方互換ラッパー
   editRow(rowId, changes): void       // checkpoint なし（プレビュー用）
   saveRow(rowId, changes): ValidationResult
   addNewHireRow(opts): void
 
-  // ポジション操作（直接メソッド・現在 Undo 対象外）
+  // ポジション操作（executeOperation 経由・Undo 対象）
   createVacantPosition(departmentCode: string, localJobTitle: string): void
   removePosition(rowId: number): void
   assignPersonToVacantPosition(vacantRowId: number, personSfId: string): void

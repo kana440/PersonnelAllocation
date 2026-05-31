@@ -1,4 +1,4 @@
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 
 /**
@@ -8,7 +8,7 @@ import { ok, fail } from '../types'
  * positionTreeByOrgId は managerPositionCode で再構築されるため、
  * ツリー階層を保ったまま兄弟の表示順だけが変わる。
  */
-export class ReorderRowOperation implements IDomainOperation {
+export class ReorderRowOperation implements EditCommand {
   readonly kind = 'ReorderRow'
 
   constructor(

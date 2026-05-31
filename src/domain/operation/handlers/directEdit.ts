@@ -1,13 +1,13 @@
 // DirectEdit — rewrites after-fields of a single AllocationRow.
 // Used by RowEditorPanel (manual Excel-style row editing).
 // Meaningful operation kinds (MoveToOrg, Promote, SendOnSecondment, ...)
-// will be added as separate IDomainOperation implementations.
+// will be added as separate EditCommand implementations.
 
 import type { AfterValues }    from '../../allocationRow'
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, failField }       from '../types'
 
-export class DirectEditOperation implements IDomainOperation {
+export class DirectEditOperation implements EditCommand {
   readonly kind = 'DirectEdit'
 
   constructor(

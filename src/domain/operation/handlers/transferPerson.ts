@@ -3,13 +3,13 @@
 // and sets managerPositionCode to the top position of the target org.
 // This is a single undo entry; use instead of the multi-step createPosition→assign sequence.
 
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields, deriveManagerName } from '../orgHelpers'
 
-export class TransferPersonOperation implements IDomainOperation {
+export class TransferPersonOperation implements EditCommand {
   readonly kind = 'TransferPerson'
 
   constructor(

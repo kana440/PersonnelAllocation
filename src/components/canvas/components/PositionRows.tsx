@@ -3,9 +3,35 @@ import { useOrgView } from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import { appService } from '../../../application/HRApplicationService'
-import { detectPositionPatterns } from '../../../application/positionPatterns'
+import { EDIT_PATTERN_META } from '../../../domain/editPattern'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
+import { useStore } from '../../../store/useStore'
 import { CanvasFieldDiff } from './CanvasFieldDiff'
+
+type EmpCategory = 'employee' | 'outsource' | 'extension'
+
+const EMP_CATEGORY_META: Record<EmpCategory, { label: string; cls: string }> = {
+  employee:  { label: '社員',    cls: 'text-blue-600' },
+  outsource: { label: '出向受入', cls: 'text-orange-600' },
+  extension: { label: '雇用延長', cls: 'text-purple-600' },
+}
+
+function useEmpCategoryMap() {
+  const { codeLists } = useStore()
+  return useMemo(() => {
+    const map = new Map<string, EmpCategory>()
+    for (const e of codeLists.employmentTypes) {
+      const key = e.label || e.code
+      if (!key) continue
+      const cat: EmpCategory | null =
+        e.isEmployee            ? 'employee'  :
+        e.isOutsourceAcceptance ? 'outsource' :
+        e.isEmploymentExtension ? 'extension' : null
+      if (cat) { map.set(e.code, cat); map.set(e.label, cat) }
+    }
+    return map
+  }, [codeLists.employmentTypes])
+}
 
 // ── カラーパレット（ReportLineView と同系） ───────────────────────────────────
 const PALETTE = [
@@ -29,18 +55,17 @@ const getPositionTitle = (row: AllocationRow): string =>
 interface PositionRowsProps { orgId: string }
 
 export function PositionRows({ orgId }: PositionRowsProps) {
-  const displayFields = useCanvasDisplayStore(state => state.displayFields)
+  const displayFields  = useCanvasDisplayStore(state => state.displayFields)
+  const empCategoryMap = useEmpCategoryMap()
   const {
     positionTreeByOrgId,
-    positionContext,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDropOnVacantSlot,
     handleDropPositionOnPosition,
-    handlePositionContextMenu,
     handleReorderRow,
     isSelectMode, selectedPersonIds, togglePersonSelection,
     selectedPersonId, selectPerson,
-    handleRowDoubleClick, handlePersonContextMenu,
+    handleRowDoubleClick,
     setConfirmDialog,
   } = useOrgView()
 
@@ -140,9 +165,8 @@ export function PositionRows({ orgId }: PositionRowsProps) {
 
   return (
     <div className="space-y-0.5 mb-2">
-      {visibleEntries.map(({ row, person, depth }) => {
-        const isVacant     = !person
-        const badges       = detectPositionPatterns(row, positionContext)
+      {visibleEntries.map(({ row, person, depth, activePatterns }) => {
+        const isVacant = !person
         const isSelected   = !isVacant && (
           isSelectMode ? selectedPersonIds.has(person!.id) : selectedPersonId === person!.id
         )
@@ -230,7 +254,6 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   onDragLeave={() => setDragOverPositionRowId(null)}
                   onDrop={e => { setDragOverPositionRowId(null); handleDropPositionOnPosition(e, row.rowId) }}
                   onDoubleClick={e => handleRowDoubleClick(e, row.rowId)}
-                  onContextMenu={e => handlePositionContextMenu(e, row.rowId)}
                   title="ダブルクリック：変更メニュー / ドラッグ→別組織に移動 / 別ポジションにドロップ→上司設定"
                   className={`
                     relative flex items-center gap-1 px-2 py-1
@@ -294,7 +317,6 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   onDragLeave={() => setDragOverVacantRowId(null)}
                   onDrop={e => { setDragOverVacantRowId(null); handleDropOnVacantSlot(e, row.rowId) }}
                   onDoubleClick={e => handleRowDoubleClick(e, row.rowId)}
-                  onContextMenu={e => handlePositionContextMenu(e, row.rowId)}
                 >
                   {dragOverVacantRowId === row.rowId ? 'ここにドロップ' : '（空席）← drop'}
                 </div>
@@ -314,7 +336,6 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                   } : undefined}
                   onClick={() => isSelectMode ? togglePersonSelection(person!.id) : selectPerson(person!.id)}
                   onDoubleClick={e => !isSelectMode && handleRowDoubleClick(e, row.rowId)}
-                  onContextMenu={e => !isSelectMode && handlePersonContextMenu(e, person!.id)}
                   className={`
                     flex-1 flex items-center gap-2 px-2 py-1 text-xs select-none
                     transition-all min-w-0
@@ -332,17 +353,24 @@ export function PositionRows({ orgId }: PositionRowsProps) {
                     {/* 名前 + バッジ */}
                     <div className="flex items-center gap-1 min-w-0">
                       <span className="font-semibold text-gray-800 leading-tight truncate">{person!.name}</span>
-                      {badges.map(b => (
-                        <span key={b.kind} className={`flex-shrink-0 text-[9px] font-medium px-1 py-0.5 rounded ${b.color}`}>{b.label}</span>
-                      ))}
+                      {[...activePatterns].map(p => {
+                        const meta = EDIT_PATTERN_META[p]
+                        return (
+                          <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-1 py-0.5 rounded ${meta.badgeColor}`}>{meta.label}</span>
+                        )
+                      })}
                     </div>
-                    {/* グループ + ユーザーID（固定） */}
-                    {(row.group || row.userId) && (
-                      <div className="flex items-center gap-1.5 text-[9px] text-gray-400 leading-tight">
-                        {row.group && <span className="truncate">{row.group}</span>}
-                        {row.userId && <span className="tabular-nums flex-shrink-0">{row.userId}</span>}
-                      </div>
-                    )}
+                    {/* 雇用タイプカテゴリ + ユーザーID */}
+                    {row.userId && (() => {
+                      const cat = row.employmentType ? empCategoryMap.get(row.employmentType) : undefined
+                      const meta = cat ? EMP_CATEGORY_META[cat] : null
+                      return (
+                        <div className="flex items-center gap-1.5 text-[9px] leading-tight">
+                          {meta && <span className={`font-medium flex-shrink-0 ${meta.cls}`}>{meta.label}</span>}
+                          <span className="tabular-nums text-gray-400 flex-shrink-0">{row.userId}</span>
+                        </div>
+                      )
+                    })()}
                     {/* 選択可能フィールド（変更前後の差分付き） */}
                     <CanvasFieldDiff row={row} displayFields={displayFields} isConcurrent={isConcurrent} />
                   </div>

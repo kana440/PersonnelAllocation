@@ -74,7 +74,7 @@
 | `getOrgMembers` | departmentCode | その組織の全メンバー一覧 | 🟡 中 |
 | `getCodeListValues` | codeListKey | 有効値一覧 | 🟡 中 |
 
-### 2.2 書き込み Tools（IDomainOperation 経由）
+### 2.2 書き込み Tools（EditCommand 経由）
 
 | Tool名 | 操作 | OperationClass | 優先度 |
 |---|---|---|---|

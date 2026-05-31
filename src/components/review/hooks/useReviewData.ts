@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useScopedStore } from '../../../store/useScopedStore'
 import { validateRow, type ValidationIssue } from '../../../domain/validation/validateRow'
 import { detectChanges, type RowChanges } from '../../../domain/review/changeDetection'
-import { deriveEditPatternState, type EditPattern } from '../../../application/editPatterns'
+import { deriveEditPatterns, type EditPattern } from '../../../domain/editPattern'
 import type { AllocationRow } from '../../../domain/allocationRow'
 
 export interface ReviewRow {
@@ -61,7 +61,7 @@ export function useReviewData(): ReviewData {
   const rows = useMemo((): ReviewRow[] =>
     allocationList.map(row => {
       const changes = detectChanges(row, sameOrgPairs, jobLevelWarningMap)
-      const { active } = deriveEditPatternState(changes.kinds, row)
+      const { active } = deriveEditPatterns(changes.kinds, row, codeLists)
       return {
         row,
         changes,

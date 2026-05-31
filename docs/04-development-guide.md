@@ -20,7 +20,7 @@
 `src/domain/operation/handlers/moveToOrg.ts` を作成する。
 
 ```typescript
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, failField } from '../types'
 
 // 操作が必要とするパラメータ
@@ -31,7 +31,7 @@ interface MoveToOrgParams {
   effectiveDate:  string
 }
 
-export class MoveToOrgOperation implements IDomainOperation {
+export class MoveToOrgOperation implements EditCommand {
   readonly kind = 'MoveToOrg'
 
   constructor(private readonly params: MoveToOrgParams) {}
@@ -269,13 +269,18 @@ Excel 読み込みと SF 読み込みを選べる UI を追加するだけ。
 
 ### Q: 新しい操作は Registry に登録が必要？
 
-不要。`IDomainOperation` を実装したクラスをインスタンス化して
-`executeOperation(op)` に渡すだけ。
+不要。`EditCommand` を実装したクラスをインスタンス化して
+`executeOperation(op)` または `executeScenario({ label, commands })` に渡すだけ。
+
+### Q: 複数人にまたがる操作（玉突き等）はどうする？
+
+`executeScenario` を使う。複数の `EditCommand` を1つの `EditScenario` にまとめると、
+順次 validate/apply され、1つの StatePatch として UndoStack に積まれる。
 
 ### Q: Undo はどう動く？
 
-`executeOperation()` が `checkpoint()` を呼んでからから `apply()` する。
-`undo()` は `past.pop()` で前の `CoreState` に戻すだけ。
+`executeScenario()` が全 Command を適用し差分 StatePatch を UndoStack に積む。
+`undo()` は `undoStack.undo()` → `applyPatch(direction: 'undo')` で巻き戻す。
 ハンドラー側で特別な実装は不要。
 
 ### Q: AI と Web UI でバリデーションが違う動きをしないか？

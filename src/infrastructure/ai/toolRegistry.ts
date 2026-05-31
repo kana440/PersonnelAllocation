@@ -44,7 +44,7 @@ export interface ConfirmEntry {
   definition: ToolDefinition
   /** ユーザーに見せる確認ウィジェットを構築する（副作用なし）。 */
   buildProposal(args: Record<string, unknown>): { widget: ChatWidget }
-  /** ユーザーが承認した後に呼ばれる。IDomainOperation 経由でのみ変更する。 */
+  /** ユーザーが承認した後に呼ばれる。EditCommand 経由でのみ変更する。 */
   executeOnApprove(args: Record<string, unknown>): unknown
 }
 

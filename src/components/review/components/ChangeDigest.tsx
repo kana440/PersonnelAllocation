@@ -1,5 +1,5 @@
 import type { ReviewData } from '../hooks/useReviewData'
-import type { EditPattern } from '../../../application/editPatterns'
+import type { EditPattern } from '../../../domain/editPattern'
 
 interface Props {
   data:        ReviewData

@@ -1,7 +1,7 @@
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok } from '../types'
 
-export class BulkSetAssigneeOperation implements IDomainOperation {
+export class BulkSetAssigneeOperation implements EditCommand {
   readonly kind = 'BulkSetAssigneeOperation'
 
   constructor(private readonly assignments: ReadonlyMap<number, string>) {}

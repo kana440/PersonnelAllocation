@@ -3,7 +3,7 @@
 // These are coarser-grained than DirectEditOperation and carry meaningful undo labels.
 // Both Web pattern dialogs and AI tools converge here via HRApplicationService methods.
 
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
@@ -17,7 +17,7 @@ function personName(row: AllocationRow): string {
 
 // ── OrgTransfer ───────────────────────────────────────────────────────────────
 
-export class OrgTransferOperation implements IDomainOperation {
+export class OrgTransferOperation implements EditCommand {
   readonly kind = 'OrgTransfer'
 
   constructor(
@@ -59,7 +59,7 @@ export interface PromotionFields {
   payGrade?:             string
 }
 
-export class PromotionOperation implements IDomainOperation {
+export class PromotionOperation implements EditCommand {
   readonly kind = 'Promotion'
 
   constructor(
@@ -94,7 +94,7 @@ export interface JobTypeFields {
   jobType?:   string
 }
 
-export class JobTypeChangeOperation implements IDomainOperation {
+export class JobTypeChangeOperation implements EditCommand {
   readonly kind = 'JobTypeChange'
 
   constructor(
@@ -124,7 +124,7 @@ export class JobTypeChangeOperation implements IDomainOperation {
 
 // ── Resignation ───────────────────────────────────────────────────────────────
 
-export class ResignationOperation implements IDomainOperation {
+export class ResignationOperation implements EditCommand {
   readonly kind = 'Resignation'
 
   constructor(
@@ -156,7 +156,7 @@ export class ResignationOperation implements IDomainOperation {
 
 // ── VacantPositionMove ────────────────────────────────────────────────────────
 
-export class VacantPositionMoveOperation implements IDomainOperation {
+export class VacantPositionMoveOperation implements EditCommand {
   readonly kind = 'VacantPositionMove'
 
   constructor(
@@ -203,7 +203,7 @@ export interface SecondmentReleaseFields {
   memo?:                   string
 }
 
-export class SecondmentReleaseOperation implements IDomainOperation {
+export class SecondmentReleaseOperation implements EditCommand {
   readonly kind = 'SecondmentRelease'
 
   constructor(

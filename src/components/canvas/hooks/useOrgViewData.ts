@@ -3,8 +3,8 @@ import { buildOrgMap } from '../../../domain/projection/rows'
 import type { Organization, Person } from '../../../domain/schemas'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
-import { buildPositionContext } from '../../../application/positionPatterns'
-import type { PositionContext } from '../../../application/positionPatterns'
+import { detectChanges } from '../../../domain/review/changeDetection'
+import { deriveEditPatterns } from '../../../domain/editPattern'
 
 interface UseOrgViewDataDeps {
   allAfterOrgs:   Organization[]
@@ -63,7 +63,8 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList }: UseOrg
       const visit = (row: AllocationRow, depth: number) => {
         if (visited.has(row.rowId)) return
         visited.add(row.rowId)
-        entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth })
+        const { active } = deriveEditPatterns(detectChanges(row).kinds, row)
+        entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth, activePatterns: new Set(active) })
         if (row.positionCode) {
           const children = childrenByMgrCode.get(row.positionCode) ?? []
           for (const c of children) if (c.rowId !== row.rowId) visit(c, depth + 1)
@@ -71,17 +72,15 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList }: UseOrg
       }
       rootRows.forEach(r => visit(r, 0))
       for (const row of rows) {
-        if (!visited.has(row.rowId)) entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth: 0 })
+        if (!visited.has(row.rowId)) {
+          const { active } = deriveEditPatterns(detectChanges(row).kinds, row)
+          entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth: 0, activePatterns: new Set(active) })
+        }
       }
       result.set(orgId, entries)
     }
     return result
   }, [afterOrgRowsById, personBySfId])
 
-  const positionContext = useMemo<PositionContext>(
-    () => buildPositionContext(allocationList),
-    [allocationList],
-  )
-
-  return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId, positionContext }
+  return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId }
 }

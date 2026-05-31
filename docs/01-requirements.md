@@ -109,7 +109,7 @@ codeLists:           AllCodeLists      ← LocalStorage にも保存
 | 層 | 責務 |
 |---|---|
 | **UI** | 入力ヒント・補助（placeholder、disabled 制御） |
-| **`IDomainOperation.validate()`** | 操作の前提条件・業務ルール（純粋関数） |
+| **`EditCommand.validate()`** | 操作の前提条件・業務ルール（純粋関数） |
 | **`validateRow()`** | 行単位の整合性チェック（純粋関数） |
 
 バリデーションは純粋関数として単体テストできる。

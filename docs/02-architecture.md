@@ -19,7 +19,9 @@
 │ ドメイン層         src/domain/         ← 依存ゼロ・テスト最優先 │
 │  allocationRow.ts    — AllocationRow 型, FIELD_METADATA          │
 │  schemas.ts          — Zod スキーマ（Organization, Person …）   │
-│  operation/          — IDomainOperation インターフェース         │
+│  operation/          — EditCommand インターフェース・ハンドラー群 │
+│  editPattern/        — EditPattern 分類ラベル・検出ロジック      │
+│  editScenario/       — EditScenario 複合操作インターフェース     │
 │  projection/         — 派生ビュー（純粋関数）                   │
 │  validation/         — バリデーション（純粋関数）                │
 │  valueRules.ts       — VALUE_RULES（許容値制約の単一定義ソース） │
@@ -72,12 +74,12 @@ Excel ファイル
     │                     │
     └──────────┬───────────┘
                ▼
-[Application]  HRApplicationService.executeOperation(op)   ← IDomainOperation 経由
-               HRApplicationService.createVacantPosition() ← 直接呼び出し（位置操作）
+[Application]  HRApplicationService.executeScenario(s)     ← EditScenario 経由（統一口）
+               HRApplicationService.executeOperation(op)   ← EditCommand 経由（後方互換ラッパー）
                │
-               ├─ op.validate(ctx)  ← 純粋関数（副作用なし）
-               ├─ checkpoint()      ← Undo スタックに積む
-               ├─ op.apply(ctx)     ← 純粋関数（副作用なし）
+               ├─ cmd.validate(ctx) ← 純粋関数（副作用なし）
+               ├─ UndoStack.push()  ← StatePatch として差分を積む
+               ├─ cmd.apply(ctx)    ← 純粋関数（副作用なし）
                └─ emit()            ← Zustand 再同期
                │
                ▼
@@ -88,9 +90,8 @@ Excel ファイル
 ```
 
 **設計の核心**:
-Web UI も AI も基本的に同一の `executeOperation()` を通る。
-ポジション操作（createVacant / assign / unassign / remove）は現在直接メソッドとして実装しており、
-IDomainOperation への統一は今後の改善課題（[next-steps](./06-next-steps.md) 参照）。
+Web UI も AI も `executeScenario()` / `executeOperation()` を通る。
+操作フレームワークの設計思想は `docs/12-operation-framework.md` を参照。
 
 ---
 
@@ -109,19 +110,22 @@ IDomainOperation への統一は今後の改善課題（[next-steps](./06-next-s
 
 ---
 
-## 操作の抽象化（IDomainOperation）
+## 操作の抽象化（EditCommand / EditScenario）
 
-`src/domain/operation/types.ts` のインターフェース:
+詳細は `docs/12-operation-framework.md` を参照。概要:
 
 ```typescript
-interface IDomainOperation {
-  readonly kind: string
+// EditCommand — 単行の原子操作（旧 IDomainOperation）
+interface EditCommand {
+  readonly kind: string         // EditPattern 分類ラベル
+  validate(ctx: OperationContext): ValidationResult   // 純粋関数
+  apply(ctx: OperationContext): OperationResult       // 純粋関数
+}
 
-  // 現在の状態に対して操作が有効かを検証（純粋関数）
-  validate(ctx: OperationContext): ValidationResult
-
-  // 新しい allocationList を返す（ctx は変更しない。純粋関数）
-  apply(ctx: OperationContext): OperationResult
+// EditScenario — 複合操作（玉突き人事など）
+interface EditScenario {
+  readonly label: string
+  readonly commands: EditCommand[]   // 1件でも複数件でも同じ構造
 }
 ```
 
@@ -129,7 +133,7 @@ interface IDomainOperation {
 
 1. **テスト容易性**: 外部依存なし。任意の AllocationRow[] を渡してテストできる
 2. **予測可能性**: 同じ入力には必ず同じ出力
-3. **Undo の単純さ**: apply が副作用を持たないため、Undo は単純なスタックの巻き戻しで実現できる
+3. **Undo の単純さ**: apply が副作用を持たないため、Undo は差分スタックの巻き戻しで実現できる
 
 ---
 
@@ -171,8 +175,7 @@ undo()       → past.pop()                 // 前の状態に戻す
 redo()       → future.pop()
 ```
 
-IDomainOperation を経由しないポジション直接操作（createVacantPosition 等）は
-現時点で checkpoint を経由しないため Undo 対象外（今後の改善課題）。
+ポジション操作（createVacantPosition 等）は `executeOperation()` 経由で Undo 対象。
 
 ---
 

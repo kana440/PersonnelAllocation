@@ -22,7 +22,9 @@ src/domain/                      ← ドメイン層（外部依存ゼロ。Zod�
   valueRules.ts                  ← VALUE_RULES（許容値制約の単一定義ソース）
   optionFilter/                  ← 選択肢生成・絞り込み（valueRules から導出）
   validation/                    ← バリデーション A〜G・W 系（純粋関数）
-  operation/                     ← IDomainOperation ハンドラー群
+  operation/                     ← EditCommand インターフェース・ハンドラー群
+  editPattern/                   ← EditPattern 分類ラベル・検出ロジック
+  editScenario/                  ← EditScenario 複合操作インターフェース
   codeLists/                     ← コードリスト型定義・集約
   csvImport/                     ← Excel/CSV 解釈（純粋関数）
 src/ports/                       ← インターフェース定義
@@ -34,18 +36,32 @@ src/ports/                       ← インターフェース定義
 
 ## 業務操作の追加方法（最重要）
 
-新しい業務変更は必ず `IDomainOperation` として実装する。直接 `allocationList` を変更しない。
+操作フレームワークの設計思想は `docs/12-operation-framework.md` を参照。
+
+### 概念の対応関係
+
+| 名称 | コード上の実体 | 意味 |
+|---|---|---|
+| `EditCommand` | `src/domain/operation/types.ts` | 単行の原子操作。UndoStack 差分単位 |
+| `EditScenario` | `src/domain/editScenario/` | 複合操作。1件でも複数件でも同じ構造 |
+| `EditPattern` | `src/domain/editPattern/` | 操作の分類ラベル。表示・集計・メニュー用 |
+
+設計思想の詳細は `docs/12-operation-framework.md` を参照。
+
+### 単一操作の追加
+
+新しい業務変更は必ず `EditCommand` として実装する。直接 `allocationList` を変更しない。
 
 ```typescript
 // src/domain/operation/handlers/myOp.ts
-export class MyOperation implements IDomainOperation {
-  readonly kind = 'MyOperation'
+export class MyOperation implements EditCommand {
+  readonly kind = 'myOperation'
   constructor(private readonly rowId: number) {}
 
   validate(ctx: OperationContext): ValidationResult {
     if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return { ok: false, message: '対象行が見つかりません' }
-    return { ok: true }
+      return fail('対象行が見つかりません')
+    return ok()
   }
 
   apply(ctx: OperationContext): OperationResult {
@@ -58,10 +74,21 @@ export class MyOperation implements IDomainOperation {
 ```
 
 ```typescript
-// 呼び出し側（UI or AI）
+// 呼び出し側（単一操作）
 appService.executeOperation(new MyOperation(rowId))
-// → validate → UndoStack に積む → apply → emit（Zustand 再同期）
+
+// 呼び出し側（複合操作・玉突き等）
+appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC] })
+// → 各 Command を順に validate/apply → txId 付与 → 1つの StatePatch → UndoStack
 ```
+
+**新しい操作を追加するときの手順**（必ずこの順序で）:
+1. `EditPattern` に新ラベルを追加（`src/domain/editPattern/patterns.ts`）
+2. `EditCommand` の実装を追加（`src/domain/operation/handlers/`）
+3. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
+4. 複数行にまたがる操作なら `EditScenario` を組み立てる呼び出し元を追加
+
+手順 3 を省略すると Excel 後方互換のリストア保証が崩れる。
 
 既存の実装例: `src/domain/operation/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
 
@@ -192,7 +219,7 @@ components/foo/
 - `allocationList` を直接 `push` / `splice` する（必ず `executeOperation` 経由）
 - `prevXxx` フィールドを操作中に書き換える（before 状態は不変）
 - `positionCode` が `_pos_` 始まりかどうかチェックせず Excel 出力する
-- `IDomainOperation` を使わず `HRApplicationService` に直接ドメインロジックを書く
+- `EditCommand` を使わず `HRApplicationService` に直接ドメインロジックを書く
 - バリデーションとオプション絞り込みを別々に実装する（`VALUE_RULES` を使う）
 
 ---

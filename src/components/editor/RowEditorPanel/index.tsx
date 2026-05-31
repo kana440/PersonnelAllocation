@@ -155,8 +155,8 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
         effectiveRow={effectiveRow}
         issues={issues}
         readOnly={readOnly}
-        transferReasonOptions={getOptions('transferReason', codeLists, currentJobFamily, effectiveRow)}
-        demotionReasonOptions={getOptions('demotionReason', codeLists, currentJobFamily, effectiveRow)}
+        transferReasonOptions={getOptions('transferReason', codeLists, currentJobFamily, effectiveRow).valid}
+        demotionReasonOptions={getOptions('demotionReason', codeLists, currentJobFamily, effectiveRow).valid}
         onChange={handleChange}
       />
 

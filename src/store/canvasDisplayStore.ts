@@ -1,6 +1,8 @@
 import { create } from 'zustand'
+import type { FieldStrictness } from '../domain/optionStrictness'
 
-const STORAGE_KEY = 'canvas_display_fields'
+const STORAGE_KEY           = 'canvas_display_fields'
+const STRICTNESS_STORAGE_KEY = 'field_strictness_overrides'
 
 export interface CanvasField {
   key:   string
@@ -46,9 +48,19 @@ function loadFromStorage(): string[] {
   return DEFAULT_FIELDS
 }
 
+function loadStrictnessOverrides(): Partial<Record<string, FieldStrictness>> {
+  try {
+    const raw = localStorage.getItem(STRICTNESS_STORAGE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as Partial<Record<string, FieldStrictness>>
+  } catch { return {} }
+}
+
 interface CanvasDisplayState {
-  displayFields:    string[]
-  setDisplayFields: (fields: string[]) => void
+  displayFields:             string[]
+  setDisplayFields:          (fields: string[]) => void
+  fieldStrictnessOverrides:  Partial<Record<string, FieldStrictness>>
+  setFieldStrictness:        (field: string, value: FieldStrictness | undefined) => void
 }
 
 export const useCanvasDisplayStore = create<CanvasDisplayState>(set => ({
@@ -56,5 +68,15 @@ export const useCanvasDisplayStore = create<CanvasDisplayState>(set => ({
   setDisplayFields: (fields) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(fields))
     set({ displayFields: fields })
+  },
+  fieldStrictnessOverrides: loadStrictnessOverrides(),
+  setFieldStrictness: (field, value) => {
+    set(state => {
+      const next = { ...state.fieldStrictnessOverrides }
+      if (value === undefined) delete next[field]
+      else next[field] = value
+      localStorage.setItem(STRICTNESS_STORAGE_KEY, JSON.stringify(next))
+      return { fieldStrictnessOverrides: next }
+    })
   },
 }))

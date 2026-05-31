@@ -88,12 +88,12 @@ function removePosition(rowId: number): void { ... }
 **背景**: `createVacantPosition` / `removePosition` / `assignPersonToVacantPosition` / `unassignPersonFromPosition`
 は `HRApplicationService` の直接メソッドで実装されており、`checkpoint()` を呼んでいないため Undo できない。
 
-**選択肢 A（推奨）**: 各操作を `IDomainOperation` として実装し、`executeOperation()` 経由に統一する。
+**選択肢 A（推奨）**: 各操作を `EditCommand` として実装し、`executeOperation()` 経由に統一する。
 - `CreateVacantPositionOperation`, `AssignPersonOperation`, `UnassignPersonOperation`, `RemovePositionOperation` を追加
 - `HRApplicationService` の直接メソッドはこれらを呼ぶ薄いラッパーに変更
 
 **選択肢 B**: 直接メソッドに `checkpoint()` を追加するだけ。
-- 実装コストが低いが、IDomainOperation への統一という設計方針から外れる
+- 実装コストが低いが、EditCommand への統一という設計方針から外れる
 
 **判断ポイント**: AI から呼ぶ必要があるなら A（Tool Use で操作を指定しやすい）。
 UI のみなら B で十分。

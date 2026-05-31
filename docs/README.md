@@ -29,7 +29,7 @@ src/
 ├── domain/           ドメイン層（外部依存ゼロ・テスト最優先）
 │   ├── allocationRow.ts       AllocationRow 型 + AfterValues
 │   ├── schemas.ts             Zod スキーマ（Organization, Person …）
-│   ├── operation/             IDomainOperation インターフェース
+│   ├── operation/             EditCommand インターフェース
 │   │   ├── types.ts           ValidationResult, OperationContext など
 │   │   └── handlers/          操作ハンドラー実装（DirectEdit など）
 │   ├── projection/            派生ビュー（純粋関数）

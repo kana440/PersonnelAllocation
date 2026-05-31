@@ -7,11 +7,11 @@
 // Cascade rule: any row whose managerPositionCode references the old "_pos_XXX" code is
 // also updated so the report-line relationship is preserved.
 
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { PositionCodeAssignment } from '../../../ports'
 
-export class AssignPositionCodesOperation implements IDomainOperation {
+export class AssignPositionCodesOperation implements EditCommand {
   readonly kind = 'AssignPositionCodes'
 
   constructor(private readonly assignments: PositionCodeAssignment[]) {}

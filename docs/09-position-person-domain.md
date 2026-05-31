@@ -231,5 +231,5 @@ export const FIELD_METADATA: ReadonlyArray<{
 | 6 | Excel 出力時の `positionCode` blank 判定（`_pos_` プレフィックスチェック） | ✅ 完了（exceljs/xlsx 両エクスポーター） |
 | 7 | 各フィールドの `binding` 分類を HR 運用ルールに合わせてレビュー・確定 | 🚧 暫定のまま |
 | 8 | 削除済みパネル UI（削除済みポジション・人の復活操作） | 🚧 未着手 |
-| 9 | ポジション操作を `IDomainOperation` 化して Undo 対象に | 🚧 未着手 |
+| 9 | ポジション操作を `EditCommand` 化して Undo 対象に | 🚧 未着手 |
 | 10 | `aiTools` にポジション操作を追加（AI から呼べるように） | 🚧 未着手 |

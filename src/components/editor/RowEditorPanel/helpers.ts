@@ -2,7 +2,9 @@ import { BEFORE_AFTER_FIELD_PAIRS, FIELD_METADATA } from '../../../domain/alloca
 import { ALLOCATION_LIST_LABEL_MAP } from '../../../domain/csvImport/allocationList/labels'
 import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
 import type { AllocationRow } from '../../../domain/allocationRow'
-import { buildBaseOptions, getFieldOptions } from '../../../domain/optionFilter'
+import { buildBaseOptions, getGroupedFieldOptions, type OptionsGroup } from '../../../domain/optionFilter'
+
+export type { OptionsGroup }
 
 
 // ── 表示メタ ─────────────────────────────────────────────────────────────────
@@ -67,13 +69,13 @@ export const READONLY_FIELDS = new Set<string>([
  * FLAG_FIELDS（Y/N 系）のみここで処理。
  */
 export function getOptions(
-  key:              string,
-  codeLists:        AllCodeLists,
+  key:               string,
+  codeLists:         AllCodeLists,
   currentJobFamily?: string,
-  row?:             AllocationRow,
-): string[] {
-  if (FLAG_FIELDS.has(key)) return FLAG_OPTIONS
-  if (row) return getFieldOptions(key, row, codeLists, currentJobFamily)
-  return buildBaseOptions(key, codeLists, currentJobFamily)
+  row?:              AllocationRow,
+): OptionsGroup {
+  if (FLAG_FIELDS.has(key)) return { valid: FLAG_OPTIONS, invalid: [] }
+  if (row) return getGroupedFieldOptions(key, row, codeLists, currentJobFamily)
+  return { valid: buildBaseOptions(key, codeLists, currentJobFamily), invalid: [] }
 }
 

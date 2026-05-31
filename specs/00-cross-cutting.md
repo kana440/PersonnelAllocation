@@ -69,7 +69,7 @@
 | D1 | Tools 仕様 | `specs/G4-ai/01-tools-spec.md` — tool 設計を追加 | 必須 |
 | D2 | aiTools.ts | tool 実装（`HRApplicationService` の既存メソッドに委譲） | 必須 |
 | D3 | AI プロンプト | `specs/G4-ai/02-system-prompt-rules.md` — tool の使い所をルールで記述 | 必須 |
-| D4 | 書き込みツール | `IDomainOperation` 経由か確認（直接 allocationList を変更しない） | 必須 |
+| D4 | 書き込みツール | `EditCommand` 経由か確認（直接 allocationList を変更しない） | 必須 |
 | D5 | Undo 対象確認 | `executeOperation()` 経由なら自動で Undo 対象になる | 自動 |
 
 ---

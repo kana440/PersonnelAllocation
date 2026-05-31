@@ -16,6 +16,7 @@ export interface StatePatch {
   orgsBefore?: Organization[]   // set only when afterOrganizations changed
   orgsAfter?:  Organization[]
   label?:      string           // 操作ラベル（履歴パネル表示用）
+  txId?:       string           // EditScenario 実行時に付与される一意ID（同一Scenarioの全Commandで共有）
 }
 
 export interface HistoryEntry {

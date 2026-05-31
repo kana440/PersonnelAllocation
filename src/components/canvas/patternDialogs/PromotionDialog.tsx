@@ -2,8 +2,10 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { ComboInput } from '../../common/ComboInput'
-import { getFieldOptions } from '../../../domain/optionFilter'
+import { getGroupedFieldOptions } from '../../../domain/optionFilter'
 import { validateRow } from '../../../domain/validation/validateRow'
+import { resolveFieldStrictness } from '../../../domain/optionStrictness'
+import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
 import type { AllocationRow } from '../../../domain/allocationRow'
 
 interface Props {
@@ -23,6 +25,7 @@ const FIELD_KEYS = new Set(FIELDS.map(f => f.key as string))
 
 export function PromotionDialog({ rowId, onClose }: Props) {
   const { allocationList, codeLists, afterOrganizations } = useStore()
+  const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
   const [buffer, setBuffer] = useState<Partial<Record<string, string>>>({})
@@ -34,7 +37,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList)
+    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
   }, [effectiveRow, afterOrganizations, codeLists, allocationList])
 
@@ -72,7 +75,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
             const fieldIssues = issues.filter(i => i.field === key)
             const hasError    = fieldIssues.some(i => i.level === 'error')
             const hasWarning  = fieldIssues.some(i => i.level === 'warning')
-            const options     = getFieldOptions(key as string, effectiveRow, codeLists, get('jobFamily'))
+            const { valid, invalid } = getGroupedFieldOptions(key as string, effectiveRow, codeLists, get('jobFamily'))
 
             return (
               <div key={key as string}>
@@ -84,7 +87,9 @@ export function PromotionDialog({ rowId, onClose }: Props) {
                     <ComboInput
                       value={afterVal}
                       onChange={v => setBuffer(prev => ({ ...prev, [key as string]: v }))}
-                      options={options}
+                      options={valid}
+                      invalidOptions={invalid}
+                      strictness={resolveFieldStrictness(key as string, overrides)}
                       hasIssue={hasError || hasWarning}
                     />
                     {fieldIssues.map((issue, i) => (

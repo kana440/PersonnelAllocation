@@ -20,13 +20,15 @@
   ・保存ボタンが確認ゲート              ・confirm ツールがユーザー確認ゲート
 ```
 
-両アダプターは同じ `IDomainOperation` パイプラインに収束する：
+両アダプターは同じ操作パイプラインに収束する：
 
 ```
-executeOperation(op) → validate() → UndoStack → apply() → emit()
+executeScenario(s)   → validate() → UndoStack → apply() → emit()  // 統一エントリ
+executeOperation(op) → executeScenario の後方互換ラッパー
 ```
 
 この収束点より先（ドメイン層）は Web と AI で完全に共有される。
+操作フレームワークの詳細は `docs/12-operation-framework.md` を参照。
 
 ---
 
@@ -58,7 +60,7 @@ aiTools.ts へのルーティングと、LLM が解釈できる形式への変�
 - `execute()` → **aiTools のメソッドを呼ぶだけ**
 
 **持つべきでないもの:**
-- `IDomainOperation` の直接インスタンス化
+- `EditCommand` / `EditScenario` の直接インスタンス化
 - `appService.executeOperation()` の直接呼び出し
 - ビジネスロジック（フィルタリング・集計・派生計算）
 
@@ -120,7 +122,7 @@ execute: args => aiTools.getPersonDetail(args.userId as string) // ← OK
 
 ### 対称性が成り立つ層
 
-- ドメイン操作（`IDomainOperation`）— 完全に共有
+- ドメイン操作（`EditCommand`）— 完全に共有
 - バリデーションルール（`VALUE_RULES`, `validateRow`）— 完全に共有
 - HRApplicationService のメソッド群 — 完全に共有
 

@@ -1,17 +1,20 @@
 import { ComboInput } from '../common/ComboInput'
 import type { ValidationIssue } from '../../domain/validation/validateRow'
+import type { FieldStrictness } from '../../domain/optionStrictness'
 
 interface Props {
-  label:      string
-  beforeVal:  string
-  afterVal:   string
-  onChange:   (v: string) => void
-  options?:   string[]          // コードリストがある場合はドロップダウン候補
-  issues?:    ValidationIssue[]
-  readOnly?:  boolean           // メタフィールドを条件付き読み取り専用にする場合
+  label:          string
+  beforeVal:      string
+  afterVal:       string
+  onChange:       (v: string) => void
+  options?:        string[]
+  invalidOptions?: string[]
+  strictness?:     FieldStrictness
+  issues?:         ValidationIssue[]
+  readOnly?:       boolean
 }
 
-export function RowEditorField({ label, beforeVal, afterVal, onChange, options, issues, readOnly }: Props) {
+export function RowEditorField({ label, beforeVal, afterVal, onChange, options, invalidOptions, strictness, issues, readOnly }: Props) {
   const hasError   = issues?.some(i => i.level === 'error')
   const hasWarning = issues?.some(i => i.level === 'warning')
   const hasDiff    = beforeVal !== afterVal
@@ -35,6 +38,8 @@ export function RowEditorField({ label, beforeVal, afterVal, onChange, options, 
           value={afterVal}
           onChange={onChange}
           options={options ?? []}
+          invalidOptions={invalidOptions}
+          strictness={strictness}
           disabled={readOnly}
           hasIssue={hasError || hasWarning}
         />

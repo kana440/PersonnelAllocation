@@ -1,5 +1,5 @@
 import type { HRApplicationService } from '../HRApplicationService'
-import type { IDomainOperation, ValidationResult, OperationError } from '../../domain/operation/types'
+import type { EditCommand, ValidationResult, OperationError } from '../../domain/operation/types'
 import type { AllocationRow, AfterValues } from '../../domain/allocationRow'
 import { ChangeTitleOperation, derivePersonGradeFields } from '../../domain/operation/handlers/changeTitle'
 import { DirectEditOperation } from '../../domain/operation/handlers/directEdit'
@@ -31,12 +31,12 @@ export function createWriteMethods(service: HRApplicationService) {
 
   // ── Core operations ───────────────────────────────────────────────────────
 
-  function validateOperation(op: IDomainOperation): ValidationResult {
+  function validateOperation(op: EditCommand): ValidationResult {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
     return op.validate({ allocationList, afterOrganizations, codeLists })
   }
 
-  function executeOperation(op: IDomainOperation): AIOperationResult {
+  function executeOperation(op: EditCommand): AIOperationResult {
     const beforeList = service.getSnapshot().allocationList
     const result = service.executeOperation(op)
     if (!result.ok) return result

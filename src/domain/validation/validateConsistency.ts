@@ -2,6 +2,7 @@ import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../codeLists/aggregate'
 import type { RowChanges } from '../review/changeDetection'
 import type { ValidationIssue } from './types'
+import { findEmpType } from '../valueRules'
 
 // G系: データ整合性チェック（エラー）
 // W系: ワーニングチェック（保存はブロックしないが確認を促す）
@@ -32,7 +33,7 @@ function checkG1_bandChangeRequiresNewPosition(row: AllocationRow, changes?: Row
  * どちらかの値が 0 の場合は判定対象外（出向受入など昇降格判定対象外のバンド）。
  */
 function checkW2_promotionDemotionWarning(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
-  const et = codeLists.employmentTypes.find(e => e.label === (row.employmentType as string | undefined))
+  const et = findEmpType(codeLists, row)
   if (!et?.isEmployee || !row.userId || row.userId !== row.groupEmployeeId) return []
 
   const bandEntry     = codeLists.jobLevels.find(e => e.label === (row.band     as string | undefined))

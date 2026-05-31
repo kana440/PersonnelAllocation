@@ -1,4 +1,4 @@
-import type { IDomainOperation, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
@@ -22,7 +22,7 @@ export function derivePersonGradeFields(
  * - 旧ポジションを空席行として残す（prevXxx は不変）
  * - 部下（managerPositionCode が旧 positionCode と一致する行）を新 positionCode に追従させる
  */
-export class ChangeTitleOperation implements IDomainOperation {
+export class ChangeTitleOperation implements EditCommand {
   readonly kind = 'ChangeTitle'
 
   constructor(

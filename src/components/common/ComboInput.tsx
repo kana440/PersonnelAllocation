@@ -1,16 +1,25 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import type { FieldStrictness } from '../../domain/optionStrictness'
 
 interface Props {
-  value:        string
-  onChange:     (v: string) => void
-  options:      string[]
-  placeholder?: string
-  disabled?:    boolean
-  className?:   string
-  hasIssue?:    boolean
+  value:           string
+  onChange:        (v: string) => void
+  options:         string[]
+  /** 条件に合致しないが表示するオプション（下段に表示） */
+  invalidOptions?: string[]
+  /**
+   * 'strict': 無効選択肢は選択不可（cursor-not-allowed）
+   * 'guide' : 無効選択肢はグレーだが選択可（デフォルト）
+   * 'free'  : 全選択肢を均等に表示
+   */
+  strictness?:     FieldStrictness
+  placeholder?:    string
+  disabled?:       boolean
+  className?:      string
+  hasIssue?:       boolean
 }
 
-export function ComboInput({ value, onChange, options, placeholder, disabled, className, hasIssue }: Props) {
+export function ComboInput({ value, onChange, options, invalidOptions = [], strictness = 'guide', placeholder, disabled, className, hasIssue }: Props) {
   const [open,  setOpen]  = useState(false)
   const [input, setInput] = useState(value)
   // true = ユーザーが文字入力した → options を絞り込む
@@ -48,10 +57,9 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
     return () => document.removeEventListener('mousedown', close)
   }, [open])
 
-  // typed のときだけ絞り込む。未タイプ（開いた直後）は全件表示。
-  const filtered = typed
-    ? options.filter(o => o.toLowerCase().includes(input.toLowerCase()))
-    : options
+  const q = input.toLowerCase()
+  const filteredValid   = typed ? options.filter(o => o.toLowerCase().includes(q))        : options
+  const filteredInvalid = typed ? invalidOptions.filter(o => o.toLowerCase().includes(q)) : invalidOptions
 
   const commit = (v: string) => {
     setInput(v)
@@ -99,13 +107,13 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
         }}
       />
 
-      {open && filtered.length > 0 && (
+      {open && (filteredValid.length > 0 || filteredInvalid.length > 0) && (
         <div
           ref={dropdownRef}
-          className="fixed z-[9999] bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto"
+          className="fixed z-[9999] bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto"
           style={dropStyle}
         >
-          {filtered.map(opt => (
+          {filteredValid.map(opt => (
             <button
               key={opt}
               type="button"
@@ -117,6 +125,33 @@ export function ComboInput({ value, onChange, options, placeholder, disabled, cl
               {opt}
             </button>
           ))}
+          {filteredInvalid.length > 0 && (
+            <>
+              {filteredValid.length > 0 && (
+                <div className="flex items-center gap-1 px-2 py-0.5 border-t border-gray-100">
+                  <span className="text-[9px] text-gray-400">その他</span>
+                </div>
+              )}
+              {filteredInvalid.map(opt => {
+                const isStrict = strictness === 'strict'
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    disabled={isStrict}
+                    onMouseDown={isStrict ? undefined : e => { e.preventDefault(); commit(opt) }}
+                    className={`w-full text-left px-2 py-1 text-xs ${
+                      isStrict
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : `text-gray-400 hover:bg-gray-50 ${opt === value ? 'font-medium text-gray-600 bg-gray-50' : ''}`
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                )
+              })}
+            </>
+          )}
         </div>
       )}
     </div>

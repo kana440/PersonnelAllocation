@@ -2,7 +2,10 @@ import type { AllocationRow } from '../allocationRow'
 import type { Organization } from '../schemas'
 import type { AllCodeLists } from '../codeLists/aggregate'
 import { VALUE_RULES, evaluateConstraint, type ConstraintRule } from '../valueRules'
+import type { FieldStrictness } from '../optionStrictness'
 import type { ValidationIssue } from './types'
+
+type Overrides = Partial<Record<string, FieldStrictness>>
 
 // D2系: マスタ・リスト値との存在チェック
 // 大半は VALUE_RULES から導出。例外は以下のカスタムチェック:
@@ -36,18 +39,19 @@ const EXISTENCE_RULES = VALUE_RULES.filter(
   (r): r is ConstraintRule => r.kind === 'constraint' && !r.when
 )
 
-function checkFromValueRules(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
-  return EXISTENCE_RULES.flatMap(r => evaluateConstraint(r, row, codeLists))
+function checkFromValueRules(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
+  return EXISTENCE_RULES.flatMap(r => evaluateConstraint(r, row, codeLists, overrides))
 }
 
 export function runExistence(
   row:       AllocationRow,
   orgs:      Organization[],
   codeLists: AllCodeLists,
+  overrides?: Overrides,
 ): ValidationIssue[] {
   return [
     ...checkD2_1(row, orgs),
-    ...checkFromValueRules(row, codeLists),
+    ...checkFromValueRules(row, codeLists, overrides),
     ...checkD2_7(row, codeLists),
   ]
 }

@@ -3,6 +3,7 @@ import type { AllCodeLists } from '../codeLists/aggregate'
 import type { OrgMasterEntry } from '../codeLists/orgMaster'
 import { UNION_MEMBER_CODE } from '../codeLists/unionMember'
 import { VALUE_RULES, evaluateConstraint, type ConstraintRule } from '../valueRules'
+import type { FieldStrictness } from '../optionStrictness'
 import type { ValidationIssue } from './types'
 
 // C系: 関連チェック（マスタ参照による整合性チェック）
@@ -103,17 +104,18 @@ function checkC4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
   return []
 }
 
-// VALUE_RULES の条件付き制約をすべて評価（C4の役職・勤務場所、F1〜F4のバンド・給与等級など）
-function checkConditionalValueRules(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
-  return CONDITIONAL_CONSTRAINT_RULES.flatMap(r => evaluateConstraint(r, row, codeLists))
+type Overrides = Partial<Record<string, FieldStrictness>>
+
+function checkConditionalValueRules(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
+  return CONDITIONAL_CONSTRAINT_RULES.flatMap(r => evaluateConstraint(r, row, codeLists, overrides))
 }
 
-export function runRelated(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+export function runRelated(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
   return [
     ...checkC1(row, codeLists),
     ...checkC2(row, codeLists),
     ...checkC3(row),
     ...checkC4(row, codeLists),
-    ...checkConditionalValueRules(row, codeLists),
+    ...checkConditionalValueRules(row, codeLists, overrides),
   ]
 }

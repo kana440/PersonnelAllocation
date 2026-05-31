@@ -248,7 +248,7 @@ const filteredRows = allocationList.filter(row =>
 
 ### 7-5. 実装ポイント
 
-- 補完の確定は `IDomainOperation` として実装し Undo 対象にする
+- 補完の確定は `EditCommand` として実装し Undo 対象にする
 - 一括補完（全行を自動確定）と個別確認モードの両方を提供する
 
 ---

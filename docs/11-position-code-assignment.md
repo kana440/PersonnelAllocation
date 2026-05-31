@@ -17,7 +17,7 @@
 ```
 UI / AI
   ↓
-AssignPositionCodesOperation   ← IDomainOperation
+AssignPositionCodesOperation   ← EditCommand
   ↓
 HRApplicationService.assignPositionCodes()
   ↓

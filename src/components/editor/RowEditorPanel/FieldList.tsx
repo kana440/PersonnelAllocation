@@ -8,6 +8,8 @@ import {
   BOOLEAN_1_FIELDS, MANAGER_POS_FIELDS, ORG_FIELDS, READONLY_FIELDS,
   getOptions,
 } from './helpers'
+import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
+import { resolveFieldStrictness } from '../../../domain/optionStrictness'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
 import type { Organization } from '../../../domain/schemas'
@@ -33,6 +35,8 @@ export function FieldList({
   readOnly, currentJobFamily,
   onChange, onManagerChange, onOrgChange,
 }: Props) {
+  const strictnessOverrides = useFieldStrictnessOverrides()
+
   return (
     <div className="flex-1 overflow-y-auto">
       {EDITOR_FIELD_ORDER.map(key => {
@@ -100,6 +104,7 @@ export function FieldList({
           )
         }
 
+        const { valid, invalid } = getOptions(key, codeLists, currentJobFamily, effectiveRow)
         return (
           <Fragment key={key}>
             <RowEditorField
@@ -107,7 +112,9 @@ export function FieldList({
               afterVal={afterStr}
               beforeVal={prevStr}
               onChange={v => onChange(afterKey, v)}
-              options={getOptions(key, codeLists, currentJobFamily, effectiveRow)}
+              options={valid}
+              invalidOptions={invalid}
+              strictness={resolveFieldStrictness(key, strictnessOverrides)}
               issues={fieldIssues}
               readOnly={isReadOnly}
             />
