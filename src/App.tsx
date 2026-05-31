@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { OrgSearchSidebar }  from './components/sidebar/OrgSearchSidebar'
-import { OrgOperationView }  from './components/canvas/OrgOperationView'
+import { LeftSidebar }        from './components/sidebar/LeftSidebar'
+import { CanvasLayout }        from './components/canvas/CanvasLayout'
 import { FloatingEditor }    from './components/editor/FloatingEditor'
 import { HistoryPanel }      from './components/history/HistoryPanel'
 import { BottomPanel }       from './components/editor/BottomPanel'
@@ -24,6 +24,7 @@ const BOTTOM_MIN        = 36
 const BOTTOM_MAX_RATIO  = 0.65
 const BOTTOM_DEFAULT    = 220
 const BOTTOM_COLLAPSED  = 36
+
 
 const SIDEBAR_MIN     = 140
 const SIDEBAR_MAX     = 480
@@ -323,16 +324,10 @@ export default function App() {
       {/* ── Upper area: sidebar + canvas + chat drawer ───────────── */}
       <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5 pb-0">
 
-        {/* Org search sidebar */}
+        {/* Left sidebar — タブ切り替え（組織・人物 / 組織パネル） */}
         {isTreeOpen ? (
           <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: sidebarWidth }}>
-            <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-200 flex-shrink-0">
-              <span className="text-xs font-semibold text-blue-600">組織・人物</span>
-              <button onClick={() => setIsTreeOpen(false)} title="折りたたむ" className="text-gray-400 hover:text-gray-600 text-xs w-4 h-4 flex items-center justify-center">◀</button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <OrgSearchSidebar />
-            </div>
+            <LeftSidebar />
             <div
               className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10"
               onMouseDown={handleSidebarResizeStart}
@@ -349,9 +344,9 @@ export default function App() {
           </div>
         )}
 
-        {/* Main canvas */}
+        {/* Main canvas + right panel */}
         <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0">
-          <OrgOperationView />
+          <CanvasLayout />
         </div>
 
         {/* AI Chat drawer */}

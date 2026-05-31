@@ -14,6 +14,8 @@ export interface DragData {
   fromRowId?:      number
   /** キャンバス外のドロップ先（チャット等）向けの統一フィールド */
   rowId?:          number
+  /** どのパネルからのドラッグか（'main' | strip panel id）。クロスパネル判定用 */
+  fromPanelId?:    string
 }
 
 export interface PositionEntry {

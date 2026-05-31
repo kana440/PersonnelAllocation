@@ -146,6 +146,8 @@ executeOperation(op)
 
 `useStore` / `useScopedStore` 経由で UI が subscribe する。**UI コンポーネントから `appService` を直接参照しない**（`OrgOperationView` など一部例外あり）。
 
+**`canvasLayoutStore`**（`src/store/canvasLayoutStore.ts`）はキャンバスレイアウトの UI 状態（組織パネルの一覧・並び順）を管理する独立した Zustand ストア。`HRApplicationService` の Undo 対象外。Excel 読み込み時・セッションリセット時に自動クリアされる。
+
 ---
 
 ## AI ツール
@@ -177,6 +179,20 @@ components/foo/
 **OrgTreePanel パターン**: レビューエリアで検索＋組織ツリーを使うときは
 `src/components/review/components/OrgTreePanel.tsx` を再利用する。
 コピーしてローカルに書かない。
+
+**OrgPickerModal パターン**: 組織をモーダルで選択させるときは
+`src/components/common/OrgPickerModal` を使う。階層ツリー表示・検索・追加済み表示を統一提供する。
+インラインのドロップダウンで代替しない。
+
+**左サイドバー構造**:
+```
+LeftSidebar（タブ）
+  ├── 組織・人物タブ → OrgSearchSidebar（組織ツリー・人物一覧）
+  └── 組織パネルタブ → PanelTabContent（パネル一覧・未網羅候補・未設定）
+```
+- 担当者ロール（`capabilities.rowScope !== null`）: 組織パネルタブがデフォルト
+- 管理者ロール（`capabilities.rowScope === null`）: 組織・人物タブがデフォルト
+- 組織パネルの状態は `canvasLayoutStore` が管理し、Excel 読み込み時にリセットされる
 
 ---
 

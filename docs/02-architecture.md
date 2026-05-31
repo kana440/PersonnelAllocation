@@ -28,6 +28,7 @@
 │  optionFilter/       — 選択肢生成・絞り込み（valueRules.ts 導出）│
 │  codeLists/          — コードリスト集約                         │
 │  csvImport/          — Excel/CSV 解釈（純粋関数）               │
+│  orgPicker/          — 関連組織収集・最上位組織算出（純粋関数）  │
 │  assignee.ts         — 担当者ユーティリティ（将来追加）          │
 ├──────────────────────────────────────────────────────────────────┤
 │ インフラ層         src/infrastructure/                           │

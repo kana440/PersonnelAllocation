@@ -202,6 +202,9 @@ export const useStore = create<AppState>((set, get) => {
       })
       await save(result.codeLists)
       set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
+      // 新しいデータが読み込まれたらパネル設定をリセット
+      const { clearPanels } = await import('../store/canvasLayoutStore').then(m => ({ clearPanels: m.useCanvasLayoutStore.getState().clearPanels }))
+      clearPanels()
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),
@@ -250,6 +253,7 @@ export const useStore = create<AppState>((set, get) => {
     reset: () => {
       appService.reset()
       set({ selectedPersonId: null, selectedRowId: null, focusedOrgId: null, isLoading: false, expandedChipIds: new Set() })
+      import('../store/canvasLayoutStore').then(m => m.useCanvasLayoutStore.getState().clearPanels())
     },
 
     enterEditMode: (rowId) => {
