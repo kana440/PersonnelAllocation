@@ -49,33 +49,39 @@ export function MetaSection({
 
       <div className="px-3 py-2 space-y-1.5">
 
-        {/* ── 個人識別 ＋ サイン（左右2カラム） ── */}
-        <div className="flex gap-2">
+        {/* ── 行1：ユーザー/社員ID・グループ社員ID・社員番号 を1行に ── */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">ユーザー/社員ID</label>
+          <input
+            type="text"
+            value={str('userId')}
+            onChange={e => onChange('userId', e.target.value)}
+            disabled={readOnly}
+            className={`w-20 ${INPUT}`}
+          />
+          <label className="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">グループ社員ID</label>
+          <input
+            type="text"
+            value={str('groupEmployeeId')}
+            onChange={e => onChange('groupEmployeeId', e.target.value)}
+            disabled={readOnly}
+            className={`w-20 ${INPUT}`}
+          />
+          <label className="text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">社員番号</label>
+          <input
+            type="text"
+            value={str('employeeNumber')}
+            onChange={e => onChange('employeeNumber', e.target.value)}
+            disabled={readOnly}
+            className={`flex-1 min-w-0 ${INPUT}`}
+          />
+        </div>
 
-          {/* 左：個人情報 2行 */}
-          <div className="flex-1 space-y-1.5 min-w-0">
+        {/* ── 氏名＋異動事由（左）＋ 昇降格・給与等級変更・降格理由（右、2行分） ── */}
+        <div className="pt-1.5 border-t border-gray-100 flex gap-2">
 
-            {/* 行1：ユーザー/社員ID と 社員番号 */}
-            <div className="flex items-center gap-1.5">
-              <label className={`text-xs text-gray-500 flex-shrink-0 ${LABEL_W}`}>ユーザー/社員ID</label>
-              <input
-                type="text"
-                value={str('userId')}
-                onChange={e => onChange('userId', e.target.value)}
-                disabled={readOnly}
-                className={`w-24 ${INPUT}`}
-              />
-              <label className="text-xs text-gray-400 flex-shrink-0">社員番号</label>
-              <input
-                type="text"
-                value={str('employeeNumber')}
-                onChange={e => onChange('employeeNumber', e.target.value)}
-                disabled={readOnly}
-                className={`flex-1 min-w-0 ${INPUT}`}
-              />
-            </div>
-
-            {/* 行2：氏名（姓・名 均等） */}
+          {/* 左：氏名 + 異動事由 */}
+          <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-center gap-1.5">
               <label className={`text-xs text-gray-500 flex-shrink-0 ${LABEL_W}`}>氏名</label>
               <input
@@ -95,20 +101,32 @@ export function MetaSection({
                 className={`flex-1 min-w-0 ${INPUT}`}
               />
             </div>
+            <div className="flex items-center gap-1.5">
+              <label className={`text-xs text-gray-500 flex-shrink-0 ${LABEL_W}`}>異動事由</label>
+              <div className="flex-1 min-w-0">
+                <ComboInput
+                  value={str('transferReason')}
+                  onChange={v => onChange('transferReason', v)}
+                  options={transferReasonOptions}
+                  disabled={readOnly}
+                  hasIssue={issues.some(i => i.field === 'transferReason')}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* 右：昇降格・給与変更・降格理由（コンパクト縦並び） */}
+          {/* 右：昇降格・給与等級変更・降格理由（2行分の高さを縦に活用） */}
           <div className="flex-shrink-0 flex flex-col justify-center gap-1 border-l border-gray-100 pl-2">
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-gray-400 w-12 text-right flex-shrink-0">昇降格</span>
+              <span className="text-[10px] text-gray-400 w-16 text-right flex-shrink-0">昇降格</span>
               <SignBadge value={str('promotionSign')} />
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-gray-400 w-12 text-right flex-shrink-0">給与変更</span>
+              <span className="text-[10px] text-gray-400 w-16 text-right flex-shrink-0">給与等級変更</span>
               <SignBadge value={str('payGradeChangeSign')} />
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-gray-400 w-12 text-right flex-shrink-0">降格理由</span>
+              <span className="text-[10px] text-gray-400 w-16 text-right flex-shrink-0">降格理由</span>
               <div className="w-20">
                 <ComboInput
                   value={str('demotionReason')}
@@ -122,30 +140,16 @@ export function MetaSection({
           </div>
         </div>
 
-        {/* ── 異動事由 ＋ メモ ── */}
-        <div className="pt-1.5 border-t border-gray-100 space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <label className={`text-xs text-gray-500 flex-shrink-0 ${LABEL_W}`}>異動事由</label>
-            <div className="flex-1">
-              <ComboInput
-                value={str('transferReason')}
-                onChange={v => onChange('transferReason', v)}
-                options={transferReasonOptions}
-                disabled={readOnly}
-                hasIssue={issues.some(i => i.field === 'transferReason')}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label className={`text-xs text-gray-400 flex-shrink-0 ${LABEL_W} pl-3`}>└ メモ</label>
-            <input
-              type="text"
-              value={str('memo')}
-              onChange={e => onChange('memo', e.target.value)}
-              disabled={readOnly}
-              className={`flex-1 ${INPUT}`}
-            />
-          </div>
+        {/* ── メモ ── */}
+        <div className="flex items-center gap-1.5">
+          <label className={`text-xs text-gray-400 flex-shrink-0 ${LABEL_W} pl-3`}>└ メモ</label>
+          <input
+            type="text"
+            value={str('memo')}
+            onChange={e => onChange('memo', e.target.value)}
+            disabled={readOnly}
+            className={`flex-1 ${INPUT}`}
+          />
         </div>
 
         {/* バリデーション */}

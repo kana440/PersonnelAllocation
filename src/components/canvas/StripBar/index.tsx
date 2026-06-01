@@ -100,7 +100,7 @@ export function PanelTabContent() {
               onClick={() => setAddModalOpen(true)}
               className="w-full py-1 text-xs text-blue-500 border border-dashed border-blue-300 rounded hover:bg-blue-50 transition-colors"
             >
-              ＋ 組織を追加
+              ＋ パネルを追加
             </button>
           </div>
         </div>

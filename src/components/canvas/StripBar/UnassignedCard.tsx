@@ -13,7 +13,7 @@ export function UnassignedCard() {
   if (total === 0) {
     return (
       <div className="flex-shrink-0 flex items-center px-3 h-full border-2 border-green-200 rounded-lg bg-green-50 text-xs text-green-600 font-medium gap-1.5">
-        <span>✓</span><span>未設定なし</span>
+        <span>✓</span><span>組織未設定なし</span>
       </div>
     )
   }
@@ -27,7 +27,7 @@ export function UnassignedCard() {
       >
         <span className="text-orange-500 text-xs">⚠</span>
         <span className="flex-1 text-left text-xs font-semibold text-orange-700">
-          未設定 ({total})
+          組織未設定（{total}）
         </span>
         <span className="text-orange-400 text-xs">{collapsed ? '▶' : '▼'}</span>
       </button>

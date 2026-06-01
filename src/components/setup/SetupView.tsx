@@ -1,20 +1,18 @@
 import { useRef, useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
+import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
-import type { AllCodeLists } from '../../domain/codeLists/aggregate'
 import { isUninitializedRow } from '../../domain/setup/afterInit'
 import { SetupHelp } from './SetupHelp'
-import { AssigneeSelectStep } from './AssigneeSelectStep'
 import { AfterInitWizard } from './AfterInitWizard'
+import { ModeSelectStep } from './ModeSelectStep'
+import { computeAssigneePanelOrgIds, findCommonAncestorOrgId } from './panelInit'
 
 type Phase =
   | { kind: 'idle' }
   | { kind: 'loading'; progress: string }
-  | { kind: 'done'; result: ImportedWorkbookResult }
   | { kind: 'mode-select'; result: ImportedWorkbookResult }
-  | { kind: 'assignee-select'; result: ImportedWorkbookResult }
   | { kind: 'after-init'; result: ImportedWorkbookResult; role: 'admin' | 'assignee'; assigneeName: string | null }
   | { kind: 'error'; message: string }
 
@@ -23,8 +21,8 @@ interface Props {
 }
 
 export function SetupView({ onReady }: Props) {
-  const { loadExcelData, setScopeWithMapping, setUserSession } = useStore()
-  const fileInputRef  = useRef<HTMLInputElement>(null)
+  const { loadExcelData, setScopeWithMapping, setUserSession, focusOrg } = useStore()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
 
@@ -35,7 +33,7 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: '準備中...' })
     try {
       const result = await fn(onProgress)
-      if (result) setPhase({ kind: 'done', result })
+      if (result) setPhase({ kind: 'mode-select', result })
     } catch (err) {
       setPhase({ kind: 'error', message: String(err) })
     }
@@ -54,12 +52,7 @@ export function SetupView({ onReady }: Props) {
 
   const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
 
-  const handleDone = useCallback(() => {
-    if (phase.kind !== 'done') return
-    setPhase({ kind: 'mode-select', result: phase.result })
-  }, [phase])
-
-  // ── after-init チェックを挟む共通ヘルパー ─────────────────────────────────
+  // after-init チェックを挟む共通ヘルパー
   const proceedOrInitWizard = useCallback((
     result: ImportedWorkbookResult,
     role: 'admin' | 'assignee',
@@ -74,7 +67,7 @@ export function SetupView({ onReady }: Props) {
     return needsInit
   }, [])
 
-  // 管理者として開く → after-init チェック → ロード → 開始
+  // 管理者として開く
   const handleSelectAdmin = useCallback(async () => {
     if (phase.kind !== 'mode-select') return
     const { result } = phase
@@ -83,20 +76,16 @@ export function SetupView({ onReady }: Props) {
     if (needsInit) return
     await tick()
     await loadExcelData(result)
+    // 管理者モード: 人が存在する最上位共通組織をフォーカス
+    const commonOrgId = findCommonAncestorOrgId(result.allocationList, result.afterOrganizations)
+    if (commonOrgId) focusOrg(commonOrgId)
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, focusOrg, onReady])
 
-  // 担当者として開く → AssigneeSelectStep へ
-  const handleSelectAssigneeMode = useCallback(() => {
-    if (phase.kind !== 'mode-select') return
-    setUserSession({ role: 'assignee', assigneeName: null })
-    setPhase({ kind: 'assignee-select', result: phase.result })
-  }, [phase, setUserSession])
-
-  // 担当者選択確定 → after-init チェック → ロード → 開始
+  // 担当者として開く（AssigneeSelectStep からの選択確定）
   const handleAssigneeSelect = useCallback(async (assigneeName: string) => {
-    if (phase.kind !== 'assignee-select') return
+    if (phase.kind !== 'mode-select') return
     const { result } = phase
     const resolvedName = assigneeName || null
     setUserSession({ role: 'assignee', assigneeName: resolvedName })
@@ -104,19 +93,34 @@ export function SetupView({ onReady }: Props) {
     if (needsInit) return
     await tick()
     await loadExcelData(result)
+    // 担当者モード: 担当組織を人数降順で最大8件パネル自動追加
+    const orgIds = computeAssigneePanelOrgIds(result.allocationList, result.afterOrganizations, resolvedName)
+    const { addPanel } = useCanvasLayoutStore.getState()
+    orgIds.forEach(orgId => addPanel(orgId))
+    if (orgIds.length > 0) focusOrg(orgIds[0])
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, focusOrg, onReady])
 
-  // after-init ウィザード完了 → ロード → 開始
+  // after-init ウィザード完了
   const handleAfterInitComplete = useCallback(async (modifiedResult: ImportedWorkbookResult) => {
     if (phase.kind !== 'after-init') return
+    const { role, assigneeName } = phase
     setPhase({ kind: 'loading', progress: `データ適用中... (${modifiedResult.allocationRowCount.toLocaleString()} 行)` })
     await tick()
     await loadExcelData(modifiedResult)
+    if (role === 'assignee') {
+      const orgIds = computeAssigneePanelOrgIds(modifiedResult.allocationList, modifiedResult.afterOrganizations, assigneeName)
+      const { addPanel } = useCanvasLayoutStore.getState()
+      orgIds.forEach(orgId => addPanel(orgId))
+      if (orgIds.length > 0) focusOrg(orgIds[0])
+    } else {
+      const commonOrgId = findCommonAncestorOrgId(modifiedResult.allocationList, modifiedResult.afterOrganizations)
+      if (commonOrgId) focusOrg(commonOrgId)
+    }
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, loadExcelData, setScopeWithMapping, onReady])
+  }, [phase, loadExcelData, setScopeWithMapping, focusOrg, onReady])
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
@@ -133,25 +137,12 @@ export function SetupView({ onReady }: Props) {
           />
         )}
         {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
-        {phase.kind === 'done' && (
-          <ResultView
-            result={phase.result}
-            onNext={handleDone}
-            onBack={() => setPhase({ kind: 'idle' })}
-          />
-        )}
         {phase.kind === 'mode-select' && (
-          <ModeSelectView
-            onAdmin={handleSelectAdmin}
-            onAssignee={handleSelectAssigneeMode}
-            onBack={() => phase.kind === 'mode-select' && setPhase({ kind: 'done', result: phase.result })}
-          />
-        )}
-        {phase.kind === 'assignee-select' && (
-          <AssigneeSelectStep
+          <ModeSelectStep
             result={phase.result}
-            onSelect={handleAssigneeSelect}
-            onBack={() => setPhase({ kind: 'mode-select', result: phase.result })}
+            onAdmin={handleSelectAdmin}
+            onAssigneeSelect={handleAssigneeSelect}
+            onBack={() => setPhase({ kind: 'idle' })}
           />
         )}
         {phase.kind === 'after-init' && (
@@ -168,7 +159,7 @@ export function SetupView({ onReady }: Props) {
   )
 }
 
-// ── 画面①: ファイル選択 ───────────────────────────────────────────────
+// ── 画面①: ファイル選択 ────────────────────────────────────────────────
 
 function IdleView({ onFileClick, onFileDrop, onSample, onHelp }: {
   onFileClick: () => void
@@ -247,58 +238,7 @@ function IdleView({ onFileClick, onFileDrop, onSample, onHelp }: {
   )
 }
 
-// ── 画面②: モード選択 ────────────────────────────────────────────────
-
-function ModeSelectView({ onAdmin, onAssignee, onBack }: {
-  onAdmin: () => void
-  onAssignee: () => void
-  onBack: () => void
-}) {
-  return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-gray-800">どのモードで開きますか？</h2>
-          <p className="mt-0.5 text-xs text-gray-500">役割に応じてモードを選択してください。</p>
-        </div>
-        <button
-          onClick={onBack}
-          className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          ← 戻る
-        </button>
-      </div>
-
-      <div className="space-y-3">
-        <button
-          onClick={onAssignee}
-          className="w-full text-left px-4 py-4 border-2 border-blue-400 rounded-xl hover:bg-blue-50 transition-colors group"
-        >
-          <div className="text-sm font-semibold text-blue-700 group-hover:text-blue-800">
-            担当者として開く
-          </div>
-          <div className="mt-1 text-xs text-gray-500">
-            自分の担当行のみ表示・編集します。担当者名を選択して開始します。
-          </div>
-        </button>
-
-        <button
-          onClick={onAdmin}
-          className="w-full text-left px-4 py-4 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors group"
-        >
-          <div className="text-sm font-semibold text-gray-700 group-hover:text-gray-800">
-            管理者として開く
-          </div>
-          <div className="mt-1 text-xs text-gray-500">
-            全行を表示・管理します。担当者の割り当て・分割エクスポートが可能です。
-          </div>
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── 画面③: 読み込み中 ────────────────────────────────────────────────
+// ── 読み込み中 ───────────────────────────────────────────────────────────
 
 function LoadingView({ progress }: { progress: string }) {
   return (
@@ -309,95 +249,7 @@ function LoadingView({ progress }: { progress: string }) {
   )
 }
 
-// ── 読み込み結果 ──────────────────────────────────────────────────────
-
-function ResultView({ result, onNext, onBack }: {
-  result: ImportedWorkbookResult
-  onNext: () => void
-  onBack: () => void
-}) {
-  const codeListKeys = (Object.keys(CODE_LIST_LABELS) as (keyof AllCodeLists)[])
-    .filter(k => k !== 'orgMasterEntries')
-  const foundCodeListKeys = codeListKeys.filter(k => {
-    const val = result.codeLists[k]
-    return Array.isArray(val) && val.length > 0
-  })
-  const foundLabels = foundCodeListKeys.map(k => CODE_LIST_LABELS[k])
-  const codeListFound = result.sheetsFound.includes(SHEET_CODE_LISTS)
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-bold text-gray-800">読み込み完了</h2>
-        <p className="mt-0.5 text-xs text-gray-400">内容を確認してモードを選択してください。</p>
-      </div>
-
-      <div className="bg-gray-50 rounded-lg px-4 py-3 space-y-3 text-xs">
-        <ResultRow
-          label={SHEET_ALLOCATION}
-          found={result.sheetsFound.includes(SHEET_ALLOCATION)}
-          detail={`${result.allocationRowCount} 行`}
-        />
-        <ResultRow
-          label={SHEET_ORG_MASTER}
-          found={result.sheetsFound.includes(SHEET_ORG_MASTER)}
-          detail={`${result.orgEntries.length} 組織`}
-        />
-        <div className="flex items-start gap-2">
-          <span className={`text-base leading-none mt-0.5 ${codeListFound ? 'text-green-500' : 'text-gray-300'}`}>
-            {codeListFound ? '✓' : '—'}
-          </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`font-mono ${codeListFound ? 'text-gray-700' : 'text-gray-400'}`}>
-                {SHEET_CODE_LISTS}
-              </span>
-              {codeListFound && (
-                <span className="text-gray-400">{foundCodeListKeys.length} / {codeListKeys.length} 種類</span>
-              )}
-              {!codeListFound && (
-                <span className="text-gray-400 italic">シートが見つかりません</span>
-              )}
-            </div>
-            {foundLabels.length > 0 && (
-              <p className="text-gray-400 mt-1 leading-relaxed">{foundLabels.join(' · ')}</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <button
-          onClick={onNext}
-          className="w-full py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          モードを選択 →
-        </button>
-        <button
-          onClick={onBack}
-          className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          ← 戻る
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function ResultRow({ label, found, detail }: { label: string; found: boolean; detail?: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`text-base leading-none ${found ? 'text-green-500' : 'text-gray-300'}`}>
-        {found ? '✓' : '—'}
-      </span>
-      <span className={`font-mono ${found ? 'text-gray-700' : 'text-gray-400'}`}>{label}</span>
-      {found && detail && <span className="text-gray-400">{detail}</span>}
-      {!found && <span className="text-gray-400 italic">シートが見つかりません</span>}
-    </div>
-  )
-}
-
-// ── エラー ───────────────────────────────────────────────────────────
+// ── エラー ───────────────────────────────────────────────────────────────
 
 function ErrorView({ message, onBack }: { message: string; onBack: () => void }) {
   return (

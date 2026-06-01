@@ -1,19 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useUserSession }    from '../../store/useUserSession'
 import { OrgSearchSidebar }  from './OrgSearchSidebar'
 import { PanelTabContent }   from '../canvas/StripBar'
 
 type Tab = 'tree' | 'panels'
 
-function defaultTab(rowScope: string | null): Tab {
-  // 担当者（rowScope あり）は組織パネルをデフォルト
-  // 管理者（rowScope なし）は組織・人物をデフォルト
-  return rowScope !== null ? 'panels' : 'tree'
-}
-
 export function LeftSidebar() {
-  const { capabilities } = useUserSession()
-  const [activeTab, setActiveTab] = useState<Tab>(() => defaultTab(capabilities.rowScope))
+  const { session } = useUserSession()
+  const [activeTab, setActiveTab] = useState<Tab>(
+    () => session.role === 'assignee' ? 'panels' : 'tree'
+  )
+
+  // セッション変更（ロール切り替え）時に確実にタブを合わせる
+  const role = session.role
+  useEffect(() => {
+    setActiveTab(role === 'assignee' ? 'panels' : 'tree')
+  }, [role])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

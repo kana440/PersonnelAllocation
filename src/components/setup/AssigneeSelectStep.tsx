@@ -11,9 +11,10 @@ interface Props {
   result: ImportedWorkbookResult
   onSelect: (assigneeName: string) => void
   onBack?: () => void
+  noHeader?: boolean
 }
 
-export function AssigneeSelectStep({ result, onSelect, onBack }: Props) {
+export function AssigneeSelectStep({ result, onSelect, onBack, noHeader }: Props) {
   const [search, setSearch] = useState('')
   const [orgSearch, setOrgSearch] = useState('')
 
@@ -83,20 +84,22 @@ export function AssigneeSelectStep({ result, onSelect, onBack }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-gray-800">担当者を選択</h2>
-          <p className="mt-0.5 text-xs text-gray-500">担当する組織の担当者名を選んでください。</p>
+      {!noHeader && (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-gray-800">担当者を選択</h2>
+            <p className="mt-0.5 text-xs text-gray-500">担当する組織の担当者名を選んでください。</p>
+          </div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ← 戻る
+            </button>
+          )}
         </div>
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            ← 戻る
-          </button>
-        )}
-      </div>
+      )}
 
       <div className="flex gap-2">
         <input
