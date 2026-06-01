@@ -4,8 +4,10 @@ import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEE
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
 import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
 import type { AllCodeLists } from '../../domain/codeLists/aggregate'
+import { isUninitializedRow } from '../../domain/setup/afterInit'
 import { SetupHelp } from './SetupHelp'
 import { AssigneeSelectStep } from './AssigneeSelectStep'
+import { AfterInitWizard } from './AfterInitWizard'
 
 type Phase =
   | { kind: 'idle' }
@@ -13,6 +15,7 @@ type Phase =
   | { kind: 'done'; result: ImportedWorkbookResult }
   | { kind: 'mode-select'; result: ImportedWorkbookResult }
   | { kind: 'assignee-select'; result: ImportedWorkbookResult }
+  | { kind: 'after-init'; result: ImportedWorkbookResult; role: 'admin' | 'assignee'; assigneeName: string | null }
   | { kind: 'error'; message: string }
 
 interface Props {
@@ -56,17 +59,33 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'mode-select', result: phase.result })
   }, [phase])
 
-  // 管理者として開く → 全行をそのままロードして開始
+  // ── after-init チェックを挟む共通ヘルパー ─────────────────────────────────
+  const proceedOrInitWizard = useCallback((
+    result: ImportedWorkbookResult,
+    role: 'admin' | 'assignee',
+    assigneeName: string | null,
+  ) => {
+    const needsInit = result.allocationList.some(r => isUninitializedRow(r, result.codeLists))
+    if (needsInit) {
+      setPhase({ kind: 'after-init', result, role, assigneeName })
+    } else {
+      setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
+    }
+    return needsInit
+  }, [])
+
+  // 管理者として開く → after-init チェック → ロード → 開始
   const handleSelectAdmin = useCallback(async () => {
     if (phase.kind !== 'mode-select') return
     const { result } = phase
     setUserSession({ role: 'admin', assigneeName: null })
-    setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
+    const needsInit = proceedOrInitWizard(result, 'admin', null)
+    if (needsInit) return
     await tick()
     await loadExcelData(result)
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, setUserSession, loadExcelData, setScopeWithMapping, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, onReady])
 
   // 担当者として開く → AssigneeSelectStep へ
   const handleSelectAssigneeMode = useCallback(() => {
@@ -75,17 +94,29 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'assignee-select', result: phase.result })
   }, [phase, setUserSession])
 
-  // 担当者選択確定 → データロード → 開始
+  // 担当者選択確定 → after-init チェック → ロード → 開始
   const handleAssigneeSelect = useCallback(async (assigneeName: string) => {
     if (phase.kind !== 'assignee-select') return
     const { result } = phase
-    setPhase({ kind: 'loading', progress: `データ適用中... (${result.allocationRowCount.toLocaleString()} 行)` })
+    const resolvedName = assigneeName || null
+    setUserSession({ role: 'assignee', assigneeName: resolvedName })
+    const needsInit = proceedOrInitWizard(result, 'assignee', resolvedName)
+    if (needsInit) return
     await tick()
     await loadExcelData(result)
-    setUserSession({ role: 'assignee', assigneeName: assigneeName || null })
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, loadExcelData, setUserSession, setScopeWithMapping, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, onReady])
+
+  // after-init ウィザード完了 → ロード → 開始
+  const handleAfterInitComplete = useCallback(async (modifiedResult: ImportedWorkbookResult) => {
+    if (phase.kind !== 'after-init') return
+    setPhase({ kind: 'loading', progress: `データ適用中... (${modifiedResult.allocationRowCount.toLocaleString()} 行)` })
+    await tick()
+    await loadExcelData(modifiedResult)
+    setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
+    onReady()
+  }, [phase, loadExcelData, setScopeWithMapping, onReady])
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
@@ -121,6 +152,12 @@ export function SetupView({ onReady }: Props) {
             result={phase.result}
             onSelect={handleAssigneeSelect}
             onBack={() => setPhase({ kind: 'mode-select', result: phase.result })}
+          />
+        )}
+        {phase.kind === 'after-init' && (
+          <AfterInitWizard
+            result={phase.result}
+            onComplete={handleAfterInitComplete}
           />
         )}
         {phase.kind === 'error' && (

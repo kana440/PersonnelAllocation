@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useUserSession } from '../../store/useUserSession'
-import { buildExportBuffer } from '../../infrastructure/excel/xlsx/exporter'
+import { buildExportBuffer } from '../../infrastructure/excel/engine'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 
 interface AssigneeSummary {

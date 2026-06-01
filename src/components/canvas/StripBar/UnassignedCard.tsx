@@ -35,8 +35,8 @@ export function UnassignedCard() {
       {!collapsed && (
         <div className="max-h-64 overflow-y-auto px-2 pb-2 space-y-1.5">
           {groups.map(g => (
-            <UnassignedGroup
-              key={g.prevCode ?? '__new__'}
+            <UnassignedGroupCard
+              key={g.groupKey}
               group={g}
             />
           ))}
@@ -52,7 +52,7 @@ interface GroupProps {
   group: GroupType
 }
 
-function UnassignedGroup({ group }: GroupProps) {
+function UnassignedGroupCard({ group }: GroupProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [modalOpen,   setModalOpen]   = useState(false)
 
@@ -78,16 +78,10 @@ function UnassignedGroup({ group }: GroupProps) {
     setSelectedIds(new Set())
   }
 
-  const label = group.prevOrgName
-    ? (group.prevOrgPath ?? group.prevOrgName)
-    : '旧: なし（新入社員）'
-
   return (
     <div className="text-[10px] border border-orange-200 rounded bg-white p-1.5">
-      <div className="font-semibold text-gray-500 truncate mb-1" title={label}>
-        {group.prevOrgName ? `旧: ${group.prevOrgName}` : '旧: なし（新入社員）'}
-      </div>
-      <div className="flex flex-wrap gap-1 mb-1.5">
+      <GroupLabel group={group} />
+      <div className="flex flex-wrap gap-1 mb-1.5 mt-1">
         {group.names.map((name, i) => (
           <button
             key={group.rowIds[i]}
@@ -118,6 +112,53 @@ function UnassignedGroup({ group }: GroupProps) {
           title="移動先の組織を選択"
         />
       </div>
+    </div>
+  )
+}
+
+// ── グループラベル ─────────────────────────────────────────────────────────────
+
+function GroupLabel({ group }: { group: GroupType }) {
+  const { code, orgName, orgPath, textPath, isMismatch } = group
+
+  if (isMismatch) {
+    // departmentCode あり but 新組織マスタに対応なし
+    const displayName = orgName ?? code ?? '（不明）'
+    const displayPath = orgPath ?? textPath
+    const fullTitle   = [displayName, displayPath].filter(Boolean).join(' / ')
+    return (
+      <div title={fullTitle}>
+        <div className="flex items-center gap-1 flex-wrap">
+          <span className="font-semibold text-gray-600 truncate">{displayName}</span>
+          <span className="flex-shrink-0 text-[9px] bg-orange-100 text-orange-600 border border-orange-200 rounded px-1">
+            対応新組織なし
+          </span>
+        </div>
+        {displayPath && (
+          <div className="text-[9px] text-gray-400 truncate mt-0.5 pl-0.5">{displayPath}</div>
+        )}
+      </div>
+    )
+  }
+
+  if (!code) {
+    return (
+      <div className="font-semibold text-gray-500">旧: なし（新入社員）</div>
+    )
+  }
+
+  // prevDepartmentCode あり
+  const displayName = orgName ?? code
+  // orgPath は「会社 > BU > 部門名」形式。textPath はフォールバック
+  const displayPath = orgPath ?? textPath
+  const fullTitle   = displayPath ?? displayName
+
+  return (
+    <div title={fullTitle}>
+      <div className="font-semibold text-gray-500 truncate">旧: {displayName}</div>
+      {displayPath && displayPath !== displayName && (
+        <div className="text-[9px] text-gray-400 truncate mt-0.5 pl-0.5">{displayPath}</div>
+      )}
     </div>
   )
 }

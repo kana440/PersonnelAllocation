@@ -33,12 +33,10 @@ export function PanelItem({
   const { personDragOver, handleDragOver: dropDragOver, handleDragLeave, handleDrop: dropHandle }
     = usePanelDrop(currentOrg)
 
-  // 子組織（メンバーのいるものだけ）
+  // 子組織（廃止済みを除く全組織）
   const childOrgs = useMemo(
-    () => (childrenOf.get(currentOrgId) ?? []).filter(
-      o => !o.isAbandoned && (subtreeCountByOrg.get(o.id) ?? 0) > 0,
-    ),
-    [childrenOf, currentOrgId, subtreeCountByOrg],
+    () => (childrenOf.get(currentOrgId) ?? []).filter(o => !o.isAbandoned),
+    [childrenOf, currentOrgId],
   )
 
   // パンくずパス

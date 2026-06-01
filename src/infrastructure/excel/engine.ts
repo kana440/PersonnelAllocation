@@ -7,7 +7,7 @@
 // を保持する。ExcelJS と同等の書式再現性は持たないが、速度が 10〜100 倍速い。
 
 export { importFromFile, importFromUrl, importWorkbook } from './exceljs/importer'
-export { exportToXlsx, buildExportBuffer }              from './xlsx/exporter'
+export { exportToXlsx, buildExportBuffer }              from './zip/exporter'
 
 // ── エンジン非依存の共有エクスポート ─────────────────────────────────────────
 export { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_COMPANY } from './sheetNames'
