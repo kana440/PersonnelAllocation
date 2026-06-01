@@ -8,7 +8,7 @@ import type { AllocationRow }     from '../../allocationListMapper'
 import { getLastBuffer, getLastFileName } from '../state'
 
 const EXPORT_SHEET_NAME = '要員配置リスト'
-const EXPORT_FIELDS     = ALLOCATION_LIST_FIELDS.filter(f => f.key !== 'groupEmployeeId')
+const EXPORT_FIELDS     = ALLOCATION_LIST_FIELDS
 
 const HEADER_SET = new Set(ALLOCATION_LIST_FIELDS.map(f => (f.header ?? f.key).trim()))
 
