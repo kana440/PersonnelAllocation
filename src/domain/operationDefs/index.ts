@@ -12,7 +12,7 @@
  */
 
 export type { OperationDef, OperationGroup, OperationInput } from './types'
-export { isEmployee, isOutsourceAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from './helpers'
+export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from './helpers'
 
 // ── 職務情報操作 ──────────────────────────────────────────────────────────────
 export {

@@ -17,11 +17,11 @@ type OrgSubField = {
 }
 
 const ORG_SUB_FIELDS: OrgSubField[] = [
-  { rowKey: 'businessUnit', masterKey: 'businessUnit', label: 'ビジネスユニット' },
-  { rowKey: 'division',     masterKey: 'division',     label: '部門'           },
-  { rowKey: 'subDivision',  masterKey: 'department',   label: '統括部'         },
-  { rowKey: 'group',        masterKey: 'group',        label: 'グループ'       },
-  { rowKey: 'team',         masterKey: 'team',         label: 'チーム'         },
+  { rowKey: 'businessUnit', masterKey: 'pathBusinessUnit', label: 'ビジネスユニット' },
+  { rowKey: 'division',     masterKey: 'pathDivision',     label: '部門'           },
+  { rowKey: 'subDivision',  masterKey: 'pathDepartment',   label: '統括部'         },
+  { rowKey: 'group',        masterKey: 'pathGroup',        label: 'グループ'       },
+  { rowKey: 'team',         masterKey: 'pathTeam',         label: 'チーム'         },
 ]
 
 /**
@@ -63,8 +63,8 @@ function checkC2(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
   const issues: ValidationIssue[] = []
   if (entry.workLocation && (row.location as string | undefined) !== entry.workLocation)
     issues.push({ field: 'location',    level: 'error', message: `勤務場所が組織マスタの値と異なります（正しい値: "${entry.workLocation}"）` })
-  if (entry.CostCenter && (row.costCenter as string | undefined) !== entry.CostCenter)
-    issues.push({ field: 'costCenter',  level: 'error', message: `コストセンターが組織マスタの値と異なります（正しい値: "${entry.CostCenter}"）` })
+  if (entry.costCenter && (row.costCenter as string | undefined) !== entry.costCenter)
+    issues.push({ field: 'costCenter',  level: 'error', message: `コストセンターが組織マスタの値と異なります（正しい値: "${entry.costCenter}"）` })
   return issues
 }
 
@@ -98,7 +98,7 @@ function checkC4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
 
   const org = codeLists.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
            ?? codeLists.orgMasterEntries.find(e => e.code === row.departmentCode)
-  if (org && org.organizationLevel !== SECONDMENT_ORG_LEVEL)
+  if (org && org.orgCategory !== SECONDMENT_ORG_LEVEL)
     return [{ field: 'departmentCode', level: 'error',
       message: '出向先会社が入力されている場合、組織コードは出向者用組織を選択してください' }]
   return []

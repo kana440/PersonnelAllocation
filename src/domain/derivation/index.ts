@@ -16,14 +16,22 @@ import type { DerivedUpdates } from './types'
 
 import { deriveOrgSubFields }        from './orgFields'
 import { deriveManagerName }         from './managerFields'
-import { derivePromotionSign, derivePayGradeChangeSign } from './promotionFields'
+import { derivePromotionSign, derivePayGradeChangeSign, derivePromotionSignFromLevel } from './promotionFields'
 import { deriveOnJobFamilyChange, derivePayGradeFromJobType } from './jobFields'
 
 export { deriveOrgSubFields, reDeriveOrgSubFieldsForList, isSecondmentOrg, suggestSecondmentOrgCodes } from './orgFields'
 export { deriveManagerName, reDeriveManagerNamesForList } from './managerFields'
-export { derivePromotionSign, derivePayGradeChangeSign }  from './promotionFields'
+export { derivePromotionSign, derivePayGradeChangeSign, derivePromotionSignFromLevel } from './promotionFields'
 export { computePayGrade }                                from './jobFields'
 export type { DerivedUpdates, DerivationContext }         from './types'
+
+/** F2 条件: 雇用タイプが社員 かつ userId === groupEmployeeId（本籍行）*/
+function isF2Primary(row: AllocationRow, codeLists: AllCodeLists): boolean {
+  const emp = row.employmentType as string | undefined
+  if (!emp) return false
+  const entry = codeLists.employmentTypes.find(e => e.label === emp || e.code === emp)
+  return !!entry?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId
+}
 
 /**
  * フィールド変更から連動する自動導出フィールドを計算する。
@@ -48,16 +56,13 @@ export function deriveFieldUpdates(
     result.managerName = deriveManagerName(changes.managerPositionCode, allocationList)
   }
 
-  // band → promotionSign（前回バンドと比較）
+  // band → promotionSign（warningLevel 比較）+ F2条件: positionBand を band と同期
   if ('band' in changes) {
-    const prevBand  = draft.prevBand as string | undefined
+    const prevBand = draft.prevBand as string | undefined
     Object.assign(result, derivePromotionSign(changes.band, prevBand, codeLists))
-  }
-
-  // payGrade → payGradeChangeSign
-  if ('payGrade' in changes) {
-    const prevPg = draft.prevPayGrade as string | undefined
-    Object.assign(result, derivePayGradeChangeSign(changes.payGrade, prevPg))
+    if (isF2Primary(draft, codeLists)) {
+      result.positionBand = changes.band
+    }
   }
 
   // jobFamily → jobType / payGrade リセット
@@ -71,6 +76,21 @@ export function deriveFieldUpdates(
   if (('jobType' in changes || 'band' in changes) && newJobType && newBand) {
     if (!('jobFamily' in changes)) {
       Object.assign(result, derivePayGradeFromJobType(newJobType, newBand, codeLists))
+    }
+  }
+
+  // payGrade（明示変更 or 導出済み）→ payGradeChangeSign + Level由来の promotionSign
+  const effectivePg = ('payGrade' in result
+    ? result.payGrade
+    : 'payGrade' in changes ? changes.payGrade : undefined) as string | undefined
+
+  if (effectivePg !== undefined) {
+    const prevPg = draft.prevPayGrade as string | undefined
+    Object.assign(result, derivePayGradeChangeSign(effectivePg, prevPg))
+    // Level（数字部分）が変化した場合は promotionSign を上書き
+    const lvSign = derivePromotionSignFromLevel(effectivePg, prevPg)
+    if (lvSign.promotionSign !== undefined) {
+      Object.assign(result, lvSign)
     }
   }
 

@@ -142,6 +142,15 @@ function CodeListSummaryRow({ result }: { result: ImportedWorkbookResult }) {
             {foundKeys.map(k => CODE_LIST_LABELS[k]).join(' · ')}
           </p>
         )}
+        {result.codeListCompatibilityWarnings.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {result.codeListCompatibilityWarnings.map(w => (
+              <p key={w.field} className="text-amber-600 text-xs">
+                ⚠ {w.field}: Excel の値 [{w.actual.join(', ')}] がハードコード定数 [{w.expected.join(', ')}] と一致しません
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

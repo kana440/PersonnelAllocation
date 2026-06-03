@@ -51,42 +51,42 @@ export const makePersonRow = (overrides: Partial<AllocationRow> = {}): Allocatio
 // テストは必要なエントリを override して使う。
 
 export const MOCK_EMP_TYPES = {
-  employee:  { code: 'EMP', label: '社員',       isEmployee: true,  isOutsourceAcceptance: false, isConcurrentOutsourceAcceptance: false, isEmploymentExtension: false },
-  outsource: { code: 'OUT', label: '出向受入社員', isEmployee: false, isOutsourceAcceptance: true,  isConcurrentOutsourceAcceptance: false, isEmploymentExtension: false },
-  extension: { code: 'EXT', label: '雇用延長社員', isEmployee: false, isOutsourceAcceptance: false, isConcurrentOutsourceAcceptance: false, isEmploymentExtension: true  },
-  other:     { code: 'OTH', label: 'その他',       isEmployee: false, isOutsourceAcceptance: false, isConcurrentOutsourceAcceptance: false, isEmploymentExtension: false },
+  employee:  { code: 'EMP', label: '社員',       isRegularEmployee: true,  isSecondmentAcceptance: false, isConcurrentSecondmentAcceptance: false, isExtendedEmployee: false },
+  outsource: { code: 'OUT', label: '出向受入社員', isRegularEmployee: false, isSecondmentAcceptance: true,  isConcurrentSecondmentAcceptance: false, isExtendedEmployee: false },
+  extension: { code: 'EXT', label: '雇用延長社員', isRegularEmployee: false, isSecondmentAcceptance: false, isConcurrentSecondmentAcceptance: false, isExtendedEmployee: true  },
+  other:     { code: 'OTH', label: 'その他',       isRegularEmployee: false, isSecondmentAcceptance: false, isConcurrentSecondmentAcceptance: false, isExtendedEmployee: false },
 }
 
 export const MOCK_JOB_LEVELS = {
-  empM3:  { code: 'M3', label: 'M3', promotionDemotionWarningLevel: 2, promotionDemotionBand: undefined, isEmployee: true,  isOutsourceAcceptance: false, isEmploymentExtensionPosition: false, isEmploymentExtensionJobClassification: false, isEmployeeOrAcceptedUnionMember: true,  isEmploymentExtensionUnionMember: false, isDiscretionaryTarget: 0, isOutsourceAcceptance2: false },
-  empM4:  { code: 'M4', label: 'M4', promotionDemotionWarningLevel: 3, promotionDemotionBand: undefined, isEmployee: true,  isOutsourceAcceptance: false, isEmploymentExtensionPosition: false, isEmploymentExtensionJobClassification: false, isEmployeeOrAcceptedUnionMember: true,  isEmploymentExtensionUnionMember: false, isDiscretionaryTarget: 0, isOutsourceAcceptance2: false },
-  empM6:  { code: 'M6', label: 'M6', promotionDemotionWarningLevel: 5, promotionDemotionBand: undefined, isEmployee: true,  isOutsourceAcceptance: false, isEmploymentExtensionPosition: false, isEmploymentExtensionJobClassification: false, isEmployeeOrAcceptedUnionMember: true,  isEmploymentExtensionUnionMember: false, isDiscretionaryTarget: 0, isOutsourceAcceptance2: false },
-  outM3:  { code: 'OM3', label: 'OM3', promotionDemotionWarningLevel: 0, promotionDemotionBand: undefined, isEmployee: false, isOutsourceAcceptance: true, isEmploymentExtensionPosition: false, isEmploymentExtensionJobClassification: false, isEmployeeOrAcceptedUnionMember: true, isEmploymentExtensionUnionMember: false, isDiscretionaryTarget: 0, isOutsourceAcceptance2: true },
-  extE1:  { code: 'E1', label: 'E1', promotionDemotionWarningLevel: 0, promotionDemotionBand: undefined, isEmployee: false, isOutsourceAcceptance: false, isEmploymentExtensionPosition: true, isEmploymentExtensionJobClassification: true, isEmployeeOrAcceptedUnionMember: false, isEmploymentExtensionUnionMember: false, isDiscretionaryTarget: 0, isOutsourceAcceptance2: false },
+  empM3:  { code: 'M3',  label: 'M3',  promotionDemotionWarningLevel: 2, promotionDemotionBand: undefined, isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployeePosition: false, isExtendedEmployeeJobClassification: false, isRegularEmployeeOrSecondmentAcceptance: true,  isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
+  empM4:  { code: 'M4',  label: 'M4',  promotionDemotionWarningLevel: 3, promotionDemotionBand: undefined, isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployeePosition: false, isExtendedEmployeeJobClassification: false, isRegularEmployeeOrSecondmentAcceptance: true,  isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
+  empM6:  { code: 'M6',  label: 'M6',  promotionDemotionWarningLevel: 5, promotionDemotionBand: undefined, isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployeePosition: false, isExtendedEmployeeJobClassification: false, isRegularEmployeeOrSecondmentAcceptance: true,  isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
+  outM3:  { code: 'OM3', label: 'OM3', promotionDemotionWarningLevel: 0, promotionDemotionBand: undefined, isRegularEmployee: false, isSecondmentAcceptance: true,  isExtendedEmployeePosition: false, isExtendedEmployeeJobClassification: false, isRegularEmployeeOrSecondmentAcceptance: true,  isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
+  extE1:  { code: 'E1',  label: 'E1',  promotionDemotionWarningLevel: 0, promotionDemotionBand: undefined, isRegularEmployee: false, isSecondmentAcceptance: false, isExtendedEmployeePosition: true,  isExtendedEmployeeJobClassification: true,  isRegularEmployeeOrSecondmentAcceptance: false, isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
 }
 
 export const MOCK_PAY_GRADES = {
-  empG3:  { code: 'G3', label: 'G3', isEmployee: true,  isOutsourceAcceptance: false, isEmploymentExtension: false, isConcurrent: false, isPayGradeChangeSign: false },
-  empG4:  { code: 'G4', label: 'G4', isEmployee: true,  isOutsourceAcceptance: false, isEmploymentExtension: false, isConcurrent: false, isPayGradeChangeSign: false },
-  outOG3: { code: 'OG3', label: 'OG3', isEmployee: false, isOutsourceAcceptance: true, isEmploymentExtension: false,  isConcurrent: false, isPayGradeChangeSign: false },
-  extEG1: { code: 'EG1', label: 'EG1', isEmployee: false, isOutsourceAcceptance: false, isEmploymentExtension: true, isConcurrent: false, isPayGradeChangeSign: false },
-  conCG1: { code: 'CG1', label: 'CG1', isEmployee: false, isOutsourceAcceptance: false, isEmploymentExtension: false, isConcurrent: true,  isPayGradeChangeSign: false },
+  empG3:  { code: 'G3',  label: 'G3',  isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployee: false, isConcurrent: false, isPayGradeChange: false },
+  empG4:  { code: 'G4',  label: 'G4',  isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployee: false, isConcurrent: false, isPayGradeChange: false },
+  outOG3: { code: 'OG3', label: 'OG3', isRegularEmployee: false, isSecondmentAcceptance: true,  isExtendedEmployee: false, isConcurrent: false, isPayGradeChange: false },
+  extEG1: { code: 'EG1', label: 'EG1', isRegularEmployee: false, isSecondmentAcceptance: false, isExtendedEmployee: true,  isConcurrent: false, isPayGradeChange: false },
+  conCG1: { code: 'CG1', label: 'CG1', isRegularEmployee: false, isSecondmentAcceptance: false, isExtendedEmployee: false, isConcurrent: true,  isPayGradeChange: false },
 }
 
 export const MOCK_TRANSFER_REASONS = {
-  normal:       { code: 'TR', label: '通常異動',   noCheckRequired: false, concurrentCheckSign: false },
-  noCheck:      { code: 'NC', label: 'チェック不要', noCheckRequired: true,  concurrentCheckSign: false },
-  concurrent:   { code: 'CC', label: '兼務',        noCheckRequired: false, concurrentCheckSign: true  },
+  normal:     { code: 'TR', label: '通常異動',   noCheckRequired: false, concurrentCheckSign: false },
+  noCheck:    { code: 'NC', label: 'チェック不要', noCheckRequired: true,  concurrentCheckSign: false },
+  concurrent: { code: 'CC', label: '兼務',        noCheckRequired: false, concurrentCheckSign: true  },
 }
 
 export const MOCK_OFFICIAL_POSITIONS = {
-  normal:    { code: 'OP1', label: '一般職',         isFreeTitle: false, isDiscretionaryTarget: false },
-  freeTitle: { code: 'OP2', label: 'フリータイトル役職', isFreeTitle: true,  isDiscretionaryTarget: false },
+  normal:    { code: 'OP1', label: '一般職',            requiresFreeTitle: false, isDiscretionaryTarget: false },
+  freeTitle: { code: 'OP2', label: 'フリータイトル役職', requiresFreeTitle: true,  isDiscretionaryTarget: false },
 }
 
 export const MOCK_ORG_ENTRIES = {
-  normal:     { code: 'ORG001', companyCode: 'C1', name: '開発部',   phase: 'after' as const, company: 'テスト社', businessUnit: 'BU1', division: 'DIV1', department: 'DEPT1', group: 'G1', team: 'T1', organizationLevel: '通常組織', CostCenter: '12345-AB00001', workLocation: '本社' },
-  secondment: { code: 'ORG002', companyCode: 'C1', name: '出向者部門', phase: 'after' as const, company: 'テスト社', businessUnit: 'BU1', division: 'DIV1', department: 'DEPT1', group: 'G1', team: 'T1', organizationLevel: '出向者用組織', CostCenter: '12345-AB00001', workLocation: '本社' },
+  normal:     { code: 'ORG001', companyCode: 'C1', name: '開発部',   phase: 'after' as const, company: 'テスト社', pathBusinessUnit: 'BU1', pathDivision: 'DIV1', pathDepartment: 'DEPT1', pathGroup: 'G1', pathTeam: 'T1', orgCategory: '通常組織',   costCenter: '12345-AB00001', workLocation: '本社' },
+  secondment: { code: 'ORG002', companyCode: 'C1', name: '出向者部門', phase: 'after' as const, company: 'テスト社', pathBusinessUnit: 'BU1', pathDivision: 'DIV1', pathDepartment: 'DEPT1', pathGroup: 'G1', pathTeam: 'T1', orgCategory: '出向者用組織', costCenter: '12345-AB00001', workLocation: '本社' },
 }
 
 // デフォルトのコードリストモック（テスト可能な最小セット）
@@ -100,7 +100,7 @@ export const MOCK_CODE_LISTS: AllCodeLists = {
   orgMasterEntries:  Object.values(MOCK_ORG_ENTRIES),
   workLocations:     [{ code: 'WL1', label: '本社' }],
   jobFamilies:       [{ code: 'JF1', label: 'エンジニアリング' }],
-  subJobFamilies:    [{ code: 'SJF1', label: 'SE', jobFamilyCode: 'JF1', isDiscretionaryTarget: false, compensationCategory: '' }],
+  jobTypes:          [{ code: 'SJF1', label: 'SE', jobFamilyCode: 'JF1', isDiscretionaryTarget: false, compensationCategory: '' }],
   concurrentReasons: [{ code: 'CR1', label: '業務支援' }],
 }
 

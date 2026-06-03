@@ -1,6 +1,27 @@
 import type { AllCodeLists }  from '../codeLists/aggregate'
 import type { DerivedUpdates } from './types'
 
+/** 給与等級ラベルから数字部分（Level）を抽出する */
+function extractLevelNumber(payGrade: string | undefined): number | undefined {
+  if (!payGrade) return undefined
+  const m = payGrade.match(/\d+/)
+  return m ? parseInt(m[0], 10) : undefined
+}
+
+/**
+ * 給与等級の数字部分（Level）の変化から promotionSign を導出する。
+ * Level が上がった → '昇格'、下がった → '降格'、変化なし → undefined。
+ */
+export function derivePromotionSignFromLevel(
+  afterPayGrade: string | undefined,
+  prevPayGrade:  string | undefined,
+): DerivedUpdates {
+  const afterLv = extractLevelNumber(afterPayGrade)
+  const prevLv  = extractLevelNumber(prevPayGrade)
+  if (afterLv === undefined || prevLv === undefined || afterLv === prevLv) return {}
+  return { promotionSign: afterLv > prevLv ? '昇格' : '降格' }
+}
+
 function warningLevel(bandLabel: string | undefined, codeLists: AllCodeLists): number {
   if (!bandLabel) return 0
   return codeLists.jobLevels.find(e => e.label === bandLabel)?.promotionDemotionWarningLevel ?? 0

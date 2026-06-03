@@ -49,7 +49,7 @@ function useEmpBadge(row: AllocationRow): { label: string; cls: string } | null 
   const et = row.employmentType as string | undefined
   if (!et) return null
   const entry = codeLists.employmentTypes.find(e => e.label === et || e.code === et)
-  if (!entry?.isOutsourceAcceptance) return null
+  if (!entry?.isSecondmentAcceptance) return null
   return { label: '出向受入', cls: 'bg-orange-100 text-orange-700' }
 }
 

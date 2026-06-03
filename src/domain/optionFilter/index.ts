@@ -29,8 +29,8 @@ export function buildBaseOptions(
   if (field === 'jobType') {
     const parent   = codeLists.jobFamilies.find(jf => jf.label === currentJobFamily)
     const filtered = parent
-      ? codeLists.subJobFamilies.filter(s => s.jobFamilyCode === parent.code)
-      : codeLists.subJobFamilies
+      ? codeLists.jobTypes.filter(s => s.jobFamilyCode === parent.code)
+      : codeLists.jobTypes
     return filtered.map(s => s.label)
   }
 

@@ -54,7 +54,7 @@ function isOutsource(row: AllocationRow, cl: AllCodeLists): boolean {
   const et = row.employmentType as string | undefined
   if (!et) return false
   const entry = cl.employmentTypes.find(e => e.label === et || e.code === et)
-  return entry?.isOutsourceAcceptance ?? false
+  return entry?.isSecondmentAcceptance ?? false
 }
 
 export const ALL_EDIT_PATTERNS: EditPattern[] = [

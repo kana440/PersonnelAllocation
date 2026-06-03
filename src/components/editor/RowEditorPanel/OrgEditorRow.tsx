@@ -33,11 +33,11 @@ function hasRelatedData(relatedValues: RelatedValues): boolean {
 function buildBatch(key: string, entry: OrgMasterEntry): Record<string, string> {
   return {
     [key]:          entry.code,
-    businessUnit:   entry.businessUnit,
-    division:       entry.division,
-    subDivision:    entry.department,
-    group:          entry.group,
-    team:           entry.team,
+    businessUnit:   entry.pathBusinessUnit,
+    division:       entry.pathDivision,
+    subDivision:    entry.pathDepartment,
+    group:          entry.pathGroup,
+    team:           entry.pathTeam,
   }
 }
 

@@ -9,7 +9,7 @@ import type {
   OfficialPositionEntry,
   WorkLocationEntry,
   JobFamilyEntry,
-  SubJobFamilyEntry,
+  JobTypeEntry,
   JobLevelEntry,
   TransferReasonEntry,
   ConcurrentReasonEntry,
@@ -17,6 +17,9 @@ import type {
   TrainingPositionEntry,
   DiscretionaryWorkEntry,
 } from '../../domain/codeLists'
+import { TRAINING_POSITION_VALUES } from '../../domain/codeLists/trainingPosition'
+import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '../../domain/codeLists/discretionaryWork'
+import { CONCURRENT_TYPES } from '../../domain/codeLists/concurrentType'
 
 // ── Column utilities ───────────────────────────────────────────────────────────
 
@@ -67,7 +70,7 @@ export const CODE_LIST_LABELS: Record<keyof AllCodeLists, string> = {
   officialPositions:        '役職',
   workLocations:            '勤務場所',
   jobFamilies:              '職種（Job Family）',
-  subJobFamilies:           'Sub Job Family',
+  jobTypes:           'Sub Job Family',
   jobLevels:                '職務レベル',
   transferReasons:          '異動事由',
   concurrentReasons:        '兼務理由',
@@ -104,10 +107,10 @@ function parseEmploymentTypes(raw: unknown[][]): EmploymentTypeEntry[] {
   return dataRowIndices(raw, 'K').map(r => ({
     code:                            cellStr(raw, r, colIdx('K')),
     label:                           cellStr(raw, r, colIdx('L')),
-    isOutsourceAcceptance:           cellBool(raw, r, colIdx('M')),
-    isEmployee:                      cellBool(raw, r, colIdx('N')),
-    isConcurrentOutsourceAcceptance: cellBool(raw, r, colIdx('O')),
-    isEmploymentExtension:           cellBool(raw, r, colIdx('P')),
+    isSecondmentAcceptance:           cellBool(raw, r, colIdx('M')),
+    isRegularEmployee:                      cellBool(raw, r, colIdx('N')),
+    isConcurrentSecondmentAcceptance: cellBool(raw, r, colIdx('O')),
+    isExtendedEmployee:           cellBool(raw, r, colIdx('P')),
   }))
 }
 
@@ -120,11 +123,11 @@ function parsePayGrades(raw: unknown[][]): PayGradeEntry[] {
       label:                  cellStr(raw, r, colIdx('S')),
       ...(compensationCategory ? { compensationCategory } : {}),
       ...(band               ? { band }                : {}),
-      isOutsourceAcceptance:  cellBool(raw, r, colIdx('V')),
-      isEmployee:             cellBool(raw, r, colIdx('W')),
-      isEmploymentExtension:  cellBool(raw, r, colIdx('X')),
+      isSecondmentAcceptance:  cellBool(raw, r, colIdx('V')),
+      isRegularEmployee:             cellBool(raw, r, colIdx('W')),
+      isExtendedEmployee:  cellBool(raw, r, colIdx('X')),
       isConcurrent:           cellBool(raw, r, colIdx('Y')),
-      isPayGradeChangeSign:   cellBool(raw, r, colIdx('Z')),
+      isPayGradeChange:   cellBool(raw, r, colIdx('Z')),
     }
   })
 }
@@ -133,7 +136,7 @@ function parseOfficialPositions(raw: unknown[][]): OfficialPositionEntry[] {
   return dataRowIndices(raw, 'AE').map(r => ({
     code:                  cellStr(raw, r, colIdx('AE')),
     label:                 cellStr(raw, r, colIdx('AF')),
-    isFreeTitle:           cellBool(raw, r, colIdx('AG')),
+    requiresFreeTitle:           cellBool(raw, r, colIdx('AG')),
     isDiscretionaryTarget: cellBool(raw, r, colIdx('AH')),
   }))
 }
@@ -152,7 +155,7 @@ function parseJobFamilies(raw: unknown[][]): JobFamilyEntry[] {
   }))
 }
 
-function parseSubJobFamilies(raw: unknown[][]): SubJobFamilyEntry[] {
+function parseJobTypes(raw: unknown[][]): JobTypeEntry[] {
   return dataRowIndices(raw, 'AR').map(r => ({
     code:                  cellStr(raw, r, colIdx('AR')),
     label:                 cellStr(raw, r, colIdx('AS')),
@@ -170,12 +173,12 @@ function parseJobLevels(raw: unknown[][]): JobLevelEntry[] {
       label:                                   cellStr(raw, r, colIdx('AX')),
       ...(promotionDemotionBand ? { promotionDemotionBand } : {}),
       promotionDemotionWarningLevel:             cellNum(raw, r, colIdx('AZ')),
-      isOutsourceAcceptance:                     cellBool(raw, r, colIdx('BA')),
-      isEmployee:                                cellBool(raw, r, colIdx('BB')),
-      isEmploymentExtensionPosition:             cellBool(raw, r, colIdx('BC')),
-      isEmploymentExtensionJobClassification:    cellBool(raw, r, colIdx('BD')),
-      isEmployeeOrAcceptedUnionMember:           cellBool(raw, r, colIdx('BE')),
-      isEmploymentExtensionUnionMember:          cellBool(raw, r, colIdx('BF')),
+      isSecondmentAcceptance:                     cellBool(raw, r, colIdx('BA')),
+      isRegularEmployee:                                cellBool(raw, r, colIdx('BB')),
+      isExtendedEmployeePosition:             cellBool(raw, r, colIdx('BC')),
+      isExtendedEmployeeJobClassification:    cellBool(raw, r, colIdx('BD')),
+      isRegularEmployeeOrSecondmentAcceptance:           cellBool(raw, r, colIdx('BE')),
+      isExtendedEmployeeUnionMember:          cellBool(raw, r, colIdx('BF')),
       isDiscretionaryTarget:                     cellNum(raw, r, colIdx('BG')),
     }
   })
@@ -226,12 +229,36 @@ export function parseCompanySheet(raw: unknown[][]): CompanyEntry[] {
   return entries
 }
 
+// ── Hardcoded-list compatibility check ────────────────────────────────────────
+// ドメイン層でハードコードされた選択肢と Excel の実データを照合する。
+// 不一致があれば警告として返す（Excel 後方互換の破損検出）。
+
+export interface CompatibilityWarning {
+  field:      string    // チェック対象フィールド名
+  expected:   string[]  // ハードコード定数側の値
+  actual:     string[]  // Excel から読み取った値
+  unexpected: string[]  // Excel にあってハードコードにない値
+  missing:    string[]  // ハードコードにあって Excel にない値
+}
+
+function checkHardcoded(
+  actual:   string[],
+  expected: readonly string[],
+  field:    string,
+): CompatibilityWarning | null {
+  const unexpected = actual.filter(v => !expected.includes(v))
+  const missing    = expected.filter(v => !actual.includes(v))
+  if (unexpected.length === 0 && missing.length === 0) return null
+  return { field, expected: [...expected], actual, unexpected, missing }
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface ParseCodeListsResult {
-  lists:          Partial<AllCodeLists>
-  foundKeys:      (keyof AllCodeLists)[]
-  missingKeys:    (keyof AllCodeLists)[]
+  lists:                 Partial<AllCodeLists>
+  foundKeys:             (keyof AllCodeLists)[]
+  missingKeys:           (keyof AllCodeLists)[]
+  compatibilityWarnings: CompatibilityWarning[]
 }
 
 export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult {
@@ -243,7 +270,7 @@ export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult 
     officialPositions:        parseOfficialPositions(raw),
     workLocations:            parseWorkLocations(raw),
     jobFamilies:              parseJobFamilies(raw),
-    subJobFamilies:           parseSubJobFamilies(raw),
+    jobTypes:                 parseJobTypes(raw),
     jobLevels:                parseJobLevels(raw),
     trainingPositions:        parseCodeEntryList<TrainingPositionEntry>(raw, 'BI'),
     discretionaryWorkOptions: parseCodeEntryList<DiscretionaryWorkEntry>(raw, 'BM'),
@@ -251,8 +278,28 @@ export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult 
     demotionReasons:          parseCodeEntryList<DemotionReasonEntry>(raw, 'BS'),
   }
 
+  const concurrentTypeActual = dataRowIndices(raw, 'BK').map(r => cellStr(raw, r, colIdx('BK')))
+
+  const compatibilityWarnings: CompatibilityWarning[] = [
+    checkHardcoded(
+      (lists.trainingPositions ?? []).map(e => e.label),
+      TRAINING_POSITION_VALUES,
+      'trainingPositions',
+    ),
+    checkHardcoded(
+      (lists.discretionaryWorkOptions ?? []).map(e => e.label),
+      [DISCRETIONARY_YES, DISCRETIONARY_NO],
+      'discretionaryWorkOptions',
+    ),
+    checkHardcoded(
+      concurrentTypeActual,
+      CONCURRENT_TYPES,
+      'concurrentType',
+    ),
+  ].filter((w): w is CompatibilityWarning => w !== null)
+
   const allKeys     = Object.keys(CODE_LIST_LABELS) as (keyof AllCodeLists)[]
   const foundKeys   = allKeys.filter(k => (lists[k] as unknown[])?.length > 0)
   const missingKeys = allKeys.filter(k => !foundKeys.includes(k))
-  return { lists, foundKeys, missingKeys }
+  return { lists, foundKeys, missingKeys, compatibilityWarnings }
 }

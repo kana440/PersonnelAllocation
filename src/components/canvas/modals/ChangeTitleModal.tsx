@@ -65,11 +65,11 @@ export function ChangeTitleModal({ rowId, allocationList, onDone, onCancel }: Ch
             </select>
           </div>
 
-          {/* 役職フリーテキスト：選択した役職が isFreeTitle の場合のみ入力可 */}
+          {/* 役職フリーテキスト：選択した役職が requiresFreeTitle の場合のみ入力可 */}
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-gray-600">
               役職フリーテキスト
-              {selectedOfficialEntry && !selectedOfficialEntry.isFreeTitle && (
+              {selectedOfficialEntry && !selectedOfficialEntry.requiresFreeTitle && (
                 <span className="ml-1 text-gray-400 font-normal">（この役職はフリーテキスト非対応）</span>
               )}
             </label>
@@ -77,7 +77,7 @@ export function ChangeTitleModal({ rowId, allocationList, onDone, onCancel }: Ch
               type="text"
               value={localJobTitle}
               onChange={e => setLocalJobTitle(e.target.value)}
-              disabled={!!(selectedOfficialEntry && !selectedOfficialEntry.isFreeTitle)}
+              disabled={!!(selectedOfficialEntry && !selectedOfficialEntry.requiresFreeTitle)}
               placeholder="フリーテキストで役職名を入力"
               className="w-full border border-gray-300 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
             />

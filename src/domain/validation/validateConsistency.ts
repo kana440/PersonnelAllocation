@@ -34,7 +34,7 @@ function checkG1_bandChangeRequiresNewPosition(row: AllocationRow, changes?: Row
  */
 function checkW2_promotionDemotionWarning(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   const et = findEmpType(codeLists, row)
-  if (!et?.isEmployee || !row.userId || row.userId !== row.groupEmployeeId) return []
+  if (!et?.isRegularEmployee || !row.userId || row.userId !== row.groupEmployeeId) return []
 
   const bandEntry     = codeLists.jobLevels.find(e => e.label === (row.band     as string | undefined))
   const prevBandEntry = codeLists.jobLevels.find(e => e.label === (row.prevBand as string | undefined))

@@ -23,14 +23,14 @@ function checkD2_1(row: AllocationRow, orgs: Organization[]): ValidationIssue[] 
 // ── D2-7: ジョブタイプ（カスタム: 親子フィルタ）─────────────────────────────
 function checkD2_7(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   const jobType = row.jobType
-  if (!jobType || codeLists.subJobFamilies.length === 0) return []
+  if (!jobType || codeLists.jobTypes.length === 0) return []
   const parent = codeLists.jobFamilies.find(jf => jf.label === row.jobFamily)
   if (parent) {
-    const children = codeLists.subJobFamilies.filter(s => s.jobFamilyCode === parent.code)
+    const children = codeLists.jobTypes.filter(s => s.jobFamilyCode === parent.code)
     if (children.some(s => s.label === jobType)) return []
     return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは選択中のジョブファミリーに含まれる値を選択してください' }]
   }
-  if (codeLists.subJobFamilies.some(s => s.label === jobType)) return []
+  if (codeLists.jobTypes.some(s => s.label === jobType)) return []
   return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは有効な選択肢から選択してください' }]
 }
 

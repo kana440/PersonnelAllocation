@@ -2,16 +2,18 @@ import type { AllCodeLists }  from '../../domain/codeLists/aggregate'
 import type { Organization }  from '../../domain/schemas'
 import type { AllocationRow } from '../../domain/allocationRow'
 import type { OrgMasterEntry } from '../../domain/codeLists/orgMaster'
+import type { CompatibilityWarning } from '../codeLists/parser'
 
 export interface ImportedWorkbookResult {
-  codeLists:           AllCodeLists
-  beforeOrganizations: Organization[]
-  afterOrganizations:  Organization[]
-  allocationList:      AllocationRow[]
-  sheetsFound:         string[]
-  sheetsMissing:       string[]
-  orgEntries:          OrgMasterEntry[]
-  allocationRowCount:  number
+  codeLists:                    AllCodeLists
+  beforeOrganizations:          Organization[]
+  afterOrganizations:           Organization[]
+  allocationList:               AllocationRow[]
+  sheetsFound:                  string[]
+  sheetsMissing:                string[]
+  orgEntries:                   OrgMasterEntry[]
+  allocationRowCount:           number
+  codeListCompatibilityWarnings: CompatibilityWarning[]
 }
 
 export type ProgressCallback = (message: string) => void

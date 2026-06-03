@@ -60,19 +60,19 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
     if (!code) continue
     entries.push({
       code,
-      companyCode:       cCompanyCode >= 0 ? (cellStr(raw, r, cCompanyCode) || undefined) : undefined,
-      parentCode:        cParent      >= 0 ? (cellStr(raw, r, cParent)       || undefined) : undefined,
-      name:              cName        >= 0 ? (cellStr(raw, r, cName)          || undefined) : undefined,
-      company:           cCompany     >= 0 ? cellStr(raw, r, cCompany) : '',
-      phase:             parsePhase(cPhase >= 0 ? cellStr(raw, r, cPhase) : ''),
-      businessUnit:      cellStr(raw, r, cBu),
-      division:          cellStr(raw, r, cDiv),
-      department:        cellStr(raw, r, cDept),
-      group:             cellStr(raw, r, cGroup),
-      team:              cellStr(raw, r, cTeam),
-      organizationLevel: cOrgLevel    >= 0 ? cellStr(raw, r, cOrgLevel)    : '',
-      CostCenter:        cCostCenter  >= 0 ? cellStr(raw, r, cCostCenter)  : '',
-      workLocation:      cWorkLocation >= 0 ? cellStr(raw, r, cWorkLocation) : '',
+      companyCode:      cCompanyCode  >= 0 ? (cellStr(raw, r, cCompanyCode) || undefined) : undefined,
+      parentCode:       cParent       >= 0 ? (cellStr(raw, r, cParent)       || undefined) : undefined,
+      name:             cName         >= 0 ? (cellStr(raw, r, cName)          || undefined) : undefined,
+      company:          cCompany      >= 0 ? cellStr(raw, r, cCompany) : '',
+      phase:            parsePhase(cPhase >= 0 ? cellStr(raw, r, cPhase) : ''),
+      pathBusinessUnit: cellStr(raw, r, cBu),
+      pathDivision:     cellStr(raw, r, cDiv),
+      pathDepartment:   cellStr(raw, r, cDept),
+      pathGroup:        cellStr(raw, r, cGroup),
+      pathTeam:         cellStr(raw, r, cTeam),
+      orgCategory:      cOrgLevel     >= 0 ? cellStr(raw, r, cOrgLevel)     : '',
+      costCenter:       cCostCenter   >= 0 ? cellStr(raw, r, cCostCenter)   : '',
+      workLocation:     cWorkLocation >= 0 ? cellStr(raw, r, cWorkLocation) : '',
     })
   }
   return entries
@@ -89,7 +89,7 @@ export function orgMasterToEntities(
     const codeSet = new Set(subset.map(e => e.code))
     const orgs: Organization[] = subset.filter(e => e.code).map(e => {
       const cid         = e.company || fallbackCompanyName
-      const derivedName = e.team || e.group || e.department || e.division || e.businessUnit || e.code
+      const derivedName = e.pathTeam || e.pathGroup || e.pathDepartment || e.pathDivision || e.pathBusinessUnit || e.code
       const parentId    = (e.parentCode && codeSet.has(e.parentCode)) ? e.parentCode : null
       return { id: e.code, name: e.name || derivedName, companyId: cid, parentId, level: 1, externalCode: e.code }
     })

@@ -59,7 +59,7 @@ function checkA1_2(row: AllocationRow): ValidationIssue[] {
 function checkA2(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   if (!row.departmentCode) return []
   const org = codeLists.orgMasterEntries.find(e => e.code === row.departmentCode)
-  if (org?.organizationLevel !== '出向者用組織') return []
+  if (org?.orgCategory !== '出向者用組織') return []
   if (row.secondmentToCompany) return []
   return [{ field: 'secondmentToCompany', level: 'error', message: '出向者用組織の場合、出向先会社は必須です' }]
 }
@@ -68,7 +68,7 @@ function checkA2(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
 function checkA3(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   if (!row.employmentType) return []
   const entry = findEmpType(codeLists, row)
-  if (!entry?.isOutsourceAcceptance) return []
+  if (!entry?.isSecondmentAcceptance) return []
   const issues: ValidationIssue[] = []
   if (!row.secondmentFromCompany)
     issues.push({ field: 'secondmentFromCompany', level: 'error', message: '出向受入の場合、出向元会社は必須です' })
@@ -90,7 +90,7 @@ function checkA4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
 function checkA5(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   if (!row.officialPositionCode) return []
   const entry = codeLists.officialPositions.find(e => e.label === row.officialPositionCode)
-  if (!entry?.isFreeTitle) return []
+  if (!entry?.requiresFreeTitle) return []
   if (row.localJobTitle) return []
   return [{ field: 'localJobTitle', level: 'error', message: 'フリータイトル対象の役職の場合、フリータイトルは必須です' }]
 }

@@ -20,6 +20,12 @@ export interface OperationInput {
   readonly required: boolean
   /** ラベル上書き。省略時は ALLOCATION_LIST_LABEL_MAP から取得 */
   readonly label?:   string
+  /**
+   * バンド選択肢を方向でフィルタリングする。
+   * 'up' = 現在より上のバンドのみ（昇格用）、'down' = 下のみ（降格用）。
+   * UI 側でステップ数セレクター（1段階/2段階/全て）と組み合わせて使用する。
+   */
+  readonly stepFilter?: 'up' | 'down'
 }
 
 /**

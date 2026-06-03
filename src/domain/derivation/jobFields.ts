@@ -8,7 +8,7 @@ export function computePayGrade(
   codeLists:    AllCodeLists,
 ): string | undefined {
   if (!jobTypeLabel || !bandLabel) return undefined
-  const sub = codeLists.subJobFamilies.find(s => s.label === jobTypeLabel)
+  const sub = codeLists.jobTypes.find(s => s.label === jobTypeLabel)
   if (!sub?.compensationCategory) return undefined
   return codeLists.payGrades.find(
     p => p.compensationCategory === sub.compensationCategory && p.band === bandLabel

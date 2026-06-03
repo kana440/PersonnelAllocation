@@ -54,10 +54,12 @@ export class OrgTransferOperation implements EditCommand {
 export interface PromotionFields {
   officialPositionCode?: string
   localJobTitle?:        string
+  positionCode?:         string
   positionBand?:         string
   band?:                 string
   payGrade?:             string
   promotionSign?:        string
+  payGradeChangeSign?:   string
 }
 
 export class PromotionOperation implements EditCommand {
@@ -199,10 +201,12 @@ export class VacantPositionMoveOperation implements EditCommand {
 export interface DemotionFields {
   officialPositionCode?: string
   localJobTitle?:        string
+  positionCode?:         string
   positionBand?:         string
   band?:                 string
   payGrade?:             string
   demotionReason?:       string
+  payGradeChangeSign?:   string
 }
 
 export class DemotionOperation implements EditCommand {

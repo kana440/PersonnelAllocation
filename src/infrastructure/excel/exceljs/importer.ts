@@ -45,11 +45,13 @@ export async function importWorkbook(
   const sheetsMissing: string[] = []
 
   let codeLists = EMPTY_CODE_LISTS
+  let codeListCompatibilityWarnings: ImportedWorkbookResult['codeListCompatibilityWarnings'] = []
   if (wb.getWorksheet(SHEET_CODE_LISTS)) {
     await report('コードリスト（各種TBL）を解析中...')
     sheetsFound.push(SHEET_CODE_LISTS)
     const result = parseCodeListsFromSheet(worksheetToRaw(wb.getWorksheet(SHEET_CODE_LISTS)!))
     codeLists = { ...EMPTY_CODE_LISTS, ...result.lists }
+    codeListCompatibilityWarnings = result.compatibilityWarnings
   } else { sheetsMissing.push(SHEET_CODE_LISTS) }
 
   let orgEntries: OrgMasterEntry[] = [], beforeOrganizations: Organization[] = [], afterOrganizations: Organization[] = []
@@ -78,7 +80,7 @@ export async function importWorkbook(
     allocationList = rawRows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
   } else { sheetsMissing.push(SHEET_ALLOCATION) }
 
-  return { codeLists, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, allocationRowCount: allocationList.length }
+  return { codeLists, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, allocationRowCount: allocationList.length, codeListCompatibilityWarnings }
 }
 
 export function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {

@@ -24,9 +24,9 @@ function useEmpCategoryMap() {
       const key = e.label || e.code
       if (!key) continue
       const cat: EmpCategory | null =
-        e.isEmployee            ? 'employee'  :
-        e.isOutsourceAcceptance ? 'outsource' :
-        e.isEmploymentExtension ? 'extension' : null
+        e.isRegularEmployee            ? 'employee'  :
+        e.isSecondmentAcceptance ? 'outsource' :
+        e.isExtendedEmployee ? 'extension' : null
       if (cat) { map.set(e.code, cat); map.set(e.label, cat) }
     }
     return map

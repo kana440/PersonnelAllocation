@@ -10,13 +10,13 @@ export function deriveOrgSubFields(
             ?? codeLists.orgMasterEntries.find(e => e.code === departmentCode)
   if (!entry) return {}
   return {
-    businessUnit: entry.businessUnit  || undefined,
-    division:     entry.division      || undefined,
-    subDivision:  entry.department    || undefined,
-    group:        entry.group         || undefined,
-    team:         entry.team          || undefined,
-    location:     entry.workLocation  || undefined,
-    costCenter:   entry.CostCenter    || undefined,
+    businessUnit: entry.pathBusinessUnit || undefined,
+    division:     entry.pathDivision     || undefined,
+    subDivision:  entry.pathDepartment   || undefined,
+    group:        entry.pathGroup        || undefined,
+    team:         entry.pathTeam         || undefined,
+    location:     entry.workLocation     || undefined,
+    costCenter:   entry.costCenter       || undefined,
   }
 }
 
@@ -40,10 +40,10 @@ export function reDeriveOrgSubFieldsForList(
   })
 }
 
-/** 出向者用組織かどうか（organizationLevel に "出向者用組織" が含まれる） */
+/** 出向者用組織かどうか（orgCategory に "出向者用組織" が含まれる） */
 export function isSecondmentOrg(departmentCode: string, codeLists: AllCodeLists): boolean {
   const entry = codeLists.orgMasterEntries.find(e => e.code === departmentCode)
-  return entry?.organizationLevel?.includes('出向者用組織') ?? false
+  return entry?.orgCategory?.includes('出向者用組織') ?? false
 }
 
 /**
@@ -69,7 +69,7 @@ export function suggestSecondmentOrgCodes(
       siblings.push(e.code)
       childrenMap.set(e.parentCode, siblings)
     }
-    if (e.organizationLevel?.includes('出向者用組織')) {
+    if (e.orgCategory?.includes('出向者用組織')) {
       secondmentCodes.add(e.code)
     }
   }

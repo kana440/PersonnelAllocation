@@ -10,7 +10,7 @@ import {
   ConcurrentSecondmentOutReleaseOperation,
   ConcurrentSecondmentInReleaseOperation,
 } from '../../operation/handlers/secondmentOps'
-import { isEmployee, isOutsourceAcceptance, wasSecondedOut, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany } from '../helpers'
+import { isRegularEmployee, isSecondmentAcceptance, wasSecondedOut, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany } from '../helpers'
 
 // ── 本務出向（SF統合先） ──────────────────────────────────────────────────────
 
@@ -21,7 +21,7 @@ export const secondmentOutSFDef: OperationDef = {
   badgeColor: 'bg-amber-100 text-amber-700',
 
   availableFor: (row, cl) =>
-    isEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row),
+    isRegularEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row),
 
   inputs: [
     { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF統合）' },
@@ -52,7 +52,7 @@ export const secondmentOutNonSFDef: OperationDef = {
   badgeColor: 'bg-amber-100 text-amber-700',
 
   availableFor: (row, cl) =>
-    isEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row),
+    isRegularEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row),
 
   inputs: [
     { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF非統合）' },
@@ -81,7 +81,7 @@ export const secondmentInSFDef: OperationDef = {
   badgeColor: 'bg-amber-50 text-amber-600',
 
   availableFor: (row, cl) =>
-    !isOutsourceAcceptance(row, cl) && isMainAssignment(row) && !wasSecondedIn(row),
+    !isSecondmentAcceptance(row, cl) && isMainAssignment(row) && !wasSecondedIn(row),
 
   inputs: [
     { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF統合）' },
@@ -110,7 +110,7 @@ export const secondmentInNonSFDef: OperationDef = {
   badgeColor: 'bg-amber-50 text-amber-600',
 
   availableFor: (row, cl) =>
-    !isOutsourceAcceptance(row, cl) && isMainAssignment(row) && !wasSecondedIn(row),
+    !isSecondmentAcceptance(row, cl) && isMainAssignment(row) && !wasSecondedIn(row),
 
   inputs: [
     { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF非統合）' },
@@ -139,7 +139,7 @@ export const concurrentSecondmentOutSFDef: OperationDef = {
   badgeColor: 'bg-amber-100 text-amber-700',
 
   availableFor: (row, cl) =>
-    isEmployee(row, cl) && isMainAssignment(row),
+    isRegularEmployee(row, cl) && isMainAssignment(row),
 
   inputs: [
     { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF統合）' },
@@ -166,7 +166,7 @@ export const concurrentSecondmentOutNonSFDef: OperationDef = {
   badgeColor: 'bg-amber-100 text-amber-700',
 
   availableFor: (row, cl) =>
-    isEmployee(row, cl) && isMainAssignment(row),
+    isRegularEmployee(row, cl) && isMainAssignment(row),
 
   inputs: [
     { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF非統合）' },

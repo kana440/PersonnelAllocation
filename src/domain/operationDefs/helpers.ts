@@ -10,21 +10,21 @@ function findEmpType(row: AllocationRow, codeLists: AllCodeLists) {
   return codeLists.employmentTypes.find(e => e.label === v || e.code === v)
 }
 
-/** 社員（isEmployee = true）かどうか */
-export function isEmployee(row: AllocationRow, codeLists: AllCodeLists): boolean {
-  return findEmpType(row, codeLists)?.isEmployee ?? false
+/** 社員（isRegularEmployee = true）かどうか */
+export function isRegularEmployee(row: AllocationRow, codeLists: AllCodeLists): boolean {
+  return findEmpType(row, codeLists)?.isRegularEmployee ?? false
 }
 
-/** 出向受入（isOutsourceAcceptance = true）かどうか */
-export function isOutsourceAcceptance(row: AllocationRow, codeLists: AllCodeLists): boolean {
-  return findEmpType(row, codeLists)?.isOutsourceAcceptance ?? false
+/** 出向受入（isSecondmentAcceptance = true）かどうか */
+export function isSecondmentAcceptance(row: AllocationRow, codeLists: AllCodeLists): boolean {
+  return findEmpType(row, codeLists)?.isSecondmentAcceptance ?? false
 }
 
-/** 雇用延長ポジション対象（isEmploymentExtensionPosition = true）かどうか */
-export function isEmploymentExtensionTarget(row: AllocationRow, codeLists: AllCodeLists): boolean {
+/** 雇用延長ポジション対象（isExtendedEmployeePosition = true）かどうか */
+export function isExtendedEmployeeTarget(row: AllocationRow, codeLists: AllCodeLists): boolean {
   const band = row.band as string | undefined
   if (!band) return false
-  return codeLists.jobLevels.find(e => e.label === band)?.isEmploymentExtensionPosition ?? false
+  return codeLists.jobLevels.find(e => e.label === band)?.isExtendedEmployeePosition ?? false
 }
 
 /** 本務行かどうか（concurrentType が兼務でない） */
@@ -47,7 +47,7 @@ export function prevWasSecondmentIn(row: AllocationRow, codeLists: AllCodeLists)
   const prevEt = row.prevEmploymentType as string | undefined
   if (!prevEt) return false
   const entry = codeLists.employmentTypes.find(e => e.label === prevEt || e.code === prevEt)
-  return entry?.isOutsourceAcceptance ?? false
+  return entry?.isSecondmentAcceptance ?? false
 }
 
 /** SF統合済み会社かどうか（companyEntry の isSFIntegrated フラグで判定） */

@@ -6,7 +6,8 @@ import type { EmploymentTypeEntry } from './employmentType'
 import type { PayGradeEntry }       from './payGrade'
 import type { OfficialPositionEntry } from './officialPosition'
 import type { WorkLocationEntry }   from './workLocation'
-import type { JobFamilyEntry, SubJobFamilyEntry } from './jobFamily'
+import type { JobFamilyEntry }  from './jobFamily'
+import type { JobTypeEntry }    from './jobType'
 import type { JobLevelEntry }       from './jobLevel'
 import type { TransferReasonEntry } from './transferReason'
 import type { ConcurrentReasonEntry } from './concurrentReason'
@@ -33,7 +34,7 @@ export interface AllCodeLists {
 
   // 職務分類（親子）
   jobFamilies:              JobFamilyEntry[]    // 職種テーブル (AM-AN) が source
-  subJobFamilies:           SubJobFamilyEntry[]
+  jobTypes:           JobTypeEntry[]
 
   // 職務レベル
   jobLevels:                JobLevelEntry[]
@@ -57,7 +58,7 @@ export const EMPTY_CODE_LISTS: AllCodeLists = {
   officialPositions:        [],
   workLocations:            [],
   jobFamilies:              [],
-  subJobFamilies:           [],
+  jobTypes:           [],
   jobLevels:                [],
   transferReasons:          [],
   concurrentReasons:        [],
