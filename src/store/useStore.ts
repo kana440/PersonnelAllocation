@@ -131,9 +131,14 @@ interface Actions {
   setPersonPickupViewMode: (mode: 'before' | 'after') => void
   setMemberPanelOrgId:     (orgId: string | null) => void
 
-  // 編集モード
+  // 編集モード（直接編集）
   enterEditMode:      (rowId: number) => void
   exitEditMode:       () => void
+
+  // 操作パネルモード（FloatingEditor 内で操作を選んで実行するフロー）
+  operationPanelRowId: number | null
+  enterOperationPanel: (rowId: number) => void
+  exitOperationPanel:  () => void
   setMainCanvasMode:  (mode: '組織図' | 'レポートライン') => void
 
   // チップ展開
@@ -182,6 +187,7 @@ export const useStore = create<AppState>((set, get) => {
     memberPanelOrgId:     null,
     editMode:             false,
     previousViewState:    null,
+    operationPanelRowId:  null,
     mainCanvasMode:       '組織図',
     expandedChipIds:      new Set<string>(),
     scopeOrgId:           null,
@@ -262,10 +268,11 @@ export const useStore = create<AppState>((set, get) => {
       if (!row) return
       const person = persons.find(p => p.sfPersonId === row.userId)
       set({
-        editMode:          true,
-        previousViewState: { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
-        selectedRowId:     rowId,
-        selectedPersonId:  person?.id ?? selectedPersonId,
+        editMode:            true,
+        operationPanelRowId: null,   // 操作パネルと排他
+        previousViewState:   { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
+        selectedRowId:       rowId,
+        selectedPersonId:    person?.id ?? selectedPersonId,
       })
     },
 
@@ -277,6 +284,31 @@ export const useStore = create<AppState>((set, get) => {
         focusedOrgId:      previousViewState?.focusedOrgId ?? null,
         selectedPersonId:  previousViewState?.selectedPersonId ?? null,
         previousViewState: null,
+      })
+    },
+
+    enterOperationPanel: (rowId) => {
+      const { allocationList, persons, focusedOrgId, selectedPersonId, mainCanvasMode } = get()
+      const row    = allocationList.find(r => r.rowId === rowId)
+      if (!row) return
+      const person = persons.find(p => p.sfPersonId === row.userId)
+      set({
+        operationPanelRowId: rowId,
+        editMode:            false,   // 直接編集と排他
+        previousViewState:   { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
+        selectedRowId:       rowId,
+        selectedPersonId:    person?.id ?? selectedPersonId,
+      })
+    },
+
+    exitOperationPanel: () => {
+      const { previousViewState } = get()
+      set({
+        operationPanelRowId: null,
+        selectedRowId:       null,
+        focusedOrgId:        previousViewState?.focusedOrgId ?? null,
+        selectedPersonId:    previousViewState?.selectedPersonId ?? null,
+        previousViewState:   null,
       })
     },
 

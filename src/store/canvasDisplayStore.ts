@@ -1,8 +1,10 @@
 import { create } from 'zustand'
-import type { FieldStrictness } from '../domain/optionStrictness'
+import type { FieldStrictness, UnavailableOperationDisplay } from '../domain/optionStrictness'
+import { DEFAULT_UNAVAILABLE_OPERATION_DISPLAY } from '../domain/optionStrictness'
 
-const STORAGE_KEY           = 'canvas_display_fields'
-const STRICTNESS_STORAGE_KEY = 'field_strictness_overrides'
+const STORAGE_KEY                 = 'canvas_display_fields'
+const STRICTNESS_STORAGE_KEY      = 'field_strictness_overrides'
+const UNAVAIL_OP_DISPLAY_STORAGE_KEY = 'unavailable_operation_display'
 
 export interface CanvasField {
   key:   string
@@ -56,11 +58,21 @@ function loadStrictnessOverrides(): Partial<Record<string, FieldStrictness>> {
   } catch { return {} }
 }
 
+function loadUnavailableOperationDisplay(): UnavailableOperationDisplay {
+  try {
+    const raw = localStorage.getItem(UNAVAIL_OP_DISPLAY_STORAGE_KEY)
+    if (raw === 'hide' || raw === 'show' || raw === 'show-disabled') return raw
+  } catch { /* ignore */ }
+  return DEFAULT_UNAVAILABLE_OPERATION_DISPLAY
+}
+
 interface CanvasDisplayState {
-  displayFields:             string[]
-  setDisplayFields:          (fields: string[]) => void
-  fieldStrictnessOverrides:  Partial<Record<string, FieldStrictness>>
-  setFieldStrictness:        (field: string, value: FieldStrictness | undefined) => void
+  displayFields:                string[]
+  setDisplayFields:             (fields: string[]) => void
+  fieldStrictnessOverrides:     Partial<Record<string, FieldStrictness>>
+  setFieldStrictness:           (field: string, value: FieldStrictness | undefined) => void
+  unavailableOperationDisplay:  UnavailableOperationDisplay
+  setUnavailableOperationDisplay: (value: UnavailableOperationDisplay) => void
 }
 
 export const useCanvasDisplayStore = create<CanvasDisplayState>(set => ({
@@ -78,5 +90,10 @@ export const useCanvasDisplayStore = create<CanvasDisplayState>(set => ({
       localStorage.setItem(STRICTNESS_STORAGE_KEY, JSON.stringify(next))
       return { fieldStrictnessOverrides: next }
     })
+  },
+  unavailableOperationDisplay: loadUnavailableOperationDisplay(),
+  setUnavailableOperationDisplay: (value) => {
+    localStorage.setItem(UNAVAIL_OP_DISPLAY_STORAGE_KEY, value)
+    set({ unavailableOperationDisplay: value })
   },
 }))

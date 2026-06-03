@@ -77,7 +77,7 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
     if (derivedName) updates.managerName = derivedName
 
     const deptCode = (effectiveRow.departmentCode as string | undefined) ?? ''
-    const orgFields = deriveOrgSubFields(deptCode, codeLists.orgMasterEntries)
+    const orgFields = deriveOrgSubFields(deptCode, codeLists)
     if (orgFields) Object.assign(updates, orgFields)
 
     const jobType = (effectiveRow.jobType as string | undefined) ?? ''

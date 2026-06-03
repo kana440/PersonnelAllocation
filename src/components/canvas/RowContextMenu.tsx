@@ -1,8 +1,47 @@
-import { detectChanges }         from '../../domain/review/changeDetection'
-import { deriveEditPatterns, EDIT_PATTERN_META } from '../../domain/editPattern'
-import type { EditPattern }       from '../../domain/editPattern'
-import type { AllocationRow }     from '../../domain/allocationRow'
-import { useStore }               from '../../store/useStore'
+import { detectChanges }                              from '../../domain/review/changeDetection'
+import { deriveEditPatterns, EDIT_PATTERN_META }      from '../../domain/editPattern'
+import type { EditPattern }                            from '../../domain/editPattern'
+import type { AllocationRow }                          from '../../domain/allocationRow'
+import { useStore }                                    from '../../store/useStore'
+
+// ── メニューセクション定義 ─────────────────────────────────────────────────────
+// 業務上の文脈に沿った分類。availableFor() を通過した操作のみ各セクションに表示される。
+
+const SECTIONS: { label: string; patterns: EditPattern[] }[] = [
+  {
+    label: '昇降格・役職変更',
+    patterns: ['promotion', 'demotion', 'titleChange'],
+  },
+  {
+    label: '職務内容・雇用形態',
+    patterns: ['jobTypeChange', 'employmentExtension'],
+  },
+  {
+    label: '組織への異動',
+    patterns: ['orgTransfer', 'orgRestructure', 'managerChange', 'vacantPositionMove'],
+  },
+  {
+    label: '兼務',
+    patterns: ['concurrentAdd', 'concurrentRelease'],
+  },
+  {
+    label: '出向',
+    patterns: [
+      'secondmentOut',    'secondmentIn',
+      'secondmentOutRelease', 'secondmentInRelease',
+      'concurrentSecondmentOut',    'concurrentSecondmentIn',
+      'concurrentSecondmentOutRelease', 'concurrentSecondmentInRelease',
+    ],
+  },
+  {
+    label: '在籍・退職',
+    patterns: [
+      'leaveOfAbsence', 'returnFromLeave',
+      'employmentTransferOut', 'employmentTransferIn',
+      'resignation', 'noChange',
+    ],
+  },
+]
 
 // 雇用タイプバッジ（出向受入のみ表示）
 function useEmpBadge(row: AllocationRow): { label: string; cls: string } | null {
@@ -23,21 +62,29 @@ interface Props {
   onClose:       () => void
 }
 
-const MENU_W = 240
-const MENU_H = 320
+const MENU_W = 360
 
 export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose }: Props) {
   const clampedX = Math.min(x, window.innerWidth  - MENU_W - 8)
-  const clampedY = Math.min(y, window.innerHeight - MENU_H - 8)
+  const clampedY = Math.min(y, window.innerHeight - 520 - 8)
 
   const { codeLists } = useStore()
   const empBadge = useEmpBadge(row)
 
-  const { kinds } = detectChanges(row)
-  const { active, available } = deriveEditPatterns(kinds, row, codeLists)
+  // 設定済みパターン（ヘッダー表示用）
+  const active = (() => {
+    const ch = detectChanges(row)
+    return new Set(deriveEditPatterns(ch.kinds, row, codeLists).active)
+  })()
 
-  const name          = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'
-  const posTitle      = row.localJobTitle || row.officialPositionCode || row.positionCode || ''
+  // availableFor を通過した操作セット
+  const passesFilter = (p: EditPattern) => {
+    const cond = EDIT_PATTERN_META[p].availableFor
+    return cond === undefined || cond(row, codeLists)
+  }
+
+  const name         = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'
+  const posTitle     = row.localJobTitle || row.officialPositionCode || row.positionCode || ''
   const transferReason = (row.transferReason as string | undefined) ?? ''
 
   return (
@@ -48,11 +95,11 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
         onContextMenu={e => { e.preventDefault(); onClose() }}
       />
       <div
-        className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
-        style={{ left: clampedX, top: clampedY, width: MENU_W }}
+        className="fixed z-[9999] bg-white border border-gray-200 rounded-lg shadow-xl flex flex-col"
+        style={{ left: clampedX, top: clampedY, width: MENU_W, maxHeight: '82vh' }}
       >
-        {/* ヘッダー */}
-        <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+        {/* ── ヘッダー ── */}
+        <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
           <div className="flex items-start justify-between gap-1">
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-gray-800 truncate">{name}</div>
@@ -72,57 +119,69 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
               className="flex-shrink-0 text-gray-300 hover:text-gray-500 text-xs leading-none mt-0.5"
             >✕</button>
           </div>
-          <div className="mt-1 text-[10px] text-gray-500">
-            異動事由: {transferReason
-              ? <span className="text-gray-700">{transferReason}</span>
-              : <span className="text-gray-300">―</span>
-            }
-          </div>
-        </div>
 
-        {/* 設定済みパターンのバッジ */}
-        {active.length > 0 && (
-          <div className="px-3 py-1.5 border-b border-gray-100 flex flex-wrap gap-1">
-            {active.map(p => (
-              <span
-                key={p}
-                className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${EDIT_PATTERN_META[p].badgeColor}`}
-              >{EDIT_PATTERN_META[p].label}</span>
-            ))}
-          </div>
-        )}
-
-        {/* パターンボタン群 */}
-        <div className="py-0.5">
-          {active.map(p => (
-            <button
-              key={p}
-              onClick={() => { onEditPattern(p, row.rowId) }}
-              className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
-            >
-              <span className="text-gray-400">✏</span>
-              {EDIT_PATTERN_META[p].editLabel}
-            </button>
-          ))}
-
-          {active.length > 0 && available.length > 0 && (
-            <div className="mx-3 my-0.5 border-t border-gray-100" />
+          {/* 現在設定済みのパターン（情報表示のみ） */}
+          {active.size > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {[...active].map(p => (
+                <span
+                  key={p}
+                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ring-1 ring-current/30 ${EDIT_PATTERN_META[p].badgeColor}`}
+                >
+                  {EDIT_PATTERN_META[p].menuLabel ?? EDIT_PATTERN_META[p].label}
+                </span>
+              ))}
+            </div>
           )}
 
-          {available.map(p => (
-            <button
-              key={p}
-              onClick={() => { onEditPattern(p, row.rowId) }}
-              className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 flex items-center gap-2 transition-colors"
-            >
-              <span className="text-gray-300">＋</span>
-              {EDIT_PATTERN_META[p].addLabel}
-            </button>
-          ))}
+          {transferReason && (
+            <div className="mt-1 text-[10px] text-gray-400 truncate">
+              {transferReason}
+            </div>
+          )}
         </div>
 
-        {/* 直接編集ボタン */}
-        <div className="border-t border-gray-100 px-3 py-2">
+        {/* ── 操作セクション群 ── */}
+        <div className="overflow-y-auto flex-1 py-2 px-3 space-y-3">
+          {SECTIONS.map(({ label, patterns }) => {
+            const visible = patterns.filter(passesFilter)
+            if (visible.length === 0) return null
+            return (
+              <div key={label}>
+                {/* セクションヘッダー */}
+                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 px-0.5">
+                  {label}
+                </div>
+                {/* バッジボタン — 3列グリッドで等幅 */}
+                <div className="grid grid-cols-3 gap-1">
+                  {visible.map(p => {
+                    const meta     = EDIT_PATTERN_META[p]
+                    const isActive = active.has(p)
+                    const blabel   = meta.menuLabel ?? meta.label
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => { onEditPattern(p, row.rowId); onClose() }}
+                        title={meta.label}
+                        className={[
+                          'py-1 rounded text-[11px] font-medium text-center',
+                          'transition-all hover:brightness-95 active:scale-95',
+                          meta.badgeColor,
+                          isActive ? 'ring-1 ring-current/40' : 'opacity-80',
+                        ].join(' ')}
+                      >
+                        {blabel}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ── 直接編集 ── */}
+        <div className="border-t border-gray-100 px-3 py-2 flex-shrink-0">
           <button
             onClick={() => { onDirectEdit(row.rowId); onClose() }}
             className="w-full text-center text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"

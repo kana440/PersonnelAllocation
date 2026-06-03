@@ -6,16 +6,31 @@ import type { EditPattern } from '../../../domain/editPattern'
 // フィルターチップ定義（EditPattern + newHire/termination）
 type FilterKey = EditPattern | 'newHire' | 'termination'
 const ALL_FILTER_CHIPS: { key: FilterKey; label: string; color: string }[] = [
-  { key: 'orgTransfer',       label: '組織異動',        color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'promotionDemotion', label: '昇降格',          color: 'bg-green-100 text-green-700 border-green-200' },
-  { key: 'jobTypeChange',     label: 'ジョブタイプ変更', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { key: 'vacantPositionMove',label: 'ポジション異動',  color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
-  { key: 'secondmentRelease', label: '出向解除',        color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  { key: 'newHire',           label: '新規採用',        color: 'bg-teal-100 text-teal-700 border-teal-200' },
-  { key: 'termination',       label: '退職',            color: 'bg-red-100 text-red-700 border-red-200' },
+  { key: 'orgTransfer',           label: '社内異動',           color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'orgRestructure',        label: '組織改変',           color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { key: 'promotion',             label: '昇格',               color: 'bg-green-100 text-green-700 border-green-200' },
+  { key: 'demotion',              label: '降格',               color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { key: 'titleChange',           label: '役職変更',           color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  { key: 'jobTypeChange',         label: 'ジョブタイプ変更',   color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { key: 'secondmentOut',         label: '本務出向',           color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  { key: 'secondmentIn',          label: '本務出向受入',       color: 'bg-amber-50 text-amber-600 border-amber-100' },
+  { key: 'secondmentOutRelease',  label: '本務出向解除',       color: 'bg-red-100 text-red-600 border-red-200' },
+  { key: 'secondmentInRelease',   label: '本務出向受入解除',   color: 'bg-red-100 text-red-600 border-red-200' },
+  { key: 'leaveOfAbsence',        label: '休職',               color: 'bg-gray-100 text-gray-600 border-gray-200' },
+  { key: 'returnFromLeave',       label: '復職',               color: 'bg-gray-100 text-gray-600 border-gray-200' },
+  { key: 'concurrentAdd',         label: '兼務追加',           color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { key: 'vacantPositionMove',    label: 'ポジション異動',     color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { key: 'noChange',              label: '変更なし',           color: 'bg-neutral-100 text-neutral-500 border-neutral-200' },
+  { key: 'newHire',               label: '新規採用',           color: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { key: 'termination',           label: '退職',               color: 'bg-red-100 text-red-700 border-red-200' },
 ]
 
-const EDIT_PATTERNS = new Set<string>(['orgTransfer','promotionDemotion','jobTypeChange','vacantPositionMove','secondmentRelease','resignation'])
+const EDIT_PATTERNS = new Set<string>([
+  'orgTransfer','orgRestructure','promotion','demotion','titleChange','jobTypeChange',
+  'secondmentOut','secondmentIn','secondmentOutRelease','secondmentInRelease',
+  'leaveOfAbsence','returnFromLeave','concurrentAdd','concurrentRelease',
+  'vacantPositionMove','noChange','resignation',
+])
 
 interface Props {
   rows:                ReviewRow[]

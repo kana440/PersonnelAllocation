@@ -8,7 +8,7 @@ import { useScopedStore } from '../../store/useScopedStore'
 import { ReportLineView }   from './components/ReportLineView'
 import { OrgBox, DropZone } from './components/OrgBox'
 import { PersonContextMenu } from './CanvasContextMenus'
-import { RowContextMenu } from './RowContextMenu'
+// import { RowContextMenu } from './RowContextMenu'  // PersonOperationPanel に統合
 import { OrgTransferDialog }       from './patternDialogs/OrgTransferDialog'
 import { PromotionDialog }         from './patternDialogs/PromotionDialog'
 import { JobTypeDialog }           from './patternDialogs/JobTypeDialog'
@@ -42,6 +42,7 @@ export function OrgOperationView() {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
     selectedPersonId, selectPerson, enterEditMode, saveRow,
+    operationPanelRowId, enterOperationPanel,
     mainCanvasMode, setMainCanvasMode,
     expandedChipIds, toggleChip,
     assignPersonToVacantPosition,
@@ -77,7 +78,8 @@ export function OrgOperationView() {
   const [moveModalOpen,     setMoveModalOpen]     = useState(false)
   const [bulkActionModal,   setBulkActionModal]   = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
   const [changeTitleRowId,   setChangeTitleRowId]   = useState<number | null>(null)
-  const [rowContextMenu,     setRowContextMenu]     = useState<{ x: number; y: number; rowId: number } | null>(null)
+  // rowContextMenu と activePatternDialog は PersonOperationPanel に統合したため廃止
+  // （後方互換のため宣言は残すが、新フローでは使わない）
   const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
 
   // ── Hooks ──────────────────────────────────────────────────────
@@ -121,8 +123,17 @@ export function OrgOperationView() {
   const handleRowDoubleClick = useCallback((e: React.MouseEvent, rowId: number) => {
     e.preventDefault(); e.stopPropagation()
     if (isHistoryPreviewMode) return
-    setRowContextMenu({ x: e.clientX, y: e.clientY, rowId })
-  }, [isHistoryPreviewMode])
+
+    // 別行の操作パネルが開いている場合は確認
+    if (operationPanelRowId !== null && operationPanelRowId !== rowId) {
+      setConfirmDialog({
+        message: '別の行の操作パネルが開いています。切り替えますか？（変更は保持されます）',
+        onConfirm: () => enterOperationPanel(rowId),
+      })
+      return
+    }
+    enterOperationPanel(rowId)
+  }, [isHistoryPreviewMode, operationPanelRowId, enterOperationPanel])
 
   const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
     e.preventDefault(); e.stopPropagation()
@@ -377,26 +388,12 @@ export function OrgOperationView() {
           )}
         </div>
 
-        {rowContextMenu && (() => {
-          const row = allocationList.find(r => r.rowId === rowContextMenu.rowId)
-          return row ? (
-            <RowContextMenu
-              x={rowContextMenu.x} y={rowContextMenu.y}
-              row={row}
-              onEditPattern={(pattern, rowId) => {
-                setRowContextMenu(null)
-                setActivePatternDialog({ pattern, rowId })
-              }}
-              onDirectEdit={rowId => { enterEditMode(rowId) }}
-              onClose={() => setRowContextMenu(null)}
-            />
-          ) : null
-        })()}
+        {/* RowContextMenu は PersonOperationPanel に統合したため不使用 */}
 
         {activePatternDialog?.pattern === 'orgTransfer' && (
           <OrgTransferDialog       rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
         )}
-        {activePatternDialog?.pattern === 'promotionDemotion' && (
+        {(activePatternDialog?.pattern === 'promotion' || activePatternDialog?.pattern === 'demotion') && (
           <PromotionDialog         rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
         )}
         {activePatternDialog?.pattern === 'jobTypeChange' && (
@@ -408,7 +405,8 @@ export function OrgOperationView() {
         {activePatternDialog?.pattern === 'vacantPositionMove' && (
           <VacantPositionDialog    rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
         )}
-        {activePatternDialog?.pattern === 'secondmentRelease' && (
+        {(activePatternDialog?.pattern === 'secondmentOutRelease' ||
+          activePatternDialog?.pattern === 'secondmentInRelease') && (
           <SecondmentReleaseDialog rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
         )}
 

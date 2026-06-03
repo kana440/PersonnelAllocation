@@ -57,6 +57,7 @@ export interface PromotionFields {
   positionBand?:         string
   band?:                 string
   payGrade?:             string
+  promotionSign?:        string
 }
 
 export class PromotionOperation implements EditCommand {
@@ -189,6 +190,110 @@ export class VacantPositionMoveOperation implements EditCommand {
     return {
       ...innerResult,
       label: `ポジション異動: ${personName(source)} → ${posTitle}`,
+    }
+  }
+}
+
+// ── Demotion ──────────────────────────────────────────────────────────────────
+
+export interface DemotionFields {
+  officialPositionCode?: string
+  localJobTitle?:        string
+  positionBand?:         string
+  band?:                 string
+  payGrade?:             string
+  demotionReason?:       string
+}
+
+export class DemotionOperation implements EditCommand {
+  readonly kind = 'Demotion'
+
+  constructor(
+    private readonly rowId:  number,
+    private readonly fields: DemotionFields,
+  ) {}
+
+  validate(ctx: OperationContext): ValidationResult {
+    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
+      return fail(`行が見つかりません (rowId: ${this.rowId})`)
+    return ok()
+  }
+
+  apply(ctx: OperationContext): OperationResult {
+    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
+    const changes = Object.fromEntries(
+      Object.entries(this.fields).filter(([, v]) => v !== undefined)
+    )
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === this.rowId ? { ...r, ...changes } : r
+      ),
+      label: `降格: ${personName(row)}`,
+    }
+  }
+}
+
+// ── TitleChange ───────────────────────────────────────────────────────────────
+
+export interface TitleChangeFields {
+  officialPositionCode?: string
+  localJobTitle?:        string
+}
+
+export class TitleChangeOperation implements EditCommand {
+  readonly kind = 'TitleChange'
+
+  constructor(
+    private readonly rowId:  number,
+    private readonly fields: TitleChangeFields,
+  ) {}
+
+  validate(ctx: OperationContext): ValidationResult {
+    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
+      return fail(`行が見つかりません (rowId: ${this.rowId})`)
+    return ok()
+  }
+
+  apply(ctx: OperationContext): OperationResult {
+    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
+    const changes = Object.fromEntries(
+      Object.entries(this.fields).filter(([, v]) => v !== undefined)
+    )
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === this.rowId ? { ...r, ...changes } : r
+      ),
+      label: `役職変更: ${personName(row)}`,
+    }
+  }
+}
+
+// ── ManagerChange ─────────────────────────────────────────────────────────────
+
+export class ManagerChangeOperation implements EditCommand {
+  readonly kind = 'ManagerChange'
+
+  constructor(
+    private readonly rowId:               number,
+    private readonly managerPositionCode: string | undefined,
+    private readonly managerName:         string | undefined,
+  ) {}
+
+  validate(ctx: OperationContext): ValidationResult {
+    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
+      return fail(`行が見つかりません (rowId: ${this.rowId})`)
+    return ok()
+  }
+
+  apply(ctx: OperationContext): OperationResult {
+    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === this.rowId
+          ? { ...r, managerPositionCode: this.managerPositionCode, managerName: this.managerName }
+          : r
+      ),
+      label: `上司変更: ${personName(row)}`,
     }
   }
 }
