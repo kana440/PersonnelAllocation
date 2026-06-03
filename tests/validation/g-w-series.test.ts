@@ -1,7 +1,7 @@
 // G系（データ整合性チェック）・W系（ワーニング）シナリオ
 // 仕様: specs/G2-domain/02-validation-rules.md
 import { runScenarios } from '../helpers/runner'
-import type { RowChanges } from '../../src/domain/review/changeDetection'
+import type { RowChanges } from '../../src/domain/patterns/changeDetection'
 
 // ── RowChanges ヘルパー ───────────────────────────────────────────────────────
 const changes = (kinds: RowChanges['kinds']): RowChanges =>

@@ -1,19 +1,19 @@
 import type { Organization } from '../domain/schemas'
-import type { AllCodeLists } from '../domain/codeLists/aggregate'
-import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../domain/masters/aggregate'
+import { EMPTY_CODE_LISTS } from '../domain/masters/aggregate'
 import type { AllocationRow } from '../domain/allocationRow'
 import { nextRowId } from '../domain/allocationRow'
 import type { AfterValues } from '../domain/allocationRow'
-import type { EditCommand, ValidationResult } from '../domain/operation/types'
-import { fail } from '../domain/operation/types'
-import type { EditScenario } from '../domain/editScenario'
-import { DirectEditOperation }  from '../domain/operation/handlers/directEdit'
+import type { EditCommand, ValidationResult } from '../domain/commands/types'
+import { fail } from '../domain/commands/types'
+import type { EditScenario } from '../domain/commands/scenarios'
+import { DirectEditOperation }  from '../domain/commands/handlers/directEdit'
 import {
   CreateVacantPositionOperation,
   RemovePositionOperation,
   UnassignPersonFromPositionOperation,
   AssignPersonToPositionOperation,
-} from '../domain/operation/handlers/positionOps'
+} from '../domain/commands/handlers/positionOps'
 import {
   OrgTransferOperation,
   PromotionOperation,
@@ -21,21 +21,21 @@ import {
   ResignationOperation,
   VacantPositionMoveOperation,
   SecondmentReleaseOperation,
-} from '../domain/operation/handlers/patternOps'
+} from '../domain/commands/handlers/patternOps'
 import type {
   PromotionFields,
   JobTypeFields,
   SecondmentReleaseFields,
-} from '../domain/operation/handlers/patternOps'
-import { AssignPositionCodesOperation } from '../domain/operation/handlers/assignPositionCodes'
+} from '../domain/commands/handlers/patternOps'
+import { AssignPositionCodesOperation } from '../domain/commands/handlers/assignPositionCodes'
 import type { PositionCodeAssignment } from '../ports'
-import { derivePersons } from '../domain/projection/rows'
+import { derivePersons } from '../domain/choices/rows'
 import type { Person } from '../domain/schemas'
-import type { IOperationPattern, PatternDetectionResult } from '../domain/operationPatterns/types'
-import { matchAllPatterns } from '../domain/operationPatterns/patternMatcher'
-import { mergeAllocationList } from '../domain/importMerge'
-import type { ImportMode, AssigneeImportMode, MergeResult } from '../domain/importMerge'
-import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../domain/operation/orgHelpers'
+import type { IOperationPattern, PatternDetectionResult } from '../domain/patterns/groupPatternTypes'
+import { matchAllPatterns } from '../domain/patterns/groupPatternMatcher'
+import { mergeAllocationList } from '../application/importMerge'
+import type { ImportMode, AssigneeImportMode, MergeResult } from '../application/importMerge'
+import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../domain/commands/orgHelpers'
 import { UndoStack } from './UndoStack'
 import type { HistoryEntry } from './UndoStack'
 

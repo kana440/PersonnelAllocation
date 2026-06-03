@@ -1,6 +1,6 @@
 // 組織CD一覧シートを unknown[][] から解析する純粋関数（ライブラリ非依存）
 
-import type { OrgMasterEntry } from '../../../domain/codeLists/orgMaster'
+import type { OrgMasterEntry } from '../../../domain/masters/orgMaster'
 import type { Organization }   from '../../../domain/schemas'
 
 // A=0, B=1 …

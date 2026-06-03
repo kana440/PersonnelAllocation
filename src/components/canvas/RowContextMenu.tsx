@@ -1,6 +1,6 @@
-import { detectChanges }                              from '../../domain/review/changeDetection'
-import { deriveEditPatterns, EDIT_PATTERN_META }      from '../../domain/editPattern'
-import type { EditPattern }                            from '../../domain/editPattern'
+import { detectChanges }                              from '../../domain/patterns/changeDetection'
+import { deriveEditPatterns, EDIT_PATTERN_META }      from '../../domain/patterns/editPattern'
+import type { EditPattern }                            from '../../domain/patterns/editPattern'
 import type { AllocationRow }                          from '../../domain/allocationRow'
 import { useStore }                                    from '../../store/useStore'
 

@@ -2,7 +2,7 @@ import { useMemo }        from 'react'
 import { useStore }        from '../../../store/useStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { OrgTreePicker }   from '../OrgTreePicker'
-import { collectTopLevelRelevantOrgIds } from '../../../domain/orgPicker/relevantOrgs'
+import { collectTopLevelRelevantOrgIds } from '../../../domain/choices/relevantOrgs'
 
 interface Props {
   open:     boolean

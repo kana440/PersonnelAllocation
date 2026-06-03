@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Organization } from '../../domain/schemas'
 import type { Person } from '../../domain/schemas'
 import type { AllocationRow } from '../../domain/allocationRow'
-import type { EditPattern } from '../../domain/editPattern'
+import type { EditPattern } from '../../domain/patterns/editPattern'
 
 export interface DragData {
   dragType?:       'person' | 'position'

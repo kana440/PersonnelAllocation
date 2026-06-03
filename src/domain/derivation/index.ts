@@ -11,7 +11,7 @@
  */
 
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists }  from '../codeLists/aggregate'
+import type { AllCodeLists }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
 import { deriveOrgSubFields }        from './orgFields'

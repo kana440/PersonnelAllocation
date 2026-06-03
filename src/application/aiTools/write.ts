@@ -1,11 +1,11 @@
 import type { HRApplicationService } from '../HRApplicationService'
-import type { EditCommand, ValidationResult, OperationError } from '../../domain/operation/types'
+import type { EditCommand, ValidationResult, OperationError } from '../../domain/commands/types'
 import type { AllocationRow, AfterValues } from '../../domain/allocationRow'
-import { ChangeTitleOperation, derivePersonGradeFields } from '../../domain/operation/handlers/changeTitle'
-import { DirectEditOperation } from '../../domain/operation/handlers/directEdit'
-import { BulkMoveToOrgOperation } from '../../domain/operation/handlers/bulkMoveToOrg'
-import { TransferPersonOperation } from '../../domain/operation/handlers/transferPerson'
-import { detectChanges } from '../../domain/review/changeDetection'
+import { ChangeTitleOperation, derivePersonGradeFields } from '../../domain/commands/handlers/changeTitle'
+import { DirectEditOperation } from '../../domain/commands/handlers/directEdit'
+import { BulkMoveToOrgOperation } from '../../domain/commands/handlers/bulkMoveToOrg'
+import { TransferPersonOperation } from '../../domain/commands/handlers/transferPerson'
+import { detectChanges } from '../../domain/patterns/changeDetection'
 import { validateRow } from '../../domain/validation/validateRow'
 import type { ValidationIssue } from '../../domain/validation/types'
 import type { PositionCodeAssignment } from '../../ports'
@@ -24,7 +24,7 @@ export function createWriteMethods(service: HRApplicationService) {
       .filter(r => beforeMap.get(r.rowId) !== r)
       .map(r => ({
         rowId:  r.rowId,
-        issues: validateRow(r, afterOrganizations, codeLists, detectChanges(r), allocationList),
+        issues: validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectChanges(r) }),
       }))
       .filter(v => v.issues.length > 0)
   }

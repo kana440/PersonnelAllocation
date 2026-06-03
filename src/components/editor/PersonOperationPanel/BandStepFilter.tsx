@@ -1,4 +1,4 @@
-import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../../../domain/masters/aggregate'
 
 export type StepMode = '1' | '2' | 'all'
 

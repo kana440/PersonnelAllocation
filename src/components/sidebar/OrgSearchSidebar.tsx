@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useScopedStore } from '../../store/useScopedStore'
 import { rowDiff } from '../../domain/allocationRow'
-import { buildOrgMap } from '../../domain/projection/rows'
+import { buildOrgMap } from '../../domain/choices/rows'
 import type { AllocationRow } from '../../domain/allocationRow'
 import type { Person } from '../../domain/schemas'
 import type { Organization } from '../../domain/schemas'

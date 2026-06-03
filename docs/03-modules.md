@@ -61,7 +61,7 @@ type Organization, Person, Company ...（Zod 由来）
 
 ## Module B: Validation
 
-**場所**: `src/domain/validation/`（複数ファイルに分割）, `src/domain/valueRules.ts`, `src/domain/optionFilter/`
+**場所**: `src/domain/validation/`（複数ファイルに分割）, `src/domain/choices/`
 
 **責務**: `AllocationRow` 1行の整合性をチェックする。エラー・警告を返す。
 また、`VALUE_RULES` を単一ソースとしてバリデーション（存在チェック）と UI 選択肢絞り込みの両方を導出する。
@@ -80,17 +80,17 @@ type Organization, Person, Company ...（Zod 由来）
 | `validateExistence.ts` | D 系（コードリスト存在チェック）: `VALUE_RULES` から導出 |
 | `validateKeys.ts` | E 系（キー重複チェック） |
 | `validateConsistency.ts` | G 系（整合性エラー）+ W 系（ワーニング）: G1 昇降格時ポジション未変更 / W2 2段階昇降格 |
-| `valueRules.ts` | `VALUE_RULES` 配列 — 許容値制約の単一定義ソース。`SuggestionRule \| ConstraintRule` の discriminated union。`validateExistence.ts`・`validateRelated.ts`（F1-F4）・`optionFilter/` の 3 箇所が参照する |
-| `optionFilter/index.ts` | `buildBaseOptions()` / `filterOptions()` / `getFieldOptions()` — UI の選択肢生成・行状態による絞り込み |
+| `rules.ts` | `VALUE_RULES` 配列 — 許容値制約の単一定義ソース。`SuggestionRule \| ConstraintRule` の discriminated union。`validateExistence.ts`・`validateRelated.ts`（F1-F4）・`choices/` の 3 箇所が参照する |
+| `choices/index.ts` | `buildBaseOptions()` / `filterOptions()` / `getFieldOptions()` — UI の選択肢生成・行状態による絞り込み |
 
 **公開 API**:
 ```typescript
 // validateRow.ts
-function validateRow(row, orgs, codeLists): ValidationIssue[]
+function validateRow(ctx: RowContext, overrides?): ValidationIssue[]
 function issuesForField(issues, field): ValidationIssue[]
 function fieldsToShow(row, issues): Set<keyof AllocationRow>
 
-// optionFilter/index.ts
+// choices/index.ts
 function buildBaseOptions(field, codeLists): OptionItem[]
 function filterOptions(field, row, base, codeLists): OptionItem[]
 function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
@@ -102,7 +102,7 @@ function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
 
 ## Module C: Operation Abstraction
 
-**場所**: `src/domain/operation/`, `src/domain/editPattern/`, `src/domain/editScenario/`
+**場所**: `src/domain/commands/`, `src/domain/patterns/`
 
 **責務**: 業務操作の抽象インターフェース・分類ラベル・複合操作を提供する
 
@@ -115,8 +115,8 @@ function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
 // EditCommand — 単行の原子操作
 interface EditCommand {
   kind: string
-  validate(ctx: OperationContext): ValidationResult  // 純粋関数
-  apply(ctx: OperationContext): OperationResult      // 純粋関数
+  validate(ctx: DomainContext): ValidationResult  // 純粋関数
+  apply(ctx: DomainContext): OperationResult      // 純粋関数
 }
 
 // EditScenario — 複合操作（玉突き人事等）
@@ -148,7 +148,7 @@ function failField(field, message): ValidationError
 
 ## Module D: Projection（派生ビュー）
 
-**場所**: `src/domain/projection/rows.ts`
+**場所**: `src/domain/choices/rows.ts`
 
 **責務**: `AllocationRow[]` から UI が必要とする派生ビュー（Person, Company）と組織検索 Map を生成する
 
@@ -311,7 +311,7 @@ function exportValue(row, key): unknown {
 
 新しいモジュールを追加・変更するとき、以下を確認する:
 
-- [ ] ドメイン層（operation/, validation/, projection/, codeLists/, optionFilter/）は外部ライブラリに依存していないか
+- [ ] ドメイン層（commands/, validation/, choices/, masters/）は外部ライブラリに依存していないか
 - [ ] 操作ハンドラーの `validate()` と `apply()` は純粋関数か（副作用なし・同じ入力 → 同じ出力）
 - [ ] AI と Web UI は同じ `executeOperation()` を通っているか（またはその計画があるか）
 - [ ] AI から呼ぶ操作は `aiTools` に公開されているか

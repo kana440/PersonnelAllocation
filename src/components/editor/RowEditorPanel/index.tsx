@@ -43,7 +43,7 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList)
+    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList })
   }, [effectiveRow, afterOrganizations, codeLists, allocationList])
 
   if (!selectedRowId || !row || !effectiveRow) {

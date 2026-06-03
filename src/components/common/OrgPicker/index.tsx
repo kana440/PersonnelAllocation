@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import type { Organization } from '../../../domain/schemas'
-import { buildOrgPath } from '../../../domain/orgPicker/relevantOrgs'
+import { buildOrgPath } from '../../../domain/choices/relevantOrgs'
 
 interface OrgPickerProps {
   value:           string | null

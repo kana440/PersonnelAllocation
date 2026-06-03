@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { appService }            from '../../../application/HRApplicationService'
-import { ChangeTitleOperation }  from '../../../domain/operation/handlers/changeTitle'
+import { ChangeTitleOperation }  from '../../../domain/commands/handlers/changeTitle'
 import type { AllocationRow }    from '../../../domain/allocationRow'
 
 interface ChangeTitleModalProps {

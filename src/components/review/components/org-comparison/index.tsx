@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../../../../store/useStore'
-import type { OrgMatch } from '../../../../domain/review/orgMatching'
+import type { OrgMatch } from '../../../../domain/patterns/orgMatching'
 import { MappingStep } from './MappingStep'
 import { PreviewStep } from './PreviewStep'
 import type { OrgMapping } from './types'

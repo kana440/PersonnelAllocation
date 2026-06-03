@@ -1,7 +1,7 @@
-import type { AllCodeLists }  from '../../domain/codeLists/aggregate'
+import type { AllCodeLists }  from '../../domain/masters/aggregate'
 import type { Organization }  from '../../domain/schemas'
 import type { AllocationRow } from '../../domain/allocationRow'
-import type { OrgMasterEntry } from '../../domain/codeLists/orgMaster'
+import type { OrgMasterEntry } from '../../domain/masters/orgMaster'
 import type { CompatibilityWarning } from '../codeLists/parser'
 
 export interface ImportedWorkbookResult {

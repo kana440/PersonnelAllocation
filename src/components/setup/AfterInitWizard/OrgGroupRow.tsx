@@ -1,5 +1,5 @@
 import type { Organization }    from '../../../domain/schemas'
-import type { OrgMappingGroup } from '../../../domain/setup/afterInit'
+import type { OrgMappingGroup } from '../../../application/setup/afterInit'
 
 interface Props {
   group:      OrgMappingGroup

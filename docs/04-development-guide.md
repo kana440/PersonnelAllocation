@@ -17,10 +17,10 @@
 
 ### Step 1: ハンドラーファイルを作成
 
-`src/domain/operation/handlers/moveToOrg.ts` を作成する。
+`src/domain/commands/handlers/moveToOrg.ts` を作成する。
 
 ```typescript
-import type { EditCommand, OperationContext, OperationResult, ValidationResult } from '../types'
+import type { EditCommand, DomainContext, OperationResult, ValidationResult } from '../types'
 import { ok, failField } from '../types'
 
 // 操作が必要とするパラメータ
@@ -37,7 +37,7 @@ export class MoveToOrgOperation implements EditCommand {
   constructor(private readonly params: MoveToOrgParams) {}
 
   // 純粋関数: 現在の状態に対して操作が有効かを検証
-  validate(ctx: OperationContext): ValidationResult {
+  validate(ctx: DomainContext): ValidationResult {
     const { userId, toOrgCode } = this.params
     const rows = ctx.allocationList.filter(r => r.userId === userId)
     if (rows.length === 0) return failField('userId', `ユーザー ${userId} が見つかりません`)
@@ -51,7 +51,7 @@ export class MoveToOrgOperation implements EditCommand {
   }
 
   // 純粋関数: 新しい allocationList を返す
-  apply(ctx: OperationContext): OperationResult {
+  apply(ctx: DomainContext): OperationResult {
     const { userId, toOrgCode, transferReason } = this.params
     const updatedList = ctx.allocationList.map(row => {
       if (row.userId !== userId || row.concurrentType === '兼務') return row
@@ -68,7 +68,7 @@ export class MoveToOrgOperation implements EditCommand {
 ### Step 2: UI から呼ぶ（フォームコンポーネント内）
 
 ```typescript
-import { MoveToOrgOperation } from '../domain/operation/handlers/moveToOrg'
+import { MoveToOrgOperation } from '../domain/commands/handlers/moveToOrg'
 import { useStore } from '../store/useStore'
 
 function MoveToOrgForm({ userId, onClose }) {
@@ -95,8 +95,9 @@ function MoveToOrgForm({ userId, onClose }) {
 ### Step 4: テストを書く
 
 ```typescript
-// src/domain/operation/handlers/moveToOrg.test.ts
-import { MoveToOrgOperation } from './moveToOrg'
+// tests/operations/moveToOrg.test.ts
+import { runOperationScenarios } from '../helpers/operationRunner'
+import { MoveToOrgOperation } from '../../src/domain/commands/handlers/moveToOrg'
 
 const ctx = {
   allocationList:     [/* テスト用 AllocationRow */],

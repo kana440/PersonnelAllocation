@@ -1,0 +1,107 @@
+// ドメイン層の選択肢生成・絞り込みロジック。
+// VALUE_RULES を単一ソースとして参照する。
+// jobType のみ currentJobFamily コンテキストが必要なためカスタム処理。
+
+import type { AllocationRow } from '../allocationRow'
+import type { AllCodeLists } from '../masters/aggregate'
+import { VALUE_RULES, getEffectiveSource } from '../validation/rules'
+
+/** 条件付きルールが適用されたときの有効・無効の分類結果 */
+export interface OptionsGroup {
+  /** 現在の行状態に対して有効な選択肢 */
+  valid:   string[]
+  /** ベースリストには存在するが現在の条件では非推奨な選択肢 */
+  invalid: string[]
+}
+
+// ── ベース選択肢の組み立て ───────────────────────────────────────────────────
+
+/**
+ * フィールド名と codeLists からベース選択肢リストを返す。
+ * 行の状態による絞り込みは行わない。
+ */
+export function buildBaseOptions(
+  field:             string,
+  codeLists:         AllCodeLists,
+  currentJobFamily?: string,
+): string[] {
+  // jobType: 親子フィルタが必要なためカスタム処理
+  if (field === 'jobType') {
+    const parent   = codeLists.jobFamilies.find(jf => jf.label === currentJobFamily)
+    const filtered = parent
+      ? codeLists.jobTypes.filter(s => s.jobFamilyCode === parent.code)
+      : codeLists.jobTypes
+    return filtered.map(s => s.label)
+  }
+
+  // その他: VALUE_RULES の一般ルール（when なし）から source を取得
+  const general = VALUE_RULES.find(r => r.field === (field as keyof AllocationRow) && !r.when)
+  return general ? general.source(codeLists) : []  // general rules do not need row
+}
+
+// ── 絞り込み ─────────────────────────────────────────────────────────────────
+
+/**
+ * 行の状態に応じてベース選択肢を絞り込む。
+ * VALUE_RULES の条件付きルール（when あり）が一致すればその source を返す。
+ * 一致しなければ base をそのまま返す（参照同一）。
+ */
+export function filterOptions(
+  field:     string,
+  row:       AllocationRow,
+  base:      string[],
+  codeLists: AllCodeLists,
+): string[] {
+  const effective = getEffectiveSource(field as keyof AllocationRow, row, codeLists)
+  // effective が base と同じ内容（条件ルールなし）なら base を返す
+  // getEffectiveSource は条件ルールが優先なので、条件付きルールが存在すれば上書きされる
+  if (effective === null) return base
+  // 条件付きルールが適用された場合は effective を返す（base を無視）
+  const hasConditional = VALUE_RULES.some(
+    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
+  )
+  return hasConditional ? effective : base
+}
+
+// ── 主エントリポイント ───────────────────────────────────────────────────────
+
+/**
+ * 有効・無効に分類した選択肢グループを返す。
+ * 条件付きルールが適用される場合: valid = 条件合致、invalid = ベースのうち条件非合致
+ * 条件付きルールがない場合: valid = ベース全件、invalid = []
+ */
+export function getGroupedFieldOptions(
+  field:             string,
+  row:               AllocationRow,
+  codeLists:         AllCodeLists,
+  currentJobFamily?: string,
+): OptionsGroup {
+  const base = buildBaseOptions(field, codeLists, currentJobFamily)
+  const hasConditional = VALUE_RULES.some(
+    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
+  )
+  if (!hasConditional) return { valid: base, invalid: [] }
+
+  const effective = getEffectiveSource(field as keyof AllocationRow, row, codeLists)
+  if (!effective || effective.length === 0) return { valid: base, invalid: [] }
+
+  const effectiveSet = new Set(effective)
+  return {
+    valid:   effective,
+    invalid: base.filter(o => !effectiveSet.has(o)),
+  }
+}
+
+/**
+ * 後方互換ラッパー: valid → invalid の順でフラットに返す。
+ * AI ツール等の既存呼び出し側向け。
+ */
+export function getFieldOptions(
+  field:             string,
+  row:               AllocationRow,
+  codeLists:         AllCodeLists,
+  currentJobFamily?: string,
+): string[] {
+  const { valid, invalid } = getGroupedFieldOptions(field, row, codeLists, currentJobFamily)
+  return [...valid, ...invalid]
+}

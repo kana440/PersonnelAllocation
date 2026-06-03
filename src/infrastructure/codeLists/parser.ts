@@ -16,10 +16,10 @@ import type {
   DemotionReasonEntry,
   TrainingPositionEntry,
   DiscretionaryWorkEntry,
-} from '../../domain/codeLists'
-import { TRAINING_POSITION_VALUES } from '../../domain/codeLists/trainingPosition'
-import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '../../domain/codeLists/discretionaryWork'
-import { CONCURRENT_TYPES } from '../../domain/codeLists/concurrentType'
+} from '../../domain/masters'
+import { TRAINING_POSITION_VALUES } from '../../domain/masters/trainingPosition'
+import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '../../domain/masters/discretionaryWork'
+import { CONCURRENT_TYPES } from '../../domain/masters/concurrentType'
 
 // ── Column utilities ───────────────────────────────────────────────────────────
 

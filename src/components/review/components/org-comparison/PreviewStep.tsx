@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { flattenOrgTree } from '../../../../domain/orgScope'
-import { detectChanges } from '../../../../domain/review/changeDetection'
+import { flattenOrgTree } from '../../../../domain/choices/orgTree'
+import { detectChanges } from '../../../../domain/patterns/changeDetection'
 import type { Organization } from '../../../../domain/schemas'
 import type { AllocationRow } from '../../../../domain/allocationRow'
 import { computeDirectBeforeMembers, computeDirectAfterMembers } from './helpers'

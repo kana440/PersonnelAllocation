@@ -1,8 +1,6 @@
 import { BEFORE_AFTER_FIELD_PAIRS } from '../allocationRow'
 import type { AllocationRow } from '../allocationRow'
-import type { Organization } from '../schemas'
-import type { AllCodeLists } from '../codeLists/aggregate'
-import type { RowChanges } from '../review/changeDetection'
+import type { RowContext } from '../context'
 import type { ValidationIssue } from './types'
 import { runRequired }    from './validateRequired'
 import { runFormat }      from './validateFormat'
@@ -17,19 +15,16 @@ export type { ValidationLevel, ValidationIssue } from './types'
 // ── メインバリデーション関数 ─────────────────────────────────────────────────
 // ルーティング:
 //   transferReason の noCheckRequired === true → E系（キー重複）のみ
-//   それ以外 → A/B/D/E/F 全系を実行
+//   それ以外 → A/B/D/E/F/G/W 全系を実行
 export function validateRow(
-  row:        AllocationRow,
-  orgs:       Organization[],
-  codeLists:  AllCodeLists,
-  changes?:   RowChanges,
-  allRows?:   AllocationRow[],
+  ctx:       RowContext,
   overrides?: Partial<Record<string, FieldStrictness>>,
 ): ValidationIssue[] {
+  const { row, afterOrganizations: orgs, codeLists, allocationList, changes } = ctx
   const reasonEntry = codeLists.transferReasons.find(r => r.label === row.transferReason)
 
   if (reasonEntry?.noCheckRequired) {
-    return allRows ? runKeys(row, allRows) : []
+    return allocationList.length > 0 ? runKeys(row, allocationList) : []
   }
 
   return [
@@ -37,7 +32,7 @@ export function validateRow(
     ...runFormat(row),
     ...runRelated(row, codeLists, overrides),
     ...runExistence(row, orgs, codeLists, overrides),
-    ...(allRows ? runKeys(row, allRows) : []),
+    ...(allocationList.length > 0 ? runKeys(row, allocationList) : []),
     ...runConsistency(row, codeLists, changes),
   ]
 }

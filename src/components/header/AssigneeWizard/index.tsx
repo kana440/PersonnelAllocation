@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
-import { BulkSetAssigneeOperation } from '../../../domain/operation/handlers/bulkSetAssignee'
+import { BulkSetAssigneeOperation } from '../../../domain/commands/handlers/bulkSetAssignee'
 import {
   getRootOrgs, getAvailableLevels, buildUseThisForDepth,
   computeGroupNodeIds, computeRowCountByGroupId, buildRowAssignments,

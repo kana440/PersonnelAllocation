@@ -32,7 +32,7 @@ Excel にはデータは残るが「いつ・誰が・何の目的で行った�
 - **操作の実体ではない。表示・集計・メニューの語彙である。**
 - UI のバッジ・操作メニュー・レビュー件数集計に使用する。
 - Excel インポート後でも確定的に検出できることが設計上の要件。
-- 実装: `src/domain/editPattern/`
+- 実装: `src/domain/patterns/editPatterns.ts`
 
 ### 2. EditCommand（単行の原子操作）
 
@@ -41,12 +41,12 @@ Excel にはデータは残るが「いつ・誰が・何の目的で行った�
 ```typescript
 interface EditCommand {
   readonly kind: string               // EditPattern 値（分類ラベル）
-  validate(ctx: OperationContext): ValidationResult
-  apply(ctx: OperationContext): OperationResult
+  validate(ctx: DomainContext): ValidationResult
+  apply(ctx: DomainContext): OperationResult
 }
 ```
 
-- 実装: `src/domain/operation/types.ts`（旧 `IDomainOperation`）
+- 実装: `src/domain/commands/types.ts`（旧 `IDomainOperation`）
 - **UndoStack への差分積み上げ単位。**
 - ポートとして公開される。
 - 具体クラス（`PromotionOperation` 等）は `implements EditCommand` で実装する。
@@ -178,10 +178,12 @@ cascade 検出はヒューリスティックだが、**バリデーションが�
 
 新しい業務操作を追加する手順（**この順序を守ること**）:
 
-1. `EditPattern` に新ラベルを追加（`src/domain/editPattern/patterns.ts`）
-2. `EditCommand` の実装を追加（`src/domain/operation/handlers/`）
-3. `EditScenario` の具体実装を追加（必要な場合・`src/domain/editScenario/`）
+1. `EditPattern` に新ラベルを追加（`src/domain/patterns/editPatterns.ts`）
+2. `EditCommand` の実装を追加（`src/domain/commands/handlers/`）
+3. `OperationDef` を追加（`src/domain/commands/defs/`）して `ALL_OPERATION_DEFS` に登録
 4. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
+5. `EditScenario` の具体実装を追加（複数行にまたがる場合・`src/domain/commands/scenarios.ts`）
+6. TDD ガイドに従ってテストを追加（`docs/13-tdd-operation-patterns.md`）
 
 手順 4 を省略するとリストア保証が崩れるため、EditPattern 追加と
 バリデーション追加は **必ずセットで行う**。

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Organization } from '../../../domain/schemas'
 import type { AllocationRow, AfterValues } from '../../../domain/allocationRow'
 import { appService } from '../../../application/HRApplicationService'
-import { MoveRowsToOrgOperation } from '../../../domain/operation/handlers/moveRowsToOrg'
+import { MoveRowsToOrgOperation } from '../../../domain/commands/handlers/moveRowsToOrg'
 import type { BulkMoveConfirmParams } from '../modals/BulkMoveModal'
 
 interface UseBulkMoveDeps {

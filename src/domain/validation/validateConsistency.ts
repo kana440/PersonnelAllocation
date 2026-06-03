@@ -1,8 +1,8 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../codeLists/aggregate'
-import type { RowChanges } from '../review/changeDetection'
+import type { AllCodeLists } from '../masters/aggregate'
+import type { RowChanges } from '../patterns/changeDetection'
 import type { ValidationIssue } from './types'
-import { findEmpType } from '../valueRules'
+import { findEmpType } from './rules'
 
 // G系: データ整合性チェック（エラー）
 // W系: ワーニングチェック（保存はブロックしないが確認を促す）

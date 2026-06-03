@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import type { Organization } from '../../domain/schemas'
-import type { OrgMasterEntry } from '../../domain/codeLists/orgMaster'
+import type { OrgMasterEntry } from '../../domain/masters/orgMaster'
 
 interface Props {
   afterOrganizations: Organization[]

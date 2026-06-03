@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import type { AllCodeLists } from '../domain/codeLists/aggregate'
-import { EMPTY_CODE_LISTS } from '../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../domain/masters/aggregate'
+import { EMPTY_CODE_LISTS } from '../domain/masters/aggregate'
 import { LocalStorageCodeListRepository } from '../infrastructure/codeLists/localStorageRepository'
 
 // Write path: only the setup flow needs to write code lists.

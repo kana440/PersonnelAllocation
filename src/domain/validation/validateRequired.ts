@@ -1,7 +1,7 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../codeLists/aggregate'
+import type { AllCodeLists } from '../masters/aggregate'
 import type { ValidationIssue } from './types'
-import { findEmpType, findTransferReason } from '../valueRules'
+import { findEmpType, findTransferReason } from './rules'
 
 /** A1-0: 申請区分（異動事由）は常に必須 */
 function checkA1_0(row: AllocationRow): ValidationIssue[] {

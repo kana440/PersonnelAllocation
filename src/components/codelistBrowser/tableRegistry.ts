@@ -1,4 +1,4 @@
-import type { AllCodeLists } from '../../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../../domain/masters/aggregate'
 import type { Organization }  from '../../domain/schemas'
 import { CODE_LIST_LABELS }   from '../../infrastructure/codeLists/parser'
 

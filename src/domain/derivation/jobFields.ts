@@ -1,4 +1,4 @@
-import type { AllCodeLists }  from '../codeLists/aggregate'
+import type { AllCodeLists }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
 /** jobType + band → payGrade を導出する（compensationCategory 経由） */

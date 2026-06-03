@@ -1,4 +1,4 @@
-import type { AllCodeLists }   from '../domain/codeLists/aggregate'
+import type { AllCodeLists }   from '../domain/masters/aggregate'
 import type { AllocationRow }  from '../domain/allocationRow'
 import type { Organization } from '../domain/schemas'
 

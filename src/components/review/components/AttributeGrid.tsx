@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useStore } from '../../../store/useStore'
 import type { ReviewRow } from '../hooks/useReviewData'
-import type { EditPattern } from '../../../domain/editPattern'
+import type { EditPattern } from '../../../domain/patterns/editPattern'
 
 // フィルターチップ定義（EditPattern + newHire/termination）
 type FilterKey = EditPattern | 'newHire' | 'termination'

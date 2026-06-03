@@ -1,7 +1,7 @@
 import type { AllocationRow }  from '../../domain/allocationRow'
 import type { Organization }   from '../../domain/schemas'
-import type { AllCodeLists }   from '../../domain/codeLists/aggregate'
-import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../../domain/operation/orgHelpers'
+import type { AllCodeLists }   from '../../domain/masters/aggregate'
+import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../../domain/commands/orgHelpers'
 import type { PersonChange, OrgPreview } from './types'
 
 // ── helpers ──────────────────────────────────────────────────────────────────

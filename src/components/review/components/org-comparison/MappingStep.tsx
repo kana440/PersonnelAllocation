@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import { flattenOrgTree, getDescendantOrgIds } from '../../../../domain/orgScope'
+import { flattenOrgTree, getDescendantOrgIds } from '../../../../domain/choices/orgTree'
 import type { Organization } from '../../../../domain/schemas'
 import { OrgTreePanel } from '../OrgTreePanel'
 import type { OrgMapping } from './types'

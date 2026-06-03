@@ -10,7 +10,7 @@
 import type { ChatWidget, PersonDiff } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
-import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../../domain/operation/orgHelpers'
+import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '../../domain/commands/orgHelpers'
 
 type ProposalResult = { widget: ChatWidget }
 

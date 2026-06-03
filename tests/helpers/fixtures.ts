@@ -1,7 +1,7 @@
 import type { AllocationRow }  from '../../src/domain/allocationRow'
-import type { AllCodeLists }   from '../../src/domain/codeLists/aggregate'
+import type { AllCodeLists }   from '../../src/domain/masters/aggregate'
 import type { Organization }   from '../../src/domain/schemas'
-import { EMPTY_CODE_LISTS }    from '../../src/domain/codeLists/aggregate'
+import { EMPTY_CODE_LISTS }    from '../../src/domain/masters/aggregate'
 
 // ── 最小有効行 ─────────────────────────────────────────────────────────────────
 // transferReason のみ設定。各テストが必要なフィールドを override する。

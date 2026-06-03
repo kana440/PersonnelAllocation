@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { OrgSearchDialog } from '../OrgSearchDialog'
 import { ConfirmOverwriteDialog } from '../ConfirmOverwriteDialog'
 import type { Organization } from '../../../domain/schemas'
-import type { OrgMasterEntry } from '../../../domain/codeLists/orgMaster'
+import type { OrgMasterEntry } from '../../../domain/masters/orgMaster'
 import type { ValidationIssue } from '../../../domain/validation/validateRow'
 
 interface RelatedValues {

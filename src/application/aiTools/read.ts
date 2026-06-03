@@ -1,9 +1,9 @@
 import type { HRApplicationService } from '../HRApplicationService'
 import type { AllocationRow } from '../../domain/allocationRow'
 import type { Person, Organization } from '../../domain/schemas'
-import { detectChanges } from '../../domain/review/changeDetection'
+import { detectChanges } from '../../domain/patterns/changeDetection'
 import { validateRow } from '../../domain/validation/validateRow'
-import { getFieldOptions as getFieldOptionsFromDomain } from '../../domain/optionFilter'
+import { getFieldOptions as getFieldOptionsFromDomain } from '../../domain/choices'
 import type { OrgTreeNode, SelectedRowContext } from '../aiTypes'
 import type { PersonSearchResult, VacantPositionResult } from './types'
 import { buildOrgTree } from './orgTree'
@@ -66,7 +66,7 @@ export function createReadMethods(service: HRApplicationService) {
     if (!row) return null
     const name   = [row.lastName, row.firstName].filter(Boolean).join(' ') || `行 ${rowId}`
     const org    = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
-    const issues = validateRow(row, afterOrganizations, codeLists, detectChanges(row), allocationList)
+    const issues = validateRow({ row, afterOrganizations, codeLists, allocationList, changes: detectChanges(row) })
     return {
       rowId,
       name,

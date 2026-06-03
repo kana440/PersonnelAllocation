@@ -16,16 +16,32 @@ npx depcruise src --config .dependency-cruiser.js  # アーキテクチャ境界
 ```
 src/components/  src/store/      ← UI層（Reactコンポーネント + Zustand）
 src/application/                 ← アプリケーション層
+  importMerge.ts                 ←   インポートマージロジック
+  setup/afterInit.ts             ←   初期化ロジック（Excel 読込後の org マッピング等）
 src/infrastructure/              ← インフラ層（Excel・AI・LocalStorage）
 src/domain/                      ← ドメイン層（外部依存ゼロ。Zodのみ可）
   allocationRow.ts               ← AllocationRow 型・FIELD_METADATA
-  valueRules.ts                  ← VALUE_RULES（許容値制約の単一定義ソース）
-  optionFilter/                  ← 選択肢生成・絞り込み（valueRules から導出）
+  context.ts                     ← DomainContext・RowContext（全ドメイン処理の共通コンテキスト）
+  masters/                       ← マスタデータ型定義・集約（AllCodeLists）
   validation/                    ← バリデーション A〜G・W 系（純粋関数）
-  operation/                     ← EditCommand インターフェース・ハンドラー群
-  editPattern/                   ← EditPattern 分類ラベル・検出ロジック
-  editScenario/                  ← EditScenario 複合操作インターフェース
-  codeLists/                     ← コードリスト型定義・集約
+    rules.ts                     ←   VALUE_RULES（許容値制約の単一定義ソース）
+  commands/                      ← 業務操作（EditCommand・OperationDef・シナリオ）
+    types.ts                     ←   EditCommand インターフェース・DomainContext 再エクスポート
+    handlers/                    ←   EditCommand 実装群
+    defs/                        ←   OperationDef 宣言群（メニュー条件・フォーム定義）
+    scenarios.ts                 ←   複合操作（EditScenario）
+    helpers.ts                   ←   isRegularEmployee 等の判定ヘルパー
+  patterns/                      ← 変更パターン分類・検出
+    editPatterns.ts              ←   EditPattern 定数（23種）
+    editPatternMatcher.ts        ←   差分からの EditPattern 検出
+    changeDetection.ts           ←   before/after 差分検出（RowChanges）
+    groupPatternMatcher.ts       ←   グループ行（出向2行等）のパターン検出
+  choices/                       ← UI選択肢・表示用ユーティリティ
+    index.ts                     ←   選択肢の生成・絞り込み（VALUE_RULES から導出）
+    orgTree.ts                   ←   組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
+    rows.ts                      ←   行・人物の表示用変換（buildOrgMap・derivePersons）
+    relevantOrgs.ts              ←   組織ピッカー候補の絞り込み
+  derivation/                    ← フィールド自動導出（組織・上司名・昇降格）
   csvImport/                     ← Excel/CSV 解釈（純粋関数）
 src/ports/                       ← インターフェース定義
 ```
@@ -42,9 +58,10 @@ src/ports/                       ← インターフェース定義
 
 | 名称 | コード上の実体 | 意味 |
 |---|---|---|
-| `EditCommand` | `src/domain/operation/types.ts` | 単行の原子操作。UndoStack 差分単位 |
-| `EditScenario` | `src/domain/editScenario/` | 複合操作。1件でも複数件でも同じ構造 |
-| `EditPattern` | `src/domain/editPattern/` | 操作の分類ラベル。表示・集計・メニュー用 |
+| `EditCommand` | `src/domain/commands/types.ts` | 単行の原子操作。UndoStack 差分単位 |
+| `EditScenario` | `src/domain/commands/scenarios.ts` | 複合操作。1件でも複数件でも同じ構造 |
+| `EditPattern` | `src/domain/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
+| `OperationDef` | `src/domain/commands/defs/` | メニュー表示条件・フォーム定義・初期値計算 |
 
 設計思想の詳細は `docs/12-operation-framework.md` を参照。
 
@@ -53,7 +70,7 @@ src/ports/                       ← インターフェース定義
 新しい業務変更は必ず `EditCommand` として実装する。直接 `allocationList` を変更しない。
 
 ```typescript
-// src/domain/operation/handlers/myOp.ts
+// src/domain/commands/handlers/myOp.ts
 export class MyOperation implements EditCommand {
   readonly kind = 'myOperation'
   constructor(private readonly rowId: number) {}
@@ -83,14 +100,16 @@ appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC]
 ```
 
 **新しい操作を追加するときの手順**（必ずこの順序で）:
-1. `EditPattern` に新ラベルを追加（`src/domain/editPattern/patterns.ts`）
-2. `EditCommand` の実装を追加（`src/domain/operation/handlers/`）
+1. `EditPattern` に新ラベルを追加（`src/domain/patterns/editPatterns.ts`）
+2. `EditCommand` の実装を追加（`src/domain/commands/handlers/`）
 3. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-4. 複数行にまたがる操作なら `EditScenario` を組み立てる呼び出し元を追加
+4. `OperationDef` を追加（`src/domain/commands/defs/`）して `ALL_OPERATION_DEFS` に登録
+5. 複数行にまたがる操作なら `EditScenario` を組み立てる（`commands/scenarios.ts`）
 
 手順 3 を省略すると Excel 後方互換のリストア保証が崩れる。
 
-既存の実装例: `src/domain/operation/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
+既存の実装例: `src/domain/commands/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
+TDD ガイド: `docs/13-tdd-operation-patterns.md`
 
 ---
 

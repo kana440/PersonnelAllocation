@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
-import { buildOrgMap } from '../../../domain/projection/rows'
+import { buildOrgMap } from '../../../domain/choices/rows'
 import type { Organization, Person } from '../../../domain/schemas'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
-import { detectChanges } from '../../../domain/review/changeDetection'
-import { deriveEditPatterns } from '../../../domain/editPattern'
+import { detectChanges } from '../../../domain/patterns/changeDetection'
+import { deriveEditPatterns } from '../../../domain/patterns/editPattern'
 
 interface UseOrgViewDataDeps {
   allAfterOrgs:   Organization[]

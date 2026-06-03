@@ -1,4 +1,4 @@
-import type { ValidationError } from '../../domain/operation/types'
+import type { ValidationError } from '../../domain/commands/types'
 import type { ValidationIssue } from '../../domain/validation/types'
 
 export interface VacantPositionResult {

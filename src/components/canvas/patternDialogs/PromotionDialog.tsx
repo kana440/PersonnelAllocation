@@ -4,14 +4,14 @@ import { appService } from '../../../application/HRApplicationService'
 import { ComboInput } from '../../common/ComboInput'
 import { TitleSuggestionModal } from '../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
-import { getGroupedFieldOptions } from '../../../domain/optionFilter'
+import { getGroupedFieldOptions } from '../../../domain/choices'
 import { validateRow } from '../../../domain/validation/validateRow'
 import { resolveFieldStrictness } from '../../../domain/optionStrictness'
 import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
 import { deriveFieldUpdates } from '../../../domain/derivation'
 import { nextRowId } from '../../../domain/allocationRow'
 import type { AllocationRow } from '../../../domain/allocationRow'
-import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../../../domain/masters/aggregate'
 
 type StepMode = '1' | '2' | 'all'
 
@@ -65,7 +65,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
   }, [effectiveRow, afterOrganizations, codeLists, allocationList])
 

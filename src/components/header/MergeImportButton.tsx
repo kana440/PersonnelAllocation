@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore'
 import { useUserSession } from '../../store/useUserSession'
 import { importFromFile } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import type { ImportMode, AssigneeImportMode } from '../../domain/importMerge'
+import type { ImportMode, AssigneeImportMode } from '../../application/importMerge'
 
 type Step =
   | { kind: 'idle' }

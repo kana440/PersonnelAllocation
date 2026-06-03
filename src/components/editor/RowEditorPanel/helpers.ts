@@ -1,8 +1,8 @@
 import { BEFORE_AFTER_FIELD_PAIRS, FIELD_METADATA } from '../../../domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '../../../domain/csvImport/allocationList/labels'
-import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../../../domain/masters/aggregate'
 import type { AllocationRow } from '../../../domain/allocationRow'
-import { buildBaseOptions, getGroupedFieldOptions, type OptionsGroup } from '../../../domain/optionFilter'
+import { buildBaseOptions, getGroupedFieldOptions, type OptionsGroup } from '../../../domain/choices'
 
 export type { OptionsGroup }
 

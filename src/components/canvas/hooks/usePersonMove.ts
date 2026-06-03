@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { appService } from '../../../application/HRApplicationService'
-import { TransferPersonOperation } from '../../../domain/operation/handlers/transferPerson'
+import { TransferPersonOperation } from '../../../domain/commands/handlers/transferPerson'
 
 interface PersonMoveDialog {
   fromRowId: number | null

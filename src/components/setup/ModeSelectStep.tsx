@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import type { AllCodeLists } from '../../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../../domain/masters/aggregate'
 import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
 import { AssigneeSelectStep } from './AssigneeSelectStep'
 

@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "depcruise": "depcruise --config .dependency-cruiser.cjs src",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:context": "node scripts/test-context.js",
+    "test:save": "node scripts/save-test.js"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

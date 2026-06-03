@@ -4,9 +4,9 @@ import {
   buildOrgMappingGroups,
   applyAfterInit,
   isUninitializedRow,
-} from '../../../domain/setup/afterInit'
+} from '../../../application/setup/afterInit'
 import { OrgGroupRow } from './OrgGroupRow'
-import type { OrgMappingGroup } from '../../../domain/setup/afterInit'
+import type { OrgMappingGroup } from '../../../application/setup/afterInit'
 
 interface Props {
   result:      ImportedWorkbookResult

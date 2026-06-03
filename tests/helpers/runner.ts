@@ -1,10 +1,11 @@
 import { describe, test, expect } from 'vitest'
 import type { AllocationRow }  from '../../src/domain/allocationRow'
-import type { AllCodeLists }   from '../../src/domain/codeLists/aggregate'
+import type { AllCodeLists }   from '../../src/domain/masters/aggregate'
 import type { Organization }   from '../../src/domain/schemas'
-import type { RowChanges }     from '../../src/domain/review/changeDetection'
+import type { FieldStrictness } from '../../src/domain/optionStrictness'
+import type { RowChanges }     from '../../src/domain/patterns/changeDetection'
 import { validateRow }              from '../../src/domain/validation/validateRow'
-import { getGroupedFieldOptions }   from '../../src/domain/optionFilter/index'
+import { getGroupedFieldOptions }   from '../../src/domain/choices'
 import { makeRow, makeCL, MOCK_ORGS } from './fixtures'
 
 // ── シナリオ型 ─────────────────────────────────────────────────────────────────
@@ -23,6 +24,12 @@ export interface Scenario {
   allRows?: AllocationRow[]
   /** RowChanges（G系・W系用） */
   changes?: RowChanges
+  /**
+   * フィールドごとの厳密さ上書き。
+   * D2/F系など VALUE_RULES 制約のエラーは 'strict' にしないと発火しない
+   * （GLOBAL_DEFAULT_STRICTNESS = 'guide' のため）。
+   */
+  strictnessOverrides?: Partial<Record<string, FieldStrictness>>
   expect: {
     /** これらのフィールドにエラーがあること */
     errorFields?: string[]
@@ -33,6 +40,10 @@ export interface Scenario {
   }
 }
 
+/** 指定フィールドを全て 'strict' にするヘルパー */
+export const strict = (...fields: string[]): Partial<Record<string, FieldStrictness>> =>
+  Object.fromEntries(fields.map(f => [f, 'strict' as FieldStrictness]))
+
 // ── テストランナー ─────────────────────────────────────────────────────────────
 export function runScenarios(suiteName: string, scenarios: Scenario[]) {
   describe(suiteName, () => {
@@ -41,7 +52,10 @@ export function runScenarios(suiteName: string, scenarios: Scenario[]) {
         const row      = makeRow(s.row)
         const cl       = makeCL(s.cl)
         const orgs     = s.orgs ?? MOCK_ORGS
-        const issues   = validateRow(row, orgs, cl, s.changes, s.allRows)
+        const issues   = validateRow(
+          { row, afterOrganizations: orgs, codeLists: cl, allocationList: s.allRows ?? [], changes: s.changes },
+          s.strictnessOverrides,
+        )
 
         for (const field of s.expect.errorFields ?? []) {
           expect(

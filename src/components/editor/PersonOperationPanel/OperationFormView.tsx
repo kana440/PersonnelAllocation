@@ -3,14 +3,14 @@ import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { deriveFieldUpdates } from '../../../domain/derivation'
 import { validateRow } from '../../../domain/validation/validateRow'
-import { getGroupedFieldOptions } from '../../../domain/optionFilter'
+import { getGroupedFieldOptions } from '../../../domain/choices'
 import { resolveFieldStrictness } from '../../../domain/optionStrictness'
 import { ALLOCATION_LIST_LABEL_MAP } from '../../../domain/csvImport/allocationList/labels'
 import { nextRowId } from '../../../domain/allocationRow'
 import { ComboInput } from '../../common/ComboInput'
 import { TitleSuggestionModal } from '../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
-import type { OperationDef } from '../../../domain/operationDefs'
+import type { OperationDef } from '../../../domain/commands/defs/index'
 import type { AllocationRow } from '../../../domain/allocationRow'
 import { OrgSearchDialog } from '../OrgSearchDialog'
 import { BandStepFilter, filterBandsByStep } from './BandStepFilter'
@@ -54,7 +54,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
   }
 
   const issues = useMemo(
-    () => validateRow(draftRow, afterOrganizations, codeLists, undefined, allocationList)
+    () => validateRow({ row: draftRow, afterOrganizations, codeLists, allocationList })
       .filter(i => def.inputs.some(inp => inp.field === i.field)),
     [draftRow, afterOrganizations, codeLists, allocationList, def.inputs]
   )

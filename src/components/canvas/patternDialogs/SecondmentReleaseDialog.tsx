@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { ComboInput } from '../../common/ComboInput'
-import { getGroupedFieldOptions } from '../../../domain/optionFilter'
+import { getGroupedFieldOptions } from '../../../domain/choices'
 import { validateRow } from '../../../domain/validation/validateRow'
 import { resolveFieldStrictness } from '../../../domain/optionStrictness'
 import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
@@ -41,7 +41,7 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow(effectiveRow, afterOrganizations, codeLists, undefined, allocationList, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
   }, [effectiveRow, afterOrganizations, codeLists, allocationList, overrides])
 

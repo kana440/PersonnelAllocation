@@ -19,17 +19,14 @@
 │ ドメイン層         src/domain/         ← 依存ゼロ・テスト最優先 │
 │  allocationRow.ts    — AllocationRow 型, FIELD_METADATA          │
 │  schemas.ts          — Zod スキーマ（Organization, Person …）   │
-│  operation/          — EditCommand インターフェース・ハンドラー群 │
-│  editPattern/        — EditPattern 分類ラベル・検出ロジック      │
-│  editScenario/       — EditScenario 複合操作インターフェース     │
-│  projection/         — 派生ビュー（純粋関数）                   │
-│  validation/         — バリデーション（純粋関数）                │
-│  valueRules.ts       — VALUE_RULES（許容値制約の単一定義ソース） │
-│  optionFilter/       — 選択肢生成・絞り込み（valueRules.ts 導出）│
-│  codeLists/          — コードリスト集約                         │
+│  context.ts          — DomainContext・RowContext（共通コンテキスト）│
+│  commands/           — EditCommand・OperationDef・EditScenario   │
+│  patterns/           — EditPattern 分類・差分検出               │
+│  validation/         — バリデーション A〜W 系（純粋関数）        │
+│  choices/            — 選択肢生成・組織ツリー操作               │
+│  masters/            — マスタデータ型定義・AllCodeLists 集約     │
+│  derivation/         — フィールド自動導出（純粋関数）            │
 │  csvImport/          — Excel/CSV 解釈（純粋関数）               │
-│  orgPicker/          — 関連組織収集・最上位組織算出（純粋関数）  │
-│  assignee.ts         — 担当者ユーティリティ（将来追加）          │
 ├──────────────────────────────────────────────────────────────────┤
 │ インフラ層         src/infrastructure/                           │
 │  excel/exceljs/exporter.ts  — Excel エクスポート（ExcelJS）     │
@@ -37,7 +34,7 @@
 │  excel/engine.ts            — エクスポーター選択                │
 │  excel/state.ts             — 元ファイルバッファ保持             │
 │  allocationListMapper.ts    — ドメイン→Excel 行変換             │
-│  codeLists/                 — LocalStorage 実装                 │
+│  masters/                   — LocalStorage 実装                 │
 │  ai/agentRunner.ts          — Claude API Tool Use ループ        │
 │  ai/mockChatService.ts      — AI チャットモック                 │
 │  ai/scenarios/              — 会話シナリオ（8種）               │
@@ -119,8 +116,8 @@ Web UI も AI も `executeScenario()` / `executeOperation()` を通る。
 // EditCommand — 単行の原子操作（旧 IDomainOperation）
 interface EditCommand {
   readonly kind: string         // EditPattern 分類ラベル
-  validate(ctx: OperationContext): ValidationResult   // 純粋関数
-  apply(ctx: OperationContext): OperationResult       // 純粋関数
+  validate(ctx: DomainContext): ValidationResult   // 純粋関数
+  apply(ctx: DomainContext): OperationResult       // 純粋関数
 }
 
 // EditScenario — 複合操作（玉突き人事など）

@@ -1,5 +1,5 @@
 import type { HRApplicationService } from '../HRApplicationService'
-import { detectChanges } from '../../domain/review/changeDetection'
+import { detectChanges } from '../../domain/patterns/changeDetection'
 import { validateRow } from '../../domain/validation/validateRow'
 
 export function createReviewMethods(service: HRApplicationService) {
@@ -21,7 +21,7 @@ export function createReviewMethods(service: HRApplicationService) {
         for (const k of kinds) byKind[k] = (byKind[k] ?? 0) + 1
       }
       const changes = detectChanges(row)
-      for (const issue of validateRow(row, afterOrganizations, codeLists, changes, allocationList)) {
+      for (const issue of validateRow({ row, afterOrganizations, codeLists, allocationList, changes })) {
         issue.level === 'error' ? errorCount++ : warningCount++
       }
     }
@@ -66,7 +66,7 @@ export function createReviewMethods(service: HRApplicationService) {
     const results = []
     for (const row of allocationList) {
       const changes = detectChanges(row)
-      const issues = validateRow(row, afterOrganizations, codeLists, changes, allocationList)
+      const issues = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
       for (const issue of issues) {
         if (filter.level && issue.level !== filter.level) continue
         results.push({
@@ -103,7 +103,7 @@ export function createReviewMethods(service: HRApplicationService) {
 
     for (const row of allocationList) {
       const changes = detectChanges(row)
-      for (const issue of validateRow(row, afterOrganizations, codeLists, changes, allocationList)) {
+      for (const issue of validateRow({ row, afterOrganizations, codeLists, allocationList, changes })) {
         const key = String(issue.field)
         const existing = fieldMap.get(key)
         if (existing) {

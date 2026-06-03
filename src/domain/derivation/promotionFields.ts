@@ -1,4 +1,4 @@
-import type { AllCodeLists }  from '../codeLists/aggregate'
+import type { AllCodeLists }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
 /** 給与等級ラベルから数字部分（Level）を抽出する */

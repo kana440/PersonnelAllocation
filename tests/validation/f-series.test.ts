@@ -1,7 +1,7 @@
 // F系（雇用タイプ・申請区分による値制約）シナリオ
 // バリデーション（エラー検出）とオプション絞り込み（選択肢）を同時検証する
 // 仕様: specs/G2-domain/02-validation-rules.md
-import { runScenarios } from '../helpers/runner'
+import { runScenarios, strict } from '../helpers/runner'
 
 // ══════════════════════════════════════════════════════════════════════════════
 // F1: 出向受入タイプのとき band・payGrade は出向受入対応のものに限定
@@ -10,6 +10,7 @@ runScenarios('F1: 出向受入タイプのとき band・payGrade は出向受入
   {
     id: 'F1-1', desc: '出向受入 + 社員バンド(M4) → band エラー',
     row: { employmentType: '出向受入社員', band: 'M4' },
+    strictnessOverrides: strict('band'),
     expect: { errorFields: ['band'] },
   },
   {
@@ -20,6 +21,7 @@ runScenarios('F1: 出向受入タイプのとき band・payGrade は出向受入
   {
     id: 'F1-3', desc: '出向受入 + 社員給与等級(G4) → payGrade エラー',
     row: { employmentType: '出向受入社員', payGrade: 'G4' },
+    strictnessOverrides: strict('payGrade'),
     expect: { errorFields: ['payGrade'] },
   },
   {
@@ -49,6 +51,7 @@ runScenarios('F1: 出向受入タイプのとき band・payGrade は出向受入
 runScenarios('F2: 社員タイプ + 本人行のとき band・payGrade は社員対応のもののみ', [
   {
     id: 'F2-1', desc: '社員 + 本人行 + 出向受入バンド(OM3) → エラー',
+    strictnessOverrides: strict('band'),
     row: { employmentType: '社員', userId: '111', groupEmployeeId: '111', band: 'OM3' },
     expect: { errorFields: ['band'] },
   },
@@ -78,6 +81,7 @@ runScenarios('F3: 雇用延長タイプのとき band・payGrade は雇用延長
   {
     id: 'F3-1', desc: '雇用延長 + 社員バンド(M4) → エラー',
     row: { employmentType: '雇用延長社員', band: 'M4' },
+    strictnessOverrides: strict('band'),
     expect: { errorFields: ['band'] },
   },
   {
@@ -95,6 +99,7 @@ runScenarios('F3: 雇用延長タイプのとき band・payGrade は雇用延長
   {
     id: 'F3-4', desc: '雇用延長 + 社員給与等級(G4) → payGrade エラー',
     row: { employmentType: '雇用延長社員', payGrade: 'G4' },
+    strictnessOverrides: strict('payGrade'),
     expect: { errorFields: ['payGrade'] },
   },
   {
@@ -111,6 +116,7 @@ runScenarios('F4: 兼務申請区分のとき payGrade は兼務対応のもの�
   {
     id: 'F4-1', desc: '兼務 transferReason + 社員給与等級(G4) → payGrade エラー',
     row: { transferReason: '兼務', payGrade: 'G4' },
+    strictnessOverrides: strict('payGrade'),
     expect: { errorFields: ['payGrade'] },
   },
   {
@@ -121,6 +127,7 @@ runScenarios('F4: 兼務申請区分のとき payGrade は兼務対応のもの�
   {
     id: 'F4-3', desc: '兼務 transferReason + leaveFlag 設定あり → エラー',
     row: { transferReason: '兼務', leaveFlag: '1' },
+    strictnessOverrides: strict('leaveFlag'),
     expect: { errorFields: ['leaveFlag'] },
   },
   {

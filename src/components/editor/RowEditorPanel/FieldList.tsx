@@ -11,7 +11,7 @@ import {
 import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
 import { resolveFieldStrictness } from '../../../domain/optionStrictness'
 import type { AllocationRow } from '../../../domain/allocationRow'
-import type { AllCodeLists } from '../../../domain/codeLists/aggregate'
+import type { AllCodeLists } from '../../../domain/masters/aggregate'
 import type { Organization } from '../../../domain/schemas'
 import type { ValidationIssue } from '../../../domain/validation/validateRow'
 

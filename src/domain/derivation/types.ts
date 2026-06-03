@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists }  from '../codeLists/aggregate'
+import type { AllCodeLists }  from '../masters/aggregate'
 
 export type DerivedUpdates = Partial<Omit<AllocationRow, 'rowId' | 'operationGroupId'>>
 

@@ -55,7 +55,7 @@ HRApplicationService.assignPositionCodes()
 |---|---|
 | `src/ports/index.ts` | `IPositionCodePort`, `UnassignedPosition`, `PositionCodeAssignment` 型定義 |
 | `src/infrastructure/positionCode/ClipboardAdapter.ts` | クリップボード用 TSV フォーマット/パース |
-| `src/domain/operation/handlers/assignPositionCodes.ts` | `AssignPositionCodesOperation` — validate + apply（cascade含む） |
+| `src/domain/commands/handlers/assignPositionCodes.ts` | `AssignPositionCodesOperation` — validate + apply（cascade含む） |
 | `src/application/HRApplicationService.ts` | `getUnassignedPositions()` / `assignPositionCodes()` |
 | `src/store/useStore.ts` | 上記を UI に公開 |
 | `src/components/positionCodeAssignment/index.tsx` | UI ダイアログ（3ステップ: Export → Import → Done） |
