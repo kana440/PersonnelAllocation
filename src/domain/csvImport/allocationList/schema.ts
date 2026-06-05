@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+// Excel フラグ列: "1" = セット、空白・スペースのみ・null = 未セット
+const flagField = z.string().optional().transform((v): string | undefined => (v?.trim() ? '1' : undefined))
+
 export const AllocationListSchema = z.object({
   // ── Metadata ──────────────────────────────────────────────────
   userId:                            z.string().optional(),
@@ -10,9 +13,9 @@ export const AllocationListSchema = z.object({
   firstName:                         z.string().optional(),
   transferReason:                    z.string().optional(),
   memo:                              z.string().optional(),
-  promotionSign:                     z.string().optional(),
+  promotionSign:                     flagField,
   demotionReason:                    z.string().optional(),
-  payGradeChangeSign:                z.string().optional(),
+  payGradeChangeSign:                flagField,
 
   // ── After state (canonical field names, aligned with position/jobClassification) ──
   employmentType:                    z.string().optional(),
@@ -20,7 +23,7 @@ export const AllocationListSchema = z.object({
   concurrentReason:                  z.string().optional(),
   secondmentFromCompany:             z.string().optional(),
   secondmentFromEmployeeNumber:      z.string().optional(),
-  leaveFlag:                         z.string().optional(),
+  leaveOfAbsenceSign:                flagField,
   positionCode:                      z.string().optional(),
   departmentCode:                    z.string().optional(),
   businessUnit:                      z.string().optional(),
@@ -53,7 +56,7 @@ export const AllocationListSchema = z.object({
   prevConcurrentReason:              z.string().optional(),
   prevSecondmentFromCompany:         z.string().optional(),
   prevSecondmentFromEmployeeNumber:  z.string().optional(),
-  prevLeaveFlag:                     z.string().optional(),
+  prevLeaveOfAbsenceSign:                     flagField,
   prevPositionCode:                  z.string().optional(),
   prevDepartmentCode:                z.string().optional(),
   prevBusinessUnit:                  z.string().optional(),

@@ -32,7 +32,7 @@
 | `unionFlag` | 労働組合員 | ✓ | `select` | `UNION_MEMBER_CODES` | '組合員'/'特別組合員'/'非組合員' の固定値 |
 | `discretionaryWorkFlag` | 裁量労働対象 | ✓ | `select` | `discretionaryWorkOptions` | CodeEntry[]。codeList から select 表示 |
 | `nonUnionAgreementFlag` | 非組合協定対象者 | ✓ | `checkbox` | — | '1'=対象 / ''=非対象（BooleanFieldRow） |
-| `leaveFlag` | 休職者サイン | ✓ | `checkbox` | — | '1'=休職中 / ''=通常（BooleanFieldRow） |
+| `leaveOfAbsenceSign` | 休職者サイン | ✓ | `checkbox` | — | '1'=休職中 / ''=通常（BooleanFieldRow） |
 
 ---
 
@@ -121,5 +121,5 @@
 - [ ] `promotionSign`, `payGradeChangeSign` の有効値（現状 "1"/"" として実装）
 - [ ] `localJobTitle` と `officialPositionCode` の使い分けルール
 - [x] `businessUnit`〜`team` は `departmentCode` から `orgMasterEntries` を使って自動補完（操作時・エディタ両方）。一括再導出ボタンあり
-- [x] `leaveFlag` の値形式 → '1'=休職中 / ''=通常（checkbox UI）
+- [x] `leaveOfAbsenceSign` の値形式 → '1'=休職中 / ''=通常（checkbox UI）
 - [x] `managerName` は managerPositionCode 選択時・操作時に自動入力。一括再導出あり

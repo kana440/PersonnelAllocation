@@ -1,10 +1,10 @@
 // ドメイン層の選択肢生成・絞り込みロジック。
-// VALUE_RULES を単一ソースとして参照する。
+// FIELD_CONSTRAINTS を単一ソースとして参照する。
 // jobType のみ currentJobFamily コンテキストが必要なためカスタム処理。
 
 import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../masters/aggregate'
-import { VALUE_RULES, getEffectiveSource } from '../validation/rules'
+import { FIELD_CONSTRAINTS, getEffectiveSource } from '../fieldConstraints'
 
 /** 条件付きルールが適用されたときの有効・無効の分類結果 */
 export interface OptionsGroup {
@@ -34,8 +34,8 @@ export function buildBaseOptions(
     return filtered.map(s => s.label)
   }
 
-  // その他: VALUE_RULES の一般ルール（when なし）から source を取得
-  const general = VALUE_RULES.find(r => r.field === (field as keyof AllocationRow) && !r.when)
+  // その他: FIELD_CONSTRAINTS の一般ルール（when なし）から source を取得
+  const general = FIELD_CONSTRAINTS.find(r => r.field === (field as keyof AllocationRow) && !r.when)
   return general ? general.source(codeLists) : []  // general rules do not need row
 }
 
@@ -43,7 +43,7 @@ export function buildBaseOptions(
 
 /**
  * 行の状態に応じてベース選択肢を絞り込む。
- * VALUE_RULES の条件付きルール（when あり）が一致すればその source を返す。
+ * FIELD_CONSTRAINTS の条件付きルール（when あり）が一致すればその source を返す。
  * 一致しなければ base をそのまま返す（参照同一）。
  */
 export function filterOptions(
@@ -57,7 +57,7 @@ export function filterOptions(
   // getEffectiveSource は条件ルールが優先なので、条件付きルールが存在すれば上書きされる
   if (effective === null) return base
   // 条件付きルールが適用された場合は effective を返す（base を無視）
-  const hasConditional = VALUE_RULES.some(
+  const hasConditional = FIELD_CONSTRAINTS.some(
     r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
   )
   return hasConditional ? effective : base
@@ -77,7 +77,7 @@ export function getGroupedFieldOptions(
   currentJobFamily?: string,
 ): OptionsGroup {
   const base = buildBaseOptions(field, codeLists, currentJobFamily)
-  const hasConditional = VALUE_RULES.some(
+  const hasConditional = FIELD_CONSTRAINTS.some(
     r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
   )
   if (!hasConditional) return { valid: base, invalid: [] }

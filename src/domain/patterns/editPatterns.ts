@@ -187,12 +187,12 @@ export const EDIT_PATTERN_META: Record<EditPattern, EditPatternMeta> = {
   leaveOfAbsence: {
     label: '休職', addLabel: '休職', editLabel: '休職',
     badgeColor: C_RED, group: 'person',
-    availableFor: (row) => !!row.userId && !row.leaveFlag,
+    availableFor: (row) => !!row.userId && !row.leaveOfAbsenceSign,
   },
   returnFromLeave: {
     label: '復職', addLabel: '復職', editLabel: '復職',
     badgeColor: C_GREEN, group: 'person',
-    availableFor: (row) => !!row.leaveFlag,
+    availableFor: (row) => !!row.leaveOfAbsenceSign,
   },
   employmentTransferOut: {
     label: '移籍（出る）', addLabel: '移籍（出る）', editLabel: '移籍（出る）',

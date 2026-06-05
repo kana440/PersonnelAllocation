@@ -1,14 +1,14 @@
 import type { AllocationRow } from '../allocationRow'
 import type { Organization } from '../schemas'
 import type { AllCodeLists } from '../masters/aggregate'
-import { VALUE_RULES, evaluateConstraint, type ConstraintRule } from './rules'
+import { FIELD_CONSTRAINTS, evaluateConstraint, type ConstraintRule } from '../fieldConstraints'
 import type { FieldStrictness } from '../optionStrictness'
 import type { ValidationIssue } from './types'
 
 type Overrides = Partial<Record<string, FieldStrictness>>
 
 // D2系: マスタ・リスト値との存在チェック
-// 大半は VALUE_RULES から導出。例外は以下のカスタムチェック:
+// 大半は FIELD_CONSTRAINTS から導出。例外は以下のカスタムチェック:
 //   D2-1: departmentCode — Organization[] 参照が必要
 //   D2-7: jobType        — 親子フィルタ（jobFamily 依存）
 
@@ -34,8 +34,8 @@ function checkD2_7(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue
   return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは有効な選択肢から選択してください' }]
 }
 
-// ── D2-2〜D2-6, D2-8〜D2-11: VALUE_RULES から導出 ──────────────────────────
-const EXISTENCE_RULES = VALUE_RULES.filter(
+// ── D2-2〜D2-6, D2-8〜D2-11: FIELD_CONSTRAINTS から導出 ──────────────────────────
+const EXISTENCE_RULES = FIELD_CONSTRAINTS.filter(
   (r): r is ConstraintRule => r.kind === 'constraint' && !r.when
 )
 
@@ -43,7 +43,7 @@ function checkFromValueRules(row: AllocationRow, codeLists: AllCodeLists, overri
   return EXISTENCE_RULES.flatMap(r => evaluateConstraint(r, row, codeLists, overrides))
 }
 
-export function runExistence(
+export function runDataExistence(
   row:       AllocationRow,
   orgs:      Organization[],
   codeLists: AllCodeLists,

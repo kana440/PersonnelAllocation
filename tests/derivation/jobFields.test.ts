@@ -77,7 +77,7 @@ describe('deriveFieldUpdates', () => {
     const row    = makeRow({ prevBand: 'M4', band: 'M4', employmentType: '社員', userId: '111', groupEmployeeId: '111' })
     const result = deriveFieldUpdates({ band: 'M6' }, row, cl)
     // M4(warningLevel=3) → M6(warningLevel=5): 昇格
-    expect(result.promotionSign).toBe('昇格')
+    expect(result.promotionSign).toBe('1')
   })
 
   test('jobFamily 変更 → jobType・payGrade がリセットされる', () => {

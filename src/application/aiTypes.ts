@@ -55,10 +55,22 @@ export type ChatWidget =
 
 /** 選択中の行のコンテキスト情報。AI のシステムプロンプトに注入する */
 export interface SelectedRowContext {
-  rowId:   number
-  name:    string
-  orgName: string
-  issues:  Array<{ field: string; level: 'error' | 'warning'; message: string }>
+  rowId:        number
+  name:         string
+  orgName:      string
+  issues:       Array<{ field: string; level: 'error' | 'warning'; message: string }>
+  // Intent-First のため追加 — ツール往復なしで意図を分類できる情報
+  changeKinds:  string[]   // 現在の変更種別ラベル（例: ['異動', '昇格']）
+  availableOps: string[]   // この行で実行可能な操作ラベル（OperationDef.label）
+  keyFields: {             // 主要フィールドの現在値（beforeは含めない）
+    employmentType?:      string
+    band?:                string
+    payGrade?:            string
+    officialPositionCode?:string
+    leaveOfAbsenceSign?:  string
+    concurrentType?:      string
+    positionCode?:        string
+  }
 }
 
 export interface ConfirmResult {

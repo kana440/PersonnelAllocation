@@ -60,7 +60,7 @@ export const FIELD_METADATA: ReadonlyArray<FieldMeta> = [
   { after: 'unionFlag',                  before: 'prevUnionFlag',                  binding: 'person' },
   { after: 'discretionaryWorkFlag',      before: 'prevDiscretionaryWorkFlag',      binding: 'person' },
   { after: 'nonUnionAgreementFlag',      before: 'prevNonUnionAgreementFlag',      binding: 'person' },
-  { after: 'leaveFlag',                  before: 'prevLeaveFlag',                  binding: 'person' },
+  { after: 'leaveOfAbsenceSign',                  before: 'prevLeaveOfAbsenceSign',                  binding: 'person' },
 
   // ── allocation ──────────────────────────────────────────────────────────────
   { after: 'concurrentType',             before: 'prevConcurrentType',             binding: 'allocation' },
@@ -133,7 +133,7 @@ export type AfterValues = Partial<
     AllocationList,
     | 'employmentType' | 'concurrentType' | 'concurrentReason'
     | 'secondmentFromCompany' | 'secondmentFromEmployeeNumber'
-    | 'leaveFlag' | 'positionCode' | 'departmentCode'
+    | 'leaveOfAbsenceSign' | 'positionCode' | 'departmentCode'
     | 'businessUnit' | 'division' | 'subDivision' | 'group' | 'team'
     | 'officialPositionCode' | 'localJobTitle' | 'secondmentToCompany'
     | 'location' | 'costCenter' | 'managerPositionCode' | 'managerName'

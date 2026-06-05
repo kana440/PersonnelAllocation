@@ -11,10 +11,10 @@ export const leaveOfAbsenceDef: OperationDef = {
   group:      'person',
   badgeColor: 'bg-gray-100 text-gray-600',
 
-  availableFor: (row) => !!row.userId && !row.leaveFlag,
+  availableFor: (row) => !!row.userId && !row.leaveOfAbsenceSign,
 
   inputs: [
-    { field: 'leaveFlag', required: true,  label: '休職フラグ' },
+    { field: 'leaveOfAbsenceSign', required: true,  label: '休職フラグ' },
     { field: 'memo',      required: false, label: '休職種別メモ' },
   ],
 
@@ -23,7 +23,7 @@ export const leaveOfAbsenceDef: OperationDef = {
   createCommand: (rowId, input) =>
     new LeaveOfAbsenceOperation(
       rowId,
-      input.leaveFlag as string,
+      input.leaveOfAbsenceSign as '1',
       input.memo      as string | undefined,
     ),
 }
@@ -36,7 +36,7 @@ export const returnFromLeaveDef: OperationDef = {
   group:      'person',
   badgeColor: 'bg-gray-100 text-gray-600',
 
-  availableFor: (row) => !!row.leaveFlag,
+  availableFor: (row) => !!row.leaveOfAbsenceSign,
 
   inputs: [],
 

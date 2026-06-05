@@ -2,13 +2,11 @@ import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../masters/aggregate'
 import type { OrgMasterEntry } from '../masters/orgMaster'
 import { UNION_MEMBER_CODE } from '../masters/unionMember'
-import { VALUE_RULES, evaluateConstraint, type ConstraintRule } from './rules'
-import type { FieldStrictness } from '../optionStrictness'
 import type { ValidationIssue } from './types'
 
 // C系: 関連チェック（マスタ参照による整合性チェック）
 // C1/C2/C3 はカスタムロジック。
-// C4（条件付き値制約）は VALUE_RULES から導出。
+// C4（条件付き値制約）は FIELD_CONSTRAINTS から導出。
 
 type OrgSubField = {
   rowKey:    keyof AllocationRow
@@ -83,13 +81,9 @@ function checkC3(row: AllocationRow): ValidationIssue[] {
   return issues
 }
 
-// ── C4: 条件付き値制約 — VALUE_RULES から導出 ────────────────────────────────
+// ── C4: 条件付き値制約 — FIELD_CONSTRAINTS から導出 ────────────────────────────────
 // departmentCode の組織レベルチェックのみカスタム（orgs ではなく orgMasterEntries を使用）
 const SECONDMENT_ORG_LEVEL = '出向者用組織'
-
-const CONDITIONAL_CONSTRAINT_RULES = VALUE_RULES.filter(
-  (r): r is ConstraintRule => r.kind === 'constraint' && !!r.when
-)
 
 // C4: 出向先会社設定時の組織コードチェック（カスタム部分のみ）
 function checkC4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
@@ -104,18 +98,11 @@ function checkC4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
   return []
 }
 
-type Overrides = Partial<Record<string, FieldStrictness>>
-
-function checkConditionalValueRules(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
-  return CONDITIONAL_CONSTRAINT_RULES.flatMap(r => evaluateConstraint(r, row, codeLists, overrides))
-}
-
-export function runRelated(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
+export function runCorrelation(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   return [
     ...checkC1(row, codeLists),
     ...checkC2(row, codeLists),
     ...checkC3(row),
     ...checkC4(row, codeLists),
-    ...checkConditionalValueRules(row, codeLists, overrides),
   ]
 }

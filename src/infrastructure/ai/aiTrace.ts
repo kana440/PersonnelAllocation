@@ -10,12 +10,19 @@ import type { APIMessage } from '../../ports'
 
 // ── Event types ───────────────────────────────────────────────────────────────
 
+export interface RequestParams {
+  model?:      string
+  toolCount:   number
+  temperature?: number
+}
+
 export type AITraceEvent =
-  | { kind: 'request';     agentId?: string; round: number; messages: APIMessage[] }
-  | { kind: 'tool_call';   agentId?: string; round: number; toolName: string; args: unknown }
-  | { kind: 'tool_result'; agentId?: string; round: number; toolName: string; result: string }
-  | { kind: 'response';    agentId?: string; text: string }
-  | { kind: 'error';       agentId?: string; error: unknown }
+  | { kind: 'request';       agentId?: string; round: number; messages: APIMessage[]; params?: RequestParams }
+  | { kind: 'tool_call';     agentId?: string; round: number; toolName: string; args: unknown }
+  | { kind: 'tool_result';   agentId?: string; round: number; toolName: string; result: string }
+  | { kind: 'response';      agentId?: string; text: string }
+  | { kind: 'error';         agentId?: string; error: unknown }
+  | { kind: 'tier_decision'; agentId?: string; tier: 'guide' | 'simple_write' | 'wizard'; intent: string; params?: Record<string, unknown> }
 
 // ── Observer interface ────────────────────────────────────────────────────────
 
@@ -164,6 +171,34 @@ export class SummaryTraceObserver implements AITraceObserver {
     this.turns = []
     this.current = null
     this.pendingCall = null
+  }
+}
+
+// ── InMemoryTraceObserver (for UI panel) ──────────────────────────────────────
+// Stores events in memory and notifies subscribers so the UI can render a
+// live tool-call timeline without needing console access.
+
+export type TimedTraceEvent = AITraceEvent & { ts: number }
+
+export class InMemoryTraceObserver implements AITraceObserver {
+  private events: TimedTraceEvent[] = []
+  private listeners: Set<() => void> = new Set()
+
+  onEvent(event: AITraceEvent): void {
+    this.events.push({ ...event, ts: Date.now() })
+    this.listeners.forEach(fn => fn())
+  }
+
+  getEvents(): readonly TimedTraceEvent[] { return this.events }
+
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn)
+    return () => this.listeners.delete(fn)
+  }
+
+  clear(): void {
+    this.events = []
+    this.listeners.forEach(fn => fn())
   }
 }
 

@@ -23,8 +23,8 @@ src/domain/                      ← ドメイン層（外部依存ゼロ。Zod�
   allocationRow.ts               ← AllocationRow 型・FIELD_METADATA
   context.ts                     ← DomainContext・RowContext（全ドメイン処理の共通コンテキスト）
   masters/                       ← マスタデータ型定義・集約（AllCodeLists）
+  fieldConstraints.ts            ← FIELD_CONSTRAINTS（許容値制約の単一定義ソース）
   validation/                    ← バリデーション A〜G・W 系（純粋関数）
-    rules.ts                     ←   VALUE_RULES（許容値制約の単一定義ソース）
   commands/                      ← 業務操作（EditCommand・OperationDef・シナリオ）
     types.ts                     ←   EditCommand インターフェース・DomainContext 再エクスポート
     handlers/                    ←   EditCommand 実装群
@@ -37,7 +37,7 @@ src/domain/                      ← ドメイン層（外部依存ゼロ。Zod�
     changeDetection.ts           ←   before/after 差分検出（RowChanges）
     groupPatternMatcher.ts       ←   グループ行（出向2行等）のパターン検出
   choices/                       ← UI選択肢・表示用ユーティリティ
-    index.ts                     ←   選択肢の生成・絞り込み（VALUE_RULES から導出）
+    index.ts                     ←   選択肢の生成・絞り込み（FIELD_CONSTRAINTS から導出）
     orgTree.ts                   ←   組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
     rows.ts                      ←   行・人物の表示用変換（buildOrgMap・derivePersons）
     relevantOrgs.ts              ←   組織ピッカー候補の絞り込み
@@ -52,7 +52,7 @@ src/ports/                       ← インターフェース定義
 
 ## 業務操作の追加方法（最重要）
 
-操作フレームワークの設計思想は `docs/12-operation-framework.md` を参照。
+操作フレームワークの設計思想は `docs/05-operation-framework.md` を参照。
 
 ### 概念の対応関係
 
@@ -63,7 +63,7 @@ src/ports/                       ← インターフェース定義
 | `EditPattern` | `src/domain/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
 | `OperationDef` | `src/domain/commands/defs/` | メニュー表示条件・フォーム定義・初期値計算 |
 
-設計思想の詳細は `docs/12-operation-framework.md` を参照。
+設計思想の詳細は `docs/05-operation-framework.md` を参照。
 
 ### 単一操作の追加
 
@@ -109,7 +109,7 @@ appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC]
 手順 3 を省略すると Excel 後方互換のリストア保証が崩れる。
 
 既存の実装例: `src/domain/commands/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
-TDD ガイド: `docs/13-tdd-operation-patterns.md`
+TDD ガイド: `docs/07-tdd-guide.md`
 
 ---
 
@@ -215,9 +215,9 @@ LeftSidebar（タブ）
 
 ---
 
-## 値制約・選択肢の追加方法（VALUE_RULES）
+## 値制約・選択肢の追加方法（FIELD_CONSTRAINTS）
 
-`src/domain/valueRules.ts` がフィールドの許容値制約の**単一定義ソース**。
+`src/domain/fieldConstraints.ts` がフィールドの許容値制約の**単一定義ソース**。
 バリデーション（D2系・C4系・F系）とオプション絞り込みの両方がここから自動導出される。
 
 ```typescript
@@ -240,11 +240,11 @@ LeftSidebar（タブ）
 ```
 
 **ルール追加時の自動伝播**:
-- `validateExistence.ts` — `when` なし constraint → D2系として自動評価
-- `validateRelated.ts` — `when` あり constraint → C/F系として自動評価
+- `validateDataExistence.ts` — `when` なし constraint → D2系として自動評価
+- `validateCorrelation.ts` — `when` あり constraint → C/F系として自動評価
 - `optionFilter/index.ts` — 全ルール → UI ドロップダウンの選択肢に自動反映
 
-**W系（ワーニング）は VALUE_RULES に乗らない**。`validateConsistency.ts` にカスタム関数として実装し `level: 'warning'` で返す。
+**W系（ワーニング）は FIELD_CONSTRAINTS に乗らない**。`validateGlobalConsistency.ts` にカスタム関数として実装し `level: 'warning'` で返す。
 
 ---
 
@@ -255,11 +255,11 @@ LeftSidebar（タブ）
 - `prevXxx` フィールドを操作中に書き換える（before 状態は不変）
 - `positionCode` が `_pos_` 始まりかどうかチェックせず Excel 出力する
 - `EditCommand` を使わず `HRApplicationService` に直接ドメインロジックを書く
-- バリデーションとオプション絞り込みを別々に実装する（`VALUE_RULES` を使う）
+- バリデーションとオプション絞り込みを別々に実装する（`FIELD_CONSTRAINTS` を使う）
 
 ---
 
-## 既知の未着手事項（docs/09-position-person-domain.md より）
+## 既知の未着手事項（docs/04-domain-model.md より）
 
 - `FieldBinding` の分類は暫定。HR 運用ルールに合わせて要レビュー
 - 削除済みパネル UI（削除済みポジション・人の復活操作）
@@ -267,9 +267,9 @@ LeftSidebar（タブ）
 
 ---
 
-## 業務フロー前提（仮説 / docs/10-business-flow-hypothesis.md 参照）
+## 業務フロー前提（仮説 / docs/04-domain-model.md 参照）
 
-> 詳細・未決定事項は docs/10-business-flow-hypothesis.md を参照。
+> 詳細・未決定事項は docs/04-domain-model.md を参照。
 
 **重要な前提**:
 

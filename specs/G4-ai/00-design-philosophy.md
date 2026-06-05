@@ -123,7 +123,7 @@ execute: args => aiTools.getPersonDetail(args.userId as string) // ← OK
 ### 対称性が成り立つ層
 
 - ドメイン操作（`EditCommand`）— 完全に共有
-- バリデーションルール（`VALUE_RULES`, `validateRow`）— 完全に共有
+- バリデーションルール（`FIELD_CONSTRAINTS`, `validateRow`）— 完全に共有
 - HRApplicationService のメソッド群 — 完全に共有
 
 ### 対称性が成り立たない層（意図的な差異）

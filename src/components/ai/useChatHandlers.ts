@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
-import { ChatSession, buildSystemPrompt } from '../../application/chatSession'
+import { ChatSession, buildSystemPrompt, type SessionState } from '../../application/chatSession'
 import type { WelcomeSession } from '../../application/welcomeSession'
 import { DirectEditOperation } from '../../domain/commands/handlers/directEdit'
 import { mockApiService } from '../../infrastructure/ai/chatServiceFactory'
@@ -63,10 +63,17 @@ export function useChatHandlers({
     const rowCtxs  = chatContextRowIds
       .map(id => aiTools.getRowContext(id))
       .filter((c): c is NonNullable<typeof c> => c !== null)
+    const reviewSummary = aiTools.getReviewSummary()
+    const session: SessionState = {
+      changedCount:  reviewSummary.changedRows,
+      errorCount:    reviewSummary.errorCount,
+      warningCount:  reviewSummary.warningCount,
+    }
     return buildSystemPrompt(
       scopeOrg?.name,
       scopeOrg?.externalCode ?? undefined,
       rowCtxs.length > 0 ? rowCtxs : undefined,
+      session,
     )
   }, [])
 

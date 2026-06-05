@@ -37,10 +37,15 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
               : 'bg-blue-500 text-white rounded-tr-sm'
           }`}>
             {message.isLoading ? (
-              <div className="flex gap-1 items-center py-0.5">
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1 items-center flex-shrink-0 py-0.5">
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                {message.text && (
+                  <span className="text-xs text-gray-500 truncate">{message.text}</span>
+                )}
               </div>
             ) : message.text}
           </div>

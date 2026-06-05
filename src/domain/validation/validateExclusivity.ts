@@ -33,7 +33,7 @@ function checkManagerPositionCode(row: AllocationRow, allRows: AllocationRow[]):
   return []
 }
 
-export function runKeys(row: AllocationRow, allRows: AllocationRow[]): ValidationIssue[] {
+export function runExclusivity(row: AllocationRow, allRows: AllocationRow[]): ValidationIssue[] {
   return [
     ...checkManagerPositionCode(row, allRows),
   ]

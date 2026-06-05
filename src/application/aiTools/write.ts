@@ -162,12 +162,28 @@ export function createWriteMethods(service: HRApplicationService) {
       : { ok: false, error: result.errors?.[0]?.message ?? 'エラー' }
   }
 
+  // propose_field_edit で変更を許可するフィールドと表示ラベル。
+  // positionCode / departmentCode / userId / managerPositionCode は専用 propose_xxx を使うため除外。
   const FIELD_EDIT_LABELS: Record<string, string> = {
-    localJobTitle:        '役職名',
-    band:                 'バンド',
-    payGrade:             '給与等級',
-    officialPositionCode: '役職コード',
-    transferReason:       '異動事由',
+    // 人・職務情報
+    employmentType:             '雇用タイプ',
+    band:                       'バンド',
+    payGrade:                   '給与等級',
+    officialPositionCode:       '役職コード',
+    localJobTitle:              '役職名',
+    jobFamily:                  'ジョブファミリー',
+    jobType:                    'ジョブタイプ',
+    // 勤務・配属情報
+    location:                   '勤務場所',
+    costCenter:                 'コストセンター',
+    secondmentToCompany:        '出向先会社',
+    secondmentFromCompany:      '出向元会社',
+    secondmentFromEmployeeNumber: '出向元社員番号',
+    // 申請・メタ情報
+    transferReason:             '異動事由',
+    concurrentReason:           '兼務理由',
+    demotionReason:             '降格理由',
+    memo:                       'メモ',
   }
 
   /** ALLOWED_FIELDS 以外のフィールドはエラーを返す（セキュリティゲート）。 */

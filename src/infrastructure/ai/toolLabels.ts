@@ -1,0 +1,29 @@
+// ツール名 → 日本語ラベルの対応表
+// agentRunner（進捗表示）と AITracePanel（履歴表示）の両方で使用する
+
+export const TOOL_LABELS: Record<string, string> = {
+  findPersons:                     '従業員検索',
+  findOrgs:                        '組織検索',
+  getPersonDetail:                 '従業員詳細取得',
+  listChangedRows:                 '変更内容確認',
+  getOrgMembers:                   '組織メンバー確認',
+  getOrgTree:                      '組織図表示',
+  getValidationDiagnosis:          'バリデーション確認',
+  getFieldOptions:                 '入力可能値確認',
+  findVacantPositions:             '空席ポジション検索',
+  undo:                            '操作取り消し',
+  show_org_members:                '組織メンバー表示',
+  propose_bulk_transfer:           '一括異動',
+  propose_field_edit:              'フィールド変更',
+  propose_bulk_set_field:          '一括設定',
+  propose_transfer:                '異動',
+  propose_promotion:               '昇格',
+  propose_create_position:         '空席ポジション作成',
+  propose_assign_person:           '配属',
+  propose_change_position:         'ポジション変更',
+  propose_set_manager_position:    '上司ポジション設定',
+  propose_re_derive_manager_names: '上司名再導出',
+  getUnassignedPositions:          '未割当ポジション確認',
+  propose_assign_position_codes:   'ポジションコード割り当て',
+  propose_re_derive_org_sub_fields:'組織サブフィールド再導出',
+}

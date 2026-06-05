@@ -2,7 +2,7 @@ import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../masters/aggregate'
 import type { RowChanges } from '../patterns/changeDetection'
 import type { ValidationIssue } from './types'
-import { findEmpType } from './rules'
+import { findEmpType } from '../fieldConstraints'
 
 // G系: データ整合性チェック（エラー）
 // W系: ワーニングチェック（保存はブロックしないが確認を促す）
@@ -52,7 +52,7 @@ function checkW2_promotionDemotionWarning(row: AllocationRow, codeLists: AllCode
   }]
 }
 
-export function runConsistency(
+export function runGlobalConsistency(
   row:       AllocationRow,
   codeLists: AllCodeLists,
   changes?:  RowChanges,

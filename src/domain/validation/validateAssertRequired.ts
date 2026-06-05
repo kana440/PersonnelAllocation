@@ -1,7 +1,7 @@
 import type { AllocationRow } from '../allocationRow'
 import type { AllCodeLists } from '../masters/aggregate'
 import type { ValidationIssue } from './types'
-import { findEmpType, findTransferReason } from './rules'
+import { findEmpType, findTransferReason } from '../fieldConstraints'
 
 /** A1-0: 申請区分（異動事由）は常に必須 */
 function checkA1_0(row: AllocationRow): ValidationIssue[] {
@@ -95,7 +95,7 @@ function checkA5(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
   return [{ field: 'localJobTitle', level: 'error', message: 'フリータイトル対象の役職の場合、フリータイトルは必須です' }]
 }
 
-export function runRequired(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+export function runAssertRequired(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
   return [
     ...checkA1_0(row),
     ...checkA1_1(row),

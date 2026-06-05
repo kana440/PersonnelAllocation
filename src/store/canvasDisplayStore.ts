@@ -33,7 +33,7 @@ export const CANVAS_DISPLAYABLE_FIELDS: CanvasField[] = [
   { key: 'concurrentType',        label: '本務兼務区分' },
   { key: 'secondmentToCompany',   label: '出向先会社' },
   { key: 'secondmentFromCompany', label: '出向元会社' },
-  { key: 'leaveFlag',             label: '休職者サイン' },
+  { key: 'leaveOfAbsenceSign',             label: '休職者サイン' },
   { key: 'unionFlag',             label: '労働組合員' },
   { key: 'memo',                  label: 'メモ' },
 ]

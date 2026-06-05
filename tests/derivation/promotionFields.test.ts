@@ -12,11 +12,11 @@ import { makeCL } from '../helpers/fixtures'
 
 describe('derivePromotionSignFromLevel', () => {
   test('G3 → G4: Level が上がった → 昇格', () => {
-    expect(derivePromotionSignFromLevel('G4', 'G3')).toEqual({ promotionSign: '昇格' })
+    expect(derivePromotionSignFromLevel('G4', 'G3')).toEqual({ promotionSign: '1' })
   })
 
   test('G4 → G3: Level が下がった → 降格', () => {
-    expect(derivePromotionSignFromLevel('G3', 'G4')).toEqual({ promotionSign: '降格' })
+    expect(derivePromotionSignFromLevel('G3', 'G4')).toEqual({ promotionSign: '1' })
   })
 
   test('G4 → G4: Level が同じ → 変化なし（空オブジェクト）', () => {
@@ -41,12 +41,12 @@ describe('derivePromotionSign', () => {
 
   test('M4 → M6: warningLevel 上昇 → 昇格', () => {
     const result = derivePromotionSign('M6', 'M4', cl)
-    expect(result.promotionSign).toBe('昇格')
+    expect(result.promotionSign).toBe('1')
   })
 
   test('M6 → M4: warningLevel 下降 → 降格', () => {
     const result = derivePromotionSign('M4', 'M6', cl)
-    expect(result.promotionSign).toBe('降格')
+    expect(result.promotionSign).toBe('1')
   })
 
   test('M4 → M4: 変化なし → promotionSign は undefined', () => {

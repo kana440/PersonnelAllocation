@@ -99,7 +99,7 @@ export const FIELD_METADATA: ReadonlyArray<{
   { after: 'unionFlag',                  before: 'prevUnionFlag',                  binding: 'person' },
   { after: 'discretionaryWorkFlag',      before: 'prevDiscretionaryWorkFlag',      binding: 'person' },
   { after: 'nonUnionAgreementFlag',      before: 'prevNonUnionAgreementFlag',      binding: 'person' },
-  { after: 'leaveFlag',                  before: 'prevLeaveFlag',                  binding: 'person' },
+  { after: 'leaveOfAbsenceSign',                  before: 'prevLeaveOfAbsenceSign',                  binding: 'person' },
 
   // ── allocation ──────────────────────────────────────────────
   { after: 'concurrentType',             before: 'prevConcurrentType',             binding: 'allocation' },

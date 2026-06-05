@@ -1,13 +1,15 @@
 import { delay } from './delay'
 
 const KIND_LABEL: Record<string, string> = {
-  transfer:    '組織異動',
-  promotion:   '昇格',
-  demotion:    '降格',
-  titleChange: '職位名変更',
-  newHire:     '新規採用',
-  termination: '退職',
-  concurrent:  '兼務',
+  transfer:       '組織異動',
+  promotion:      '昇格',
+  demotion:       '降格',
+  bandChange:     'バンド変更',
+  positionChange: 'ポジション変更',
+  titleChange:    '職位名変更',
+  newHire:        '新規採用',
+  termination:    '退職',
+  concurrent:     '兼務',
 }
 
 export interface ReviewSummaryResult {

@@ -23,7 +23,7 @@
 | `findPersons` / `findOrgs` | 氏名・組織名のあいまい検索 | ✓ |
 | `getPersonRows` / `getRow` | rowId を指定して行データ取得 | ✓ |
 | `getOrgMembers` / `show_org_members` | 組織メンバー一覧（text / widget） | ✓ |
-| `getFieldOptions` | 指定行・フィールドの有効選択肢を返す。VALUE_RULES 条件付きルール（F1/F2/F3）を自動適用。自己修復時の値確認に使う | ✓ |
+| `getFieldOptions` | 指定行・フィールドの有効選択肢を返す。FIELD_CONSTRAINTS 条件付きルール（F1/F2/F3）を自動適用。自己修復時の値確認に使う | ✓ |
 
 ### 1.2 書き込み（confirm — ユーザー確認後に実行）
 

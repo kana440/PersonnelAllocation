@@ -12,18 +12,20 @@
 | [01-requirements.md](./01-requirements.md) | 全員 | 要件定義。何を作るか、スコープ、ユーザー、業務ルール |
 | [02-architecture.md](./02-architecture.md) | エンジニア | クリーンアーキテクチャの層構成とデータフロー全体図 |
 | [03-modules.md](./03-modules.md) | エンジニア | モジュール一覧、依存関係、独立テスト方法 |
-| [04-development-guide.md](./04-development-guide.md) | エンジニア | 機能追加の具体的な手順（操作・バリデーション・AI Tool） |
-| [05-roadmap.md](./05-roadmap.md) | 全員 | 開発フェーズ計画。現状→操作抽象化→AI→SuccessFactors |
-| [12-operation-framework.md](./12-operation-framework.md) | エンジニア | EditCommand・EditPattern・EditScenario の設計思想と拡張手順 |
-| [13-tdd-operation-patterns.md](./13-tdd-operation-patterns.md) | エンジニア | 業務操作パターンの TDD ガイド（runOperationScenarios の使い方） |
-| [14-ai-test-generation.md](./14-ai-test-generation.md) | エンジニア | AI（Web UI）を使ったテスト自動生成ワークフロー（test:context / test:save） |
+| [04-domain-model.md](./04-domain-model.md) | エンジニア | ポジション・人・AllocationRow の 4 状態・FieldBinding |
+| [05-operation-framework.md](./05-operation-framework.md) | エンジニア | EditCommand・EditPattern・EditScenario の設計思想と拡張手順 |
+| [06-development-guide.md](./06-development-guide.md) | エンジニア | 機能追加の具体的な手順（操作・バリデーション・AI Tool） |
+| [07-tdd-guide.md](./07-tdd-guide.md) | エンジニア | 業務操作パターンの TDD ガイド |
+| [08-ai-architecture.md](./08-ai-architecture.md) | エンジニア | AI チャットの Intent-First + Tier 実行アーキテクチャ |
 
 ## 読む順番
 
 1. まず [01-requirements.md](./01-requirements.md) で何を作るかを把握
 2. [02-architecture.md](./02-architecture.md) でシステム全体の構造を理解
 3. [03-modules.md](./03-modules.md) で自分が担当するモジュールを確認
-4. [04-development-guide.md](./04-development-guide.md) を見ながら実装
+4. [04-domain-model.md](./04-domain-model.md) でドメインの核心概念を理解
+5. [05-operation-framework.md](./05-operation-framework.md) で操作の仕組みを把握
+6. [06-development-guide.md](./06-development-guide.md) を見ながら実装
 
 ## 主要ファイルマップ（クイックリファレンス）
 

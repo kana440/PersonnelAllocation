@@ -16,7 +16,7 @@ const CONFIGURABLE_FIELDS: { key: string; label: string }[] = [
   { key: 'payGrade',                   label: '給与等級' },
   { key: 'officialPositionCode',       label: '役職' },
   { key: 'location',                   label: '勤務場所' },
-  { key: 'leaveFlag',                  label: '休職フラグ' },
+  { key: 'leaveOfAbsenceSign',                  label: '休職フラグ' },
   { key: 'positionUnionFlag',          label: 'ポジション_労働組合員' },
   { key: 'positionDiscretionaryWorkFlag', label: 'ポジション_裁量労働対象' },
   { key: 'discretionaryWorkFlag',      label: '裁量労働対象' },

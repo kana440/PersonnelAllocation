@@ -19,10 +19,12 @@ import type { ChatMessage, ChatWidget, ConfirmResult } from '../../application/a
 import type { OpenAICompatibleAdapter } from './openAICompatibleAdapter'
 import type { AITraceObserver } from './aiTrace'
 import { SummaryTraceObserver, CompositeTraceObserver } from './aiTrace'
+import { TOOL_LABELS } from './toolLabels'
 import { toolRegistry } from './toolRegistry'
 import { buildAPIMessages } from '../../application/chatSession'
 
 const MAX_ROUNDS = 10
+
 
 export interface AgentRunResult {
   text:    string
@@ -45,6 +47,7 @@ export class AgentRunner {
   constructor(
     private readonly adapter: OpenAICompatibleAdapter,
     extraObserver?: AITraceObserver,
+    readonly model?: string,
   ) {
     this.summary  = new SummaryTraceObserver()
     this.observer = extraObserver
@@ -67,7 +70,10 @@ export class AgentRunner {
     let latestWidget: ChatWidget | undefined
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      this.observer.onEvent({ kind: 'request', round, messages: [...messages] })
+      this.observer.onEvent({
+        kind: 'request', round, messages: [...messages],
+        params: { model: this.model, toolCount: toolRegistry.definitions.length },
+      })
 
       const result = await this.adapter.complete(messages, toolRegistry.definitions)
 
@@ -85,8 +91,9 @@ export class AgentRunner {
         tool_calls: result.toolCalls,
       })
 
-      const toolNames = result.toolCalls.map(tc => tc.function.name).join(', ')
-      onProgress?.(`ツール実行中: ${toolNames}…`)
+      const firstTool = result.toolCalls[0]?.function.name ?? ''
+      const label = TOOL_LABELS[firstTool] ?? firstTool
+      onProgress?.(`${label}...`)
 
       for (const call of result.toolCalls) {
         const args = (() => {

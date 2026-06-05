@@ -2,6 +2,9 @@ import type { HRApplicationService } from '../HRApplicationService'
 import type { AllocationRow } from '../../domain/allocationRow'
 import type { Person, Organization } from '../../domain/schemas'
 import { detectChanges } from '../../domain/patterns/changeDetection'
+import { deriveEditPatterns } from '../../domain/patterns/editPatternMatcher'
+import { EDIT_PATTERN_META } from '../../domain/patterns/editPatterns'
+import { ALL_OPERATION_DEFS } from '../../domain/commands/defs'
 import { validateRow } from '../../domain/validation/validateRow'
 import { getFieldOptions as getFieldOptionsFromDomain } from '../../domain/choices'
 import type { OrgTreeNode, SelectedRowContext } from '../aiTypes'
@@ -64,14 +67,37 @@ export function createReadMethods(service: HRApplicationService) {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
     const row = allocationList.find(r => r.rowId === rowId)
     if (!row) return null
-    const name   = [row.lastName, row.firstName].filter(Boolean).join(' ') || `行 ${rowId}`
-    const org    = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
-    const issues = validateRow({ row, afterOrganizations, codeLists, allocationList, changes: detectChanges(row) })
+
+    const name    = [row.lastName, row.firstName].filter(Boolean).join(' ') || `行 ${rowId}`
+    const org     = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
+    const changes = detectChanges(row)
+    const issues  = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
+
+    // 現在の変更種別ラベル
+    const { active } = deriveEditPatterns(changes.kinds, row, codeLists)
+    const changeKinds = active.map(p => EDIT_PATTERN_META[p]?.label ?? p)
+
+    // この行で実行可能な操作
+    const availableOps = ALL_OPERATION_DEFS
+      .filter(def => def.availableFor(row, codeLists))
+      .map(def => def.label)
+
     return {
       rowId,
       name,
-      orgName: org?.name ?? row.departmentCode ?? '',
-      issues: issues.map(i => ({ field: String(i.field), level: i.level, message: i.message })),
+      orgName:   org?.name ?? row.departmentCode ?? '',
+      issues:    issues.map(i => ({ field: String(i.field), level: i.level, message: i.message })),
+      changeKinds,
+      availableOps,
+      keyFields: {
+        employmentType:       row.employmentType      as string | undefined,
+        band:                 row.band                as string | undefined,
+        payGrade:             row.payGrade            as string | undefined,
+        officialPositionCode: row.officialPositionCode as string | undefined,
+        leaveOfAbsenceSign:   row.leaveOfAbsenceSign  as string | undefined,
+        concurrentType:       row.concurrentType      as string | undefined,
+        positionCode:         row.positionCode        as string | undefined,
+      },
     }
   }
 

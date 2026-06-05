@@ -64,7 +64,7 @@ type Organization, Person, Company ...（Zod 由来）
 **場所**: `src/domain/validation/`（複数ファイルに分割）, `src/domain/choices/`
 
 **責務**: `AllocationRow` 1行の整合性をチェックする。エラー・警告を返す。
-また、`VALUE_RULES` を単一ソースとしてバリデーション（存在チェック）と UI 選択肢絞り込みの両方を導出する。
+また、`FIELD_CONSTRAINTS` を単一ソースとしてバリデーション（存在チェック）と UI 選択肢絞り込みの両方を導出する。
 
 **依存**: Module A のみ
 
@@ -74,13 +74,13 @@ type Organization, Person, Company ...（Zod 由来）
 |---|---|
 | `validateRow.ts` | オーケストレーター（各 validate* を呼び出して結果を集約） |
 | `types.ts` | `ValidationIssue` / `ValidationLevel` 型定義 |
-| `validateRequired.ts` | A 系（必須項目チェック） |
-| `validateFormat.ts` | B 系（形式チェック） |
-| `validateRelated.ts` | C 系（関連・整合性）: C1 組織階層 / C2 勤務地・コストセンター / C3 非組合協定 / C4 出向 |
-| `validateExistence.ts` | D 系（コードリスト存在チェック）: `VALUE_RULES` から導出 |
-| `validateKeys.ts` | E 系（キー重複チェック） |
-| `validateConsistency.ts` | G 系（整合性エラー）+ W 系（ワーニング）: G1 昇降格時ポジション未変更 / W2 2段階昇降格 |
-| `rules.ts` | `VALUE_RULES` 配列 — 許容値制約の単一定義ソース。`SuggestionRule \| ConstraintRule` の discriminated union。`validateExistence.ts`・`validateRelated.ts`（F1-F4）・`choices/` の 3 箇所が参照する |
+| `validateAssertRequired.ts` | A 系（必須項目チェック） |
+| `validateBasedOnFormat.ts` | B 系（形式チェック） |
+| `validateCorrelation.ts` | C 系（関連・整合性）: C1 組織階層 / C2 勤務地・コストセンター / C3 非組合協定 / C4 出向 |
+| `validateDataExistence.ts` | D 系（コードリスト存在チェック）: `FIELD_CONSTRAINTS` から導出 |
+| `validateExclusivity.ts` | E 系（キー重複チェック） |
+| `validateGlobalConsistency.ts` | G 系（整合性エラー）+ W 系（ワーニング）: G1 昇降格時ポジション未変更 / W2 2段階昇降格 |
+| `fieldConstraints.ts` | `FIELD_CONSTRAINTS` 配列 — 許容値制約の単一定義ソース。`SuggestionRule \| ConstraintRule` の discriminated union。`validateDataExistence.ts`・`validateCorrelation.ts`（F1-F4）・`choices/` の 3 箇所が参照する |
 | `choices/index.ts` | `buildBaseOptions()` / `filterOptions()` / `getFieldOptions()` — UI の選択肢生成・行状態による絞り込み |
 
 **公開 API**:
@@ -108,7 +108,7 @@ function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
 
 **依存**: Module A + Module B
 
-**設計思想**: `docs/12-operation-framework.md` を参照
+**設計思想**: `docs/05-operation-framework.md` を参照
 
 **公開 API**:
 ```typescript

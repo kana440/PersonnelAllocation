@@ -11,14 +11,14 @@
 
 ---
 
-## VALUE_RULES（src/domain/valueRules.ts）
+## FIELD_CONSTRAINTS（src/domain/valueRules.ts）
 
 フィールドの許容値制約の**単一定義**。以下の2箇所がここから導出される:
 
 | 導出先 | 対象 |
 |---|---|
-| `validateExistence.ts`（D2-2〜D2-11） | `kind: 'constraint'`、`when` なし |
-| `validateRelated.ts`（C4 役職・勤務場所） | `kind: 'constraint'`、`when` あり |
+| `validateDataExistence.ts`（D2-2〜D2-11） | `kind: 'constraint'`、`when` なし |
+| `validateCorrelation.ts`（C4 役職・勤務場所） | `kind: 'constraint'`、`when` あり |
 | `optionFilter/index.ts` | `kind` 問わず全ルール |
 
 **ルール追加・変更時は必ずここを確認すること。**
@@ -30,7 +30,7 @@
 | `'suggestion'` | ✓ | ✗（推奨値のみ） |
 | `'constraint'` | ✓ | ✓（リスト外はエラー） |
 
-### カスタムチェック（VALUE_RULES に含まない）
+### カスタムチェック（FIELD_CONSTRAINTS に含まない）
 
 | ルール | 理由 |
 |---|---|
@@ -57,19 +57,19 @@
 src/domain/validation/
   validateRow.ts         ← オーケストレーター（ルーティング・ヘルパー export）
   types.ts               ← ValidationIssue / ValidationLevel 型定義
-  validateRequired.ts    ← A系（必須チェック）
-  validateFormat.ts      ← B系（形式チェック）
-  validateRelated.ts     ← C系（関連チェック）
-  validateExistence.ts   ← D系（存在チェック）
-  validateKeys.ts        ← E系（キー重複チェック）
-  validateConsistency.ts ← G系（データ整合性チェック）
+  validateAssertRequired.ts    ← A系（必須チェック）
+  validateBasedOnFormat.ts      ← B系（形式チェック）
+  validateCorrelation.ts     ← C系（関連チェック）
+  validateDataExistence.ts   ← D系（存在チェック）
+  validateExclusivity.ts        ← E系（キー重複チェック）
+  validateGlobalConsistency.ts ← G系（データ整合性チェック）
 ```
 
 ---
 
 ## A系 — 必須チェック
 
-実装ファイル: `validateRequired.ts`
+実装ファイル: `validateAssertRequired.ts`
 
 | # | フィールド | 条件 | メッセージ | 実装状況 |
 |---|---|---|---|---|
@@ -87,7 +87,7 @@ src/domain/validation/
 
 ## C系 — 関連チェック
 
-実装ファイル: `validateRelated.ts`
+実装ファイル: `validateCorrelation.ts`
 
 マスタを参照して関連フィールドの整合性を検証する。マスタ未ロード時（配列長 0）はスキップ。
 
@@ -102,7 +102,7 @@ src/domain/validation/
 
 ## B系 — 形式チェック
 
-実装ファイル: `validateFormat.ts`
+実装ファイル: `validateBasedOnFormat.ts`
 
 | # | フィールド | 条件 | メッセージ | 実装状況 |
 |---|---|---|---|---|
@@ -115,7 +115,7 @@ src/domain/validation/
 
 ## D系 — 存在チェック
 
-実装ファイル: `validateExistence.ts`
+実装ファイル: `validateDataExistence.ts`
 
 マスタ・リスト値と照合し、存在しない値を検出する。マスタ未ロード時（配列長 0）はスキップ。
 
@@ -137,7 +137,7 @@ src/domain/validation/
 
 ## E系 — キー重複チェック
 
-実装ファイル: `validateKeys.ts`
+実装ファイル: `validateExclusivity.ts`
 
 `noCheckRequired === true` の場合もこの系統は**実行される**。
 
@@ -151,7 +151,7 @@ src/domain/validation/
 
 ## F系 — 雇用タイプ・申請区分による値制約
 
-実装ファイル: `validateRelated.ts`（VALUE_RULES 条件付き制約として `checkConditionalValueRules` で評価）
+実装ファイル: `validateCorrelation.ts`（FIELD_CONSTRAINTS 条件付き制約として `checkConditionalValueRules` で評価）
 
 雇用タイプや申請区分の CodeList フラグに応じて、バンド・給与等級の許容値を絞り込む。
 オプション絞り込み（`optionFilter`）にも同一ルールが自動適用される。
@@ -162,13 +162,13 @@ src/domain/validation/
 | F2 | `band`, `payGrade` | `employmentType` の `isEmployee` が true かつ `userId === groupEmployeeId` | バンド／給与等級は雇用タイプに対応する選択肢から選択してください | ✓ |
 | F3 | `band`, `payGrade` | `employmentType` の `isEmploymentExtension` が true | バンド／給与等級は雇用タイプに対応する選択肢から選択してください（band は `isEmploymentExtensionJobClassification` で絞る） | ✓ |
 | F4 | `payGrade` | `transferReason` の `concurrentCheckSign` が true | 給与等級は兼務に対応する選択肢から選択してください | ✓ |
-| F4 | `leaveFlag` | `transferReason` の `concurrentCheckSign` が true | 兼務の場合、休職フラグは設定できません | ✓ |
+| F4 | `leaveOfAbsenceSign` | `transferReason` の `concurrentCheckSign` が true | 兼務の場合、休職者サインは設定できません | ✓ |
 
 ---
 
 ## G系 — データ整合性チェック
 
-実装ファイル: `validateConsistency.ts`
+実装ファイル: `validateGlobalConsistency.ts`
 
 | # | フィールド | 条件 | メッセージ | 実装状況 |
 |---|---|---|---|---|
@@ -178,7 +178,7 @@ src/domain/validation/
 
 ## W系 — ワーニングチェック
 
-実装ファイル: `validateConsistency.ts`（`runConsistency` 内、`level: 'warning'` で返す）
+実装ファイル: `validateGlobalConsistency.ts`（`runConsistency` 内、`level: 'warning'` で返す）
 
 | # | フィールド | 条件 | メッセージ | 実装状況 |
 |---|---|---|---|---|

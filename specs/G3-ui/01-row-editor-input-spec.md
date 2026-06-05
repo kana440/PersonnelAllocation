@@ -39,7 +39,7 @@ const CODE_LIST_KEYS: Partial<Record<string, string>> = {
 // 有効値は "Y"/"N" or "1"/"0" → TODO: 業務確認
 const FLAG_FIELDS = new Set([
   'positionUnionFlag', 'positionDiscretionaryWorkFlag',
-  'unionFlag', 'nonUnionAgreementFlag', 'leaveFlag',
+  'unionFlag', 'nonUnionAgreementFlag', 'leaveOfAbsenceSign',
 ])
 ```
 

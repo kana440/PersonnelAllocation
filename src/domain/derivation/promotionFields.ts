@@ -10,7 +10,7 @@ function extractLevelNumber(payGrade: string | undefined): number | undefined {
 
 /**
  * 給与等級の数字部分（Level）の変化から promotionSign を導出する。
- * Level が上がった → '昇格'、下がった → '降格'、変化なし → undefined。
+ * Level が変化した場合のみ '1' をセット。変化なし → undefined。
  */
 export function derivePromotionSignFromLevel(
   afterPayGrade: string | undefined,
@@ -19,7 +19,7 @@ export function derivePromotionSignFromLevel(
   const afterLv = extractLevelNumber(afterPayGrade)
   const prevLv  = extractLevelNumber(prevPayGrade)
   if (afterLv === undefined || prevLv === undefined || afterLv === prevLv) return {}
-  return { promotionSign: afterLv > prevLv ? '昇格' : '降格' }
+  return { promotionSign: '1' }
 }
 
 function warningLevel(bandLabel: string | undefined, codeLists: AllCodeLists): number {
@@ -29,9 +29,7 @@ function warningLevel(bandLabel: string | undefined, codeLists: AllCodeLists): n
 
 /**
  * band の変更から promotionSign を導出する。
- * warningLevel が変化した場合のみ設定（0 → X 、または X → Y の変化）。
- * 実際の文字列値は環境の transferReason 等に依存するため TODO として残す。
- * TODO: promotionSign の実際の値（例: '○'、'昇格'等）を確認して置き換えること。
+ * warningLevel が変化した場合のみ '1' をセット（0 → X 、または X → Y の変化）。
  */
 export function derivePromotionSign(
   afterBand: string | undefined,
@@ -44,13 +42,12 @@ export function derivePromotionSign(
   if (afterLevel === 0 || prevLevel === 0 || afterLevel === prevLevel) {
     return { promotionSign: undefined }
   }
-  // TODO: 実際の promotionSign 値は環境依存。現在は方向を示すプレースホルダーを使用。
-  return { promotionSign: afterLevel > prevLevel ? '昇格' : '降格' }
+  return { promotionSign: '1' }
 }
 
 /**
  * payGrade の変更から payGradeChangeSign を導出する。
- * TODO: 実際の payGradeChangeSign 値は環境依存。現在はプレースホルダーを使用。
+ * 変更があった場合のみ '1' をセット。
  */
 export function derivePayGradeChangeSign(
   afterPayGrade: string | undefined,
@@ -59,6 +56,5 @@ export function derivePayGradeChangeSign(
   if (!afterPayGrade || afterPayGrade === prevPayGrade) {
     return { payGradeChangeSign: undefined }
   }
-  // TODO: 実際の payGradeChangeSign 値は環境依存。
-  return { payGradeChangeSign: '変更' }
+  return { payGradeChangeSign: '1' }
 }

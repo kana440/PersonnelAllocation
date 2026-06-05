@@ -2,11 +2,13 @@ import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
 import { IS_MOCK_MODE, DEFAULT_MODELS, createAgentRunner, createAdapter } from '../../infrastructure/ai/chatServiceFactory'
+import { InMemoryTraceObserver } from '../../infrastructure/ai/aiTrace'
 import { WelcomeSession } from '../../application/welcomeSession'
 import { useChatHandlers } from './useChatHandlers'
 import { AIWelcomeScreen }  from './AIWelcomeScreen'
 import { AIMessageThread }  from './AIMessageThread'
 import { AIInput }          from './AIInput'
+import { AITracePanel }     from './AITracePanel'
 
 const MOCK_MODEL = '__mock__'
 
@@ -35,9 +37,11 @@ export function AIView({ onOpenEditor, onImportExcel, onDataLoaded }: Props) {
     if (!selectedModel) setSelectedModel(model)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const traceObserver = useMemo(() => new InMemoryTraceObserver(), [])
+
   const agentRunner = useMemo(
-    () => model === MOCK_MODEL ? null : createAgentRunner(model),
-    [model],
+    () => model === MOCK_MODEL ? null : createAgentRunner(model, traceObserver),
+    [model, traceObserver],
   )
 
   // Pre-data lightweight agent: same model, no tools
@@ -119,15 +123,6 @@ export function AIView({ onOpenEditor, onImportExcel, onDataLoaded }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {agentRunner && messages.length > 0 && (
-            <button
-              onClick={handleCopyLog}
-              className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              title="AIデバッグログをクリップボードにコピー"
-            >
-              {logCopied ? '✓ コピー済み' : '📋 ログ'}
-            </button>
-          )}
           {messages.length > 0 && (
             <button
               onClick={handleClear}
@@ -196,8 +191,15 @@ export function AIView({ onOpenEditor, onImportExcel, onDataLoaded }: Props) {
         </div>
       )}
 
-      {/* Text input */}
-      <div className="flex-shrink-0">
+      {/* Trace panel + Text input */}
+      <div className="flex-shrink-0 bg-white">
+        {agentRunner && (
+          <AITracePanel
+            traceObserver={traceObserver}
+            onCopyLog={handleCopyLog}
+            logCopied={logCopied}
+          />
+        )}
         <AIInput onSubmit={handleTextSubmit} disabled={isBusy || phase !== 'idle'} />
       </div>
     </div>

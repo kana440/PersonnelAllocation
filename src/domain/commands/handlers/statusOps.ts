@@ -15,7 +15,7 @@ export class LeaveOfAbsenceOperation implements EditCommand {
 
   constructor(
     private readonly rowId:     number,
-    private readonly leaveFlag: string,
+    private readonly leaveOfAbsenceSign: '1',
     private readonly memo?:     string,
   ) {}
 
@@ -23,8 +23,8 @@ export class LeaveOfAbsenceOperation implements EditCommand {
     const row = ctx.allocationList.find(r => r.rowId === this.rowId)
     if (!row)        return fail(`行が見つかりません (rowId: ${this.rowId})`)
     if (!row.userId) return fail('人が配属されていない行に休職を設定できません')
-    if (row.leaveFlag) return fail('すでに休職中です')
-    if (!this.leaveFlag) return fail('休職フラグは必須です')
+    if (row.leaveOfAbsenceSign) return fail('すでに休職中です')
+    if (!this.leaveOfAbsenceSign) return fail('休職フラグは必須です')
     return ok()
   }
 
@@ -33,7 +33,7 @@ export class LeaveOfAbsenceOperation implements EditCommand {
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === this.rowId
-          ? { ...r, leaveFlag: this.leaveFlag, ...(this.memo !== undefined ? { memo: this.memo } : {}) }
+          ? { ...r, leaveOfAbsenceSign: this.leaveOfAbsenceSign, ...(this.memo !== undefined ? { memo: this.memo } : {}) }
           : r
       ),
       label: `休職: ${personName(row)}`,
@@ -51,7 +51,7 @@ export class ReturnFromLeaveOperation implements EditCommand {
   validate(ctx: DomainContext): ValidationResult {
     const row = ctx.allocationList.find(r => r.rowId === this.rowId)
     if (!row)          return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    if (!row.leaveFlag) return fail('休職中ではないため復職できません')
+    if (!row.leaveOfAbsenceSign) return fail('休職中ではないため復職できません')
     return ok()
   }
 
@@ -59,7 +59,7 @@ export class ReturnFromLeaveOperation implements EditCommand {
     const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId ? { ...r, leaveFlag: undefined } : r
+        r.rowId === this.rowId ? { ...r, leaveOfAbsenceSign: undefined } : r
       ),
       label: `復職: ${personName(row)}`,
     }

@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useChatStore } from '../../store/useChatStore'
 import { useStore } from '../../store/useStore'
 import { IS_MOCK_MODE, DEFAULT_MODELS, createAgentRunner } from '../../infrastructure/ai/chatServiceFactory'
+import { InMemoryTraceObserver } from '../../infrastructure/ai/aiTrace'
 import { useChatHandlers } from './useChatHandlers'
 import { useChatDrop } from './useChatDrop'
 import { AIMessageThread } from './AIMessageThread'
+import { AITracePanel }    from './AITracePanel'
 
 interface Props {
   onClose: () => void
@@ -15,10 +17,20 @@ export function AIChatDrawer({ onClose }: Props) {
   const allocationList = useStore(s => s.allocationList)
   const [input, setInput] = useState('')
 
+  const traceObserver = useMemo(() => new InMemoryTraceObserver(), [])
+  const [logCopied, setLogCopied] = useState(false)
+
   const agentRunner = useMemo(() => {
     const model = selectedModel || DEFAULT_MODELS[0] || ''
-    return model ? createAgentRunner(model) : null
-  }, [selectedModel])
+    return model ? createAgentRunner(model, traceObserver) : null
+  }, [selectedModel, traceObserver])
+
+  const handleCopyLog = useCallback(async () => {
+    if (!agentRunner) return
+    await navigator.clipboard.writeText(agentRunner.getSessionLog())
+    setLogCopied(true)
+    setTimeout(() => setLogCopied(false), 2000)
+  }, [agentRunner])
 
   const { widgetCallbacks, handleTextSubmit, isBusy, activeWidgetMsgId } =
     useChatHandlers({ agentRunner })
@@ -85,6 +97,15 @@ export function AIChatDrawer({ onClose }: Props) {
           </div>
         )}
       </div>
+
+      {/* Trace panel */}
+      {agentRunner && (
+        <AITracePanel
+          traceObserver={traceObserver}
+          onCopyLog={handleCopyLog}
+          logCopied={logCopied}
+        />
+      )}
 
       {/* Input area */}
       <div className="flex-shrink-0 border-t border-gray-200">

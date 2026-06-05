@@ -2,12 +2,13 @@ import { BEFORE_AFTER_FIELD_PAIRS } from '../allocationRow'
 import type { AllocationRow } from '../allocationRow'
 import type { RowContext } from '../context'
 import type { ValidationIssue } from './types'
-import { runRequired }    from './validateRequired'
-import { runFormat }      from './validateFormat'
-import { runRelated }     from './validateRelated'
-import { runExistence }   from './validateExistence'
-import { runKeys }        from './validateKeys'
-import { runConsistency } from './validateConsistency'
+import { runAssertRequired }        from './validateAssertRequired'
+import { runBasedOnFormat }         from './validateBasedOnFormat'
+import { runCorrelation }           from './validateCorrelation'
+import { runDataExistence }         from './validateDataExistence'
+import { runExclusivity }           from './validateExclusivity'
+import { runFilteredByEmployment }  from './validateFilteredByEmployment'
+import { runGlobalConsistency }     from './validateGlobalConsistency'
 import type { FieldStrictness } from '../optionStrictness'
 
 export type { ValidationLevel, ValidationIssue } from './types'
@@ -24,16 +25,17 @@ export function validateRow(
   const reasonEntry = codeLists.transferReasons.find(r => r.label === row.transferReason)
 
   if (reasonEntry?.noCheckRequired) {
-    return allocationList.length > 0 ? runKeys(row, allocationList) : []
+    return allocationList.length > 0 ? runExclusivity(row, allocationList) : []
   }
 
   return [
-    ...runRequired(row, codeLists),
-    ...runFormat(row),
-    ...runRelated(row, codeLists, overrides),
-    ...runExistence(row, orgs, codeLists, overrides),
-    ...(allocationList.length > 0 ? runKeys(row, allocationList) : []),
-    ...runConsistency(row, codeLists, changes),
+    ...runAssertRequired(row, codeLists),
+    ...runBasedOnFormat(row),
+    ...runCorrelation(row, codeLists),
+    ...runFilteredByEmployment(row, codeLists, overrides),
+    ...runDataExistence(row, orgs, codeLists, overrides),
+    ...(allocationList.length > 0 ? runExclusivity(row, allocationList) : []),
+    ...runGlobalConsistency(row, codeLists, changes),
   ]
 }
 

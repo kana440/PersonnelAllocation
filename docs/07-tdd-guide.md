@@ -151,7 +151,7 @@ runScenarios('F1: 出向受入のとき band は出向受入対応のものに�
     id: 'F1-1',
     desc: '出向受入 + 社員バンド → エラー',
     row: { employmentType: '出向受入社員', band: 'M4' },
-    // VALUE_RULES の制約チェックは guide モードではエラーにならない。
+    // FIELD_CONSTRAINTS の制約チェックは guide モードではエラーにならない。
     // strict() で明示的に strict モードにする。
     strictnessOverrides: strict('band'),
     expect: { errorFields: ['band'] },
@@ -170,7 +170,7 @@ runScenarios('F1: 出向受入のとき band は出向受入対応のものに�
 
 ### `strict()` ヘルパーについて
 
-`GLOBAL_DEFAULT_STRICTNESS = 'guide'` のため、VALUE_RULES の制約チェックはデフォルトでエラーを出さない（選択肢の分類のみ行う）。
+`GLOBAL_DEFAULT_STRICTNESS = 'guide'` のため、FIELD_CONSTRAINTS の制約チェックはデフォルトでエラーを出さない（選択肢の分類のみ行う）。
 
 エラー発生を期待するテストでは `strictnessOverrides: strict('fieldName')` を指定する。
 
@@ -179,7 +179,7 @@ runScenarios('F1: 出向受入のとき band は出向受入対応のものに�
 strictnessOverrides: strict('band')
 
 // 複数フィールド
-strictnessOverrides: strict('band', 'payGrade', 'leaveFlag')
+strictnessOverrides: strict('band', 'payGrade', 'leaveOfAbsenceSign')
 ```
 
 ---

@@ -20,7 +20,7 @@ export const FIELD_LABEL: Record<string, string> = Object.fromEntries(
 // Excel 列順でフィールドを表示
 export const EDITOR_FIELD_ORDER: readonly string[] = [
   'employmentType', 'concurrentType', 'concurrentReason',
-  'secondmentFromCompany', 'secondmentFromEmployeeNumber', 'leaveFlag',
+  'secondmentFromCompany', 'secondmentFromEmployeeNumber', 'leaveOfAbsenceSign',
   'positionCode', 'departmentCode',
   'businessUnit', 'division', 'subDivision', 'group', 'team',
   'officialPositionCode', 'localJobTitle', 'secondmentToCompany',
@@ -45,7 +45,7 @@ export const FLAG_OPTIONS = ['Y', 'N']
 // "1"/"0" チェックボックスフィールド（Excel データ入力規則と対応）
 export const BOOLEAN_1_FIELDS = new Set([
   'nonUnionAgreementFlag',
-  'leaveFlag',
+  'leaveOfAbsenceSign',
   'promotionSign',
   'payGradeChangeSign',
 ])

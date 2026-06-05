@@ -102,7 +102,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
       type: 'function',
       function: {
         name:        'getPersonDetail',
-        description: '指定した userId の従業員の詳細情報を取得する。before（発令前）と after（発令後/現在の変更状態）の両方を返す。promotionSign が "1" であれば昇降格フラグが立っている。',
+        description: '指定した userId の従業員の詳細情報を取得する。before（発令前）と after（発令後/現在の変更状態）の両方を返す。promotionSign が "1" であれば昇降格フラグ、leaveOfAbsenceSign が "1" であれば休職中。',
         parameters: {
           type: 'object',
           required: ['userId'],
@@ -190,6 +190,27 @@ const TOOL_ENTRIES: ToolEntry[] = [
     execute: () => aiTools.getValidationDiagnosis(),
   },
 
+  // ── Read: getFieldOptions ────────────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'getFieldOptions',
+        description: '指定した行・フィールドに入力できる有効な選択肢を返す。フィールドの値を変更する前に必ずこれで確認し、リスト外の値を設定しないこと。F1/F2/F3 の雇用タイプ制約も自動反映される。',
+        parameters: {
+          type: 'object',
+          required: ['rowId', 'field'],
+          properties: {
+            rowId: { type: 'number', description: '対象行の rowId' },
+            field: { type: 'string', description: 'フィールド名（例: band, payGrade, officialPositionCode, location）' },
+          },
+        },
+      },
+    },
+    execute: args => ({ options: aiTools.getFieldOptions(args.rowId as number, args.field as string) }),
+  },
+
   // ── Read: undo ───────────────────────────────────────────────────────────
   {
     kind: 'read',
@@ -273,7 +294,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
       type: 'function',
       function: {
         name:        'propose_field_edit',
-        description: '従業員の特定フィールドを変更することをユーザーに提案し、確認を得てから実行する。実行前に findPersons で userId を確認すること。',
+        description: '従業員の特定フィールドを変更することをユーザーに提案し、確認を得てから実行する。値を変更する前に getFieldOptions で有効な選択肢を確認すること。実行前に findPersons で userId を確認すること。',
         parameters: {
           type: 'object',
           required: ['userId', 'field', 'value'],
@@ -281,7 +302,12 @@ const TOOL_ENTRIES: ToolEntry[] = [
             userId: { type: 'string', description: 'ユーザー ID（sfPersonId）' },
             field: {
               type: 'string',
-              enum: ['localJobTitle', 'band', 'payGrade', 'officialPositionCode', 'transferReason'],
+              enum: [
+                'employmentType', 'band', 'payGrade', 'officialPositionCode', 'localJobTitle',
+                'jobFamily', 'jobType', 'location', 'costCenter',
+                'secondmentToCompany', 'secondmentFromCompany', 'secondmentFromEmployeeNumber',
+                'transferReason', 'concurrentReason', 'demotionReason', 'memo',
+              ],
               description: '変更するフィールド名',
             },
             value: { type: 'string', description: '新しい値（空文字で削除）' },
@@ -462,7 +488,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
       type: 'function',
       function: {
         name:        'propose_set_manager_position',
-        description: '上司ポジションコードをユーザーに提案し確認を得てから設定する。managerName も在席者の姓名から自動入力する。実行前に findPersons / getPersonRows で rowId と managerPositionCode（相手のポジションコード）を確認すること。',
+        description: '上司ポジションコードをユーザーに提案し確認を得てから設定する。managerName も在席者の姓名から自動入力する。実行前に findPersons で対象者の rowId を、findPersons で上司の positionCode を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId', 'managerPositionCode'],

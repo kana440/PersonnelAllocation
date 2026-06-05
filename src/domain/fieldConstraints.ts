@@ -1,4 +1,4 @@
-// VALUE_RULES — フィールドの許容値制約の単一定義
+// FIELD_CONSTRAINTS — フィールドの許容値制約の単一定義
 //
 // 以下の2箇所がここから導出される:
 //   - validateExistence.ts (D2系) / validateRelated.ts (C系・条件付き)
@@ -6,14 +6,14 @@
 //
 // バリデーション追加・変更・オプション変更は必ずここを確認すること。
 
-import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../masters/aggregate'
-import type { ValidationIssue } from './types'
-import type { FieldStrictness } from '../optionStrictness'
-import { resolveFieldStrictness } from '../optionStrictness'
-import { CONCURRENT_TYPES } from '../masters/concurrentType'
-import { UNION_MEMBER_CODE, UNION_MEMBER_CODES } from '../masters/unionMember'
-import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '../masters/discretionaryWork'
+import type { AllocationRow } from './allocationRow'
+import type { AllCodeLists } from './masters/aggregate'
+import type { ValidationIssue } from './validation/types'
+import type { FieldStrictness } from './optionStrictness'
+import { resolveFieldStrictness } from './optionStrictness'
+import { CONCURRENT_TYPES } from './masters/concurrentType'
+import { UNION_MEMBER_CODE, UNION_MEMBER_CODES } from './masters/unionMember'
+import { DISCRETIONARY_YES, DISCRETIONARY_NO } from './masters/discretionaryWork'
 
 // code・label どちらで格納されていても照合できるルックアップ
 export function findEmpType(cl: AllCodeLists, row: AllocationRow) {
@@ -49,7 +49,7 @@ export type ValueRule = SuggestionRule | ConstraintRule
 
 // ── ルール定義 ───────────────────────────────────────────────────────────────
 
-export const VALUE_RULES: ValueRule[] = [
+export const FIELD_CONSTRAINTS: ValueRule[] = [
 
   // ── 推奨値（選択肢あり・バリデーションなし）────────────────────────────────
   { kind: 'suggestion', field: 'transferReason',
@@ -201,7 +201,7 @@ export const VALUE_RULES: ValueRule[] = [
     source:  cl  => cl.payGrades.filter(e => e.isConcurrent).map(e => e.label),
     message: _   => '給与等級は兼務に対応する選択肢から選択してください' },
 
-  { kind: 'constraint', field: 'leaveFlag',
+  { kind: 'constraint', field: 'leaveOfAbsenceSign',
     when:    (row, cl) => !!findTransferReason(cl, row)?.concurrentCheckSign,
     source:  _   => ['0'],
     message: _   => '兼務の場合、休職フラグは設定できません' },
@@ -418,8 +418,8 @@ export function getEffectiveSource(
   row:       AllocationRow,
   codeLists: AllCodeLists,
 ): string[] | null {
-  const conditional = VALUE_RULES.find(r => r.field === field && r.when?.(row, codeLists))
+  const conditional = FIELD_CONSTRAINTS.find(r => r.field === field && r.when?.(row, codeLists))
   if (conditional) return conditional.source(codeLists, row)
-  const general = VALUE_RULES.find(r => r.field === field && !r.when)
+  const general = FIELD_CONSTRAINTS.find(r => r.field === field && !r.when)
   return general ? general.source(codeLists, row) : null
 }

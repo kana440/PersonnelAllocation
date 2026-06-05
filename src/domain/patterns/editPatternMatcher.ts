@@ -97,8 +97,8 @@ export function deriveEditPatterns(
   }
 
   // ── 人操作系 ──────────────────────────────────────────────────────────────
-  const prevLeave  = row.prevLeaveFlag as string | undefined
-  const afterLeave = row.leaveFlag     as string | undefined
+  const prevLeave  = row.prevLeaveOfAbsenceSign as string | undefined
+  const afterLeave = row.leaveOfAbsenceSign     as string | undefined
   if (!prevLeave && afterLeave)  active.add('leaveOfAbsence')
   if (prevLeave  && !afterLeave) active.add('returnFromLeave')
 

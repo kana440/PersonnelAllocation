@@ -110,9 +110,9 @@ runScenarios('F3: 雇用延長タイプのとき band・payGrade は雇用延長
 ])
 
 // ══════════════════════════════════════════════════════════════════════════════
-// F4: 兼務チェックサイン → payGrade は兼務対応のものに限定、leaveFlag は設定不可
+// F4: 兼務チェックサイン → payGrade は兼務対応のものに限定、leaveOfAbsenceSign は設定不可
 // ══════════════════════════════════════════════════════════════════════════════
-runScenarios('F4: 兼務申請区分のとき payGrade は兼務対応のもの・leaveFlag は設定不可', [
+runScenarios('F4: 兼務申請区分のとき payGrade は兼務対応のもの・leaveOfAbsenceSign は設定不可', [
   {
     id: 'F4-1', desc: '兼務 transferReason + 社員給与等級(G4) → payGrade エラー',
     row: { transferReason: '兼務', payGrade: 'G4' },
@@ -125,15 +125,15 @@ runScenarios('F4: 兼務申請区分のとき payGrade は兼務対応のもの�
     expect: { noErrorFields: ['payGrade'] },
   },
   {
-    id: 'F4-3', desc: '兼務 transferReason + leaveFlag 設定あり → エラー',
-    row: { transferReason: '兼務', leaveFlag: '1' },
-    strictnessOverrides: strict('leaveFlag'),
-    expect: { errorFields: ['leaveFlag'] },
+    id: 'F4-3', desc: '兼務 transferReason + leaveOfAbsenceSign 設定あり → エラー',
+    row: { transferReason: '兼務', leaveOfAbsenceSign: '1' },
+    strictnessOverrides: strict('leaveOfAbsenceSign'),
+    expect: { errorFields: ['leaveOfAbsenceSign'] },
   },
   {
-    id: 'F4-4', desc: '兼務 transferReason + leaveFlag=0 → エラーなし',
-    row: { transferReason: '兼務', leaveFlag: '0' },
-    expect: { noErrorFields: ['leaveFlag'] },
+    id: 'F4-4', desc: '兼務 transferReason + leaveOfAbsenceSign=0 → エラーなし',
+    row: { transferReason: '兼務', leaveOfAbsenceSign: '0' },
+    expect: { noErrorFields: ['leaveOfAbsenceSign'] },
   },
   {
     id: 'F4-5', desc: '通常 transferReason + 社員給与等級 → payGrade エラーなし（F4 非適用）',

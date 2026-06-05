@@ -34,7 +34,7 @@ function checkB4(row: AllocationRow): ValidationIssue[] {
   return [{ field: 'userId', level: 'error', message: 'ユーザーIDは半角数字で入力してください' }]
 }
 
-export function runFormat(row: AllocationRow): ValidationIssue[] {
+export function runBasedOnFormat(row: AllocationRow): ValidationIssue[] {
   return [
     ...checkB1(row),
     ...checkB2(row),
