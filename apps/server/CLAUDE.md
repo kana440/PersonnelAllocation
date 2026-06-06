@@ -23,7 +23,13 @@ src/
     auth.ts         ← /api/auth
     sessions.ts     ← /api/sessions
     submit.ts       ← /api/sessions/:id/submit
+    admin/
+      users.ts      ← /api/admin/users（ユーザー CRUD）
+      （新規管理機能はここに追加）
 ```
+
+管理画面 UI は `apps/web/src/components/admin/` に置く（別パッケージは作らない）。
+API ルートを追加したら、`apps/web/src/infrastructure/api/adminApi.ts` にクライアントメソッドも追加する。
 
 ## 認証 stub の使い方
 

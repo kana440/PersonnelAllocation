@@ -2,17 +2,21 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { secureHeaders } from 'hono/secure-headers'
 import authRoutes      from './routes/auth.ts'
 import sessionRoutes   from './routes/sessions.ts'
 import rowRoutes       from './routes/rows.ts'
 import submitRoutes    from './routes/submit.ts'
-import adminUserRoutes from './routes/admin/users.ts'
+import adminUserRoutes     from './routes/admin/users.ts'
+import adminSessionRoutes  from './routes/admin/sessions.ts'
+import adminPositionRoutes from './routes/admin/positions.ts'
 import { authMiddleware, requireRole } from './auth/stub.ts'
 import type { AppEnv } from './auth/stub.ts'
 
 const app = new Hono()
 
 app.use('*', logger())
+app.use('*', secureHeaders())
 app.use('*', cors({ origin: 'http://localhost:5173' })) // Vite dev server
 
 app.route('/api/auth',     authRoutes)
@@ -24,7 +28,9 @@ app.route('/api/sessions', submitRoutes)
 const admin = new Hono<AppEnv>()
 admin.use('*', authMiddleware)
 admin.use('*', requireRole('super_admin'))
-admin.route('/users', adminUserRoutes)
+admin.route('/users',     adminUserRoutes)
+admin.route('/sessions',  adminSessionRoutes)
+admin.route('/positions', adminPositionRoutes)
 app.route('/api/admin', admin)
 
 app.get('/', (c) => c.json({ message: 'PersonnelAllocation Server', status: 'ok' }))

@@ -67,15 +67,17 @@ CREATE TABLE IF NOT EXISTS notifications (
   sent_at      TEXT              -- NULL = 未送信
 );
 
--- ── デモ用初期データ ─────────────────────────────────────────────────────────────
-INSERT OR IGNORE INTO users (id, name, email, role) VALUES
-  ('user-admin',  '取りまとめ 太郎', 'admin@example.com',   'super_admin'),
-  ('user-dept-a', '部門A 担当',      'dept-a@example.com',  'admin'),
-  ('user-dept-b', '部門B 担当',      'dept-b@example.com',  'admin'),
-  ('user-lv3',    '3階層 専任',      'lv3@example.com',     'assignee');
+-- ── ポジションプール（SFコード台帳） ─────────────────────────────────────────────
+-- SF で払い出された正式コード（P########）を管理するプール。
+-- AllocationList との紐付けは行わず、取得者・取得日・備考のみ保持する。
+CREATE TABLE IF NOT EXISTS positions (
+  code          TEXT PRIMARY KEY,                       -- P########
+  status        TEXT NOT NULL DEFAULT 'available',      -- available | in_use | retired
+  acquired_by   TEXT,                                   -- 取得者（自由テキスト）
+  acquired_at   TEXT,                                   -- 取得日 (ISO date)
+  notes         TEXT,                                   -- 備考
+  registered_by TEXT REFERENCES users(id),              -- プールに登録した管理者
+  registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
-INSERT OR IGNORE INTO user_access_policies (user_id, org_level_min, org_codes) VALUES
-  ('user-admin',  NULL, NULL),       -- 全行アクセス可
-  ('user-dept-a', NULL, '["A01","A02","A03"]'),
-  ('user-dept-b', NULL, '["B01","B02"]'),
-  ('user-lv3',    3,    NULL);       -- 階層3以上のみ

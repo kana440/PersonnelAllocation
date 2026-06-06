@@ -1,11 +1,27 @@
 import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import { getDb } from '../../db/sqlite.ts'
 import type { UserRole, AppEnv } from '../../auth/stub.ts'
 import { randomUUID } from 'crypto'
 
 const app = new Hono<AppEnv>()
 
-// ── 型定義 ─────────────────────────────────────────────────────────────────
+// ── スキーマ ────────────────────────────────────────────────────
+
+const VALID_ROLES = ['super_admin', 'admin', 'assignee'] as const
+
+const userBodySchema = z.object({
+  name:        z.string().min(1, '名前は必須です'),
+  email:       z.string().email('有効なメールアドレスを入力してください'),
+  role:        z.enum(VALID_ROLES),
+  orgLevelMin: z.number().int().positive().nullable().optional(),
+  orgCodes:    z.array(z.string()).nullable().optional(),
+})
+
+const userUpdateSchema = userBodySchema.partial()
+
+// ── 型定義 ──────────────────────────────────────────────────────
 
 export interface AdminUser {
   id:    string
@@ -18,17 +34,7 @@ export interface AdminUser {
   }
 }
 
-interface UserBody {
-  name:         string
-  email:        string
-  role:         UserRole
-  orgLevelMin?: number | null
-  orgCodes?:    string[] | null
-}
-
-const VALID_ROLES: UserRole[] = ['super_admin', 'admin', 'assignee']
-
-// ── ヘルパー ────────────────────────────────────────────────────────────────
+// ── ヘルパー ────────────────────────────────────────────────────
 
 function fetchUser(id: string): AdminUser | null {
   const db = getDb()
@@ -64,9 +70,8 @@ function upsertPolicy(userId: string, orgLevelMin: number | null, orgCodes: stri
   }
 }
 
-// ── ルート ─────────────────────────────────────────────────────────────────
+// ── ルート ──────────────────────────────────────────────────────
 
-// ユーザー一覧
 app.get('/', (c) => {
   const db = getDb()
   const users = db.prepare('SELECT id, name, email, role FROM users ORDER BY name').all() as
@@ -87,41 +92,29 @@ app.get('/', (c) => {
   return c.json(result)
 })
 
-// ユーザー作成
-app.post('/', async (c) => {
-  const body = await c.req.json<UserBody>()
-  const { name, email, role, orgLevelMin = null, orgCodes = null } = body
-
-  if (!name || !email) return c.json({ error: 'name と email は必須です' }, 400)
-  if (!VALID_ROLES.includes(role)) return c.json({ error: '不正なロールです' }, 400)
-
+app.post('/', zValidator('json', userBodySchema), (c) => {
+  const { name, email, role, orgLevelMin = null, orgCodes = null } = c.req.valid('json')
   const db = getDb()
   const id = randomUUID()
-
   db.prepare('INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)').run(id, name, email, role)
   upsertPolicy(id, orgLevelMin ?? null, orgCodes ?? null)
-
   return c.json(fetchUser(id)!, 201)
 })
 
-// ユーザー詳細
 app.get('/:id', (c) => {
   const user = fetchUser(c.req.param('id'))
   if (!user) return c.json({ error: 'Not found' }, 404)
   return c.json(user)
 })
 
-// ユーザー更新
-app.put('/:id', async (c) => {
+app.put('/:id', zValidator('json', userUpdateSchema), async (c) => {
   const id = c.req.param('id')
-  const body = await c.req.json<Partial<UserBody>>()
+  const body = c.req.valid('json')
   const { name, email, role, orgLevelMin, orgCodes } = body
 
   const db = getDb()
   const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id)
   if (!existing) return c.json({ error: 'Not found' }, 404)
-
-  if (role && !VALID_ROLES.includes(role)) return c.json({ error: '不正なロールです' }, 400)
 
   if (name || email || role) {
     const sets: string[] = []
@@ -145,14 +138,12 @@ app.put('/:id', async (c) => {
   return c.json(fetchUser(id)!)
 })
 
-// ユーザー削除
 app.delete('/:id', (c) => {
   const id = c.req.param('id')
   const db = getDb()
   const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id)
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
-  // セッション作成者として参照されている場合は削除不可
   const inUse = db.prepare('SELECT id FROM sessions WHERE created_by = ? LIMIT 1').get(id)
   if (inUse) return c.json({ error: 'このユーザーはセッションで使用中のため削除できません' }, 409)
 

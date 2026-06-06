@@ -35,15 +35,16 @@ repo root/
     domain/src/          ← ドメイン層（外部依存ゼロ。Zod のみ可）
                             apps/web・apps/server の両方から @personnel/domain として参照
   apps/
-    web/src/             ← React Web UI（STEP1 本体）
+    web/src/             ← React Web UI（STEP1 本体 + 管理画面）
       application/       ←   HRApplicationService・aiTools（アプリケーション層）
-      infrastructure/    ←   Excel・AI・LocalStorage 実装（インフラ層）
+      infrastructure/    ←   Excel・AI・LocalStorage 実装・adminApi（インフラ層）
       components/        ←   React コンポーネント（UI 層）
+        admin/           ←     管理画面（AdminView・UserTable・UserEditModal）
       store/             ←   Zustand ストア（UI 層）
       ports/             ←   インターフェース定義
     server/src/          ← バックエンド（STEP2 デモ用・Hono + SQLite）
       db/                ←   SQLite スキーマ・接続
-      routes/            ←   API ルート（sessions / rows / submit）
+      routes/            ←   API ルート（sessions / rows / submit / admin/*）
       auth/              ←   認証スタブ（X-User-Id ヘッダー切り替え）
   docs/                  ← 設計ドキュメント
   specs/                 ← 実装仕様
@@ -255,6 +256,32 @@ LeftSidebar（タブ）
 - 担当者ロール（`capabilities.rowScope !== null`）: 組織パネルタブがデフォルト
 - 管理者ロール（`capabilities.rowScope === null`）: 組織・人物タブがデフォルト
 - 組織パネルの状態は `canvasLayoutStore` が管理し、Excel 読み込み時にリセットされる
+
+---
+
+## 管理画面の配置方針
+
+**管理画面 UI は `apps/web` に統合する**。`apps/admin` などの別パッケージは作らない。
+
+- React・Tailwind・共通コンポーネントをそのまま再利用できる
+- 別パッケージにすると Vite 設定・tsconfig・依存が全部複製になり、維持コストが見合わない
+- `VITE_BACKEND_MODE=local-server` の Feature Flag で出し分けるため、別デプロイ単位にする必要もない
+
+```
+apps/web/src/components/admin/   ← 管理画面コンポーネントはここ
+  AdminView/
+    index.tsx         ← オーケストレーター（タブ切り替え・一覧取得）
+    UserTable.tsx     ← ユーザー一覧テーブル
+    UserEditModal.tsx ← ユーザー追加・編集モーダル
+    ...（画面が増えたらここに追加）
+apps/web/src/infrastructure/api/
+  adminApi.ts         ← 管理 API クライアント（apps/server の /api/admin/* を呼ぶ）
+```
+
+**新しい管理画面を追加するとき**:
+1. `apps/server/src/routes/admin/` に Hono ルートを追加
+2. `apps/web/src/infrastructure/api/adminApi.ts` に API クライアントメソッドを追加
+3. `apps/web/src/components/admin/AdminView/` にコンポーネントを追加し、`AdminView` のタブに登録
 
 ---
 
