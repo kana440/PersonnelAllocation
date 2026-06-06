@@ -4,19 +4,23 @@
 
 依存の向きは**外側 → 内側のみ**。ドメイン層は何にも依存しない。
 
+物理配置は**モノレポ**（`apps/web/`, `apps/server/`, `packages/domain/`）に分離されているが、
+論理的な依存の向きはクリーンアーキテクチャの層構造に従う。
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ UI 層              src/components/  src/store/                   │
+│ UI 層         apps/web/src/components/  apps/web/src/store/      │
 │  React コンポーネント + Zustand ストア                           │
 │  ・状態は useStore 経由でのみ参照                                │
 │  ・ドメインロジックを直接書かない                                │
 ├──────────────────────────────────────────────────────────────────┤
-│ アプリケーション層  src/application/                             │
+│ アプリケーション層  apps/web/src/application/                    │
 │  HRApplicationService   — Single Source of Truth                │
 │  aiTools.ts             — AI 向け Tool 関数群                   │
 │  chatSession.ts         — LLM チャットセッション管理             │
 ├──────────────────────────────────────────────────────────────────┤
-│ ドメイン層         src/domain/         ← 依存ゼロ・テスト最優先 │
+│ ドメイン層    packages/domain/src/     ← 依存ゼロ・テスト最優先 │
+│  （apps/web・apps/server 双方が @personnel/domain として参照）   │
 │  allocationRow.ts    — AllocationRow 型, FIELD_METADATA          │
 │  schemas.ts          — Zod スキーマ（Organization, Person …）   │
 │  context.ts          — DomainContext・RowContext（共通コンテキスト）│
@@ -28,7 +32,7 @@
 │  derivation/         — フィールド自動導出（純粋関数）            │
 │  csvImport/          — Excel/CSV 解釈（純粋関数）               │
 ├──────────────────────────────────────────────────────────────────┤
-│ インフラ層         src/infrastructure/                           │
+│ インフラ層    apps/web/src/infrastructure/  （将来: apps/server）│
 │  excel/exceljs/exporter.ts  — Excel エクスポート（ExcelJS）     │
 │  excel/xlsx/exporter.ts     — Excel エクスポート（xlsx）        │
 │  excel/engine.ts            — エクスポーター選択                │
@@ -38,13 +42,19 @@
 │  ai/agentRunner.ts          — Claude API Tool Use ループ        │
 │  ai/mockChatService.ts      — AI チャットモック                 │
 │  ai/scenarios/              — 会話シナリオ（8種）               │
+│                                                                  │
+│  apps/server/src/  （STEP2 デモ用バックエンド）                  │
+│  db/sqlite.ts       — SQLite 接続（将来: Aurora アダプタに差替） │
+│  routes/            — Hono REST API                             │
+│  auth/stub.ts       — 認証スタブ（将来: SSO アダプタに差替）    │
 ├──────────────────────────────────────────────────────────────────┤
-│ ポート             src/ports/                                    │
+│ ポート        apps/web/src/ports/                                │
 │  IAllocationDataSource — データ読み込み抽象                      │
 │  IAllocationExporter   — データ書き出し抽象                     │
 │  ICodeListSource       — コードリスト読み込み抽象                │
 │  IAIChatService        — AI チャット抽象                        │
-│  （将来の SF アダプター・AI アダプターはここを実装する）         │
+│  INotificationPort     — 通知抽象（将来実装）                   │
+│  IAuthPort             — 認証抽象（将来実装）                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 

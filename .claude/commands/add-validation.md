@@ -10,7 +10,7 @@ $ARGUMENTS
 1. CLAUDE.md を読む
 2. specs/00-cross-cutting.md の「B. バリデーションルールを追加・変更するとき」を読む
 3. specs/G2-domain/02-validation-rules.md を読む
-4. src/domain/validation/validateRow.ts を読む
+4. packages/domain/src/validation/validateRow.ts を読む
 
 ### 2. 影響範囲の確認（B 列の「必須」項目）
 5. 実装するルールが AI プロンプトに記載が必要か確認（specs/G4-ai/02-system-prompt-rules.md）
@@ -19,7 +19,7 @@ $ARGUMENTS
 6. 引数で指定されたルール番号のバリデーションを実装する
 7. 既存の `validateXxx` 関数パターンに合わせて純粋関数で実装する
 8. `validateRow()` の return 配列に追加する
-9. `npx tsc --noEmit` を実行し、型エラーがあれば修正する
+9. `cd apps/web && npx tsc --noEmit` を実行し、型エラーがあれば修正する
 
 ### 4. ドキュメント更新
 10. specs/G2-domain/02-validation-rules.md の該当ルールの実装状況を ✗ → ✓ に更新する

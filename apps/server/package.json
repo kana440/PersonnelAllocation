@@ -1,0 +1,24 @@
+{
+  "name": "@personnel/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.4",
+    "@personnel/domain": "*",
+    "better-sqlite3": "^12.10.0",
+    "hono": "^4.7.11",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.2",
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.3"
+  }
+}

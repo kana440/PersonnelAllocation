@@ -28,3 +28,8 @@ npm-debug.log*
 
 # Sample data (contains real data — do not commit)
 public/.local/
+
+# SQLite local database
+apps/server/data/*.db
+apps/server/data/*.db-shm
+apps/server/data/*.db-wal

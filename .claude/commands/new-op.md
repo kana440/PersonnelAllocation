@@ -2,12 +2,12 @@
 
 引数: 操作名（例: `/new-op TransferPerson`）
 
-CLAUDE.md の IDomainOperation パターンに従い、以下を生成する:
+CLAUDE.md の EditCommand パターンに従い、以下を生成する:
 
-1. `src/domain/operation/handlers/<name>.ts` — validate + apply の実装スケルトン
-2. `src/application/aiTools.ts` への追加コメント（AIに公開する場合）
+1. `packages/domain/src/commands/handlers/<name>.ts` — validate + apply の実装スケルトン
+2. `packages/domain/src/patterns/editPatterns.ts` への新 EditPattern 追加
+3. `apps/web/src/application/aiTools.ts` への追加コメント（AI に公開する場合）
 
-生成前に、既存の操作ハンドラ（positionOps.ts、directEdit.ts、moveRowsToOrg.ts）を参照して
-パターンの整合性を確認すること。
+生成前に、既存の操作ハンドラ（`packages/domain/src/commands/handlers/positionOps.ts`、`directEdit.ts`、`moveRowsToOrg.ts`）を参照してパターンの整合性を確認すること。
 
-生成後に `npx tsc --noEmit` で型チェックを実行する。
+生成後に `cd apps/web && npx tsc --noEmit` で型チェックを実行する。

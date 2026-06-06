@@ -2,37 +2,19 @@
   "name": "personnel-allocation",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "depcruise": "depcruise --config .dependency-cruiser.cjs src",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:context": "node scripts/test-context.js",
-    "test:save": "node scripts/save-test.js"
-  },
-  "dependencies": {
-    "exceljs": "^4.4.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "xlsx": "^0.18.5",
-    "zod": "^4.4.3",
-    "zustand": "^4.5.2"
-  },
-  "devDependencies": {
-    "@types/node": "^25.9.1",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^6.0.2",
-    "autoprefixer": "^10.4.19",
-    "dependency-cruiser": "^17.4.2",
-    "https-proxy-agent": "^9.0.0",
-    "postcss": "^8.4.39",
-    "tailwindcss": "^3.4.4",
-    "typescript": "^5.4.5",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.7"
+    "dev": "npm run dev --workspace=apps/web",
+    "dev:server": "npm run dev --workspace=apps/server",
+    "build": "npm run build --workspace=apps/web",
+    "test": "npm run test --workspace=apps/web",
+    "depcruise": "npm run depcruise --workspace=apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck:web": "npm run typecheck --workspace=apps/web",
+    "typecheck:server": "npm run typecheck --workspace=apps/server",
+    "typecheck:domain": "npm run typecheck --workspace=packages/domain"
   }
 }

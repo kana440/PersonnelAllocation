@@ -1,52 +1,95 @@
 # CLAUDE.md — PersonnelAllocation プロジェクト
 
+> **ワークスペース別 CLAUDE.md**（各ディレクトリで作業するときは合わせて参照）
+> - [`packages/domain/CLAUDE.md`](packages/domain/CLAUDE.md) — EditCommand 実装・FIELD_CONSTRAINTS・型チェック
+> - [`apps/web/CLAUDE.md`](apps/web/CLAUDE.md) — コンポーネントパターン・状態管理・Feature Flags・テスト
+> - [`apps/server/CLAUDE.md`](apps/server/CLAUDE.md) — ルートパターン・認証 stub・DBスキーマ規約
+
 ## コマンド
 
 ```bash
-npm run dev        # 開発サーバー起動
-npm run build      # 本番ビルド
-npx tsc --noEmit   # 型チェック（テストの代わり）
-npx depcruise src --config .dependency-cruiser.js  # アーキテクチャ境界チェック
+# Web アプリ（STEP1 本体）
+npm run dev               # Vite 開発サーバー起動
+npm run build             # 本番ビルド
+npm run test              # vitest（apps/web 内）
+
+# サーバー（STEP2 デモ用）
+npm run dev:server        # Hono + SQLite サーバー起動（port 3000）
+
+# 型チェック
+cd apps/web  && npx tsc --noEmit   # Web アプリの型チェック
+cd apps/server && npx tsc --noEmit # サーバーの型チェック
+cd packages/domain && npx tsc --noEmit  # ドメイン層単独の型チェック
+
+# アーキテクチャ境界チェック（apps/web から実行）
+cd apps/web && npx depcruise src --config .dependency-cruiser.cjs
 ```
+
+---
+
+## モノレポ構成
+
+```
+repo root/
+  packages/
+    domain/src/          ← ドメイン層（外部依存ゼロ。Zod のみ可）
+                            apps/web・apps/server の両方から @personnel/domain として参照
+  apps/
+    web/src/             ← React Web UI（STEP1 本体）
+      application/       ←   HRApplicationService・aiTools（アプリケーション層）
+      infrastructure/    ←   Excel・AI・LocalStorage 実装（インフラ層）
+      components/        ←   React コンポーネント（UI 層）
+      store/             ←   Zustand ストア（UI 層）
+      ports/             ←   インターフェース定義
+    server/src/          ← バックエンド（STEP2 デモ用・Hono + SQLite）
+      db/                ←   SQLite スキーマ・接続
+      routes/            ←   API ルート（sessions / rows / submit）
+      auth/              ←   認証スタブ（X-User-Id ヘッダー切り替え）
+  docs/                  ← 設計ドキュメント
+  specs/                 ← 実装仕様
+```
+
+**import パス**: `packages/domain/src/` のコードは `@personnel/domain/xxx` としてインポートする。
 
 ---
 
 ## アーキテクチャ：依存の向きは外→内のみ
 
 ```
-src/components/  src/store/      ← UI層（Reactコンポーネント + Zustand）
-src/application/                 ← アプリケーション層
-  importMerge.ts                 ←   インポートマージロジック
-  setup/afterInit.ts             ←   初期化ロジック（Excel 読込後の org マッピング等）
-src/infrastructure/              ← インフラ層（Excel・AI・LocalStorage）
-src/domain/                      ← ドメイン層（外部依存ゼロ。Zodのみ可）
-  allocationRow.ts               ← AllocationRow 型・FIELD_METADATA
-  context.ts                     ← DomainContext・RowContext（全ドメイン処理の共通コンテキスト）
-  masters/                       ← マスタデータ型定義・集約（AllCodeLists）
-  fieldConstraints.ts            ← FIELD_CONSTRAINTS（許容値制約の単一定義ソース）
-  validation/                    ← バリデーション A〜G・W 系（純粋関数）
-  commands/                      ← 業務操作（EditCommand・OperationDef・シナリオ）
-    types.ts                     ←   EditCommand インターフェース・DomainContext 再エクスポート
-    handlers/                    ←   EditCommand 実装群
-    defs/                        ←   OperationDef 宣言群（メニュー条件・フォーム定義）
-    scenarios.ts                 ←   複合操作（EditScenario）
-    helpers.ts                   ←   isRegularEmployee 等の判定ヘルパー
-  patterns/                      ← 変更パターン分類・検出
-    editPatterns.ts              ←   EditPattern 定数（23種）
-    editPatternMatcher.ts        ←   差分からの EditPattern 検出
-    changeDetection.ts           ←   before/after 差分検出（RowChanges）
-    groupPatternMatcher.ts       ←   グループ行（出向2行等）のパターン検出
-  choices/                       ← UI選択肢・表示用ユーティリティ
-    index.ts                     ←   選択肢の生成・絞り込み（FIELD_CONSTRAINTS から導出）
-    orgTree.ts                   ←   組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
-    rows.ts                      ←   行・人物の表示用変換（buildOrgMap・derivePersons）
-    relevantOrgs.ts              ←   組織ピッカー候補の絞り込み
-  derivation/                    ← フィールド自動導出（組織・上司名・昇降格）
-  csvImport/                     ← Excel/CSV 解釈（純粋関数）
-src/ports/                       ← インターフェース定義
+apps/web/src/components/  apps/web/src/store/   ← UI 層
+apps/web/src/application/                        ← アプリケーション層
+  importMerge.ts
+  setup/afterInit.ts
+apps/web/src/infrastructure/                     ← インフラ層（Excel・AI・LocalStorage）
+apps/web/src/ports/                              ← インターフェース定義
+
+packages/domain/src/                             ← ドメイン層（外部依存ゼロ。Zod のみ可）
+  allocationRow.ts        ← AllocationRow 型・FIELD_METADATA
+  context.ts              ← DomainContext・RowContext（全ドメイン処理の共通コンテキスト）
+  masters/                ← マスタデータ型定義・集約（AllCodeLists）
+  fieldConstraints.ts     ← FIELD_CONSTRAINTS（許容値制約の単一定義ソース）
+  validation/             ← バリデーション A〜G・W 系（純粋関数）
+  commands/               ← 業務操作（EditCommand・OperationDef・シナリオ）
+    types.ts              ←   EditCommand インターフェース・DomainContext 再エクスポート
+    handlers/             ←   EditCommand 実装群
+    defs/                 ←   OperationDef 宣言群（メニュー条件・フォーム定義）
+    scenarios.ts          ←   複合操作（EditScenario）
+    helpers.ts            ←   isRegularEmployee 等の判定ヘルパー
+  patterns/               ← 変更パターン分類・検出
+    editPatterns.ts       ←   EditPattern 定数（23種）
+    editPatternMatcher.ts ←   差分からの EditPattern 検出
+    changeDetection.ts    ←   before/after 差分検出（RowChanges）
+    groupPatternMatcher.ts ←  グループ行（出向2行等）のパターン検出
+  choices/                ← UI 選択肢・表示用ユーティリティ
+    index.ts              ←   選択肢の生成・絞り込み（FIELD_CONSTRAINTS から導出）
+    orgTree.ts            ←   組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
+    rows.ts               ←   行・人物の表示用変換（buildOrgMap・derivePersons）
+    relevantOrgs.ts       ←   組織ピッカー候補の絞り込み
+  derivation/             ← フィールド自動導出（組織・上司名・昇降格）
+  csvImport/              ← Excel/CSV 解釈（純粋関数）
 ```
 
-**絶対に守るルール**: `src/domain/` は `src/application/`・`src/components/` をインポートしない。
+**絶対に守るルール**: `packages/domain/src/` は `apps/web/` や `apps/server/` をインポートしない。
 
 ---
 
@@ -58,10 +101,10 @@ src/ports/                       ← インターフェース定義
 
 | 名称 | コード上の実体 | 意味 |
 |---|---|---|
-| `EditCommand` | `src/domain/commands/types.ts` | 単行の原子操作。UndoStack 差分単位 |
-| `EditScenario` | `src/domain/commands/scenarios.ts` | 複合操作。1件でも複数件でも同じ構造 |
-| `EditPattern` | `src/domain/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
-| `OperationDef` | `src/domain/commands/defs/` | メニュー表示条件・フォーム定義・初期値計算 |
+| `EditCommand` | `packages/domain/src/commands/types.ts` | 単行の原子操作。UndoStack 差分単位 |
+| `EditScenario` | `packages/domain/src/commands/scenarios.ts` | 複合操作。1件でも複数件でも同じ構造 |
+| `EditPattern` | `packages/domain/src/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
+| `OperationDef` | `packages/domain/src/commands/defs/` | メニュー表示条件・フォーム定義・初期値計算 |
 
 設計思想の詳細は `docs/05-operation-framework.md` を参照。
 
@@ -70,7 +113,7 @@ src/ports/                       ← インターフェース定義
 新しい業務変更は必ず `EditCommand` として実装する。直接 `allocationList` を変更しない。
 
 ```typescript
-// src/domain/commands/handlers/myOp.ts
+// packages/domain/src/commands/handlers/myOp.ts
 export class MyOperation implements EditCommand {
   readonly kind = 'myOperation'
   constructor(private readonly rowId: number) {}
@@ -100,22 +143,22 @@ appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC]
 ```
 
 **新しい操作を追加するときの手順**（必ずこの順序で）:
-1. `EditPattern` に新ラベルを追加（`src/domain/patterns/editPatterns.ts`）
-2. `EditCommand` の実装を追加（`src/domain/commands/handlers/`）
+1. `EditPattern` に新ラベルを追加（`packages/domain/src/patterns/editPatterns.ts`）
+2. `EditCommand` の実装を追加（`packages/domain/src/commands/handlers/`）
 3. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-4. `OperationDef` を追加（`src/domain/commands/defs/`）して `ALL_OPERATION_DEFS` に登録
-5. 複数行にまたがる操作なら `EditScenario` を組み立てる（`commands/scenarios.ts`）
+4. `OperationDef` を追加（`packages/domain/src/commands/defs/`）して `ALL_OPERATION_DEFS` に登録
+5. 複数行にまたがる操作なら `EditScenario` を組み立てる（`packages/domain/src/commands/scenarios.ts`）
 
 手順 3 を省略すると Excel 後方互換のリストア保証が崩れる。
 
-既存の実装例: `src/domain/commands/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
+既存の実装例: `packages/domain/src/commands/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
 TDD ガイド: `docs/07-tdd-guide.md`
 
 ---
 
 ## 中心データ型: AllocationRow
 
-`src/domain/allocationRow.ts` が全フィールドを定義。Excel の 1 行 ≒ 1 レコード。
+`packages/domain/src/allocationRow.ts` が全フィールドを定義。Excel の 1 行 ≒ 1 レコード。
 
 **重要なフィールド**:
 
@@ -140,7 +183,7 @@ TDD ガイド: `docs/07-tdd-guide.md`
 
 ## Undo/Redo の仕組み
 
-`src/application/UndoStack.ts` が差分管理（全スナップショットではなく変更行のみ保持）。
+`apps/web/src/application/UndoStack.ts` が差分管理（全スナップショットではなく変更行のみ保持）。
 
 ```
 executeOperation(op)
@@ -156,7 +199,7 @@ executeOperation(op)
 
 ## 状態管理
 
-**`HRApplicationService`**（`src/application/`）が唯一の真の状態（Single Source of Truth）。
+**`HRApplicationService`**（`apps/web/src/application/`）が唯一の真の状態（Single Source of Truth）。
 
 - `appService.executeOperation(op)` — Undo 対象の操作実行
 - `appService.saveRow(rowId, changes)` — フィールド直接編集（`DirectEditOperation` に委譲）
@@ -165,20 +208,20 @@ executeOperation(op)
 
 `useStore` / `useScopedStore` 経由で UI が subscribe する。**UI コンポーネントから `appService` を直接参照しない**（`OrgOperationView` など一部例外あり）。
 
-**`canvasLayoutStore`**（`src/store/canvasLayoutStore.ts`）はキャンバスレイアウトの UI 状態（組織パネルの一覧・並び順）を管理する独立した Zustand ストア。`HRApplicationService` の Undo 対象外。Excel 読み込み時・セッションリセット時に自動クリアされる。
+**`canvasLayoutStore`**（`apps/web/src/store/canvasLayoutStore.ts`）はキャンバスレイアウトの UI 状態（組織パネルの一覧・並び順）を管理する独立した Zustand ストア。`HRApplicationService` の Undo 対象外。Excel 読み込み時・セッションリセット時に自動クリアされる。
 
 ---
 
 ## AI ツール
 
-`src/application/aiTools.ts` が AI から呼べる関数群。新しい操作を AI に公開するときはここに追加し、`HRApplicationService` の既存メソッドに委譲する。ロジックを重複して書かない。
+`apps/web/src/application/aiTools.ts` が AI から呼べる関数群。新しい操作を AI に公開するときはここに追加し、`HRApplicationService` の既存メソッドに委譲する。ロジックを重複して書かない。
 
 **レビュー系ツール**（read-only）:
 - `getReviewSummary()` — 変更種別ごとの件数 + バリデーション問題件数
 - `getChangedPersons({ kinds? })` — 変更ありの人物リスト。変更種別でフィルタ可能
 - `getValidationIssues({ level? })` — バリデーション問題の一覧。`error` / `warning` でフィルタ可能
 
-シナリオは `src/infrastructure/ai/scenarios/`（9種）。レビュー系は `reviewSummary.ts`。
+シナリオは `apps/web/src/infrastructure/ai/scenarios/`（9種）。レビュー系は `reviewSummary.ts`。
 
 ---
 
@@ -196,11 +239,11 @@ components/foo/
 ```
 
 **OrgTreePanel パターン**: レビューエリアで検索＋組織ツリーを使うときは
-`src/components/review/components/OrgTreePanel.tsx` を再利用する。
+`apps/web/src/components/review/components/OrgTreePanel.tsx` を再利用する。
 コピーしてローカルに書かない。
 
 **OrgPickerModal パターン**: 組織をモーダルで選択させるときは
-`src/components/common/OrgPickerModal` を使う。階層ツリー表示・検索・追加済み表示を統一提供する。
+`apps/web/src/components/common/OrgPickerModal` を使う。階層ツリー表示・検索・追加済み表示を統一提供する。
 インラインのドロップダウンで代替しない。
 
 **左サイドバー構造**:
@@ -217,7 +260,7 @@ LeftSidebar（タブ）
 
 ## 値制約・選択肢の追加方法（FIELD_CONSTRAINTS）
 
-`src/domain/fieldConstraints.ts` がフィールドの許容値制約の**単一定義ソース**。
+`packages/domain/src/fieldConstraints.ts` がフィールドの許容値制約の**単一定義ソース**。
 バリデーション（D2系・C4系・F系）とオプション絞り込みの両方がここから自動導出される。
 
 ```typescript
@@ -231,8 +274,6 @@ LeftSidebar（タブ）
   message: _ => '役職は有効な選択肢から選択してください' }
 
 // 条件付き制約（when が true のとき source に絞る）
-// when は (row, codeLists) => boolean
-// source は (codeLists, row?) => string[]
 { kind: 'constraint', field: 'band',
   when: (row, cl) => !!cl.employmentTypes.find(e => e.label === row.employmentType)?.isOutsourceAcceptance,
   source: cl => cl.jobLevels.filter(e => e.isOutsourceAcceptance).map(e => e.label),
@@ -250,7 +291,8 @@ LeftSidebar（タブ）
 
 ## やってはいけないこと
 
-- `src/domain/` 内で `appService` / `useStore` / React を import する
+- `packages/domain/src/` 内で `appService` / `useStore` / React を import する
+- `packages/domain/src/` 内で `apps/web/` や `apps/server/` のコードを import する
 - `allocationList` を直接 `push` / `splice` する（必ず `executeOperation` 経由）
 - `prevXxx` フィールドを操作中に書き換える（before 状態は不変）
 - `positionCode` が `_pos_` 始まりかどうかチェックせず Excel 出力する
@@ -286,11 +328,6 @@ LeftSidebar（タブ）
 
 **スコープ概念の廃止**: `scopeOrgId` / `setScopeWithMapping` ベースのスコープは担当者（`assignee`）フィールドに置き換わる。詳細は `specs/G6-workflow/01-assignee-workflow.md` を参照。
 
-**これが意味すること（実装上の注意）**:
-
-- after の初期化は「before をそのままコピー」では不可。**組織継承マッピング**を経由する必要がある
-- 上司ポジション欄は組織担当が氏名フリーテキストで記入 → マージ後に取りまとめ担当が `managerPositionCode` を補完する
-
 ---
 
 ## 実装仕様（specs/）
@@ -306,13 +343,17 @@ LeftSidebar（タブ）
 | `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
 | `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |
 | `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）** | `01-assignee-workflow.md` |
+| `specs/G7-server/` | サーバー移行仕様（Phase 1 〜 3） | `01-api-spec.md`（未作成） |
 
 ### specを読んで実装するときの手順
 
 1. `CLAUDE.md`（このファイル）を読む
 2. 対象の spec ファイルを読む（G1 → G2 → G3 の順が依存関係に沿っている）
 3. 実装する
-4. `npx tsc --noEmit` で型チェック
+   - ドメイン変更 → `packages/domain/src/` を編集
+   - UI 変更 → `apps/web/src/` を編集
+   - サーバー変更 → `apps/server/src/` を編集
+4. 型チェック（該当 workspace で `npx tsc --noEmit`）
 5. specファイルの実装状況（✗ → ✓）を更新する
 
 ### 未確認事項の扱い
