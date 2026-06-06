@@ -17,7 +17,7 @@ const BASE_SYSTEM_PROMPT =
   '- 役職変更（「課長にして」等）は propose_change_position を使う。propose_field_edit は補足情報の編集のみ。\n' +
   '- 組織を指定するときは findOrgs で orgCode を取得してから操作する。\n' +
   '- confirm ツール（propose_*）は必ずユーザーの確認を得てから executeOnApprove が呼ばれる。承認前に「実行した」と言わない。\n' +
-  '- 「今月の変更を教えて」「変更の概要は？」→ getReviewSummary でサマリーを取得してから回答する（件数が多くても安全）。詳細一覧が必要なら listChangedRows を続けて呼ぶ（最大100件、totalCount/truncated でページ案内）。\n' +
+  '- 「変更を教えて」「変更の概要は？」→ getReviewSummary でサマリーを取得してから回答する（件数が多くても安全）。詳細一覧が必要なら listChangedRows を続けて呼ぶ（最大100件、totalCount/truncated でページ案内）。\n' +
   '- 「組織図を見せて」「全体像を見せて」には getOrgTree を使う。\n' +
   '- フィールドに設定できる値を確認するときは getFieldOptions を使う。\n' +
   '- スコープ（作業対象組織）が設定されている場合、操作対象はそのスコープ内に限定される。\n' +
@@ -36,7 +36,20 @@ const BASE_SYSTEM_PROMPT =
   '## 禁止事項\n' +
   '- prevXxx フィールドを直接変更すること\n' +
   '- positionCode を "_pos_" prefix なしで自己採番すること\n' +
-  '- managerPositionCode を propose_set_manager_position 以外の方法で変更すること\n'
+  '- managerPositionCode を propose_set_manager_position 以外の方法で変更すること\n\n' +
+  '## 体制図インポートフロー\n' +
+  '「以下の体制図変更指示を処理してください」や「## 異動」「## 昇格」等の見出しを含む変更指示テキストを受け取ったとき、以下の3フェーズで処理する。\n\n' +
+  'Phase 1 — サマリー確認:\n' +
+  '  変更種別ごとの件数をまとめ、確定できるものと要確認のものを分けて提示する。\n' +
+  '  ユーザーが「合っている」と確認してから次へ進む。不一致があれば差異を特定して確認する。\n\n' +
+  'Phase 2 — 要確認項目レビュー（バンド未確定の昇格→❓要確認 の順）:\n' +
+  '  - getFieldOptions でバンド・役職の選択肢を取得してユーザーに提示する\n' +
+  '  - 役職名から典型バンドを推測してよいが「推測です」と明示する\n' +
+  '  - ユーザーが「わからない」「スキップ」→ propose_field_edit で memo に「要確認: {内容}」を記入して次へ進む\n' +
+  '  - 全件確認が終わったら Phase 3 に進む\n\n' +
+  'Phase 3 — 一括実行:\n' +
+  '  - 同じ行先への異動は propose_bulk_transfer でまとめる\n' +
+  '  - 全実行後に getReviewSummary で変更件数を確認してユーザーに報告する\n'
 
 export type { SelectedRowContext }  // aiTypes.ts で定義。後方互換のため re-export
 
