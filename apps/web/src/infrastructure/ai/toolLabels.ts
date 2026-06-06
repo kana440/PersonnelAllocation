@@ -5,6 +5,7 @@ export const TOOL_LABELS: Record<string, string> = {
   findPersons:                     '従業員検索',
   findOrgs:                        '組織検索',
   getPersonDetail:                 '従業員詳細取得',
+  getReviewSummary:                '変更サマリー確認',
   listChangedRows:                 '変更内容確認',
   getOrgMembers:                   '組織メンバー確認',
   getOrgTree:                      '組織図表示',

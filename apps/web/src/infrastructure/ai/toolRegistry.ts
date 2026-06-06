@@ -17,6 +17,9 @@ import type { ChatWidget, PersonInfo } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import * as P from './proposalBuilders'
+import { SecondmentOutReleaseOperation } from '@personnel/domain/commands/handlers/secondmentOps'
+import { ConcurrentSecondmentOutOperation } from '@personnel/domain/commands/handlers/secondmentOps'
+import { EmploymentTransferOutOperation } from '@personnel/domain/commands/handlers/transferOps'
 import type { ToolDefinition, ToolCall } from '../../ports'
 
 export interface ToolResult {
@@ -42,8 +45,12 @@ export interface RenderEntry {
 export interface ConfirmEntry {
   kind: 'confirm'
   definition: ToolDefinition
-  /** ユーザーに見せる確認ウィジェットを構築する（副作用なし）。 */
-  buildProposal(args: Record<string, unknown>): { widget: ChatWidget }
+  /**
+   * ユーザーに見せる確認ウィジェットを構築する（副作用なし）。
+   * 前提条件を満たさない場合は `{ error: string }` を返す。
+   * AgentRunner はエラーをツール結果として LLM に返し、widget は表示しない。
+   */
+  buildProposal(args: Record<string, unknown>): { widget: ChatWidget } | { error: string }
   /** ユーザーが承認した後に呼ばれる。EditCommand 経由でのみ変更する。 */
   executeOnApprove(args: Record<string, unknown>): unknown
 }
@@ -115,6 +122,20 @@ const TOOL_ENTRIES: ToolEntry[] = [
     execute: args => aiTools.getPersonDetail(args.userId as string),
   },
 
+  // ── Read: getReviewSummary ───────────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'getReviewSummary',
+        description: '変更件数のサマリーを返す。totalRows（全行数）・changedRows（変更行数）・byKind（変更種別ごとの件数）・errorCount・warningCount が含まれる。「今月の変更を教えて」「変更の概要は？」のような質問にはまずこれを呼ぶ。件数が多くてもこのツールは安全（集計値のみ返す）。',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    execute: () => aiTools.getReviewSummary(),
+  },
+
   // ── Read: listChangedRows ────────────────────────────────────────────────
   {
     kind: 'read',
@@ -122,11 +143,17 @@ const TOOL_ENTRIES: ToolEntry[] = [
       type: 'function',
       function: {
         name:        'listChangedRows',
-        description: '今のセッションで変更された行を一覧する。変更内容（等級・役職・組織の前後）も含む。',
-        parameters: { type: 'object', properties: {} },
+        description: '変更のある行を一覧する（最大100件）。totalCount と truncated フラグを含むので件数が多い場合は「N件中100件を表示」と案内できる。詳細確認が必要な場合に getReviewSummary の後で呼ぶ。kinds フィルタは getChangedPersons を使うこと。',
+        parameters: {
+          type: 'object',
+          properties: {
+            limit:  { type: 'number', description: '取得件数（デフォルト100、最大100）' },
+            offset: { type: 'number', description: 'ページング開始位置（デフォルト0）' },
+          },
+        },
       },
     },
-    execute: () => aiTools.listChangedRows(),
+    execute: args => aiTools.listChangedRows({ limit: args.limit as number | undefined, offset: args.offset as number | undefined }),
   },
 
   // ── Read: getOrgMembers ──────────────────────────────────────────────────
@@ -596,6 +623,217 @@ const TOOL_ENTRIES: ToolEntry[] = [
       const changed = aiTools.reDeriveOrgSubFields()
       return { applied: true, changedCount: changed }
     },
+  },
+
+  // ── Confirm: propose_leave_of_absence ─────────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_leave_of_absence',
+        description: '指定した従業員を休職させることをユーザーに提案し、確認を得てから leaveOfAbsenceSign を "1" に設定する。実行前に findPersons で userId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId: { type: 'string', description: '休職対象のユーザーID（sfPersonId）' },
+            memo:   { type: 'string', description: '休職事由（任意）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildLeaveOfAbsenceProposal(args.userId as string, args.memo as string | undefined),
+    executeOnApprove: args => aiTools.executeLeaveOfAbsence(args.userId as string, args.memo as string | undefined),
+  },
+
+  // ── Confirm: propose_return_from_leave ────────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_return_from_leave',
+        description: '指定した従業員を復職させることをユーザーに提案し、確認を得てから leaveOfAbsenceSign をクリアする。実行前に findPersons で userId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId: { type: 'string', description: '復職対象のユーザーID（sfPersonId）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildReturnFromLeaveProposal(args.userId as string),
+    executeOnApprove: args => aiTools.executeReturnFromLeave(args.userId as string),
+  },
+
+  // ── Confirm: propose_concurrent_add ──────────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_concurrent_add',
+        description: '指定した従業員に社内兼務を追加することをユーザーに提案し、確認を得てから兼務行を新規作成する。実行前に findPersons・findOrgs で ID を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['userId', 'targetOrgCode'],
+          properties: {
+            userId:          { type: 'string', description: '兼務追加対象のユーザーID（sfPersonId）' },
+            targetOrgCode:   { type: 'string', description: '兼務先組織の externalCode' },
+            concurrentReason:{ type: 'string', description: '兼務理由（任意）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildConcurrentAddProposal(args.userId as string, args.targetOrgCode as string, args.concurrentReason as string | undefined),
+    executeOnApprove: args => aiTools.executeConcurrentAdd(args.userId as string, args.targetOrgCode as string, args.concurrentReason as string | undefined),
+  },
+
+  // ── Confirm: propose_concurrent_release ──────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_concurrent_release',
+        description: '指定した従業員の社内兼務を解除することをユーザーに提案し、確認を得てから兼務行を削除する。出向兼務は対象外（出向解除を使うこと）。実行前に findPersons で userId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId:        { type: 'string', description: '兼務解除対象のユーザーID（sfPersonId）' },
+            targetOrgCode: { type: 'string', description: '兼務先組織コード（兼務が複数ある場合に指定）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildConcurrentReleaseProposal(args.userId as string, args.targetOrgCode as string | undefined),
+    executeOnApprove: args => aiTools.executeConcurrentRelease(args.userId as string, args.targetOrgCode as string | undefined),
+  },
+
+  // ── Confirm: propose_secondment_to_concurrent ─────────────────────────────
+  // Tier 3 wizard: 本務出向 → 兼務出向変換（2ステップ）
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'propose_secondment_to_concurrent',
+        description: '本務出向中の従業員を兼務出向に変換することをウィザード形式でユーザーに提案する。「出向解除 → 兼務出向追加」の2ステップを透過的に見せる。ピン留め行または findPersons で rowId を確認すること。prevDepartmentCode（元の所属）が設定されていない場合は失敗する。',
+        parameters: {
+          type: 'object',
+          required: ['rowId'],
+          properties: {
+            rowId:            { type: 'number', description: '本務出向中の行の rowId' },
+            concurrentReason: { type: 'string', description: '兼務理由（任意）' },
+          },
+        },
+      },
+    },
+    buildProposal:    args => P.buildSecondmentToConcurrentProposal(args.rowId as number, args.concurrentReason as string | undefined),
+    executeOnApprove: args => {
+      const rowId = args.rowId as number
+      const { allocationList } = appService.getSnapshot()
+      const row = allocationList.find(r => r.rowId === rowId)
+      if (!row?.secondmentToCompany) return { ok: false, error: '本務出向が設定されていません' }
+      if (!row.prevDepartmentCode)   return { ok: false, error: '元の所属組織 (prevDepartmentCode) が特定できません' }
+
+      const secondmentToCompany = row.secondmentToCompany
+      const secondmentDeptCode  = row.departmentCode!
+      const homeDeptCode        = row.prevDepartmentCode
+
+      return aiTools.executeScenario({
+        label: `本務出向→兼務出向: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
+        commands: [
+          new SecondmentOutReleaseOperation(rowId, { departmentCode: homeDeptCode }),
+          new ConcurrentSecondmentOutOperation(rowId, {
+            secondmentToCompany,
+            departmentCode:    secondmentDeptCode,
+            concurrentReason:  args.concurrentReason as string | undefined,
+          }),
+        ],
+      })
+    },
+  },
+
+  // ── Confirm: propose_secondment_transfer ──────────────────────────────────
+  // Tier 3 wizard: 出向先への転籍（2ステップ）
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'propose_secondment_transfer',
+        description: '本務出向中の従業員を出向先に転籍させることをウィザード形式でユーザーに提案する。「出向解除 → 転籍（出）」の2ステップを透過的に見せる。ピン留め行または findPersons で rowId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['rowId', 'transferReason'],
+          properties: {
+            rowId:          { type: 'number', description: '本務出向中の行の rowId' },
+            transferReason: { type: 'string', description: '異動事由（例: グループ会社転籍）' },
+          },
+        },
+      },
+    },
+    buildProposal:    args => P.buildSecondmentTransferProposal(args.rowId as number, args.transferReason as string),
+    executeOnApprove: args => {
+      const rowId         = args.rowId as number
+      const transferReason = args.transferReason as string
+      const { allocationList } = appService.getSnapshot()
+      const row = allocationList.find(r => r.rowId === rowId)
+      if (!row?.secondmentToCompany) return { ok: false, error: '本務出向が設定されていません' }
+      if (!row.prevDepartmentCode)   return { ok: false, error: '元の所属組織 (prevDepartmentCode) が特定できません' }
+
+      const homeDeptCode = row.prevDepartmentCode
+
+      return aiTools.executeScenario({
+        label: `出向先転籍: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
+        commands: [
+          new SecondmentOutReleaseOperation(rowId, { departmentCode: homeDeptCode }),
+          new EmploymentTransferOutOperation(rowId, transferReason),
+        ],
+      })
+    },
+  },
+
+  // ── Confirm: propose_demotion ─────────────────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_demotion',
+        description: '指定した従業員の降格をユーザーに提案し、確認を得てから役職・バンド等を変更する。実行前に findPersons でユーザーID を、getFieldOptions で有効な値を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId:               { type: 'string', description: '降格対象のユーザーID（sfPersonId）' },
+            officialPositionCode: { type: 'string', description: '新しい役職コード' },
+            localJobTitle:        { type: 'string', description: '新しい役職名' },
+            band:                 { type: 'string', description: '新しいバンド' },
+            payGrade:             { type: 'string', description: '新しい給与等級' },
+            demotionReason:       { type: 'string', description: '降格理由（必須）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildDemotionProposal(args.userId as string, {
+      officialPositionCode: args.officialPositionCode as string | undefined,
+      localJobTitle:        args.localJobTitle        as string | undefined,
+      band:                 args.band                 as string | undefined,
+      payGrade:             args.payGrade              as string | undefined,
+      demotionReason:       args.demotionReason        as string | undefined,
+    }),
+    executeOnApprove: args => aiTools.executeDemotionForUser(args.userId as string, {
+      officialPositionCode: args.officialPositionCode as string | undefined,
+      localJobTitle:        args.localJobTitle        as string | undefined,
+      band:                 args.band                 as string | undefined,
+      payGrade:             args.payGrade              as string | undefined,
+      demotionReason:       args.demotionReason        as string | undefined,
+    }),
   },
 ]
 

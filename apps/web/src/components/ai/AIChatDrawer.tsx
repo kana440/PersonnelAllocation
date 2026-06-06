@@ -7,23 +7,34 @@ import { useChatHandlers } from './useChatHandlers'
 import { useChatDrop } from './useChatDrop'
 import { AIMessageThread } from './AIMessageThread'
 import { AITracePanel }    from './AITracePanel'
+import { AIContextSuggestions } from './AIContextSuggestions'
+
+const MOCK_MODEL = '__mock__'
 
 interface Props {
   onClose: () => void
 }
 
 export function AIChatDrawer({ onClose }: Props) {
-  const { messages, selectedModel, chatContextRowIds, removeFromChatContext } = useChatStore()
+  const { messages, selectedModel, setSelectedModel, chatContextRowIds, removeFromChatContext, clearMessages } = useChatStore()
   const allocationList = useStore(s => s.allocationList)
   const [input, setInput] = useState('')
+
+  // ── Model selection ─────────────────────────────────────────────────────────
+  const [models,   setModels]   = useState<string[]>(DEFAULT_MODELS)
+  const [newModel, setNewModel] = useState('')
+  const [model, setModelLocal] = useState<string>(
+    () => selectedModel || (DEFAULT_MODELS[0] ?? MOCK_MODEL)
+  )
+  const setModel = (m: string) => { setModelLocal(m); setSelectedModel(m) }
 
   const traceObserver = useMemo(() => new InMemoryTraceObserver(), [])
   const [logCopied, setLogCopied] = useState(false)
 
   const agentRunner = useMemo(() => {
-    const model = selectedModel || DEFAULT_MODELS[0] || ''
-    return model ? createAgentRunner(model, traceObserver) : null
-  }, [selectedModel, traceObserver])
+    if (model === MOCK_MODEL) return null
+    return createAgentRunner(model, traceObserver)
+  }, [model, traceObserver])
 
   const handleCopyLog = useCallback(async () => {
     if (!agentRunner) return
@@ -31,6 +42,11 @@ export function AIChatDrawer({ onClose }: Props) {
     setLogCopied(true)
     setTimeout(() => setLogCopied(false), 2000)
   }, [agentRunner])
+
+  const handleClear = useCallback(() => {
+    clearMessages()
+    agentRunner?.clearSessionLog()
+  }, [clearMessages, agentRunner])
 
   const { widgetCallbacks, handleTextSubmit, isBusy, activeWidgetMsgId } =
     useChatHandlers({ agentRunner })
@@ -43,6 +59,11 @@ export function AIChatDrawer({ onClose }: Props) {
     setInput('')
     handleTextSubmit(text)
   }
+
+  const handleSuggest = useCallback((prompt: string) => {
+    if (isBusy) return
+    handleTextSubmit(prompt)
+  }, [isBusy, handleTextSubmit])
 
   const badgeItems = chatContextRowIds.map(rowId => {
     const row  = allocationList.find(r => r.rowId === rowId)
@@ -61,27 +82,74 @@ export function AIChatDrawer({ onClose }: Props) {
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-base">💬</span>
-          <span className="text-sm font-semibold text-gray-700">AI アシスタント</span>
-          {IS_MOCK_MODE && (
-            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded leading-tight">モック</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-base flex-shrink-0">💬</span>
+          <span className="text-sm font-semibold text-gray-700 flex-shrink-0">AI アシスタント</span>
+          {IS_MOCK_MODE ? (
+            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded leading-tight flex-shrink-0">モック</span>
+          ) : (
+            <div className="flex items-center gap-1 min-w-0">
+              <select
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                disabled={isBusy}
+                className="text-xs text-gray-500 border border-gray-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 max-w-[110px] truncate"
+              >
+                <option value={MOCK_MODEL}>Mock</option>
+                {models.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <form
+                onSubmit={e => {
+                  e.preventDefault()
+                  const m = newModel.trim()
+                  if (m && !models.includes(m)) {
+                    setModels(prev => [...prev, m])
+                    setModel(m)
+                  }
+                  setNewModel('')
+                }}
+                className="flex items-center"
+              >
+                <input
+                  type="text"
+                  value={newModel}
+                  onChange={e => setNewModel(e.target.value)}
+                  placeholder="追加…"
+                  className="text-xs border border-gray-200 rounded px-1 py-0.5 w-16 focus:outline-none focus:ring-1 focus:ring-blue-300"
+                />
+                {newModel.trim() && (
+                  <button type="submit" className="text-xs text-blue-500 hover:text-blue-700 ml-0.5">＋</button>
+                )}
+              </form>
+            </div>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 text-xl leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 transition-colors"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {messages.length > 0 && (
+            <button
+              onClick={handleClear}
+              disabled={isBusy}
+              className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-200 disabled:opacity-40 transition-colors"
+              title="会話履歴をクリア"
+            >
+              ↺
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      {/* Message thread — ドラッグ中はオーバーレイで示す（コンテンツは差し替えない） */}
+      {/* Message thread */}
       <div className="flex-1 overflow-hidden min-h-0 relative">
         {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-xs text-gray-400">
-            AI アシスタント画面で会話を始めてください
-          </div>
+          <EmptyState />
         ) : (
           <AIMessageThread
             messages={messages}
@@ -109,6 +177,10 @@ export function AIChatDrawer({ onClose }: Props) {
 
       {/* Input area */}
       <div className="flex-shrink-0 border-t border-gray-200">
+        {/* Compact suggestions — visible during active conversation */}
+        {messages.length > 0 && !isBusy && (
+          <AIContextSuggestions onSuggest={handleSuggest} compact />
+        )}
         {badgeItems.length > 0 && (
           <div className="px-2 pt-1.5 flex flex-wrap gap-1">
             {badgeItems.map(({ rowId, name }) => (
@@ -146,6 +218,22 @@ export function AIChatDrawer({ onClose }: Props) {
             送信
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-3">
+      <div className="text-3xl">💬</div>
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-gray-700">AI アシスタント</p>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          自然言語で操作の指示・照会ができます。<br />
+          人物をドラッグしてコンテキストに追加すると<br />
+          その人向けの操作候補が表示されます。
+        </p>
       </div>
     </div>
   )

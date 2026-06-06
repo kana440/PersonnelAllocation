@@ -112,9 +112,12 @@ export class AgentRunner {
           content = JSON.stringify(summary)
 
         } else if (entry?.kind === 'confirm') {
-          const { widget } = entry.buildProposal(args)
-          if (onConfirm) {
-            const confirmResult = await onConfirm(widget)
+          const proposal = entry.buildProposal(args)
+          if ('error' in proposal) {
+            // 前提条件エラー — widget を表示せず LLM にエラーを返してユーザーへ説明させる
+            content = JSON.stringify({ ok: false, error: proposal.error })
+          } else if (onConfirm) {
+            const confirmResult = await onConfirm(proposal.widget)
             if (confirmResult.approved) {
               const applyResult = entry.executeOnApprove(args)
               content = JSON.stringify({ ok: true, result: applyResult })

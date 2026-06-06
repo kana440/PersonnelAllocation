@@ -4,7 +4,6 @@ import { useChatStore } from '../../store/useChatStore'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import { ChatSession, buildSystemPrompt, type SessionState } from '../../application/chatSession'
-import type { WelcomeSession } from '../../application/welcomeSession'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { mockApiService } from '../../infrastructure/ai/chatServiceFactory'
 import type { AgentRunner } from '../../infrastructure/ai/agentRunner'
@@ -42,12 +41,8 @@ const BUSY_EXEMPT_PHASES: ChatPhase[] = [
 
 export function useChatHandlers({
   agentRunner,
-  welcomeSession,
-  onDataLoaded,
 }: {
   agentRunner: AgentRunner | null
-  welcomeSession?: WelcomeSession | null
-  onDataLoaded?: () => void
 }) {
   const store = useStore()
   const {
@@ -129,12 +124,10 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
       })
 
     setIsAgentRunning(true)
-    const isDataLoaded = useStore.getState().allocationList.length > 0
     try {
       let replyText: string
       let replyWidget: ChatWidget | undefined
-      if (agentRunner && isDataLoaded) {
-        // Post-data: full agent with tools
+      if (agentRunner) {
         const result = await agentRunner.run(snapshot, text, {
           onProgress:   (label: string) => updateMessage(id, { text: label }),
           onConfirm,
@@ -142,9 +135,6 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
         })
         replyText   = result.text
         replyWidget = result.widget
-      } else if (welcomeSession && !isDataLoaded) {
-        // Pre-data: lightweight welcome agent (no tools)
-        replyText = await welcomeSession.send(snapshot, text)
       } else {
         // Mock / fallback
         replyText = await chatSession.send(snapshot, text)
@@ -155,7 +145,7 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     } finally {
       setIsAgentRunning(false)
     }
-  }, [addMessage, addAILoading, updateMessage, agentRunner, welcomeSession, chatSession, setIsAgentRunning])
+  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession, setIsAgentRunning])
 
   // ── import Excel ──────────────────────────────────────────────────────────────
   const startImportExcel = useCallback(async () => {
@@ -180,12 +170,11 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
       const result = await importExcelScenario.loadFile(file, msg => updateMessage(id, { text: msg }))
       await store.loadExcelData(result)
       updateMessage(id, { isLoading: false, text: importExcelScenario.successMessage(result) })
-      onDataLoaded?.()
     } catch (e) {
       updateMessage(id, { isLoading: false, text: importExcelScenario.errorMessage(e) })
     }
     setPhase('idle')
-  }, [addMessage, addAILoading, updateMessage, setPhase, store, onDataLoaded])
+  }, [addMessage, addAILoading, updateMessage, setPhase, store])
 
   // ── excel help ────────────────────────────────────────────────────────────────
   const startExcelHelp = useCallback(async () => {

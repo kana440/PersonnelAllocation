@@ -12,10 +12,12 @@ const BASE_SYSTEM_PROMPT =
   '組織異動・出向・兼務追加・昇降格など、人事異動に関する操作をサポートします。' +
   '要員配置リストのデータに基づいて、簡潔・丁寧に回答してください。\n\n' +
   '## ツール利用ガイドライン\n' +
-  '- 従業員を探すときは必ず findPersons を使う。名前が曖昧な場合は候補を列挙してユーザーに確認する。\n' +
+  '- ピン留め行（システムプロンプトの「ピン留め参照情報」セクション）の userId・rowId・orgCode はすでに提供済みのため、findPersons/getPersonDetail を呼ばずに直接使ってよい。\n' +
+  '- ピン留めされていない従業員を探すときは findPersons を使う。名前が曖昧な場合は候補を列挙してユーザーに確認する。\n' +
   '- 役職変更（「課長にして」等）は propose_change_position を使う。propose_field_edit は補足情報の編集のみ。\n' +
   '- 組織を指定するときは findOrgs で orgCode を取得してから操作する。\n' +
   '- confirm ツール（propose_*）は必ずユーザーの確認を得てから executeOnApprove が呼ばれる。承認前に「実行した」と言わない。\n' +
+  '- 「今月の変更を教えて」「変更の概要は？」→ getReviewSummary でサマリーを取得してから回答する（件数が多くても安全）。詳細一覧が必要なら listChangedRows を続けて呼ぶ（最大100件、totalCount/truncated でページ案内）。\n' +
   '- 「組織図を見せて」「全体像を見せて」には getOrgTree を使う。\n' +
   '- フィールドに設定できる値を確認するときは getFieldOptions を使う。\n' +
   '- スコープ（作業対象組織）が設定されている場合、操作対象はそのスコープ内に限定される。\n' +
@@ -26,6 +28,11 @@ const BASE_SYSTEM_PROMPT =
   '- prevXxx フィールド（発令前の状態）は変更しない。\n' +
   '- managerPositionCode を変更するときは propose_set_manager_position を使う（saveRow で直接変更すると managerName が更新されない）。\n' +
   '- 兼務を示す申請区分（transferReason）が選択されている場合、leaveOfAbsenceSign は設定できない（バリデーションで検出される）。\n\n' +
+  '## 複数ステップ操作（Tier 3 Wizard）\n' +
+  '以下のケースはウィザード形式で提案する。単純に言われたら複数ステップを隠さず全手順を表示してから確認を取ること。\n' +
+  '- 「本務出向を兼務出向にしたい」「出向先が本務から兼務になる」→ propose_secondment_to_concurrent\n' +
+  '- 「出向先に転籍させたい」「出向先へ移籍」→ propose_secondment_transfer\n' +
+  'これらのツールは prevDepartmentCode（本務出向前の所属）が設定されている行にのみ使用可能（Excelインポート済みデータが前提）。\n\n' +
   '## 禁止事項\n' +
   '- prevXxx フィールドを直接変更すること\n' +
   '- positionCode を "_pos_" prefix なしで自己採番すること\n' +
@@ -70,7 +77,7 @@ export function buildSystemPrompt(
       '「エラーを直して」「この人を異動させて」のようにピン留め行を指していると推察できる場合はこの情報を使ってください。' +
       '「全員の〇〇を確認して」「前の操作を取り消して」など明らかに全体・別の対象を向いている場合は、ピン留め行を前提にしないでください。\n\n'
     for (const row of selectedRows) {
-      prompt += `- ${row.name}（rowId: ${row.rowId}） | ${row.orgName}`
+      prompt += `- ${row.name}（rowId: ${row.rowId}${row.userId ? `, userId: ${row.userId}` : ''}） | ${row.orgName}${row.orgCode ? `（orgCode: ${row.orgCode}）` : ''}`
       if (row.changeKinds?.length) {
         prompt += ` | 変更種別: ${row.changeKinds.join('、')}`
       }

@@ -1,10 +1,14 @@
 import type { HRApplicationService } from '../HRApplicationService'
 import type { EditCommand, ValidationResult, OperationError } from '@personnel/domain/commands/types'
+import type { EditScenario } from '@personnel/domain/commands/scenarios'
 import type { AllocationRow, AfterValues } from '@personnel/domain/allocationRow'
 import { ChangeTitleOperation, derivePersonGradeFields } from '@personnel/domain/commands/handlers/changeTitle'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { BulkMoveToOrgOperation } from '@personnel/domain/commands/handlers/bulkMoveToOrg'
 import { TransferPersonOperation } from '@personnel/domain/commands/handlers/transferPerson'
+import { LeaveOfAbsenceOperation, ReturnFromLeaveOperation } from '@personnel/domain/commands/handlers/statusOps'
+import { ConcurrentAddOperation, ConcurrentReleaseOperation } from '@personnel/domain/commands/handlers/concurrentOps'
+import { DemotionOperation } from '@personnel/domain/commands/handlers/patternOps'
 import { detectChanges } from '@personnel/domain/patterns/changeDetection'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import type { ValidationIssue } from '@personnel/domain/validation/types'
@@ -349,6 +353,92 @@ export function createWriteMethods(service: HRApplicationService) {
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
+  // ── Tier 2 operations ────────────────────────────────────────────────────
+
+  function executeLeaveOfAbsence(
+    userId: string,
+    memo?:  string,
+  ): AIOperationResult {
+    const { allocationList } = service.getSnapshot()
+    const rows    = allocationList.filter(r => r.userId === userId)
+    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const beforeList = allocationList
+    const result = service.executeOperation(new LeaveOfAbsenceOperation(primary.rowId, '1', memo))
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeReturnFromLeave(userId: string): AIOperationResult {
+    const { allocationList } = service.getSnapshot()
+    const rows    = allocationList.filter(r => r.userId === userId)
+    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const beforeList = allocationList
+    const result = service.executeOperation(new ReturnFromLeaveOperation(primary.rowId))
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeConcurrentAdd(
+    userId:          string,
+    targetOrgCode:   string,
+    concurrentReason?: string,
+  ): AIOperationResult {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+    const rows    = allocationList.filter(r => r.userId === userId)
+    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const org = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
+    if (!org) return { ok: false, errors: [{ message: '兼務先組織が見つかりません' }] }
+    const beforeList = allocationList
+    const result = service.executeOperation(new ConcurrentAddOperation(primary.rowId, org.id, concurrentReason))
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeConcurrentRelease(
+    userId:      string,
+    targetOrgCode?: string,
+  ): AIOperationResult {
+    const { allocationList } = service.getSnapshot()
+    const concurrentRows = allocationList.filter(
+      r => r.userId === userId && r.concurrentType === '兼務' && !r.secondmentToCompany && !r.secondmentFromCompany
+    )
+    let targetRow = concurrentRows[0]
+    if (targetOrgCode && concurrentRows.length > 1) {
+      targetRow = concurrentRows.find(r => r.departmentCode === targetOrgCode) ?? targetRow
+    }
+    if (!targetRow) return { ok: false, errors: [{ message: '解除対象の社内兼務行が見つかりません' }] }
+    const beforeList = allocationList
+    const result = service.executeOperation(new ConcurrentReleaseOperation(targetRow.rowId))
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeDemotionForUser(
+    userId: string,
+    fields: { officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
+  ): AIOperationResult {
+    const { allocationList } = service.getSnapshot()
+    const rows    = allocationList.filter(r => r.userId === userId)
+    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const beforeList = allocationList
+    const result = service.executeOperation(new DemotionOperation(primary.rowId, fields))
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  // ── Scenario execution ───────────────────────────────────────────────────
+
+  function executeScenario(scenario: EditScenario): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const result = service.executeScenario(scenario)
+    if (!result.ok) return { ok: false, errors: result.errors }
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
   // ── Utility ───────────────────────────────────────────────────────────────
 
   function formatErrors(errors: OperationError[]): string {
@@ -366,6 +456,9 @@ export function createWriteMethods(service: HRApplicationService) {
     executeTransferPersons, executeSetPromotion, executeChangePosition,
     executeOrgTransfer, executePromotion, executeJobTypeChange,
     executeResignation, executeVacantPositionMove, executeSecondmentRelease,
+    executeLeaveOfAbsence, executeReturnFromLeave,
+    executeConcurrentAdd, executeConcurrentRelease, executeDemotionForUser,
+    executeScenario,
     formatErrors,
   }
 }

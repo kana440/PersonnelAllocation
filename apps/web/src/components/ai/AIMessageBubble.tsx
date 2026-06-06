@@ -10,6 +10,7 @@ import { ReportLineWidget }    from './widgets/ReportLineWidget'
 import { DiffPreviewWidget }   from './widgets/DiffPreviewWidget'
 import { ImpactCheckWidget }   from './widgets/ImpactCheckWidget'
 import { ExportConfirmWidget } from './widgets/ExportConfirmWidget'
+import { WizardStepsWidget }   from './widgets/WizardStepsWidget'
 
 interface Props {
   message: ChatMessage
@@ -110,6 +111,15 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
                 isActive={isActiveWidget}
                 onConfirm={callbacks.onExportConfirm}
                 onCancel={callbacks.onExportCancel}
+              />
+            )}
+            {message.widget.type === 'wizard-steps' && (
+              <WizardStepsWidget
+                title={message.widget.title}
+                steps={message.widget.steps}
+                isActive={isActiveWidget || !!message.llmConfirm}
+                onConfirm={message.llmConfirm ?? (() => {})}
+                onCancel={message.llmCancel  ?? (() => {})}
               />
             )}
           </div>

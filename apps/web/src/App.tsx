@@ -7,7 +7,6 @@ import { FloatingEditor }    from './components/editor/FloatingEditor'
 import { HistoryPanel }      from './components/history/HistoryPanel'
 import { BottomPanel }       from './components/editor/BottomPanel'
 import { AIChatDrawer }      from './components/ai/AIChatDrawer'
-import { AIView }            from './components/ai/AIView'
 import { SetupView }         from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { MaintenanceDialog }  from './components/maintenanceDialog'
@@ -115,7 +114,7 @@ export default function App() {
   const { isLoading, undo, redo, canUndo, canRedo, selectedPersonId } = useStore()
   const { isChecked, checkStorage } = useCodeListStore()
 
-  const [appMode,      setAppMode]      = useState<'ai' | 'editor' | 'admin'>('ai')
+  const [appMode,      setAppMode]      = useState<'editor' | 'admin'>('editor')
   const [sessionReady, setSessionReady] = useState(false)
 
   useEffect(() => { checkStorage() }, [checkStorage])
@@ -205,17 +204,7 @@ export default function App() {
   )
 
   if (appMode === 'admin') {
-    return <AdminView onBack={() => setAppMode('ai')} />
-  }
-
-  if (appMode === 'ai') {
-    return (
-      <AIView
-        onOpenEditor={() => setAppMode('editor')}
-        onImportExcel={() => setAppMode('editor')}
-        onDataLoaded={() => setSessionReady(true)}
-      />
-    )
+    return <AdminView onBack={() => setAppMode('editor')} />
   }
 
   if (!sessionReady) return <SetupView onReady={() => setSessionReady(true)} />
@@ -288,12 +277,6 @@ export default function App() {
             <span>🔧</span><span>メンテナンス</span>
           </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />
-          <HeaderButton
-            onClick={() => setAppMode('ai')}
-            title="AI アシスタントに切り替え"
-          >
-            AI ←
-          </HeaderButton>
           {Features.userManagement && (
             <HeaderButton
               onClick={() => setAppMode('admin')}

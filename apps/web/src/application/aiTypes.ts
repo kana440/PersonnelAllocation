@@ -19,7 +19,7 @@ export interface PersonDiff {
   name: string
   orgName?: string
   rowId: number
-  before: { grade?: string; position?: string; orgName?: string }
+  before: { grade?: string; position?: string; orgName?: string; note?: string }
   after:  { grade?: string; position?: string; orgName?: string; note?: string }
 }
 
@@ -40,6 +40,13 @@ export interface ReportLineMember {
   grade?: string
 }
 
+export interface WizardStep {
+  stepNumber:  number
+  title:       string
+  description?: string
+  diffs:       PersonDiff[]
+}
+
 export type ChatWidget =
   | { type: 'file-picker' }
   | { type: 'excel-help' }
@@ -52,17 +59,19 @@ export type ChatWidget =
   | { type: 'diff-preview'; persons: PersonDiff[]; label?: string }
   | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
+  | { type: 'wizard-steps'; title: string; steps: WizardStep[] }
 
 /** 選択中の行のコンテキスト情報。AI のシステムプロンプトに注入する */
 export interface SelectedRowContext {
   rowId:        number
+  userId?:      string
   name:         string
   orgName:      string
+  orgCode?:     string
   issues:       Array<{ field: string; level: 'error' | 'warning'; message: string }>
-  // Intent-First のため追加 — ツール往復なしで意図を分類できる情報
-  changeKinds:  string[]   // 現在の変更種別ラベル（例: ['異動', '昇格']）
-  availableOps: string[]   // この行で実行可能な操作ラベル（OperationDef.label）
-  keyFields: {             // 主要フィールドの現在値（beforeは含めない）
+  changeKinds:  string[]
+  availableOps: string[]
+  keyFields: {
     employmentType?:      string
     band?:                string
     payGrade?:            string

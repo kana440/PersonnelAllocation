@@ -84,8 +84,10 @@ export function createReadMethods(service: HRApplicationService) {
 
     return {
       rowId,
+      userId:    row.userId ?? undefined,
       name,
       orgName:   org?.name ?? row.departmentCode ?? '',
+      orgCode:   row.departmentCode ?? undefined,
       issues:    issues.map(i => ({ field: String(i.field), level: i.level, message: i.message })),
       changeKinds,
       availableOps,
@@ -167,32 +169,54 @@ export function createReadMethods(service: HRApplicationService) {
     })
   }
 
-  function listChangedRows(): Array<{
-    rowId:    number
-    userId:   string | undefined
-    name:     string
-    orgName:  string
-    grade:    { before: string | undefined; after: string | undefined } | null
-    position: { before: string | undefined; after: string | undefined } | null
-  }> {
+  const CHANGED_ROWS_LIMIT = 100
+
+  function listChangedRows(options: { limit?: number; offset?: number } = {}): {
+    items: Array<{
+      rowId:    number
+      userId:   string | undefined
+      name:     string
+      orgName:  string
+      kinds:    string[]
+      grade:    { before: string | undefined; after: string | undefined } | null
+      position: { before: string | undefined; after: string | undefined } | null
+    }>
+    totalCount: number
+    truncated:  boolean
+  } {
     const { allocationList, afterOrganizations } = service.getSnapshot()
-    return allocationList
-      .filter(r => r.operationGroupId)
-      .map(r => {
-        const orgName = afterOrganizations.find(
-          o => (o.externalCode ?? o.id) === r.departmentCode
-        )?.name ?? r.departmentCode
-        return {
-          rowId:    r.rowId,
-          userId:   r.userId,
-          name:     [r.lastName, r.firstName].filter(Boolean).join(' '),
-          orgName:  orgName ?? '',
-          grade:    r.prevPayGrade !== r.payGrade
-            ? { before: r.prevPayGrade, after: r.payGrade } : null,
-          position: r.prevOfficialPositionCode !== r.officialPositionCode
-            ? { before: r.prevOfficialPositionCode, after: r.officialPositionCode } : null,
-        }
-      })
+    const limit  = options.limit  ?? CHANGED_ROWS_LIMIT
+    const offset = options.offset ?? 0
+
+    const changed = allocationList.filter(r => {
+      const { diffCount } = detectChanges(r)
+      return diffCount > 0
+    })
+
+    const page = changed.slice(offset, offset + limit)
+    const items = page.map(r => {
+      const { kinds } = detectChanges(r)
+      const orgName = afterOrganizations.find(
+        o => (o.externalCode ?? o.id) === r.departmentCode
+      )?.name ?? r.departmentCode ?? ''
+      return {
+        rowId:    r.rowId,
+        userId:   r.userId,
+        name:     [r.lastName, r.firstName].filter(Boolean).join(' '),
+        orgName,
+        kinds:    [...kinds],
+        grade:    r.prevPayGrade !== r.payGrade
+          ? { before: r.prevPayGrade, after: r.payGrade } : null,
+        position: r.prevOfficialPositionCode !== r.officialPositionCode
+          ? { before: r.prevOfficialPositionCode, after: r.officialPositionCode } : null,
+      }
+    })
+
+    return {
+      items,
+      totalCount: changed.length,
+      truncated:  changed.length > offset + limit,
+    }
   }
 
   /** 組織ツリーデータを返す。ChatWidget の組み立ては toolRegistry 側で行う。 */
