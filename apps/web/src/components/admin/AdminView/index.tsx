@@ -2,22 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import { adminApi } from '../../../infrastructure/api/adminApi'
 import type {
   AdminUser, UserBody,
-  AdminSession,
   AdminPosition, PositionStatus, PositionSummary,
 } from '../../../infrastructure/api/adminApi'
 import { UserTable }          from './UserTable'
 import { UserEditModal }      from './UserEditModal'
-import { SessionTable }       from './SessionTable'
+import { RoundTab }           from './RoundTab'
 import { PositionTable }      from './PositionTable'
 import { PositionEditModal }  from './PositionEditModal'
 import { BulkRegisterModal }  from './BulkRegisterModal'
 
-type Tab = 'users' | 'sessions' | 'positions'
+type Tab = 'users' | 'rounds' | 'positions'
 type PosFilter = PositionStatus | 'all'
 
 const TAB_LABELS: Record<Tab, string> = {
   users:     'ユーザー管理',
-  sessions:  'セッション一覧',
+  rounds:    '申請回一覧',
   positions: 'ポジション管理',
 }
 const POS_FILTER_LABELS: Record<PosFilter, string> = {
@@ -27,9 +26,9 @@ const POS_FILTER_LABELS: Record<PosFilter, string> = {
   retired:   '廃止',
 }
 
-interface Props { onBack: () => void }
+interface Props { onBack: () => void; onLogout?: () => void }
 
-export function AdminView({ onBack }: Props) {
+export function AdminView({ onBack, onLogout }: Props) {
   const [tab,   setTab]   = useState<Tab>('users')
   const [error, setError] = useState<string | null>(null)
 
@@ -58,20 +57,6 @@ export function AdminView({ onBack }: Props) {
     try { await adminApi.users.delete(user.id); setDeleteUser(null); await loadUsers() }
     catch (e) { setError(String(e)); setDeleteUser(null) }
   }
-
-  // ── セッション ────────────────────────────────────────────────
-  const [sessions,      setSessions]      = useState<AdminSession[]>([])
-  const [loadingS,      setLoadingS]      = useState(false)
-  const [deleteSession, setDeleteSession] = useState<AdminSession | null>(null)
-
-  const loadSessions = useCallback(async () => {
-    setLoadingS(true); setError(null)
-    try { setSessions(await adminApi.sessions.list()) }
-    catch (e) { setError(String(e)) }
-    finally { setLoadingS(false) }
-  }, [])
-
-  useEffect(() => { if (tab === 'sessions') void loadSessions() }, [tab, loadSessions])
 
 
   // ── ポジション ────────────────────────────────────────────────
@@ -144,10 +129,15 @@ export function AdminView({ onBack }: Props) {
       <header className="bg-gray-800 text-white px-4 py-2 flex items-center gap-4 flex-shrink-0">
         <button onClick={onBack} className="text-gray-300 hover:text-white text-sm">← 戻る</button>
         <h1 className="text-base font-bold tracking-tight">管理画面</h1>
+        {onLogout && (
+          <button onClick={onLogout} className="ml-auto text-xs text-gray-400 hover:text-white">
+            ログアウト
+          </button>
+        )}
       </header>
 
       <div className="bg-white border-b border-gray-200 px-4 flex gap-0 flex-shrink-0">
-        {(['users', 'sessions', 'positions'] as Tab[]).map(t => (
+        {(['users', 'rounds', 'positions'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -179,18 +169,9 @@ export function AdminView({ onBack }: Props) {
           </div>
         )}
 
-        {/* セッション一覧 */}
-        {tab === 'sessions' && (
-          <div className="bg-white rounded-lg shadow max-w-4xl mx-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <span className="text-sm font-semibold text-gray-700">
-                セッション一覧{!loadingS && <span className="text-gray-400 font-normal ml-1">（{sessions.length}件）</span>}
-              </span>
-              <button onClick={() => void loadSessions()} className="text-xs text-gray-500 hover:text-gray-700">更新</button>
-            </div>
-            {loadingS ? <div className="text-center py-16 text-gray-400 text-sm">読み込み中…</div>
-              : <SessionTable sessions={sessions} onDelete={s => setDeleteSession(s)} />}
-          </div>
+        {/* ラウンド管理 */}
+        {tab === 'rounds' && (
+          <RoundTab active={tab === 'rounds'} onError={setError} />
         )}
 
         {/* ポジション管理 */}
@@ -264,12 +245,6 @@ export function AdminView({ onBack }: Props) {
           message={`${deleteUser.name} を削除しますか？`}
           onConfirm={() => void handleDeleteUser(deleteUser)}
           onCancel={() => setDeleteUser(null)} />
-      )}
-      {deleteSession && (
-        <ConfirmDialog title="セッションを削除"
-          message={`「${deleteSession.name}」を削除しますか？`}
-          onConfirm={() => void (async () => { await adminApi.sessions.delete(deleteSession.id); setDeleteSession(null); await loadSessions() })()}
-          onCancel={() => setDeleteSession(null)} />
       )}
       {retirePosition && (
         <ConfirmDialog title="ポジションを廃止"

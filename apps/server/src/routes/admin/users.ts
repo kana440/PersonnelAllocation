@@ -1,19 +1,19 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { getDb } from '../../db/sqlite.ts'
-import type { UserRole, AppEnv } from '../../auth/stub.ts'
+import { eq, asc } from 'drizzle-orm'
+import { getDb } from '../../db/database.ts'
+import { users, userCompanyRoles } from '../../db/schema.ts'
+import type { UserRole, AuthVariables } from '../../auth/index.ts'
 import { randomUUID } from 'crypto'
 
-const app = new Hono<AppEnv>()
+const app = new Hono<{ Variables: AuthVariables }>()
 
-// ── スキーマ ────────────────────────────────────────────────────
-
-const VALID_ROLES = ['super_admin', 'admin', 'assignee'] as const
+const VALID_ROLES = ['admin', 'coordinator', 'member'] as const
 
 const userBodySchema = z.object({
-  name:        z.string().min(1, '名前は必須です'),
-  email:       z.string().email('有効なメールアドレスを入力してください'),
+  name:        z.string().min(1),
+  email:       z.string().email(),
   role:        z.enum(VALID_ROLES),
   orgLevelMin: z.number().int().positive().nullable().optional(),
   orgCodes:    z.array(z.string()).nullable().optional(),
@@ -21,88 +21,40 @@ const userBodySchema = z.object({
 
 const userUpdateSchema = userBodySchema.partial()
 
-// ── 型定義 ──────────────────────────────────────────────────────
-
 export interface AdminUser {
-  id:    string
-  name:  string
-  email: string
-  role:  UserRole
-  policy: {
-    orgLevelMin: number | null
-    orgCodes:    string[] | null
-  }
+  id:     string
+  name:   string
+  email:  string
+  role:   UserRole
 }
 
-// ── ヘルパー ────────────────────────────────────────────────────
-
-function fetchUser(id: string): AdminUser | null {
-  const db = getDb()
-  const user = db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(id) as
-    { id: string; name: string; email: string; role: UserRole } | undefined
+async function fetchUser(id: string): Promise<AdminUser | null> {
+  const db = await getDb()
+  const [user] = await db
+    .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+    .from(users).where(eq(users.id, id)).limit(1)
   if (!user) return null
-
-  const policy = db.prepare(
-    'SELECT org_level_min, org_codes FROM user_access_policies WHERE user_id = ?'
-  ).get(id) as { org_level_min: number | null; org_codes: string | null } | undefined
-
-  return {
-    ...user,
-    policy: {
-      orgLevelMin: policy?.org_level_min ?? null,
-      orgCodes:    policy?.org_codes ? JSON.parse(policy.org_codes) as string[] : null,
-    },
-  }
+  return { ...user, role: user.role as UserRole }
 }
 
-function upsertPolicy(userId: string, orgLevelMin: number | null, orgCodes: string[] | null) {
-  const db = getDb()
-  const orgCodesJson = orgCodes ? JSON.stringify(orgCodes) : null
-  const existing = db.prepare('SELECT user_id FROM user_access_policies WHERE user_id = ?').get(userId)
-  if (existing) {
-    db.prepare(
-      'UPDATE user_access_policies SET org_level_min = ?, org_codes = ? WHERE user_id = ?'
-    ).run(orgLevelMin, orgCodesJson, userId)
-  } else {
-    db.prepare(
-      'INSERT INTO user_access_policies (user_id, org_level_min, org_codes) VALUES (?, ?, ?)'
-    ).run(userId, orgLevelMin, orgCodesJson)
-  }
-}
-
-// ── ルート ──────────────────────────────────────────────────────
-
-app.get('/', (c) => {
-  const db = getDb()
-  const users = db.prepare('SELECT id, name, email, role FROM users ORDER BY name').all() as
-    Array<{ id: string; name: string; email: string; role: UserRole }>
-
-  const result: AdminUser[] = users.map(u => {
-    const policy = db.prepare(
-      'SELECT org_level_min, org_codes FROM user_access_policies WHERE user_id = ?'
-    ).get(u.id) as { org_level_min: number | null; org_codes: string | null } | undefined
-    return {
-      ...u,
-      policy: {
-        orgLevelMin: policy?.org_level_min ?? null,
-        orgCodes:    policy?.org_codes ? JSON.parse(policy.org_codes) as string[] : null,
-      },
-    }
-  })
-  return c.json(result)
+app.get('/', async (c) => {
+  const db = await getDb()
+  const all = await db
+    .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+    .from(users).orderBy(asc(users.name))
+  return c.json(all.map(u => ({ ...u, role: u.role as UserRole })))
 })
 
-app.post('/', zValidator('json', userBodySchema), (c) => {
-  const { name, email, role, orgLevelMin = null, orgCodes = null } = c.req.valid('json')
-  const db = getDb()
+app.post('/', zValidator('json', userBodySchema), async (c) => {
+  const { name, email, role } = c.req.valid('json')
+  const db = await getDb()
   const id = randomUUID()
-  db.prepare('INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)').run(id, name, email, role)
-  upsertPolicy(id, orgLevelMin ?? null, orgCodes ?? null)
-  return c.json(fetchUser(id)!, 201)
+  await db.insert(users).values({ id, name, email, role })
+  return c.json((await fetchUser(id))!, 201)
 })
 
-app.get('/:id', (c) => {
-  const user = fetchUser(c.req.param('id'))
+app.get('/:id', async (c) => {
+  const user = await fetchUser(c.req.param('id'))
   if (!user) return c.json({ error: 'Not found' }, 404)
   return c.json(user)
 })
@@ -110,45 +62,69 @@ app.get('/:id', (c) => {
 app.put('/:id', zValidator('json', userUpdateSchema), async (c) => {
   const id = c.req.param('id')
   const body = c.req.valid('json')
-  const { name, email, role, orgLevelMin, orgCodes } = body
-
-  const db = getDb()
-  const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id)
+  const db = await getDb()
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1)
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
-  if (name || email || role) {
-    const sets: string[] = []
-    const vals: unknown[] = []
-    if (name)  { sets.push('name = ?');  vals.push(name) }
-    if (email) { sets.push('email = ?'); vals.push(email) }
-    if (role)  { sets.push('role = ?');  vals.push(role) }
-    vals.push(id)
-    db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals)
+  const patch: Partial<{ name: string; email: string; role: string }> = {}
+  if (body.name)  patch.name  = body.name
+  if (body.email) patch.email = body.email
+  if (body.role)  patch.role  = body.role
+  if (Object.keys(patch).length > 0) {
+    await db.update(users).set(patch).where(eq(users.id, id))
   }
-
-  if (orgLevelMin !== undefined || orgCodes !== undefined) {
-    const current = fetchUser(id)!.policy
-    upsertPolicy(
-      id,
-      orgLevelMin !== undefined ? (orgLevelMin ?? null) : current.orgLevelMin,
-      orgCodes    !== undefined ? (orgCodes    ?? null) : current.orgCodes,
-    )
-  }
-
-  return c.json(fetchUser(id)!)
+  return c.json((await fetchUser(id))!)
 })
 
-app.delete('/:id', (c) => {
+app.delete('/:id', async (c) => {
   const id = c.req.param('id')
-  const db = getDb()
-  const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id)
+  const db = await getDb()
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, id)).limit(1)
   if (!existing) return c.json({ error: 'Not found' }, 404)
+  // user_company_roles は CASCADE で自動削除される
+  await db.delete(users).where(eq(users.id, id))
+  return c.body(null, 204)
+})
 
-  const inUse = db.prepare('SELECT id FROM sessions WHERE created_by = ? LIMIT 1').get(id)
-  if (inUse) return c.json({ error: 'このユーザーはセッションで使用中のため削除できません' }, 409)
+// ── 会社ロール管理 ────────────────────────────────────────────────────────────
 
-  db.prepare('DELETE FROM user_access_policies WHERE user_id = ?').run(id)
-  db.prepare('DELETE FROM users WHERE id = ?').run(id)
+app.get('/:id/company-roles', async (c) => {
+  const db = await getDb()
+  const roles = await db
+    .select()
+    .from(userCompanyRoles)
+    .where(eq(userCompanyRoles.userId, c.req.param('id')))
+  return c.json(roles)
+})
+
+app.put('/:id/company-roles/:companyId', async (c) => {
+  const { id, companyId } = c.req.param()
+  const body = await c.req.json<{ role: string; orgLevelMin?: number | null; orgCodes?: string[] | null }>()
+  const db = await getDb()
+  await db.insert(userCompanyRoles)
+    .values({
+      userId:      id,
+      companyId,
+      role:        body.role,
+      orgLevelMin: body.orgLevelMin ?? null,
+      orgCodes:    body.orgCodes ? JSON.stringify(body.orgCodes) : null,
+    })
+    .onConflictDoUpdate({
+      target: [userCompanyRoles.userId, userCompanyRoles.companyId],
+      set: {
+        role:        body.role,
+        orgLevelMin: body.orgLevelMin ?? null,
+        orgCodes:    body.orgCodes ? JSON.stringify(body.orgCodes) : null,
+      },
+    })
+  return c.json({ ok: true })
+})
+
+app.delete('/:id/company-roles/:companyId', async (c) => {
+  const { id } = c.req.param()
+  const db = await getDb()
+  await db.delete(userCompanyRoles)
+    .where(eq(userCompanyRoles.userId, id))
   return c.body(null, 204)
 })
 

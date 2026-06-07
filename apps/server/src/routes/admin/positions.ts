@@ -1,19 +1,17 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { getDb } from '../../db/sqlite.ts'
-import type { AppEnv } from '../../auth/stub.ts'
+import { eq, sql } from 'drizzle-orm'
+import { getDb } from '../../db/database.ts'
+import { positions } from '../../db/schema.ts'
+import type { AuthVariables } from '../../auth/index.ts'
 
-const app = new Hono<AppEnv>()
-
-// ── スキーマ ────────────────────────────────────────────────────
+const app = new Hono<{ Variables: AuthVariables }>()
 
 const SF_CODE = /^P\d{8}$/
 
 const bulkRegisterSchema = z.object({
-  codes: z
-    .array(z.string().regex(SF_CODE, 'P + 8桁の形式（例: P00001234）で入力してください'))
-    .min(1, '1件以上入力してください'),
+  codes: z.array(z.string().regex(SF_CODE, 'P + 8桁の形式（例: P00001234）で入力してください')).min(1),
 })
 
 const positionUpdateSchema = z.object({
@@ -22,8 +20,6 @@ const positionUpdateSchema = z.object({
   acquired_at: z.string().nullable().optional(),
   notes:       z.string().nullable().optional(),
 })
-
-// ── 型定義 ──────────────────────────────────────────────────────
 
 export interface AdminPosition {
   code:         string
@@ -37,43 +33,40 @@ export interface AdminPosition {
 }
 
 export interface BulkRegisterResult {
-  registered: string[]   // 新規登録されたコード
-  skipped:    string[]   // すでに存在したコード
+  registered: string[]
+  skipped:    string[]
 }
 
-// ── ヘルパー ────────────────────────────────────────────────────
-
-function toAdminPosition(row: Record<string, unknown>): AdminPosition {
+function toAdminPosition(row: typeof positions.$inferSelect): AdminPosition {
   return {
-    code:         row.code          as string,
-    status:       row.status        as 'available' | 'in_use' | 'retired',
-    acquiredBy:   (row.acquired_by  as string | null) ?? null,
-    acquiredAt:   (row.acquired_at  as string | null) ?? null,
-    notes:        (row.notes        as string | null) ?? null,
-    registeredBy: (row.registered_by as string | null) ?? null,
-    registeredAt: row.registered_at  as string,
-    updatedAt:    row.updated_at     as string,
+    code:         row.code,
+    status:       row.status as 'available' | 'in_use' | 'retired',
+    acquiredBy:   row.acquiredBy,
+    acquiredAt:   row.acquiredAt,
+    notes:        row.notes,
+    registeredBy: row.registeredBy,
+    registeredAt: row.registeredAt,
+    updatedAt:    row.updatedAt,
   }
 }
 
-// ── ルート ──────────────────────────────────────────────────────
-
 // ポジション一覧（status でフィルタ可能）
-app.get('/', (c) => {
-  const db = getDb()
-  const status = c.req.query('status') // available | in_use | retired | undefined(全件)
+app.get('/', async (c) => {
+  const db = await getDb()
+  const status = c.req.query('status')
   const rows = status
-    ? db.prepare('SELECT * FROM positions WHERE status = ? ORDER BY code').all(status)
-    : db.prepare('SELECT * FROM positions ORDER BY status, code').all()
-  return c.json((rows as Record<string, unknown>[]).map(toAdminPosition))
+    ? await db.select().from(positions).where(eq(positions.status, status)).orderBy(positions.code)
+    : await db.select().from(positions).orderBy(positions.status, positions.code)
+  return c.json(rows.map(toAdminPosition))
 })
 
 // ステータス別件数サマリ
-app.get('/summary', (c) => {
-  const db = getDb()
-  const rows = db.prepare(
-    "SELECT status, COUNT(*) as count FROM positions GROUP BY status"
-  ).all() as Array<{ status: string; count: number }>
+app.get('/summary', async (c) => {
+  const db = await getDb()
+  const rows = await db
+    .select({ status: positions.status, count: sql<number>`COUNT(*)::int` })
+    .from(positions)
+    .groupBy(positions.status)
   const summary = { available: 0, in_use: 0, retired: 0 }
   rows.forEach(r => {
     if (r.status in summary) summary[r.status as keyof typeof summary] = r.count
@@ -82,64 +75,68 @@ app.get('/summary', (c) => {
 })
 
 // 一括登録
-app.post('/bulk', zValidator('json', bulkRegisterSchema), (c) => {
+app.post('/bulk', zValidator('json', bulkRegisterSchema), async (c) => {
   const user = c.get('user')
   const { codes } = c.req.valid('json')
-  const db = getDb()
+  const db = await getDb()
 
   const registered: string[] = []
   const skipped: string[] = []
 
-  const insert = db.prepare(
-    'INSERT OR IGNORE INTO positions (code, registered_by) VALUES (?, ?)'
-  )
-  const bulkInsert = db.transaction(() => {
+  await db.transaction(async (tx) => {
     for (const code of codes) {
-      const result = insert.run(code, user.id)
-      if (result.changes > 0) registered.push(code)
+      const result = await tx
+        .insert(positions)
+        .values({ code, registeredBy: user.id })
+        .onConflictDoNothing()
+      // PGlite の onConflictDoNothing は rowsAffected を返す
+      if ((result as unknown as { rowCount: number }).rowCount > 0) registered.push(code)
       else skipped.push(code)
     }
   })
-  bulkInsert()
 
   return c.json({ registered, skipped } satisfies BulkRegisterResult, 201)
 })
 
-// ポジション更新（取得・廃止・備考編集・差し戻し）
-app.put('/:code', zValidator('json', positionUpdateSchema), (c) => {
+// ポジション更新
+app.put('/:code', zValidator('json', positionUpdateSchema), async (c) => {
   const code = c.req.param('code')
   const body = c.req.valid('json')
-  const db = getDb()
+  const db = await getDb()
 
-  const existing = db.prepare('SELECT code FROM positions WHERE code = ?').get(code)
+  const [existing] = await db
+    .select({ code: positions.code })
+    .from(positions)
+    .where(eq(positions.code, code))
+    .limit(1)
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
-  const sets: string[] = ["updated_at = datetime('now')"]
-  const vals: unknown[] = []
+  const patch: Partial<typeof positions.$inferInsert> = { updatedAt: sql`now()` as unknown as string }
+  if (body.status      !== undefined) patch.status     = body.status
+  if (body.acquired_by !== undefined) patch.acquiredBy  = body.acquired_by
+  if (body.acquired_at !== undefined) patch.acquiredAt  = body.acquired_at
+  if (body.notes       !== undefined) patch.notes       = body.notes
 
-  if (body.status      !== undefined) { sets.push('status = ?');       vals.push(body.status) }
-  if (body.acquired_by !== undefined) { sets.push('acquired_by = ?');  vals.push(body.acquired_by) }
-  if (body.acquired_at !== undefined) { sets.push('acquired_at = ?');  vals.push(body.acquired_at) }
-  if (body.notes       !== undefined) { sets.push('notes = ?');        vals.push(body.notes) }
+  await db.update(positions).set(patch).where(eq(positions.code, code))
 
-  vals.push(code)
-  db.prepare(`UPDATE positions SET ${sets.join(', ')} WHERE code = ?`).run(...vals)
-
-  const row = db.prepare('SELECT * FROM positions WHERE code = ?').get(code) as Record<string, unknown>
-  return c.json(toAdminPosition(row))
+  const [updated] = await db.select().from(positions).where(eq(positions.code, code)).limit(1)
+  return c.json(toAdminPosition(updated))
 })
 
 // プールから削除（available のみ）
-app.delete('/:code', (c) => {
+app.delete('/:code', async (c) => {
   const code = c.req.param('code')
-  const db = getDb()
+  const db = await getDb()
 
-  const row = db.prepare('SELECT code, status FROM positions WHERE code = ?').get(code) as
-    { code: string; status: string } | undefined
+  const [row] = await db
+    .select({ code: positions.code, status: positions.status })
+    .from(positions)
+    .where(eq(positions.code, code))
+    .limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
   if (row.status !== 'available') return c.json({ error: '利用可能状態のコードのみ削除できます' }, 409)
 
-  db.prepare('DELETE FROM positions WHERE code = ?').run(code)
+  await db.delete(positions).where(eq(positions.code, code))
   return c.body(null, 204)
 })
 

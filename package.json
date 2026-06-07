@@ -15,6 +15,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "typecheck:web": "npm run typecheck --workspace=apps/web",
     "typecheck:server": "npm run typecheck --workspace=apps/server",
-    "typecheck:domain": "npm run typecheck --workspace=packages/domain"
+    "typecheck:domain": "npm run typecheck --workspace=packages/domain",
+    "db:reset": "npm run db:reset --workspace=apps/server"
   }
 }

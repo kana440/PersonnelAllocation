@@ -8,12 +8,12 @@
 ## コマンド
 
 ```bash
-# Web アプリ（STEP1 本体）
+# Web アプリ（STEP1: VITE_APP_MODE=step1 がデフォルト）
 npm run dev               # Vite 開発サーバー起動
 npm run build             # 本番ビルド
 npm run test              # vitest（apps/web 内）
 
-# サーバー（STEP2 デモ用）
+# サーバー（STEP2 DEV: .env.local に VITE_APP_MODE=step2 + VITE_AUTH_MODE=stub を設定してから）
 npm run dev:server        # Hono + SQLite サーバー起動（port 3000）
 
 # 型チェック
@@ -91,6 +91,35 @@ packages/domain/src/                             ← ドメイン層（外部依
 ```
 
 **絶対に守るルール**: `packages/domain/src/` は `apps/web/` や `apps/server/` をインポートしない。
+
+---
+
+## STEP1 / STEP2 共存設計
+
+STEP1（Excel ローカル運用）と STEP2（サーバー・SSO・Round 管理）は画面動線が根本的に異なるため、**別のアプリシェル**として実装する。共通コアのみ共有する。
+
+### 環境変数（2変数）
+
+| `VITE_APP_MODE` | `VITE_AUTH_MODE` | 用途 |
+|---|---|---|
+| `step1`（デフォルト）| `none` | STEP1 本番 |
+| `step2` | `stub` | STEP2 DEV（Hono + SQLite）|
+| `step2` | `sso` | STEP2 本番（Aurora + SAML）|
+
+### EditView スロットパターン
+
+`EditView` コンポーネントは「共通コア（常に両シェルで使われる）」＋「3スロット（シェルごとに差し替える）」で構成する。
+
+```
+Core（共通コア）             → STEP1・STEP2 どちらにも自動反映
+userSlot                    → STEP1=モードセレクタ、STEP2=SSO ユーザー表示
+primaryActionSlot           → STEP1=Excel エクスポート、STEP2=提出ボタン
+step2ExtrasSlot             → STEP2 専用（提出状況・コメント・照会）
+```
+
+Core に追加した機能は STEP2 への手動追加なしで自動継承される。STEP2 専用機能のみ `step2ExtrasSlot` に配置する。
+
+詳細は `docs/02-architecture.md` の「STEP1 / STEP2 共存アーキテクチャ」セクション参照。
 
 ---
 
@@ -316,6 +345,54 @@ apps/web/src/infrastructure/api/
 
 ---
 
+## STEP2 API 境界の規約
+
+サーバー（`apps/server`）↔ クライアント（`apps/web`）間は JSON でやり取りするため、型安全が失われる境界。
+以下のルールを破ると、TypeScript が通っても実行時クラッシュする。
+
+### Drizzle ORM のキー命名
+
+Drizzle は TypeScript のプロパティ名（camelCase）でキーを返す。`ApiXxx` インターフェースは snake_case。
+**フィールドを選択するときは必ず `.select({})` で snake_case エイリアスを明示する**。
+
+```typescript
+// ❌ NG（Drizzle が camelCase で返す → ApiSubmission の snake_case と不一致）
+const rows = await db.select().from(submissions)
+
+// ✅ OK
+const rows = await db.select({
+  id:               submissions.id,
+  round_company_id: submissions.roundCompanyId,
+  parent_id:        submissions.parentId,
+}).from(submissions)
+```
+
+詳細は `apps/server/CLAUDE.md` の「Drizzle ORM のキー命名規則」を参照。
+
+### codeLists の受け取り方
+
+サーバーが返す `codeLists` は `Record<string, unknown[]>` であり `AllCodeLists` 全フィールドを保証しない
+（例: `orgMasterEntries` はサーバー側が除外して保存するため返却されない）。
+
+**受け取り後は必ず `EMPTY_CODE_LISTS` とマージしてから `appService` に渡す**。
+
+```typescript
+import { EMPTY_CODE_LISTS, type AllCodeLists } from '@personnel/domain/masters/aggregate'
+
+// ❌ NG（受け取った codeLists をそのまま cast → 未定義キーがあるとランタイムクラッシュ）
+codeLists: masters.codeLists as AllCodeLists
+
+// ✅ OK（EMPTY_CODE_LISTS をベースにして undefined キーを空配列で埋める）
+codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>) }
+```
+
+### ApiXxx インターフェースとクエリのフィールド同期
+
+`ApiXxx` に新しいフィールドを追加したら、そのフィールドを返す**すべてのエンドポイント**のクエリにも追加する。
+片方だけ変えると「型は通るが実行時は `undefined`」になる。
+
+---
+
 ## やってはいけないこと
 
 - `packages/domain/src/` 内で `appService` / `useStore` / React を import する
@@ -325,6 +402,9 @@ apps/web/src/infrastructure/api/
 - `positionCode` が `_pos_` 始まりかどうかチェックせず Excel 出力する
 - `EditCommand` を使わず `HRApplicationService` に直接ドメインロジックを書く
 - バリデーションとオプション絞り込みを別々に実装する（`FIELD_CONSTRAINTS` を使う）
+- Drizzle の `.select()` 結果を `ApiXxx` に直接 cast する（snake_case エイリアスなしで）
+- サーバーから受け取った `codeLists` を `EMPTY_CODE_LISTS` とマージせず使う
+- React の `map()` 内で `<>` フラグメントを key なしで使う（必ず `<React.Fragment key={...}>` を使う）
 
 ---
 

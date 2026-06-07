@@ -1,7 +1,18 @@
 # 09 — サーバー移行ビジョン
 
-> **ステータス**: 企画段階（2026-06）  
-> 設計・実装の詳細はこのドキュメントが承認されてから別ドキュメントに分離する。
+> **ステータス**: 実装進行中（2026-06）  
+> Phase 1（サーバー追加）・Phase 2（Web 編集）は Hono + SQLite/PGlite の STEP2 デモとして実装済み。  
+> Phase 3 への移行（Aurora 本番・SSO）は今後。詳細な画面設計は `docs/13-screen-design.md`、要件定義は `docs/12-step2-requirements.md` 参照。
+
+---
+
+## 現在の実装状況
+
+| フェーズ | ステータス |
+|---|---|
+| Phase 1（サーバー追加・Excel アップロード・SSO 認証基盤） | ✓ 実装済み（Hono + PGlite。Aurora は未移行） |
+| Phase 2（Web 直接編集・Round / Submission 管理・委任ツリー） | ✓ 実装済み（3-way merge・差し戻し・強制提出含む） |
+| Phase 3（Excel は出力専用・改版管理完全 Web 化・Aurora 本番） | 今後 |
 
 ---
 

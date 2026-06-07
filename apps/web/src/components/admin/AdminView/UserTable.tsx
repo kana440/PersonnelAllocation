@@ -7,25 +7,15 @@ interface Props {
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  super_admin: '全権管理者',
-  admin:       '取りまとめ担当',
-  assignee:    '組織担当',
+  admin:       '管理者',
+  coordinator: '取りまとめ担当',
+  member:      '担当者',
 }
 
 const ROLE_COLORS: Record<UserRole, string> = {
-  super_admin: 'bg-purple-100 text-purple-700',
-  admin:       'bg-blue-100 text-blue-700',
-  assignee:    'bg-gray-100 text-gray-600',
-}
-
-function ScopeLabel({ policy }: { policy: AdminUser['policy'] }) {
-  if (!policy.orgLevelMin && !policy.orgCodes) {
-    return <span className="text-gray-400 text-xs">全組織</span>
-  }
-  const parts: string[] = []
-  if (policy.orgLevelMin) parts.push(`Lv.${policy.orgLevelMin}以上`)
-  if (policy.orgCodes?.length) parts.push(policy.orgCodes.slice(0, 3).join(', ') + (policy.orgCodes.length > 3 ? '…' : ''))
-  return <span className="text-xs text-gray-700">{parts.join(' / ')}</span>
+  admin:       'bg-purple-100 text-purple-700',
+  coordinator: 'bg-blue-100 text-blue-700',
+  member:      'bg-gray-100 text-gray-600',
 }
 
 export function UserTable({ users, onEdit, onDelete }: Props) {
@@ -45,7 +35,6 @@ export function UserTable({ users, onEdit, onDelete }: Props) {
             <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 w-52">表示名</th>
             <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500">メール</th>
             <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 w-36">ロール</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500">アクセス範囲</th>
             <th className="px-4 py-2.5 w-24" />
           </tr>
         </thead>
@@ -58,9 +47,6 @@ export function UserTable({ users, onEdit, onDelete }: Props) {
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[u.role]}`}>
                   {ROLE_LABELS[u.role]}
                 </span>
-              </td>
-              <td className="px-4 py-3">
-                <ScopeLabel policy={u.policy} />
               </td>
               <td className="px-4 py-3">
                 <div className="flex gap-2 justify-end">

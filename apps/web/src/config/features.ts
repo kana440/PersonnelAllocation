@@ -1,22 +1,29 @@
 // STEP1/STEP2 の機能フラグ。
-// .env.production に VITE_BACKEND_MODE=stub を設定すると STEP1 ビルドになり、
-// STEP2 用 UI コードは tree-shake で除外される。
 //
-// ローカルで STEP2 デモを動かすには .env.local に VITE_BACKEND_MODE=local-server を設定する。
+// 2変数で制御する:
+//   VITE_APP_MODE  : step1 | step2
+//   VITE_AUTH_MODE : none | stub | sso   (STEP2 のみ有効)
+//
+//  VITE_APP_MODE=step1, VITE_AUTH_MODE=none  → STEP1 本番（デフォルト）
+//  VITE_APP_MODE=step2, VITE_AUTH_MODE=stub  → STEP2 DEV（Hono+SQLite+スタブ認証）
+//  VITE_APP_MODE=step2, VITE_AUTH_MODE=sso   → STEP2 本番（Aurora+SAML SSO）
 
-const mode = import.meta.env.VITE_BACKEND_MODE ?? 'stub'
+const appMode  = import.meta.env.VITE_APP_MODE  ?? 'step1'
+const authMode = import.meta.env.VITE_AUTH_MODE ?? 'none'
+
+const isStep2 = appMode === 'step2'
 
 export const Features = {
   // Web 提出ボタン・サーバー送信フロー
-  webSubmission: mode !== 'stub',
+  webSubmission: isStep2,
   // 整合エラー通知バナー
-  consistencyNotifications: mode !== 'stub',
+  consistencyNotifications: isStep2,
   // ポジション申請ワークフロー
-  positionWorkflow: mode !== 'stub',
-  // ユーザー切り替えドロップダウン（デモ用スタブ認証）
-  userSwitcher: mode === 'local-server',
+  positionWorkflow: isStep2,
+  // ユーザー切り替えドロップダウン（STEP2 DEV のスタブ認証のみ）
+  userSwitcher: isStep2 && authMode === 'stub',
   // ユーザー管理・管理画面
-  userManagement: mode !== 'stub',
+  userManagement: isStep2,
 } as const
 
 export type FeatureKey = keyof typeof Features

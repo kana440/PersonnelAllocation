@@ -13,14 +13,17 @@ npx vitest run       # テスト実行
 
 ## 環境変数
 
-`VITE_BACKEND_MODE` で動作モードを切り替える：
+STEP1 と STEP2 は画面動線が根本的に異なる別シェル。**2変数**で制御する：
 
-| 値 | 意味 |
-|---|---|
-| `stub`（デフォルト・本番） | バックエンドなし。Excel 完全互換 STEP1 モード |
-| `local-server` | ローカル Hono サーバーに接続。STEP2 機能が有効 |
+| `VITE_APP_MODE` | `VITE_AUTH_MODE` | 用途 | バックエンド | 認証 |
+|---|---|---|---|---|
+| `step1`（デフォルト） | `none` | STEP1 本番・Excel ローカル運用 | なし | なし |
+| `step2` | `stub` | STEP2 DEV | ローカル Hono + SQLite | スタブ（ユーザー切り替え UI） |
+| `step2` | `sso` | STEP2 ステージング/本番 | Aurora | SAML SSO |
 
-`.env.local` を作成して `VITE_BACKEND_MODE=local-server` を設定すると STEP2 UI が表示される。
+- `.env.local` に `VITE_APP_MODE=step2` + `VITE_AUTH_MODE=stub` → STEP2 DEV（`npm run dev:server` と併用）
+- `.env.production` は `VITE_APP_MODE=step1` 固定（STEP1 本番ビルド用）
+- STEP2 本番デプロイ時は CI/CD 環境変数で `VITE_APP_MODE=step2` + `VITE_AUTH_MODE=sso` を指定する
 
 機能フラグは `src/config/features.ts` の `Features` オブジェクトで参照する。
 UI コンポーネントで直接 `import.meta.env` を読まない。

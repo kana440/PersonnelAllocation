@@ -31,7 +31,7 @@ Module K: SF Adapter（将来） ← ports/ のみに依存
 
 ## Module A: Core Types
 
-**場所**: `src/domain/allocationRow.ts`, `src/domain/schemas.ts`, `src/domain/codeLists/`, `src/domain/csvImport/`
+**場所**: `packages/domain/src/allocationRow.ts`, `packages/domain/src/masters/`, `packages/domain/src/csvImport/`
 
 **責務**: システム全体で使われる型・スキーマ・コードリスト・CSV 解釈ロジックを定義する
 
@@ -61,7 +61,7 @@ type Organization, Person, Company ...（Zod 由来）
 
 ## Module B: Validation
 
-**場所**: `src/domain/validation/`（複数ファイルに分割）, `src/domain/choices/`
+**場所**: `packages/domain/src/validation/`（複数ファイルに分割）, `packages/domain/src/choices/`
 
 **責務**: `AllocationRow` 1行の整合性をチェックする。エラー・警告を返す。
 また、`FIELD_CONSTRAINTS` を単一ソースとしてバリデーション（存在チェック）と UI 選択肢絞り込みの両方を導出する。
@@ -102,7 +102,7 @@ function getFieldOptions(field, row, codeLists, currentJobFamily?): OptionItem[]
 
 ## Module C: Operation Abstraction
 
-**場所**: `src/domain/commands/`, `src/domain/patterns/`
+**場所**: `packages/domain/src/commands/`, `packages/domain/src/patterns/`
 
 **責務**: 業務操作の抽象インターフェース・分類ラベル・複合操作を提供する
 
@@ -148,7 +148,7 @@ function failField(field, message): ValidationError
 
 ## Module D: Projection（派生ビュー）
 
-**場所**: `src/domain/choices/rows.ts`
+**場所**: `packages/domain/src/choices/rows.ts`
 
 **責務**: `AllocationRow[]` から UI が必要とする派生ビュー（Person, Company）と組織検索 Map を生成する
 
@@ -174,7 +174,7 @@ function deriveCompanies(orgs: Organization[], companies: Company[]): Company[]
 
 ## Module F: Application Service
 
-**場所**: `src/application/HRApplicationService.ts`
+**場所**: `apps/web/src/application/HRApplicationService.ts`
 
 **責務**: 状態の Single Source of Truth。操作の実行・Undo/Redo・状態変更通知を管理する
 
@@ -217,7 +217,7 @@ class HRApplicationService {
 
 ## Module G: AI Tools
 
-**場所**: `src/application/aiTools.ts`
+**場所**: `apps/web/src/application/aiTools.ts`
 
 **責務**: AI（Claude Tool Use / シナリオハンドラー）が呼び出せる関数群を提供する。
 検索・バリデーション・操作実行の 3 種類。
@@ -251,17 +251,16 @@ tools.undo()
 tools.formatErrors(errors)
 ```
 
-**現在の欠陥（AI-Position 対応ギャップ）**:
+**未対応**:
 - `findPositions()` / `findVacantPositions()` がない → AI は空席を検索できない
-- `createVacantPosition` / `assignPersonToVacantPosition` / `unassignPersonFromPosition` / `removePosition` が未公開
-- → AI はポジション操作を実行できない（[next-steps](./06-next-steps.md) Step 1）
+- ポジション操作（`createVacantPosition` など）が AI に未公開
 
 ---
 
 ## Module H: Excel Adapter
 
-**場所**: `src/infrastructure/excel/exceljs/exporter.ts`, `src/infrastructure/excel/xlsx/exporter.ts`,
-`src/infrastructure/excel/engine.ts`, `src/infrastructure/allocationListMapper.ts`
+**場所**: `apps/web/src/infrastructure/excel/exceljs/exporter.ts`, `apps/web/src/infrastructure/excel/xlsx/exporter.ts`,
+`apps/web/src/infrastructure/excel/engine.ts`, `apps/web/src/infrastructure/allocationListMapper.ts`
 
 **責務**: ファイル I/O。Excel（`.xlsx` / `.xlsm`）の読み込みと書き出しを担う。
 
@@ -286,7 +285,7 @@ function exportValue(row, key): unknown {
 
 ## Module I: Web UI + State（Zustand）
 
-**場所**: `src/components/`, `src/store/useStore.ts`
+**場所**: `apps/web/src/components/`, `apps/web/src/store/useStore.ts`
 
 **責務**: UI コンポーネントとその状態管理。
 `HRApplicationService` の変更通知を受けて Zustand ストアを更新する。
@@ -299,7 +298,7 @@ function exportValue(row, key): unknown {
 
 ## Module J: Code List Storage
 
-**場所**: `src/infrastructure/codeLists/`, `src/store/codeListStore.ts`
+**場所**: `apps/web/src/infrastructure/masters/`, `apps/web/src/store/`
 
 **責務**: コードリストの LocalStorage への保存と読み込み。
 

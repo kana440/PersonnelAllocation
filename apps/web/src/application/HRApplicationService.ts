@@ -136,6 +136,14 @@ export class HRApplicationService {
     this.emit()
   }
 
+  // STEP2 用: 行データのみ差し替え（既存マスタを保持）
+  loadRowsOnly(rows: AllocationRow[]): void {
+    this.historyPreviewPosition = null
+    this.allocationList = rows
+    this.undoStack.clear()
+    this.emit()
+  }
+
   // ── 追加インポート（マージ）────────────────────────────────
   mergeExcelData(data: {
     allocationList: AllocationRow[]

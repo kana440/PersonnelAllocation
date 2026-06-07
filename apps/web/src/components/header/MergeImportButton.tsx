@@ -4,6 +4,9 @@ import { useUserSession } from '../../store/useUserSession'
 import { importFromFile } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
 import type { ImportMode, AssigneeImportMode } from '../../application/importMerge'
+import { computeRowDiffs, type RowChangeSummary } from '@personnel/domain/diffMerge'
+import { RowDiffTable } from '../common/RowDiffTable'
+import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 type Step =
   | { kind: 'idle' }
@@ -54,8 +57,12 @@ function computeAssigneeSummaries(result: ImportedWorkbookResult): AssigneeSumma
     .map(([assignee, rowCount]) => ({ assignee, rowCount }))
 }
 
+// groupEmployeeId + departmentCode で照合（STEP1 用）
+const step1MatchFn = (r: AllocationRow): string | null =>
+  r.groupEmployeeId ? `${r.groupEmployeeId}|${r.departmentCode ?? ''}` : null
+
 export function MergeImportButton() {
-  const { mergeExcelData } = useStore()
+  const { mergeExcelData, allocationList } = useStore()
   const { capabilities }   = useUserSession()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -97,6 +104,17 @@ export function MergeImportButton() {
     () => step.kind === 'preview' ? computeAssigneeSummaries(step.result) : [],
     [step]
   )
+
+  const rowDiffs = useMemo<RowChangeSummary[]>(() => {
+    if (step.kind !== 'preview') return []
+    const imported = step.result.allocationList
+    if (selectedMode === 'replace-all') {
+      return computeRowDiffs(allocationList as AllocationRow[], imported as AllocationRow[], step1MatchFn)
+    }
+    // append-new: 追加行のみ（before になく after にある行）
+    return computeRowDiffs(allocationList as AllocationRow[], imported as AllocationRow[], step1MatchFn)
+      .filter(d => d.kind === 'added')
+  }, [step, selectedMode, allocationList])
 
   return (
     <>
@@ -141,8 +159,19 @@ export function MergeImportButton() {
                   </div>
                 </div>
 
-                {/* Assignee summary */}
+                {/* スクロールエリア: 差分 + 担当者サマリー */}
                 <div className="flex-1 overflow-y-auto min-h-0">
+
+                  {/* 変更差分プレビュー */}
+                  <div className="px-4 pt-3 pb-2 space-y-2">
+                    <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                      変更差分
+                    </div>
+                    <RowDiffTable diffs={rowDiffs} maxVisible={100} />
+                  </div>
+
+                  {/* Assignee summary */}
+                  <div className="border-t border-gray-100">
                   <div className="px-4 pt-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
                     担当者サマリー（インポートファイル）
                   </div>
@@ -174,6 +203,7 @@ export function MergeImportButton() {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 {/* Options */}

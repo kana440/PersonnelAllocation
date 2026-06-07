@@ -16,7 +16,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@personnel/domain/*": ["../../packages/domain/src/*"]
+      "@personnel/domain/*": ["../../packages/domain/src/*"],
+      "@server/*":           ["../server/src/*"]
     }
   },
   "include": ["src", "tests"],

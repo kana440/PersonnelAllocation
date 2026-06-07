@@ -34,21 +34,7 @@
 
 ## 2. 短期改善提案（STEP1 リリース前）
 
-### 2-1. `src/config/features.ts` の導入
-
-STEP1/STEP2 の UI 出し分けを環境変数で制御するファクトリを作る。現状は未実装で、STEP2 機能がすべてのビルドに混入するリスクがある。
-
-```typescript
-// apps/web/src/config/features.ts
-export const Features = {
-  webSubmission:      import.meta.env.VITE_BACKEND_MODE !== 'stub',
-  errorNotifications: import.meta.env.VITE_BACKEND_MODE !== 'stub',
-} as const
-```
-
-`.env.production` に `VITE_BACKEND_MODE=stub` を設定することで STEP1 ビルドから STEP2 UI を除外できる。
-
-### 2-2. `packages/domain` の独立型チェックを CI に追加
+### 2-1. `packages/domain` の独立型チェックを CI に追加
 
 ```bash
 cd packages/domain && npx tsc --noEmit
@@ -56,7 +42,7 @@ cd packages/domain && npx tsc --noEmit
 
 ドメイン層が web に依存しないことを CI で保証する。
 
-### 2-3. OpenAPI スペックの生成
+### 2-2. OpenAPI スペックの生成
 
 `apps/server/src/routes/` の Hono ルートから OpenAPI スペックを自動生成し、フロントエンドの HTTP クライアントの型を自動導出する。
 
@@ -76,16 +62,7 @@ packages/
   types/      ← API 境界型・DTO（追加）
 ```
 
-### 3-2. 整合チェックの domain 層への移動
-
-現在 `apps/server/src/routes/submit.ts` に書かれている出向/兼務の整合チェックロジックは、ドメインの知識（`groupMemberId`・`band` の意味）を含んでいる。`packages/domain/src/validation/` に純粋関数として切り出すことで、フロントでもサーバーでも同じロジックを実行できる。
-
-```typescript
-// packages/domain/src/validation/validateCrossRowConsistency.ts
-export function validateCrossRowConsistency(rows: AllocationRow[]): ConsistencyIssue[]
-```
-
-### 3-3. ポジション申請ワークフローの実装
+### 3-2. ポジション申請ワークフローの実装
 
 `apps/server/` に以下を追加:
 - `POST /api/positions/request` — 担当者が新ポジションをリクエスト
@@ -94,7 +71,7 @@ export function validateCrossRowConsistency(rows: AllocationRow[]): ConsistencyI
 
 `packages/domain/src/commands/handlers/assignPositionCodes.ts` は既に実装済みなので、サーバー側のワークフローと繋ぐだけ。
 
-### 3-4. 行レベルアクセス制御の強化
+### 3-3. 行レベルアクセス制御の強化
 
 現在 `apps/server/src/routes/rows.ts` のポリシーフィルタは `orgLevel` と `orgCodes` のみ。実際の運用では「3階層以上かつ自社組織のみ」のような複合条件が必要。ポリシーモデルを拡張する。
 

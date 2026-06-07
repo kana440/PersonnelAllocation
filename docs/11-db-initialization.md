@@ -1,73 +1,86 @@
 # 11 — DB 初期化・マイグレーション戦略
 
-> **ステータス**: 実装済み（2026-06）
+> **ステータス**: 実装済み（2026-06 — Drizzle ORM + PGlite に移行）
 
 ---
 
-## 構成
+## 概要
+
+| 環境 | DB | アダプタ |
+|---|---|---|
+| ローカル開発 | PGlite（PostgreSQL WASM、サーバー不要） | `src/db/adapters/pglite.ts` |
+| 本番 / staging | Aurora Serverless v2 / RDS PostgreSQL | `src/db/adapters/aurora.ts` |
+
+どちらも同じ `schema.ts`（`pgTable`）と同じ Drizzle マイグレーション SQL を使う。
+
+---
+
+## ファイル構成
 
 ```
-apps/server/src/db/
-  schema.sql              ← DDL のみ（CREATE TABLE IF NOT EXISTS）
-  seeds/
-    demo.sql              ← デモデータ（開発・テスト専用）
-  migrations/
-    0001_add_users_role.sql
-    0002_rebuild_positions.sql
-    （スキーマ変更のたびに追番で追加）
-  sqlite.ts               ← migration runner + 初期化ロジック
+apps/server/
+  src/db/
+    schema.ts             ← Drizzle スキーマ定義（テーブル定義の Single Source）
+    database.ts           ← DB エントリポイント（環境変数でアダプタ切り替え）
+    adapters/
+      pglite.ts           ← PGlite アダプタ（dev）
+      aurora.ts           ← Aurora / node-postgres アダプタ（prod）
+    drizzle/              ← drizzle-kit generate が生成するマイグレーション SQL
+    seeds/
+      demo.sql            ← デモデータ（PostgreSQL 構文、ON CONFLICT DO NOTHING）
+  drizzle.config.ts       ← drizzle-kit 設定（dialect: postgresql）
+  data/pglite/            ← PGlite データディレクトリ（gitignore 対象）
 ```
 
 ---
 
-## 起動時の初期化順序
+## 起動時の初期化順序（PGlite）
 
 ```
-1. _migrations テーブルを作成（初回のみ）
-2. migrations/*.sql を番号順に適用（未適用かつ前提条件を満たすものだけ）
-3. schema.sql を実行（DDL）
-4. seeds/demo.sql を実行（NODE_ENV !== 'production' のときのみ）
+1. PGlite クライアント起動（data/pglite/ ディレクトリに永続化）
+2. drizzle-orm/pglite/migrator が drizzle/ の SQL を番号順に適用（未適用のみ）
+3. seeds/demo.sql を実行（NODE_ENV !== 'production' のときのみ）
 ```
 
-この順序を守ることで、古い DB ファイルを持つ開発者がサーバーを再起動するだけで自動的に最新スキーマに追いつける。
+サーバー起動時（`index.ts`）に `await getDb()` を呼ぶことで事前接続・マイグレーションを完了させる。
 
 ---
 
-## マイグレーションファイルの追加方法
+## スキーマ変更の手順
 
-スキーマを変更するとき（カラム追加・テーブル再設計など）は、**schema.sql を直接変更するだけでなく**、マイグレーションファイルも追加する。
-
-### ① schema.sql を変更する（最終形を反映）
-
-```sql
--- schema.sql（新しいカラムを追加した例）
-CREATE TABLE IF NOT EXISTS users (
-  id    TEXT PRIMARY KEY,
-  name  TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  role  TEXT NOT NULL DEFAULT 'assignee'  -- 追加
-);
-```
-
-### ② migrations/ に番号付きファイルを追加する
-
-```sql
--- migrations/0003_add_xxx.sql
-ALTER TABLE foo ADD COLUMN bar TEXT;
-```
-
-### ③ sqlite.ts の shouldApply() に前提条件を追加する（必要な場合）
-
-前提条件チェックが必要なのは、**カラムが既に存在する場合に SQL が失敗するケース**（SQLite は `ADD COLUMN IF NOT EXISTS` をサポートしない）。
+### ① schema.ts を変更する
 
 ```typescript
-case '0003_add_xxx.sql': {
-  const cols = (db.pragma('table_info(foo)') as Array<{ name: string }>).map(c => c.name)
-  return !cols.includes('bar')  // すでにあればスキップ
-}
+// src/db/schema.ts（新しいカラムを追加した例）
+export const users = pgTable('users', {
+  id:    text('id').primaryKey(),
+  name:  text('name').notNull(),
+  email: text('email').notNull().unique(),
+  role:  text('role').notNull().default('assignee'),
+  // ↓ 追加
+  department: text('department'),
+})
 ```
 
-前提条件チェックが不要なシンプルな変更（新テーブル作成など）は `default: return true` に任せて、チェックを書かなくてよい。
+### ② drizzle-kit generate でマイグレーション SQL を生成する
+
+```bash
+cd apps/server
+npx drizzle-kit generate
+# → src/db/drizzle/0001_xxx.sql が生成される
+```
+
+### ③ サーバーを再起動する
+
+起動時に `migrate()` が自動適用する。
+
+---
+
+## DB リセット（ローカル開発）
+
+```bash
+npm run db:reset   # data/pglite/ ディレクトリを削除 → 次回起動時に再初期化
+```
 
 ---
 
@@ -76,28 +89,51 @@ case '0003_add_xxx.sql': {
 | ファイル | 用途 | 実行タイミング |
 |---|---|---|
 | `seeds/demo.sql` | ローカル開発・デモ用の初期データ | `NODE_ENV !== 'production'` のみ |
-| （将来）`seeds/fixtures.sql` | テスト用フィクスチャ | テストランナーから明示的に呼ぶ |
 
-seed は **`INSERT OR IGNORE`** で書く。冪等にするため。
+seed は `ON CONFLICT DO NOTHING` で書く（冪等）。
 
 本番 DB に seed を流してしまわないよう、`NODE_ENV=production` での実行は自動的にスキップされる。
 
 ---
 
-## 本番（Aurora）への移行時
+## Aurora 本番環境
 
-現在は SQLite + 自作 runner だが、Aurora（PostgreSQL 互換）に移行する際は以下のいずれかを選択する：
+```bash
+# 接続設定（.env.example 参照）
+DATABASE_URL=postgresql://user:password@aurora-cluster.xxxx.rds.amazonaws.com:5432/personnel
+NODE_ENV=production
 
-### 選択肢 A: 自作 runner をそのまま移植（推奨・最小コスト）
+# スタートアップ migrate を無効化してデプロイスクリプト側で実行する場合
+AUTO_MIGRATE=false
+npx drizzle-kit migrate
+```
 
-`better-sqlite3` を `pg`（node-postgres）に差し替え、`_migrations` テーブルの管理ロジックをそのまま流用する。`migrations/*.sql` ファイルは Aurora でもそのまま使える（PostgreSQL 互換の SQL に書いている限り）。
+`DATABASE_URL` が設定されていると `database.ts` が自動的に Aurora アダプタを選択する。
+`NODE_ENV=production` のとき SSL（`rejectUnauthorized: true`）が有効になる。
 
-### 選択肢 B: Flyway / Liquibase に委譲
+---
 
-CI/CD パイプラインに Flyway を組み込む。`migrations/*.sql` をそのまま渡せるため、ファイルの書き直しは不要。Flyway Community Edition は無料。
+## Drizzle ORM クエリパターン
 
-### 選択肢 C: Drizzle ORM + drizzle-kit
+```typescript
+import { getDb } from '../db/database.ts'
+import { eq, desc } from 'drizzle-orm'
+import { users } from '../db/schema.ts'
 
-TypeScript でスキーマを定義し、`drizzle-kit generate` でマイグレーション SQL を自動生成する。ORM を導入することになるが、型安全なクエリが得られる。
+const db = await getDb()
 
-**現時点の判断**: Aurora 移行が決定したタイミングで選択する。それまでは自作 runner を継続。
+// SELECT
+const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1)
+
+// INSERT
+await db.insert(users).values({ id, name, email, role: 'assignee' })
+
+// UPDATE
+await db.update(users).set({ name }).where(eq(users.id, id))
+
+// TRANSACTION
+await db.transaction(async (tx) => {
+  await tx.insert(rounds).values(roundData)
+  await tx.insert(allocationRows).values(rowsData)
+})
+```

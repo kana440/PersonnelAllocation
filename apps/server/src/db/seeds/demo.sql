@@ -1,14 +1,41 @@
--- デモ用初期データ（開発・テスト環境のみ）
--- 本番では実行しない
+-- デモ用シードデータ（開発・テスト環境のみ）
+-- 冪等: ON CONFLICT DO NOTHING
 
-INSERT OR IGNORE INTO users (id, name, email, role) VALUES
-  ('user-admin',  '取りまとめ 太郎', 'admin@example.com',   'super_admin'),
-  ('user-dept-a', '部門A 担当',      'dept-a@example.com',  'admin'),
-  ('user-dept-b', '部門B 担当',      'dept-b@example.com',  'admin'),
-  ('user-lv3',    '3階層 専任',      'lv3@example.com',     'assignee');
+-- ─── 会社 ────────────────────────────────────────────────────────────────────
 
-INSERT OR IGNORE INTO user_access_policies (user_id, org_level_min, org_codes) VALUES
-  ('user-admin',  NULL, NULL),
-  ('user-dept-a', NULL, '["A01","A02","A03"]'),
-  ('user-dept-b', NULL, '["B01","B02"]'),
-  ('user-lv3',    3,    NULL);
+INSERT INTO companies (id, name, code, locale) VALUES
+  ('company-demo', '株式会社デモ', 'DEMO',     'ja'),
+  ('company-sub',  'デモ子会社',   'DEMO-SUB', 'ja')
+ON CONFLICT DO NOTHING;
+
+-- ─── ユーザー（グループ横断） ─────────────────────────────────────────────
+-- 5名構成: 管理者×1、人事（取りまとめ）×2、部門担当×2
+
+INSERT INTO users (id, name, email, role) VALUES
+  ('user-admin',  '管理者A',   'admin@example.com',       'admin'),
+  ('user-hr1',    'HR担当A',   'hr1@example.com',         'coordinator'),
+  ('user-hr2',    'HR担当B',   'hr2@example.com',         'coordinator'),
+  ('user-dept1',  '部門A担当', 'department1@example.com', 'member'),
+  ('user-dept2',  '部門B担当', 'department2@example.com', 'member')
+ON CONFLICT (id) DO UPDATE SET
+  name  = EXCLUDED.name,
+  email = EXCLUDED.email,
+  role  = EXCLUDED.role;
+
+-- ─── 会社ごとの役割・アクセス制御 ────────────────────────────────────────
+
+INSERT INTO user_company_roles (user_id, company_id, role) VALUES
+  ('user-admin',  'company-demo', 'admin'),
+  ('user-hr1',    'company-demo', 'coordinator'),
+  ('user-hr2',    'company-demo', 'coordinator'),
+  ('user-dept1',  'company-demo', 'member'),
+  ('user-dept2',  'company-demo', 'member')
+ON CONFLICT DO NOTHING;
+
+-- ─── ポジション ──────────────────────────────────────────────────────────────
+
+INSERT INTO positions (code, company_id, status, registered_by) VALUES
+  ('_pos_demo_001', 'company-demo', 'available', 'user-admin'),
+  ('_pos_demo_002', 'company-demo', 'available', 'user-admin'),
+  ('_pos_demo_003', 'company-demo', 'available', 'user-admin')
+ON CONFLICT DO NOTHING;
