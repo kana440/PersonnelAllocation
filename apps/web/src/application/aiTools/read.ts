@@ -8,7 +8,7 @@ import { ALL_OPERATION_DEFS } from '@personnel/domain/commands/defs'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/choices'
 import type { OrgTreeNode, SelectedRowContext } from '../aiTypes'
-import type { PersonSearchResult, VacantPositionResult } from './types'
+import type { PersonSearchResult, PersonDetail, VacantPositionResult } from './types'
 import { buildOrgTree } from './orgTree'
 
 export function createReadMethods(service: HRApplicationService) {
@@ -134,12 +134,50 @@ export function createReadMethods(service: HRApplicationService) {
   function getPersonDetail(userId: string): Array<{
     rowId:          number
     name:           string
-    concurrentType: string | undefined
-    before: { departmentCode: string | undefined; orgName: string | undefined; grade: string | undefined; position: string | undefined }
-    after:  { departmentCode: string | undefined; orgName: string | undefined; grade: string | undefined; position: string | undefined }
-    promotionSign?:       string
-    managerPositionCode?: string
-    positionCode?:        string
+    concurrentType?: string
+    // Organization
+    departmentCode?:     string
+    orgName?:            string
+    prevDepartmentCode?: string
+    prevOrgName?:        string
+    // Person fields
+    employmentType?:        string
+    prevEmploymentType?:    string
+    band?:                  string
+    prevBand?:              string
+    payGrade?:              string
+    prevPayGrade?:          string
+    leaveOfAbsenceSign?:    string
+    // Position fields
+    positionCode?:              string
+    officialPositionCode?:      string
+    prevOfficialPositionCode?:  string
+    localJobTitle?:             string
+    positionBand?:              string
+    managerPositionCode?:       string
+    managerName?:               string
+    location?:                  string
+    costCenter?:                string
+    jobFamily?:                 string
+    jobType?:                   string
+    businessUnit?:              string
+    division?:                  string
+    subDivision?:               string
+    group?:                     string
+    team?:                      string
+    // Allocation（出向・兼務）
+    concurrentReason?:             string
+    secondmentFromCompany?:        string
+    prevSecondmentFromCompany?:    string
+    secondmentToCompany?:          string
+    prevSecondmentToCompany?:      string
+    secondmentFromEmployeeNumber?: string
+    // Transaction meta
+    transferReason?:    string
+    promotionSign?:     string
+    demotionReason?:    string
+    payGradeChangeSign?: string
+    memo?:              string
   }> {
     const { allocationList, afterOrganizations } = service.getSnapshot()
     const rows = allocationList.filter(r => r.userId === userId)
@@ -150,23 +188,196 @@ export function createReadMethods(service: HRApplicationService) {
         rowId:          r.rowId,
         name:           [r.lastName, r.firstName].filter(Boolean).join(' '),
         concurrentType: r.concurrentType ?? r.prevConcurrentType,
-        before: {
-          departmentCode: r.prevDepartmentCode,
-          orgName:        prevOrgName ?? r.prevDepartmentCode,
-          grade:          r.prevPayGrade,
-          position:       r.prevOfficialPositionCode,
-        },
-        after: {
-          departmentCode: r.departmentCode,
-          orgName:        orgName ?? r.departmentCode,
-          grade:          r.payGrade || r.prevPayGrade,
-          position:       r.officialPositionCode || r.prevOfficialPositionCode,
-        },
-        promotionSign:       r.promotionSign       || undefined,
-        managerPositionCode: r.managerPositionCode || undefined,
-        positionCode:        r.positionCode        || undefined,
+        // Organization
+        departmentCode:     r.departmentCode,
+        orgName:            orgName ?? r.departmentCode,
+        prevDepartmentCode: r.prevDepartmentCode,
+        prevOrgName:        prevOrgName ?? r.prevDepartmentCode,
+        // Person
+        employmentType:     r.employmentType     || r.prevEmploymentType,
+        prevEmploymentType: r.prevEmploymentType,
+        band:               r.band               || r.prevBand,
+        prevBand:           r.prevBand,
+        payGrade:           r.payGrade           || r.prevPayGrade,
+        prevPayGrade:       r.prevPayGrade,
+        leaveOfAbsenceSign: r.leaveOfAbsenceSign,
+        // Position
+        positionCode:             r.positionCode              || undefined,
+        officialPositionCode:     r.officialPositionCode      || r.prevOfficialPositionCode,
+        prevOfficialPositionCode: r.prevOfficialPositionCode,
+        localJobTitle:            r.localJobTitle             || r.prevLocalJobTitle,
+        positionBand:             r.positionBand              || r.prevPositionBand,
+        managerPositionCode:      r.managerPositionCode       || undefined,
+        managerName:              r.managerName               || undefined,
+        location:                 r.location                  || r.prevLocation,
+        costCenter:               r.costCenter                || r.prevCostCenter,
+        jobFamily:                r.jobFamily                 || r.prevJobFamily,
+        jobType:                  r.jobType                   || r.prevJobType,
+        businessUnit:             r.businessUnit              || r.prevBusinessUnit,
+        division:                 r.division                  || r.prevDivision,
+        subDivision:              r.subDivision               || r.prevSubDivision,
+        group:                    r.group                     || r.prevGroup,
+        team:                     r.team                      || r.prevTeam,
+        // Allocation
+        concurrentReason:             r.concurrentReason,
+        secondmentFromCompany:        r.secondmentFromCompany,
+        prevSecondmentFromCompany:    r.prevSecondmentFromCompany,
+        secondmentToCompany:          r.secondmentToCompany,
+        prevSecondmentToCompany:      r.prevSecondmentToCompany,
+        secondmentFromEmployeeNumber: r.secondmentFromEmployeeNumber,
+        // Transaction meta
+        transferReason:    r.transferReason,
+        promotionSign:     r.promotionSign    || undefined,
+        demotionReason:    r.demotionReason,
+        payGradeChangeSign: r.payGradeChangeSign || undefined,
+        memo:              r.memo,
       }
     })
+  }
+
+  /**
+   * 複数条件で従業員を一括検索し、全フィールドを返す。
+   * 1人につき1エントリ（本務行ベース）。
+   *
+   * @param query.name       氏名（部分一致）
+   * @param query.userId     userId（部分一致）
+   * @param query.orgCode    所属組織コード（完全一致）
+   * @param query.hasChanges true のとき変更ありの人のみ返す
+   * @param query.hasErrors  true のとき検証エラーありの人のみ返す
+   * @param query.where      フィールド名:値 の追加絞り込み条件（完全一致）
+   *                         例: { leaveOfAbsenceSign: '1' }
+   */
+  function searchPersons(query: {
+    name?:       string
+    userId?:     string
+    orgCode?:    string
+    hasChanges?: boolean
+    hasErrors?:  boolean
+    where?:      Record<string, string>
+    limit?:      number
+    offset?:     number
+  }): { items: PersonDetail[]; totalCount: number; truncated: boolean } {
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+
+    // group by userId
+    const byUserId = new Map<string, AllocationRow[]>()
+    for (const row of allocationList) {
+      if (!row.userId) continue
+      const bucket = byUserId.get(row.userId) ?? []
+      bucket.push(row)
+      byUserId.set(row.userId, bucket)
+    }
+
+    const results: PersonDetail[] = []
+
+    for (const [uid, rows] of byUserId) {
+      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+      const name    = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
+
+      // ── basic filters ──────────────────────────────────────────────────
+      if (query.name    && !name.includes(query.name))              continue
+      if (query.userId  && !uid.includes(query.userId))             continue
+      if (query.orgCode && primary.departmentCode !== query.orgCode) continue
+
+      // ── where: field-level exact match ────────────────────────────────
+      if (query.where) {
+        const skip = Object.entries(query.where).some(
+          ([field, val]) => (primary as Record<string, unknown>)[field] !== val
+        )
+        if (skip) continue
+      }
+
+      // ── hasChanges ────────────────────────────────────────────────────
+      if (query.hasChanges) {
+        const changed = rows.some(r => detectChanges(r).diffCount > 0)
+        if (!changed) continue
+      }
+
+      // ── hasErrors / collect validation ────────────────────────────────
+      let errorCount   = 0
+      let warningCount = 0
+      for (const r of rows) {
+        const issues = validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectChanges(r) })
+        errorCount   += issues.filter(i => i.level === 'error').length
+        warningCount += issues.filter(i => i.level === 'warning').length
+      }
+      if (query.hasErrors && errorCount === 0) continue
+
+      // ── derive changeKinds from all rows ──────────────────────────────
+      const allKinds = new Set<string>()
+      for (const r of rows) {
+        const { kinds } = detectChanges(r)
+        const { active } = deriveEditPatterns(kinds, r, codeLists)
+        active.forEach(p => allKinds.add(EDIT_PATTERN_META[p]?.label ?? p))
+      }
+
+      const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.departmentCode)?.name
+      const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.prevDepartmentCode)?.name
+
+      results.push({
+        userId:          uid,
+        name,
+        primaryRowId:    primary.rowId,
+        concurrentRowIds: rows.filter(r => r !== primary).map(r => r.rowId),
+        // Organization
+        departmentCode:      primary.departmentCode,
+        orgName:             orgName ?? primary.departmentCode,
+        prevDepartmentCode:  primary.prevDepartmentCode,
+        prevOrgName:         prevOrgName ?? primary.prevDepartmentCode,
+        businessUnit:        primary.businessUnit  || primary.prevBusinessUnit,
+        division:            primary.division      || primary.prevDivision,
+        subDivision:         primary.subDivision   || primary.prevSubDivision,
+        group:               primary.group         || primary.prevGroup,
+        team:                primary.team          || primary.prevTeam,
+        // Person
+        employmentType:      primary.employmentType     || primary.prevEmploymentType,
+        prevEmploymentType:  primary.prevEmploymentType,
+        band:                primary.band               || primary.prevBand,
+        prevBand:            primary.prevBand,
+        payGrade:            primary.payGrade           || primary.prevPayGrade,
+        prevPayGrade:        primary.prevPayGrade,
+        leaveOfAbsenceSign:  primary.leaveOfAbsenceSign,
+        prevLeaveOfAbsenceSign: primary.prevLeaveOfAbsenceSign,
+        // Position
+        positionCode:             primary.positionCode             || undefined,
+        prevPositionCode:         primary.prevPositionCode         || undefined,
+        officialPositionCode:     primary.officialPositionCode     || primary.prevOfficialPositionCode,
+        prevOfficialPositionCode: primary.prevOfficialPositionCode,
+        localJobTitle:            primary.localJobTitle            || primary.prevLocalJobTitle,
+        prevLocalJobTitle:        primary.prevLocalJobTitle,
+        positionBand:             primary.positionBand             || primary.prevPositionBand,
+        managerPositionCode:      primary.managerPositionCode      || undefined,
+        managerName:              primary.managerName              || undefined,
+        location:                 primary.location                 || primary.prevLocation,
+        costCenter:               primary.costCenter               || primary.prevCostCenter,
+        jobFamily:                primary.jobFamily                || primary.prevJobFamily,
+        jobType:                  primary.jobType                  || primary.prevJobType,
+        // Allocation
+        concurrentType:               primary.concurrentType,
+        concurrentReason:             primary.concurrentReason,
+        secondmentFromCompany:        primary.secondmentFromCompany,
+        prevSecondmentFromCompany:    primary.prevSecondmentFromCompany,
+        secondmentToCompany:          primary.secondmentToCompany,
+        prevSecondmentToCompany:      primary.prevSecondmentToCompany,
+        secondmentFromEmployeeNumber: primary.secondmentFromEmployeeNumber,
+        // Transaction meta
+        transferReason:    primary.transferReason,
+        promotionSign:     primary.promotionSign     || undefined,
+        demotionReason:    primary.demotionReason,
+        payGradeChangeSign: primary.payGradeChangeSign || undefined,
+        memo:              primary.memo,
+        // Derived
+        hasChanges:   rows.some(r => detectChanges(r).diffCount > 0),
+        changeKinds:  [...allKinds],
+        errorCount,
+        warningCount,
+      })
+    }
+
+    const limit  = query.limit  ?? 200
+    const offset = query.offset ?? 0
+    const page   = results.slice(offset, offset + limit)
+    return { items: page, totalCount: results.length, truncated: results.length > offset + limit }
   }
 
   const CHANGED_ROWS_LIMIT = 100
@@ -247,6 +458,6 @@ export function createReadMethods(service: HRApplicationService) {
   return {
     findPersons, findOrgs, getPersonRows, getRow, getOrgs, getPersons,
     getRowContext, getFieldOptions, findVacantPositions,
-    getPersonDetail, listChangedRows, getOrgTreeData,
+    getPersonDetail, searchPersons, listChangedRows, getOrgTreeData,
   }
 }

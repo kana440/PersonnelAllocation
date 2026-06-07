@@ -17,7 +17,7 @@ import { createReadMethods }   from './read'
 import { createWriteMethods }  from './write'
 import { createReviewMethods } from './review'
 
-export type { VacantPositionResult, AIOperationResult, PersonSearchResult } from './types'
+export type { VacantPositionResult, AIOperationResult, PersonSearchResult, PersonDetail } from './types'
 export { buildOrgTree } from './orgTree'
 
 export function createAITools(service: HRApplicationService) {

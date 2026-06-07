@@ -109,7 +109,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
       type: 'function',
       function: {
         name:        'getPersonDetail',
-        description: '指定した userId の従業員の詳細情報を取得する。before（発令前）と after（発令後/現在の変更状態）の両方を返す。promotionSign が "1" であれば昇降格フラグ、leaveOfAbsenceSign が "1" であれば休職中。',
+        description: '指定した userId の従業員の詳細情報を全フィールド取得する。兼務・出向がある場合は複数行を返す。before（発令前）と after（発令後）を含む。promotionSign="1"→昇降格、leaveOfAbsenceSign="1"→休職、secondmentToCompany→出向先会社、secondmentFromCompany→出向元会社。',
         parameters: {
           type: 'object',
           required: ['userId'],
@@ -120,6 +120,41 @@ const TOOL_ENTRIES: ToolEntry[] = [
       },
     },
     execute: args => aiTools.getPersonDetail(args.userId as string),
+  },
+
+  // ── Read: searchPersons ──────────────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'searchPersons',
+        description: '複数条件で従業員を一括検索し、全フィールドを返す（1人1エントリ・本務行ベース）。「この組織の従業員を教えて」「休職中の人は誰？」「出向中の人を全員」など、属性で絞り込んで一覧したいときに使う。findPersons の上位版で、追加の API 呼び出し不要で全詳細を取得できる。',
+        parameters: {
+          type: 'object',
+          properties: {
+            name:       { type: 'string',  description: '氏名（部分一致）' },
+            userId:     { type: 'string',  description: 'userId（部分一致）' },
+            orgCode:    { type: 'string',  description: '所属組織コード（完全一致）' },
+            hasChanges: { type: 'boolean', description: 'true のとき変更ありの人のみ返す' },
+            hasErrors:  { type: 'boolean', description: 'true のときバリデーションエラーありの人のみ返す' },
+            where: {
+              type: 'object',
+              description: 'フィールド名:値 の追加絞り込み（完全一致）。例: { "leaveOfAbsenceSign": "1" } で休職中のみ、{ "secondmentToCompany": "ABC社" } で出向先で絞り込み。使えるフィールド: leaveOfAbsenceSign, promotionSign, employmentType, band, payGrade, officialPositionCode, secondmentToCompany, secondmentFromCompany, concurrentType, transferReason, location など。',
+              additionalProperties: { type: 'string' },
+            },
+            limit:  { type: 'number', description: '最大取得件数（デフォルト200）' },
+            offset: { type: 'number', description: 'ページング開始位置（デフォルト0）' },
+          },
+        },
+      },
+    },
+    execute: args => aiTools.searchPersons(args as {
+      name?: string; userId?: string; orgCode?: string
+      hasChanges?: boolean; hasErrors?: boolean
+      where?: Record<string, string>
+      limit?: number; offset?: number
+    }),
   },
 
   // ── Read: getReviewSummary ───────────────────────────────────────────────
