@@ -47,9 +47,15 @@ let suggestedOutput
 if (sourceFile.includes('commands/handlers/') || sourceFile.includes('commands/defs/')) {
   suggestedOutput = `tests/operations/${stem}.test.ts`
 } else {
-  // src/domain/foo/bar.ts → tests/foo/bar.test.ts
-  const rel = sourceFile.replace(/^src\/domain\//, '')
-  const dir  = dirname(rel)
+  // パス正規化: どのような形式で渡されても src/ 以下の相対パスに統一する
+  //   src/application/aiTools/read.ts          → application/aiTools/read.ts
+  //   ../../packages/domain/src/validation/x.ts → validation/x.ts
+  //   src/domain/foo/bar.ts                     → foo/bar.ts  (旧形式・互換)
+  const rel = sourceFile
+    .replace(/^.*?packages\/domain\/src\//, '')
+    .replace(/^src\/domain\//, '')
+    .replace(/^src\//, '')
+  const dir = dirname(rel)
   suggestedOutput = `tests/${dir}/${stem}.test.ts`
 }
 

@@ -759,7 +759,7 @@ https://hr-allocation.company.internal/
 | F-01 | SSO 認証（スタブ実装） | SAML 想定の認証アダプタ。DEV は `VITE_AUTH_MODE=stub` |
 | F-02 | ロール判定（3役割） | メールアドレスで管理者/取りまとめ担当/担当者を判別 |
 | F-03 | Round 作成 | Excel インポートまたは SF 連携で新規 Round を DB 保存 |
-| F-04 | Revision 管理 | Round 最終提出時に新 Revision を作成。過去 Revision の参照・比較 |
+| ~~F-04~~ | ~~Revision 管理~~ | **実装しない**（後述の判断根拠参照）|
 | F-05 | 委任（Submission 作成） | 領域指定＋依頼コメントで Submission を生成。無制限委任ツリー |
 | F-06 | 依頼一覧（ポータル画面） | 自分の Submission 一覧・状態・依頼コメントの表示 |
 | F-07 | 行レベルアクセス制御 | ポリシーベースで Submission の閲覧・編集範囲を制限 |
@@ -769,10 +769,28 @@ https://hr-allocation.company.internal/
 | F-11 | 提出状況ダッシュボード | 委任ツリー全体の進捗一覧（管理者向け）|
 | F-12 | 整合チェック（出向・兼務） | groupMemberId 行間の自動バリデーション |
 | F-13 | 差し戻し | 管理者 → Submission 担当者への再編集依頼 |
-| F-14 | 最終提出（Revision 確定） | Round 完了・新 Revision の生成 |
+| F-14 | 最終提出（Round 完了） | Round を closed にして確定。Revision テーブルは作成しない（F-04 参照）|
 | F-15 | メール通知（基本） | 委任・提出・差し戻し・整合エラーの通知 |
 | F-16 | 新規ポジション自動共有通知 | 同 Round・同組織の別担当者への positionCode 自動通知 |
-| F-17 | 並列 Round マージ | 複数 Round の変更を統合。コンフリクト検出と解消 UI |
+| ~~F-17~~ | ~~並列 Round マージ~~ | **実装しない**（後述の判断根拠参照）|
+
+### 実装しない機能と判断根拠（2026-06）
+
+#### F-04 Revision 管理 / F-17 並列 Round マージ
+
+**判断**: 実装しない。
+
+**根拠**:
+- Round は年2回（1月版・3月版）で固定であり、並列実行は業務上発生しない
+- 各 Submission の依頼時・提出時にスナップショットが保存されるため、変更の追跡・差分参照はすでに可能
+- Revision テーブルが解決しようとした「不変の確定状態」は、Round の `closed` ステータス ＋ Submission のスナップショット連鎖で代替できる
+- Cross-Round マージが不要なため、並列 Round の共通ベース問題（Revision の最大の存在理由）も発生しない
+
+**代替**:
+- 「直前 Round の確定状態」 = `rounds` の最新 closed レコードの `allocation_rows` 参照で代替
+- 過去参照は Submission の `snapshot_data` と diff で実現
+
+---
 
 ### P1（STEP2 強化フェーズ）
 
