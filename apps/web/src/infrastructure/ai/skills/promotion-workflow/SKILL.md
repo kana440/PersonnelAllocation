@@ -1,8 +1,10 @@
 ---
-slug: promotion-workflow
-name: 昇格ウィザード
+name: promotion-workflow
 description: 従業員の昇格を処理するとき。バンド・等級・役職の変更を含む昇格発令に使う。
-status: active
+allowed-tools: findPersons getFieldOptions propose_promotion propose_field_edit getValidationDiagnosis
+metadata:
+  display-name: 昇格ウィザード
+  status: active
 ---
 
 # 昇格ウィザード

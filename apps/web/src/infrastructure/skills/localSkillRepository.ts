@@ -43,6 +43,7 @@ export class LocalSkillRepository implements ISkillRepository {
         name:         override?.name         ?? b.name,
         description:  override?.description  ?? b.description,
         instructions: override?.instructions ?? b.instructions,
+        allowedTools: b.allowedTools,           // allowed-tools はバンドル定義を常に使う
         status:       override?.status       ?? b.status,
         isBuiltin:    true,
         updatedAt:    override?.updatedAt    ?? b.updatedAt,

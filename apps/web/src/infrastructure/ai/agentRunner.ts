@@ -24,12 +24,30 @@ import { TOOL_LABELS } from './toolLabels'
 import { toolRegistry } from './toolRegistry'
 import { buildAPIMessages } from '../../application/chatSession'
 
-/** スキル1件分のツール定義 + 呼ばれたときに返す instructions */
+/**
+ * スキル1件分のツール定義 + 呼ばれたときに返す instructions。
+ *
+ * allowedTools は SKILL.md の "allowed-tools" フィールドから取得する。
+ * ──────────────────────────────────────────────────────────────────────────
+ * 【重要】このフィールドの意味は Claude Code 標準の "allowed-tools" と異なる。
+ *
+ *   Claude Code の allowed-tools    = ユーザーへの確認ダイアログを省略する「権限」設定
+ *                                     （ツール定義の絞り込みではない）
+ *   Claude Code の disallowed-tools = LLM へのツール定義を除外するが、1ターンのみ有効
+ *
+ *   このプロジェクトの allowedTools  = スキルツールが呼ばれた直後のラウンドから
+ *                                     同一 run() 内でのみ LLM に渡すツール定義を絞り込む。
+ *                                     run() 終了で自動リセット（複数ターンにまたがらない）。
+ *
+ * 詳細は run() 内のコメント「スキルの allowed-tools スコーピング」を参照。
+ * ──────────────────────────────────────────────────────────────────────────
+ */
 export interface SkillToolEntry {
-  slug:         string
-  name:         string
-  instructions: string
-  definition:   ToolDefinition
+  slug:          string
+  name:          string
+  instructions:  string
+  allowedTools?: string[]  // SKILL.md の allowed-tools（スキル起動後のツール絞り込み用）
+  definition:    ToolDefinition
 }
 
 const MAX_ROUNDS = 10
@@ -78,20 +96,50 @@ export class AgentRunner {
     const messages: APIMessage[] = buildAPIMessages(history, systemPrompt)
     messages.push({ role: 'user', content: userText })
 
+    // スキルなし時のフルツールセット（スキルツール + 全通常ツール）
     const allDefinitions = [
       ...toolRegistry.definitions,
       ...skillEntries.map(s => s.definition),
     ]
 
+    // ── スキルの allowed-tools スコーピング ──────────────────────────────────────
+    // 【注意】これは Claude Code 標準の "allowed-tools" / "disallowed-tools" とは別物。
+    //
+    //   Claude Code allowed-tools   → 確認ダイアログをスキップする権限設定（ツール除外ではない）
+    //   Claude Code disallowed-tools → LLM へのツール定義を除外するが1ターン限り
+    //
+    //   このプロジェクト独自の動作:
+    //     スキルツールが呼ばれた直後のラウンドから run() 終了まで、
+    //     LLM に渡すツール定義を skill.allowedTools に列挙されたものだけに絞り込む。
+    //     run() が終わると自動的にリセットされ、次のユーザーターンでは全ツールが復活する。
+    //
+    //   SKILL.md の allowed-tools フィールドはメンテナー向けのドキュメントも兼ねており、
+    //   「このスキルが主に使うツール」を明示する意図がある。
+    //   allowedTools が空または未設定の場合はスコーピングを行わない（全ツール渡し）。
+    // ────────────────────────────────────────────────────────────────────────────
+    let activeSkillAllowedTools: string[] | null = null
+
     let latestWidget: ChatWidget | undefined
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      // スキルの allowed-tools が設定済みなら絞り込んだツールセットを使う
+      const roundDefinitions = (activeSkillAllowedTools !== null && activeSkillAllowedTools.length > 0)
+        ? [
+            // スキルツール自体は常に渡す（別スキルへの切り替えを許可）
+            ...skillEntries.map(s => s.definition),
+            // 通常ツールは allowed-tools リストに含まれるものだけ
+            ...toolRegistry.definitions.filter(d =>
+              activeSkillAllowedTools!.includes(d.function.name)
+            ),
+          ]
+        : allDefinitions
+
       this.observer.onEvent({
         kind: 'request', round, messages: [...messages],
-        params: { model: this.model, toolCount: allDefinitions.length },
+        params: { model: this.model, toolCount: roundDefinitions.length },
       })
 
-      const result = await this.adapter.complete(messages, allDefinitions)
+      const result = await this.adapter.complete(messages, roundDefinitions)
 
       // No tool calls → final text response
       if (!result.toolCalls || result.toolCalls.length === 0) {
@@ -124,6 +172,12 @@ export class AgentRunner {
           // スキルツール: skill_call イベントを発火し instructions を返す
           this.observer.onEvent({ kind: 'skill_call', round, slug: skillEntry.slug, skillName: skillEntry.name })
           messages.push({ role: 'tool', content: skillEntry.instructions, tool_call_id: call.id })
+
+          // 次ラウンドから allowed-tools スコーピングを有効化する
+          // （このラウンドはスキル呼び出し自体なので、次ラウンドから絞り込む）
+          if (skillEntry.allowedTools && skillEntry.allowedTools.length > 0) {
+            activeSkillAllowedTools = skillEntry.allowedTools
+          }
           continue
         }
 

@@ -1,8 +1,10 @@
 ---
-slug: cascading-transfer
-name: 玉突き人事ウィザード
+name: cascading-transfer
 description: 複数人の連鎖異動（玉突き人事）を処理するとき。上司交代・部署再編など、順序が重要な複数人の異動に使う。
-status: active
+allowed-tools: findPersons findOrgs propose_transfer getReviewSummary undo
+metadata:
+  display-name: 玉突き人事ウィザード
+  status: active
 ---
 
 # 玉突き人事ウィザード

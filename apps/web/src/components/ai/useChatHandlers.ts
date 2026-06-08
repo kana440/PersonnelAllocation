@@ -94,6 +94,7 @@ export function useChatHandlers({
       slug:         s.slug,
       name:         s.name,
       instructions: s.instructions,
+      allowedTools: s.allowedTools,  // SKILL.md の allowed-tools（スキル起動後のツール絞り込み用）
       definition: {
         type: 'function' as const,
         function: {
