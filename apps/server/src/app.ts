@@ -13,6 +13,7 @@ import roundRoutes      from './routes/rounds.ts'
 import submissionRoutes from './routes/submissions.ts'
 import adminUserRoutes     from './routes/admin/users.ts'
 import adminPositionRoutes from './routes/admin/positions.ts'
+import adminSkillRoutes    from './routes/admin/skills.ts'
 
 // 管理者専用サブアプリ（authenticated + requireRole('admin') を適用）
 const adminApp = new Hono()
@@ -20,6 +21,7 @@ const adminApp = new Hono()
   .use(requireRole('admin'))
   .route('/users',     adminUserRoutes)
   .route('/positions', adminPositionRoutes)
+  .route('/skills',    adminSkillRoutes)
 
 // アプリ本体（メソッドチェーンで組み立てることで AppType が正しく推論される）
 const app = new Hono()

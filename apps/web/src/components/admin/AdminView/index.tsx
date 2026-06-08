@@ -97,7 +97,7 @@ export function AdminView({ onBack, onLogout }: Props) {
     if (!editPosition) return
     const { pos, mode } = editPosition
     await adminApi.positions.update(pos.code, {
-      ...(mode === 'acquire' ? { status: 'in_use', acquired_by: acquiredBy, acquired_at: acquiredAt } : {}),
+      ...(mode === 'acquire' ? { status: 'in_use', acquiredBy, acquiredAt } : {}),
       notes,
     })
     setEditPosition(null)
@@ -111,7 +111,7 @@ export function AdminView({ onBack, onLogout }: Props) {
 
   const handleRelease = async (pos: AdminPosition) => {
     try {
-      await adminApi.positions.update(pos.code, { status: 'available', acquired_by: null, acquired_at: null })
+      await adminApi.positions.update(pos.code, { status: 'available', acquiredBy: null, acquiredAt: null })
       await loadPositions()
     }
     catch (e) { setError(String(e)) }

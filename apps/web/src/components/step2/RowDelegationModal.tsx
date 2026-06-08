@@ -69,7 +69,7 @@ export function RowDelegationModal({ submission, onCreated, onCancel }: Props) {
     setSaving(true); setError(null)
     try {
       const body: CreateSubmissionBody = {
-        roundCompanyId:      submission.round_company_id,
+        roundCompanyId:      submission.roundCompanyId,
         assigneeId,
         parentSubmissionId:  submission.id,
         scope:               { kind: 'manual', rowIds: [...selected] },

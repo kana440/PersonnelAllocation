@@ -64,9 +64,9 @@ export function RoundTable({ rounds, onSelect }: Props) {
                   {STATUS_LABELS[r.status]}
                 </span>
               </td>
-              <td className="px-4 py-3 text-gray-500 text-xs">{r.based_on_round_id?.slice(0, 8) ?? '—'}</td>
-              <td className="px-4 py-3 text-gray-600">{r.created_by_name ?? '—'}</td>
-              <td className="px-4 py-3 text-gray-400 text-xs">{formatDate(r.created_at)}</td>
+              <td className="px-4 py-3 text-gray-500 text-xs">{r.basedOnRoundId?.slice(0, 8) ?? '—'}</td>
+              <td className="px-4 py-3 text-gray-600">{r.createdByName ?? '—'}</td>
+              <td className="px-4 py-3 text-gray-400 text-xs">{formatDate(r.createdAt)}</td>
               <td className="px-4 py-3">
                 <button
                   onClick={() => onSelect(r)}

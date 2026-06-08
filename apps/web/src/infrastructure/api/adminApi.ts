@@ -47,10 +47,10 @@ export interface BulkRegisterResult {
 }
 
 export interface PositionUpdateBody {
-  status?:      PositionStatus
-  acquired_by?: string | null
-  acquired_at?: string | null
-  notes?:       string | null
+  status?:     PositionStatus
+  acquiredBy?: string | null
+  acquiredAt?: string | null
+  notes?:      string | null
 }
 
 // ── Round ────────────────────────────────────────────────────────────────────
@@ -59,24 +59,24 @@ export type RoundKind   = 'annual' | 'patch'
 export type RoundStatus = 'draft' | 'in_progress' | 'ready' | 'merged'
 
 export interface ApiRound {
-  id:               string
-  label:            string
-  kind:             RoundKind
-  status:           RoundStatus
-  based_on_round_id: string | null
-  created_at:       string
-  created_by_name:  string | null
-  company_count:    number
+  id:             string
+  label:          string
+  kind:           RoundKind
+  status:         RoundStatus
+  basedOnRoundId: string | null
+  createdAt:      string
+  createdByName:  string | null
+  companyCount:   number
 }
 
 export interface ApiRoundCompany {
-  id:           string   // roundCompanyId
-  round_id:     string
-  company_id:   string
-  company_name: string | null
-  company_code: string | null
-  status:       RoundStatus
-  row_count:    number
+  id:          string   // roundCompanyId
+  roundId:     string
+  companyId:   string
+  companyName: string | null
+  companyCode: string | null
+  status:      RoundStatus
+  rowCount:    number
 }
 
 export interface CreateRoundBody {
@@ -104,31 +104,31 @@ export type SubmissionStatus =
   'pending' | 'in_progress' | 'submitted' | 'merged' | 'accepted' | 'revision_requested' | 'cancelled'
 
 export interface ApiSubmission {
-  id:                string
-  round_company_id:  string
-  round_id:          string | null
-  company_id:        string | null
-  round_label:       string | null
-  parent_id:         string | null
-  assignee_id:       string
-  assignee_name:     string | null
-  scope:             string  // JSON
-  status:            SubmissionStatus
-  request_comment:   string | null
-  revision_comment:  string | null
-  created_at:        string
-  updated_at:        string
-  row_count?:        number
-  child_count?:      number
-  child_done_count?: number
+  id:              string
+  roundCompanyId:  string
+  roundId:         string | null
+  companyId:       string | null
+  roundLabel:      string | null
+  parentId:        string | null
+  assigneeId:      string
+  assigneeName:    string | null
+  scope:           string  // JSON
+  status:          SubmissionStatus
+  requestComment:  string | null
+  revisionComment: string | null
+  createdAt:       string
+  updatedAt:       string
+  rowCount?:       number
+  childCount?:     number
+  childDoneCount?: number
 }
 
 export interface ChildDiff {
-  id:            string
-  assignee_id:   string
-  assignee_name: string | null
-  status:        SubmissionStatus
-  diffs:         RowChangeSummary[]
+  id:           string
+  assigneeId:   string
+  assigneeName: string | null
+  status:       SubmissionStatus
+  diffs:        RowChangeSummary[]
 }
 
 export interface CreateSubmissionBody {
@@ -137,6 +137,29 @@ export interface CreateSubmissionBody {
   parentSubmissionId?: string
   scope:               unknown
   requestComment?:     string
+}
+
+// ── Skill ─────────────────────────────────────────────────────────────────────
+
+export type SkillStatus = 'active' | 'disabled' | 'draft'
+
+export interface ApiSkill {
+  slug:         string
+  name:         string
+  description:  string
+  instructions: string
+  status:       SkillStatus
+  isBuiltin:    boolean
+  createdAt:    string
+  updatedAt:    string
+}
+
+export interface SkillUpsertBody {
+  name?:         string
+  description?:  string
+  instructions?: string
+  status?:       SkillStatus
+  isBuiltin?:    boolean
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -226,5 +249,13 @@ export const adminApi = {
       }),
     getChildDiffs: (id: string) =>
       api<{ children: ChildDiff[] }>(`/submissions/${id}/child-diffs`),
+  },
+  skills: {
+    list:   () =>
+      admin<ApiSkill[]>('/skills'),
+    upsert: (slug: string, body: SkillUpsertBody) =>
+      admin<ApiSkill>(`/skills/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (slug: string) =>
+      admin<void>(`/skills/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
   },
 }

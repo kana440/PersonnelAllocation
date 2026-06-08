@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
+import { useSkillStore } from '../../store/skillStore'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import { ChatSession, buildSystemPrompt, type SessionState } from '../../application/chatSession'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { mockApiService } from '../../infrastructure/ai/chatServiceFactory'
-import type { AgentRunner } from '../../infrastructure/ai/agentRunner'
+import type { AgentRunner, SkillToolEntry } from '../../infrastructure/ai/agentRunner'
+import type { InMemoryTraceObserver } from '../../infrastructure/ai/aiTrace'
 import { importExcelScenario }        from '../../infrastructure/ai/scenarios/importExcel'
 import { excelHelpScenario }          from '../../infrastructure/ai/scenarios/excelHelp'
 import { checkOrgMembersScenario }    from '../../infrastructure/ai/scenarios/checkOrgMembers'
@@ -41,8 +43,10 @@ const BUSY_EXEMPT_PHASES: ChatPhase[] = [
 
 export function useChatHandlers({
   agentRunner,
+  traceObserver,
 }: {
-  agentRunner: AgentRunner | null
+  agentRunner:    AgentRunner | null
+  traceObserver?: InMemoryTraceObserver
 }) {
   const store = useStore()
   const {
@@ -54,6 +58,7 @@ export function useChatHandlers({
   const buildCurrentSystemPrompt = useCallback(() => {
     const { scopeOrgId, afterOrganizations } = useStore.getState()
     const { chatContextRowIds } = useChatStore.getState()
+    const { activeSkills } = useSkillStore.getState()
     const scopeOrg = scopeOrgId ? afterOrganizations.find(o => o.id === scopeOrgId) : null
     const rowCtxs  = chatContextRowIds
       .map(id => aiTools.getRowContext(id))
@@ -64,12 +69,40 @@ export function useChatHandlers({
       errorCount:    reviewSummary.errorCount,
       warningCount:  reviewSummary.warningCount,
     }
-    return buildSystemPrompt(
+    const base = buildSystemPrompt(
       scopeOrg?.name,
       scopeOrg?.externalCode ?? undefined,
       rowCtxs.length > 0 ? rowCtxs : undefined,
       session,
     )
+    // スキルのメタデータだけをヒントとして注入（full instructions はツール呼び出し時に渡す）
+    if (activeSkills.length === 0) return base
+    const skillHint = [
+      '# 利用可能なスキル',
+      '以下のスキルに該当するタスクが来た場合は、テキストで回答する前に必ずスキルツールを呼び出してから作業を開始してください。',
+      '',
+      ...activeSkills.map(s =>
+        `- **${s.name}** (\`skill_${s.slug.replace(/-/g, '_')}\`): ${s.description}`
+      ),
+    ].join('\n')
+    return `${base}\n\n${skillHint}`
+  }, [])
+
+  const buildSkillEntries = useCallback((): SkillToolEntry[] => {
+    const { activeSkills } = useSkillStore.getState()
+    return activeSkills.map(s => ({
+      slug:         s.slug,
+      name:         s.name,
+      instructions: s.instructions,
+      definition: {
+        type: 'function' as const,
+        function: {
+          name:        `skill_${s.slug.replace(/-/g, '_')}`,
+          description: s.description || `スキル: ${s.name}`,
+          parameters:  { type: 'object', properties: {} },
+        },
+      },
+    }))
   }, [])
 
   const chatSession = useMemo(() => new ChatSession(mockApiService), [])
@@ -132,6 +165,7 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
           onProgress:   (label: string) => updateMessage(id, { text: label }),
           onConfirm,
           systemPrompt: buildCurrentSystemPrompt(),
+          skillEntries: buildSkillEntries(),
         })
         replyText   = result.text
         replyWidget = result.widget
@@ -145,7 +179,7 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     } finally {
       setIsAgentRunning(false)
     }
-  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession, setIsAgentRunning])
+  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession, setIsAgentRunning, traceObserver])
 
   // ── import Excel ──────────────────────────────────────────────────────────────
   const startImportExcel = useCallback(async () => {

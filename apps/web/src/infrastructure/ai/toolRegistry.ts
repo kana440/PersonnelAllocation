@@ -884,10 +884,23 @@ function parseArgs(raw: string): Record<string, unknown> {
 }
 
 export const toolRegistry = {
-  definitions: TOOL_ENTRIES.map(e => e.definition) as ToolDefinition[],
+  get definitions(): ToolDefinition[] {
+    return TOOL_ENTRIES.map(e => e.definition)
+  },
 
   getEntry(name: string): ToolEntry | undefined {
     return entryMap.get(name)
+  },
+
+  /**
+   * DB から取得したスキル定義で tool description を上書きする。
+   * active な skill_def がある toolName のみ反映。起動時に一度だけ呼ぶ。
+   */
+  applyDescriptionOverrides(overrides: Record<string, string>): void {
+    for (const entry of TOOL_ENTRIES) {
+      const desc = overrides[entry.definition.function.name]
+      if (desc) entry.definition.function.description = desc
+    }
   },
 
   /** read ツール用の便利メソッド（AgentRunner が内部で使う）。 */

@@ -63,33 +63,30 @@ app.get('/', async (c) => {
 })
 ```
 
-## Drizzle ORM のキー命名規則（重要）
+## Drizzle ORM のキー命名規則
 
-Drizzle は TypeScript プロパティ名（camelCase）でクエリ結果キーを返す。
-フロントエンドの `ApiXxx` インターフェースは snake_case で定義されているため、
-**`.select({})` を使うときは必ず snake_case でエイリアスを明示する**。
+DB カラムは snake_case だが、Drizzle スキーマの TypeScript プロパティは camelCase。
+**`ApiXxx` インターフェースも camelCase** で定義する。これにより Drizzle の自然な返却型と一致し、
+エイリアスなしで型安全に `c.json()` できる。
 
 ```typescript
-// ❌ NG: Drizzle がキーを camelCase で返す → ApiXxx の snake_case と不一致
+// ✅ OK: Drizzle が camelCase で返す → ApiXxx の camelCase と一致
 const rows = await db.select().from(submissions)
-// result: { roundCompanyId: '...', parentId: '...' }
+// result: { roundCompanyId: '...', parentId: '...' } ← ApiSubmission と同じ形
 
-// ✅ OK: 明示的な snake_case エイリアス
+// JOIN や computed field が必要なときだけ明示（camelCase で）
 const rows = await db.select({
-  id:               submissions.id,
-  round_company_id: submissions.roundCompanyId,
-  parent_id:        submissions.parentId,
-  assignee_id:      submissions.assigneeId,
-}).from(submissions)
-// result: { round_company_id: '...', parent_id: '...' }
+  id:           submissions.id,
+  roundLabel:   rounds.label,
+  assigneeName: users.name,
+  rowCount:     sql<number>`(SELECT COUNT(*)::int FROM ...)`,
+}).from(submissions).leftJoin(...)
 ```
 
 **ルール**:
-- フィールドを全部返すとき（`db.select().from(table)`）は、結果を `ApiXxx` に直接 cast しない。
-  → 単一テーブルを返すだけのエンドポイントでは、フィールドを明示するか camelCase→snake_case の変換を挟む。
-- `sql<T>` サブクエリも snake_case エイリアスで書く（例: `row_count: sql<number>\`...\``）。
-- 新しいエンドポイントを追加したら、`ApiXxx` インターフェースのフィールドと `.select({})` のキーが一致しているか確認する。
-```
+- `ApiXxx` インターフェースのフィールドは camelCase。
+- `sql<T>` サブクエリのエイリアスも camelCase（例: `rowCount: sql<number>\`...\``）。
+- 新しいエンドポイントを追加したら、`ApiXxx` インターフェースと `.select({})` のキーが一致しているか確認する。
 
 ## スキーマ変更の手順
 

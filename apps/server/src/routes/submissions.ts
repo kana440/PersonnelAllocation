@@ -138,28 +138,28 @@ app.get('/', async (c) => {
   const db = await getDb()
   const subs = await db
     .select({
-      id:               submissions.id,
-      round_company_id: submissions.roundCompanyId,
-      round_id:         roundCompanies.roundId,
-      company_id:       roundCompanies.companyId,
-      parent_id:        submissions.parentId,
-      assignee_id:      submissions.assigneeId,
-      scope:            submissions.scope,
-      status:           submissions.status,
-      request_comment:  submissions.requestComment,
-      revision_comment: submissions.revisionComment,
-      created_at:       submissions.createdAt,
-      updated_at:       submissions.updatedAt,
-      round_label:      rounds.label,
-      round_kind:       rounds.kind,
-      assignee_name:    users.name,
-      row_count: sql<number>`(
+      id:              submissions.id,
+      roundCompanyId:  submissions.roundCompanyId,
+      roundId:         roundCompanies.roundId,
+      companyId:       roundCompanies.companyId,
+      parentId:        submissions.parentId,
+      assigneeId:      submissions.assigneeId,
+      scope:           submissions.scope,
+      status:          submissions.status,
+      requestComment:  submissions.requestComment,
+      revisionComment: submissions.revisionComment,
+      createdAt:       submissions.createdAt,
+      updatedAt:       submissions.updatedAt,
+      roundLabel:      rounds.label,
+      roundKind:       rounds.kind,
+      assigneeName:    users.name,
+      rowCount: sql<number>`(
         SELECT COUNT(*)::int FROM submission_rows sr WHERE sr.submission_id = ${submissions.id}
       )`,
-      child_count: sql<number>`(
+      childCount: sql<number>`(
         SELECT COUNT(*)::int FROM submissions c WHERE c.parent_id = ${submissions.id}
       )`,
-      child_done_count: sql<number>`(
+      childDoneCount: sql<number>`(
         SELECT COUNT(*)::int FROM submissions c
         WHERE c.parent_id = ${submissions.id} AND c.status IN ('submitted', 'merged', 'cancelled')
       )`,
@@ -262,22 +262,22 @@ app.get('/:id', async (c) => {
   const db = await getDb()
   const [sub] = await db
     .select({
-      id:               submissions.id,
-      round_company_id: submissions.roundCompanyId,
-      round_id:         roundCompanies.roundId,
-      company_id:       roundCompanies.companyId,
-      parent_id:        submissions.parentId,
-      assignee_id:      submissions.assigneeId,
-      scope:            submissions.scope,
-      status:           submissions.status,
-      request_comment:  submissions.requestComment,
-      revision_comment: submissions.revisionComment,
-      snapshot_data:    submissions.snapshotData,
-      conflict_fields:  submissions.conflictFields,
-      created_at:       submissions.createdAt,
-      updated_at:       submissions.updatedAt,
-      round_label:      rounds.label,
-      assignee_name:    users.name,
+      id:              submissions.id,
+      roundCompanyId:  submissions.roundCompanyId,
+      roundId:         roundCompanies.roundId,
+      companyId:       roundCompanies.companyId,
+      parentId:        submissions.parentId,
+      assigneeId:      submissions.assigneeId,
+      scope:           submissions.scope,
+      status:          submissions.status,
+      requestComment:  submissions.requestComment,
+      revisionComment: submissions.revisionComment,
+      snapshotData:    submissions.snapshotData,
+      conflictFields:  submissions.conflictFields,
+      createdAt:       submissions.createdAt,
+      updatedAt:       submissions.updatedAt,
+      roundLabel:      rounds.label,
+      assigneeName:    users.name,
     })
     .from(submissions)
     .leftJoin(roundCompanies, eq(submissions.roundCompanyId, roundCompanies.id))
@@ -286,7 +286,7 @@ app.get('/:id', async (c) => {
     .where(eq(submissions.id, c.req.param('id')))
     .limit(1)
   if (!sub) return c.json({ error: 'Not found' }, 404)
-  if (user.role !== 'admin' && sub.assignee_id !== user.id) {
+  if (user.role !== 'admin' && sub.assigneeId !== user.id) {
     return c.json({ error: '権限がありません' }, 403)
   }
   return c.json(sub)
@@ -307,17 +307,17 @@ app.get('/:id/children', async (c) => {
 
   const children = await db
     .select({
-      id:               submissions.id,
-      round_company_id: submissions.roundCompanyId,
-      parent_id:        submissions.parentId,
-      assignee_id:      submissions.assigneeId,
-      scope:            submissions.scope,
-      status:           submissions.status,
-      request_comment:  submissions.requestComment,
-      revision_comment: submissions.revisionComment,
-      created_at:       submissions.createdAt,
-      updated_at:       submissions.updatedAt,
-      assignee_name:    users.name,
+      id:              submissions.id,
+      roundCompanyId:  submissions.roundCompanyId,
+      parentId:        submissions.parentId,
+      assigneeId:      submissions.assigneeId,
+      scope:           submissions.scope,
+      status:          submissions.status,
+      requestComment:  submissions.requestComment,
+      revisionComment: submissions.revisionComment,
+      createdAt:       submissions.createdAt,
+      updatedAt:       submissions.updatedAt,
+      assigneeName:    users.name,
     })
     .from(submissions)
     .leftJoin(users, eq(submissions.assigneeId, users.id))
@@ -539,11 +539,11 @@ app.get('/:id/child-diffs', async (c) => {
 
   const children = await db
     .select({
-      id:            submissions.id,
-      assignee_id:   submissions.assigneeId,
-      assignee_name: users.name,
-      status:        submissions.status,
-      snapshot_data: submissions.snapshotData,
+      id:           submissions.id,
+      assigneeId:   submissions.assigneeId,
+      assigneeName: users.name,
+      status:       submissions.status,
+      snapshotData: submissions.snapshotData,
     })
     .from(submissions)
     .leftJoin(users, eq(submissions.assigneeId, users.id))
@@ -551,17 +551,17 @@ app.get('/:id/child-diffs', async (c) => {
     .orderBy(submissions.createdAt)
 
   const childResults = await Promise.all(children.map(async (child) => {
-    const snapshotRows: AllocationRow[] = child.snapshot_data
-      ? JSON.parse(child.snapshot_data) as AllocationRow[]
+    const snapshotRows: AllocationRow[] = child.snapshotData
+      ? JSON.parse(child.snapshotData) as AllocationRow[]
       : []
     const currentRows = await loadSubmissionRows(db, child.id)
     const rows = currentRows.length > 0 ? currentRows : snapshotRows
     return {
-      id:            child.id,
-      assignee_id:   child.assignee_id,
-      assignee_name: child.assignee_name,
-      status:        child.status,
-      diffs:         computeRowDiffs(snapshotRows, rows),
+      id:           child.id,
+      assigneeId:   child.assigneeId,
+      assigneeName: child.assigneeName,
+      status:       child.status,
+      diffs:        computeRowDiffs(snapshotRows, rows),
     }
   }))
 

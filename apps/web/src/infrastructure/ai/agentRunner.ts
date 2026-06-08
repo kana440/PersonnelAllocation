@@ -18,10 +18,19 @@ import type { APIMessage } from '../../ports'
 import type { ChatMessage, ChatWidget, ConfirmResult } from '../../application/aiTypes'
 import type { OpenAICompatibleAdapter } from './openAICompatibleAdapter'
 import type { AITraceObserver } from './aiTrace'
+import type { ToolDefinition } from '../../ports'
 import { SummaryTraceObserver, CompositeTraceObserver } from './aiTrace'
 import { TOOL_LABELS } from './toolLabels'
 import { toolRegistry } from './toolRegistry'
 import { buildAPIMessages } from '../../application/chatSession'
+
+/** スキル1件分のツール定義 + 呼ばれたときに返す instructions */
+export interface SkillToolEntry {
+  slug:         string
+  name:         string
+  instructions: string
+  definition:   ToolDefinition
+}
 
 const MAX_ROUNDS = 10
 
@@ -38,6 +47,8 @@ export interface AgentRunOptions {
   onConfirm?:    (widget: ChatWidget) => Promise<ConfirmResult>
   /** 呼び出し側がセッション固有コンテキスト（スコープ等）を追加するための system prompt 上書き。 */
   systemPrompt?: string
+  /** アクティブなスキルをツールとして渡す。呼ばれたら instructions を返す。 */
+  skillEntries?: SkillToolEntry[]
 }
 
 export class AgentRunner {
@@ -63,19 +74,24 @@ export class AgentRunner {
     userText: string,
     options?: AgentRunOptions,
   ): Promise<AgentRunResult> {
-    const { onProgress, onConfirm, systemPrompt } = options ?? {}
+    const { onProgress, onConfirm, systemPrompt, skillEntries = [] } = options ?? {}
     const messages: APIMessage[] = buildAPIMessages(history, systemPrompt)
     messages.push({ role: 'user', content: userText })
+
+    const allDefinitions = [
+      ...toolRegistry.definitions,
+      ...skillEntries.map(s => s.definition),
+    ]
 
     let latestWidget: ChatWidget | undefined
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       this.observer.onEvent({
         kind: 'request', round, messages: [...messages],
-        params: { model: this.model, toolCount: toolRegistry.definitions.length },
+        params: { model: this.model, toolCount: allDefinitions.length },
       })
 
-      const result = await this.adapter.complete(messages, toolRegistry.definitions)
+      const result = await this.adapter.complete(messages, allDefinitions)
 
       // No tool calls → final text response
       if (!result.toolCalls || result.toolCalls.length === 0) {
@@ -91,9 +107,10 @@ export class AgentRunner {
         tool_calls: result.toolCalls,
       })
 
-      const firstTool = result.toolCalls[0]?.function.name ?? ''
-      const label = TOOL_LABELS[firstTool] ?? firstTool
-      onProgress?.(`${label}...`)
+      const firstToolName = result.toolCalls[0]?.function.name ?? ''
+      const firstSkill    = skillEntries.find(s => s.definition.function.name === firstToolName)
+      const progressLabel = firstSkill?.name ?? TOOL_LABELS[firstToolName] ?? firstToolName
+      onProgress?.(`${progressLabel}...`)
 
       for (const call of result.toolCalls) {
         const args = (() => {
@@ -101,6 +118,16 @@ export class AgentRunner {
           catch { return {} as Record<string, unknown> }
         })()
 
+        const skillEntry = skillEntries.find(s => s.definition.function.name === call.function.name)
+
+        if (skillEntry) {
+          // スキルツール: skill_call イベントを発火し instructions を返す
+          this.observer.onEvent({ kind: 'skill_call', round, slug: skillEntry.slug, skillName: skillEntry.name })
+          messages.push({ role: 'tool', content: skillEntry.instructions, tool_call_id: call.id })
+          continue
+        }
+
+        // 通常のツール
         this.observer.onEvent({ kind: 'tool_call', round, toolName: call.function.name, args })
 
         const entry = toolRegistry.getEntry(call.function.name)
@@ -114,7 +141,6 @@ export class AgentRunner {
         } else if (entry?.kind === 'confirm') {
           const proposal = entry.buildProposal(args)
           if ('error' in proposal) {
-            // 前提条件エラー — widget を表示せず LLM にエラーを返してユーザーへ説明させる
             content = JSON.stringify({ ok: false, error: proposal.error })
           } else if (onConfirm) {
             const confirmResult = await onConfirm(proposal.widget)

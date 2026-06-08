@@ -30,7 +30,7 @@ export function SubmissionEditView({ submission, user, onBack, onLogout }: Props
   const { allocationList } = useStore()
 
   const [status,          setStatus]          = useState<SubmissionStatus>(submission.status)
-  const [revisionComment, setRevisionComment] = useState<string | null>(submission.revision_comment)
+  const [revisionComment, setRevisionComment] = useState<string | null>(submission.revisionComment)
   const [loading,         setLoading]         = useState(true)
   const [saving,          setSaving]          = useState(false)
   const [submitting,      setSubmitting]      = useState(false)
@@ -44,10 +44,10 @@ export function SubmissionEditView({ submission, user, onBack, onLogout }: Props
         const [sub, rows, masters] = await Promise.all([
           adminApi.submissions.get(submission.id),
           adminApi.submissions.getRows(submission.id),
-          adminApi.rounds.getMasters(submission.round_id ?? '', submission.company_id ?? ''),
+          adminApi.rounds.getMasters(submission.roundId ?? '', submission.companyId ?? ''),
         ])
         setStatus(sub.status as SubmissionStatus)
-        setRevisionComment(sub.revision_comment)
+        setRevisionComment(sub.revisionComment)
 
         const hasMasters = (masters.beforeOrganizations.length > 0 || masters.afterOrganizations.length > 0)
         if (hasMasters) {
@@ -119,7 +119,7 @@ export function SubmissionEditView({ submission, user, onBack, onLogout }: Props
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
   )
 
-  const roundLabel = submission.round_label ?? submission.round_company_id.slice(0, 8)
+  const roundLabel = submission.roundLabel ?? submission.roundCompanyId.slice(0, 8)
   const scopeLabel = (() => {
     try {
       const s = JSON.parse(submission.scope) as { kind: string; codes?: string[]; level?: number }

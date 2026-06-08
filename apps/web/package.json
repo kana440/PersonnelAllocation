@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:step1": "vite --mode step1",
+    "dev:step2": "vite --mode step2",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -19,6 +21,7 @@
     "@personnel/domain": "*",
     "@tanstack/react-query": "^5.101.0",
     "exceljs": "^4.4.0",
+    "fflate": "^0.8.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "zod": "^4.4.3",

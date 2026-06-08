@@ -1,0 +1,108 @@
+# skill_routing.yaml — スキルツールが正しいタイミングで呼ばれるかを検証する
+#
+# アプリが buildCurrentSystemPrompt() で生成するスキルヒントと
+# buildSkillEntries() で生成するツール定義を再現して、
+# モデルが正しくスキルツールを選択するかをテストする。
+#
+# 実行方法（プロジェクトルートから）:
+#   npx promptfoo@latest eval -c evals/skills/skill_routing.yaml
+#
+# ※ デフォルトで apps/web/.env.local の VITE_AI_* を自動読み込みする。
+#    ANTHROPIC_API_KEY 経由で Haiku を使う場合は --providers オプションは不要。
+
+description: Verify that skill tools are invoked for the correct user intents
+
+# ツール定義（アプリの buildSkillEntries に相当）
+# promptfoo のカスタムプロバイダーには config が渡されないため、vars.tools で渡す
+x-skill-tools: &skill-tools
+  - type: function
+    function:
+      name: skill_cascading_transfer
+      description: "複数人の連鎖異動（玉突き人事）を処理するとき。上司交代・部署再編など、順序が重要な複数人の異動に使う。"
+      parameters: { type: object, properties: {} }
+  - type: function
+    function:
+      name: skill_promotion_workflow
+      description: "従業員の昇格を処理するとき。バンド・等級・役職の変更を含む昇格発令に使う。"
+      parameters: { type: object, properties: {} }
+  - type: function
+    function:
+      name: findPersons
+      description: "従業員を氏名・組織で検索する"
+      parameters:
+        type: object
+        properties:
+          name: { type: string, description: "氏名（部分一致）" }
+
+providers:
+  # カスタム LLM（apps/web/.env.local の設定を使用）
+  - id: ../providers/customLlm.ts
+
+prompts:
+  - "{{system_prompt}}\n\nHuman: {{user_input}}"
+
+# ツールを全テストに共通で渡す
+defaultTest:
+  vars:
+    tools: *skill-tools
+
+# アプリの buildCurrentSystemPrompt() が生成するスキルヒント部分を再現
+x-skill-prompt: &skill-system-prompt |
+  あなたは人事異動管理システムのAIアシスタントです。
+
+  # 利用可能なスキル
+  以下のスキルに該当するタスクが来た場合は、テキストで回答する前に必ずスキルツールを呼び出してから作業を開始してください。
+  - **玉突き人事ウィザード** (`skill_cascading_transfer`): 複数人の連鎖異動（玉突き人事）を処理するとき。上司交代・部署再編など、順序が重要な複数人の異動に使う。
+  - **昇格ウィザード** (`skill_promotion_workflow`): 従業員の昇格を処理するとき。バンド・等級・役職の変更を含む昇格発令に使う。
+
+tests:
+  # 玉突き人事: skill_cascading_transfer が呼ばれること
+  - vars:
+      system_prompt: *skill-system-prompt
+      user_input: "部長が交代するため、Aさんの後任にBさんを、BさんのポジションにCさんを入れてください"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'skill_cascading_transfer')
+
+  # 玉突き人事（別表現）: 「玉突き」という単語なしでも呼ばれること
+  - vars:
+      system_prompt: *skill-system-prompt
+      user_input: "営業部長が異動するので、後任を順番に埋めていきたい。A→B→Cの順で入れ替えをお願いします"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'skill_cascading_transfer')
+
+  # 昇格: skill_promotion_workflow が呼ばれること
+  # ※ gpt-4o は先に findPersons を呼ぶことがあるため両方を正解とする（single-turn eval の制約）
+  - vars:
+      system_prompt: *skill-system-prompt
+      user_input: "田中さんのバンドを上げて昇格発令をお願いします"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'skill_promotion_workflow' || n === 'findPersons')
+
+  # 昇格（別表現）: 「昇格」以外の言い回しでも呼ばれること
+  - vars:
+      system_prompt: *skill-system-prompt
+      user_input: "山田さんをマネージャーに格上げする手続きをしたい"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'skill_promotion_workflow')
+
+  # 誤発動なし: 通常の照会でスキルが呼ばれないこと
+  - vars:
+      system_prompt: *skill-system-prompt
+      user_input: "今回の変更の概要を教えてください"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return !calls.some(n => n.startsWith('skill_'))

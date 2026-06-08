@@ -164,7 +164,7 @@ export function PortalView({ user, onAdmin, onLogout, onEdit, onDiff, onStep1 }:
                     <React.Fragment key={s.id}>
                       <tr className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-800">
-                          {s.round_label ?? s.round_company_id.slice(0, 8)}
+                          {s.roundLabel ?? s.roundCompanyId.slice(0, 8)}
                           <span className="ml-2 font-mono text-xs text-gray-400">{s.id.slice(0, 8)}…</span>
                         </td>
                         <td className="px-4 py-3">
@@ -173,20 +173,20 @@ export function PortalView({ user, onAdmin, onLogout, onEdit, onDiff, onStep1 }:
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          {(s.child_count ?? 0) > 0 ? (
+                          {(s.childCount ?? 0) > 0 ? (
                             <button
                               onClick={() => void toggleExpand(s.id)}
                               className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
                             >
                               <span>{expandedId === s.id ? '▼' : '▶'}</span>
-                              <span>配下 {s.child_done_count ?? 0}/{s.child_count}</span>
+                              <span>配下 {s.childDoneCount ?? 0}/{s.childCount}</span>
                             </button>
                           ) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-gray-500 text-right">{s.row_count?.toLocaleString() ?? '—'}</td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{formatDate(s.updated_at)}</td>
+                        <td className="px-4 py-3 text-gray-500 text-right">{s.rowCount?.toLocaleString() ?? '—'}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{formatDate(s.updatedAt)}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs max-w-xs truncate">
-                          {s.revision_comment ?? s.request_comment ?? '—'}
+                          {s.revisionComment ?? s.requestComment ?? '—'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -196,15 +196,15 @@ export function PortalView({ user, onAdmin, onLogout, onEdit, onDiff, onStep1 }:
                                 編集
                               </button>
                             )}
-                            {(s.child_count ?? 0) > 0 && (
+                            {(s.childCount ?? 0) > 0 && (
                               <button onClick={() => onDiff(s)}
                                 className="text-xs text-purple-600 hover:text-purple-800 hover:underline">
                                 差分
                               </button>
                             )}
-                            {s.round_id && s.company_id && (
+                            {s.roundId && s.companyId && (
                               <a
-                                href={adminApi.rounds.getExcelUrl(s.round_id, s.company_id)}
+                                href={adminApi.rounds.getExcelUrl(s.roundId, s.companyId)}
                                 download
                                 className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
                                 title="Excel をダウンロード"
@@ -227,7 +227,7 @@ export function PortalView({ user, onAdmin, onLogout, onEdit, onDiff, onStep1 }:
                                 {(childrenMap[s.id] ?? []).map(ch => (
                                   <div key={ch.id} className="flex items-center gap-3 text-xs">
                                     <span className="text-gray-700 font-medium w-28 truncate">
-                                      {ch.assignee_name ?? ch.assignee_id}
+                                      {ch.assigneeName ?? ch.assigneeId}
                                     </span>
                                     <span className={`px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[ch.status]}`}>
                                       {STATUS_LABELS[ch.status]}
@@ -250,9 +250,9 @@ export function PortalView({ user, onAdmin, onLogout, onEdit, onDiff, onStep1 }:
                                         {actionLoading === ch.id ? '処理中…' : '現状を確認・反映'}
                                       </button>
                                     )}
-                                    {ch.revision_comment && (
-                                      <span className="text-red-600 truncate max-w-xs" title={ch.revision_comment}>
-                                        差し戻し: {ch.revision_comment}
+                                    {ch.revisionComment && (
+                                      <span className="text-red-600 truncate max-w-xs" title={ch.revisionComment}>
+                                        差し戻し: {ch.revisionComment}
                                       </span>
                                     )}
                                   </div>

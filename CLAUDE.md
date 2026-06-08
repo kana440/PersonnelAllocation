@@ -352,19 +352,20 @@ apps/web/src/infrastructure/api/
 
 ### Drizzle ORM のキー命名
 
-Drizzle は TypeScript のプロパティ名（camelCase）でキーを返す。`ApiXxx` インターフェースは snake_case。
-**フィールドを選択するときは必ず `.select({})` で snake_case エイリアスを明示する**。
+Drizzle は TypeScript プロパティ名（camelCase）でキーを返す。**`ApiXxx` インターフェースも camelCase** で定義する。
+これにより Drizzle の返却型と一致し、エイリアスなしで型安全に `c.json()` できる。
 
 ```typescript
-// ❌ NG（Drizzle が camelCase で返す → ApiSubmission の snake_case と不一致）
+// ✅ OK: Drizzle が camelCase で返す → ApiSubmission の camelCase と一致
 const rows = await db.select().from(submissions)
+// result: { roundCompanyId: '...', parentId: '...' }
 
-// ✅ OK
+// JOIN や computed field が必要なときだけ明示（camelCase で）
 const rows = await db.select({
-  id:               submissions.id,
-  round_company_id: submissions.roundCompanyId,
-  parent_id:        submissions.parentId,
-}).from(submissions)
+  id:           submissions.id,
+  roundLabel:   rounds.label,
+  assigneeName: users.name,
+}).from(submissions).leftJoin(...)
 ```
 
 詳細は `apps/server/CLAUDE.md` の「Drizzle ORM のキー命名規則」を参照。
@@ -402,7 +403,7 @@ codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>
 - `positionCode` が `_pos_` 始まりかどうかチェックせず Excel 出力する
 - `EditCommand` を使わず `HRApplicationService` に直接ドメインロジックを書く
 - バリデーションとオプション絞り込みを別々に実装する（`FIELD_CONSTRAINTS` を使う）
-- Drizzle の `.select()` 結果を `ApiXxx` に直接 cast する（snake_case エイリアスなしで）
+- `ApiXxx` インターフェースを snake_case で定義する（Drizzle の返却型と不一致になる）
 - サーバーから受け取った `codeLists` を `EMPTY_CODE_LISTS` とマージせず使う
 - React の `map()` 内で `<>` フラグメントを key なしで使う（必ず `<React.Fragment key={...}>` を使う）
 

@@ -33,8 +33,8 @@ function buildTree(subs: ApiSubmission[]): TreeNode[] {
   const map = new Map(subs.map(s => [s.id, { ...s, children: [] as TreeNode[] }]))
   const roots: TreeNode[] = []
   for (const node of map.values()) {
-    if (node.parent_id && map.has(node.parent_id)) {
-      map.get(node.parent_id)!.children.push(node)
+    if (node.parentId && map.has(node.parentId)) {
+      map.get(node.parentId)!.children.push(node)
     } else {
       roots.push(node)
     }
@@ -88,16 +88,16 @@ function SubmissionNode({ node, depth, onRefresh }: {
       <div className="flex items-center gap-2 py-2 px-3 hover:bg-gray-50 rounded"
         style={{ paddingLeft: indent }}>
         {depth > 0 && <span className="text-gray-300 text-xs select-none">└─</span>}
-        <span className="font-medium text-sm text-gray-800">{node.assignee_name ?? node.assignee_id}</span>
+        <span className="font-medium text-sm text-gray-800">{node.assigneeName ?? node.assigneeId}</span>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[node.status]}`}>
           {STATUS_LABELS[node.status]}
         </span>
-        {node.row_count != null && (
-          <span className="text-xs text-gray-400">{node.row_count.toLocaleString()}行</span>
+        {node.rowCount != null && (
+          <span className="text-xs text-gray-400">{node.rowCount.toLocaleString()}行</span>
         )}
-        {node.revision_comment && (
-          <span className="text-xs text-red-600 truncate max-w-48" title={node.revision_comment}>
-            差し戻し: {node.revision_comment}
+        {node.revisionComment && (
+          <span className="text-xs text-red-600 truncate max-w-48" title={node.revisionComment}>
+            差し戻し: {node.revisionComment}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1 shrink-0">
@@ -179,7 +179,7 @@ function SubmissionNode({ node, depth, onRefresh }: {
 
       {delegating && (
         <DelegationModal
-          roundCompanyId={node.round_company_id}
+          roundCompanyId={node.roundCompanyId}
           parentId={node.id}
           onCreated={() => { setDelegating(false); onRefresh() }}
           onCancel={() => setDelegating(false)}
@@ -253,7 +253,7 @@ export function RoundDetailView({ round: initialRound, onBack, onFinalized }: Pr
             >
               <option value="">会社を選択</option>
               {companies.map(co => (
-                <option key={co.id} value={co.id}>{co.company_name ?? co.company_id}</option>
+                <option key={co.id} value={co.id}>{co.companyName ?? co.companyId}</option>
               ))}
             </select>
           )}

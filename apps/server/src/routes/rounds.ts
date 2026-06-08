@@ -34,14 +34,14 @@ app.get('/', requireRole('admin', 'coordinator'), async (c) => {
   const db = await getDb()
   const rows = await db
     .select({
-      id:                rounds.id,
-      label:             rounds.label,
-      kind:              rounds.kind,
-      status:            rounds.status,
-      based_on_round_id: rounds.basedOnRoundId,
-      created_at:        rounds.createdAt,
-      created_by_name:   users.name,
-      company_count:     sql<number>`(
+      id:              rounds.id,
+      label:           rounds.label,
+      kind:            rounds.kind,
+      status:          rounds.status,
+      basedOnRoundId:  rounds.basedOnRoundId,
+      createdAt:       rounds.createdAt,
+      createdByName:   users.name,
+      companyCount:    sql<number>`(
         SELECT COUNT(*)::int FROM round_companies rc WHERE rc.round_id = ${rounds.id}
       )`,
     })
@@ -198,14 +198,14 @@ app.get('/:id', requireRole('admin', 'coordinator'), async (c) => {
   const db = await getDb()
   const [round] = await db
     .select({
-      id:                rounds.id,
-      label:             rounds.label,
-      kind:              rounds.kind,
-      status:            rounds.status,
-      based_on_round_id: rounds.basedOnRoundId,
-      created_at:        rounds.createdAt,
-      updated_at:        rounds.updatedAt,
-      created_by_name:   users.name,
+      id:             rounds.id,
+      label:          rounds.label,
+      kind:           rounds.kind,
+      status:         rounds.status,
+      basedOnRoundId: rounds.basedOnRoundId,
+      createdAt:      rounds.createdAt,
+      updatedAt:      rounds.updatedAt,
+      createdByName:  users.name,
     })
     .from(rounds)
     .leftJoin(users, eq(rounds.createdBy, users.id))
@@ -238,13 +238,13 @@ app.get('/:id/companies', requireRole('admin', 'coordinator'), async (c) => {
   const db = await getDb()
   const rcs = await db
     .select({
-      id:           roundCompanies.id,
-      round_id:     roundCompanies.roundId,
-      company_id:   roundCompanies.companyId,
-      company_name: companies.name,
-      company_code: companies.code,
-      status:       roundCompanies.status,
-      row_count: sql<number>`(
+      id:          roundCompanies.id,
+      roundId:     roundCompanies.roundId,
+      companyId:   roundCompanies.companyId,
+      companyName: companies.name,
+      companyCode: companies.code,
+      status:      roundCompanies.status,
+      rowCount: sql<number>`(
         SELECT COUNT(*)::int FROM allocation_rows ar WHERE ar.round_company_id = ${roundCompanies.id}
       )`,
     })
@@ -356,19 +356,19 @@ app.get('/:id/tree', requireRole('admin'), async (c) => {
 
   const subs = await db
     .select({
-      id:               submissions.id,
-      round_company_id: submissions.roundCompanyId,
-      parent_id:        submissions.parentId,
-      assignee_id:      submissions.assigneeId,
-      scope:            submissions.scope,
-      status:           submissions.status,
-      request_comment:  submissions.requestComment,
-      revision_comment: submissions.revisionComment,
-      created_at:       submissions.createdAt,
-      updated_at:       submissions.updatedAt,
-      assignee_name:    users.name,
-      company_id:       roundCompanies.companyId,
-      row_count: sql<number>`(
+      id:              submissions.id,
+      roundCompanyId:  submissions.roundCompanyId,
+      parentId:        submissions.parentId,
+      assigneeId:      submissions.assigneeId,
+      scope:           submissions.scope,
+      status:          submissions.status,
+      requestComment:  submissions.requestComment,
+      revisionComment: submissions.revisionComment,
+      createdAt:       submissions.createdAt,
+      updatedAt:       submissions.updatedAt,
+      assigneeName:    users.name,
+      companyId:       roundCompanies.companyId,
+      rowCount: sql<number>`(
         SELECT COUNT(*)::int FROM submission_rows sr WHERE sr.submission_id = ${submissions.id}
       )`,
     })

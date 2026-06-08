@@ -183,6 +183,32 @@ export const positions = pgTable('positions', {
   updatedAt:    text('updated_at').notNull().default(now),
 })
 
+// ─── AI スキル定義 ────────────────────────────────────────────────────────────
+
+export const skillDefs = pgTable('skill_defs', {
+  id:          text('id').primaryKey(),
+  toolName:    text('tool_name').notNull().unique(),
+  description: text('description').notNull(),
+  status:      text('status').notNull().default('draft'), // draft | approved | active | disabled
+  version:     integer('version').notNull().default(1),
+  approvedBy:  text('approved_by').references(() => users.id),
+  approvedAt:  text('approved_at'),
+  createdAt:   text('created_at').notNull().default(now),
+  updatedAt:   text('updated_at').notNull().default(now),
+})
+
+// スキル（手順定義。slug ベース upsert。STEP2 DB 版）
+export const skills = pgTable('skills', {
+  slug:         text('slug').primaryKey(),
+  name:         text('name').notNull(),
+  description:  text('description').notNull().default(''),
+  instructions: text('instructions').notNull().default(''),
+  status:       text('status').notNull().default('draft'), // active | disabled | draft
+  isBuiltin:    integer('is_builtin').notNull().default(0),
+  createdAt:    text('created_at').notNull().default(now),
+  updatedAt:    text('updated_at').notNull().default(now),
+})
+
 // ─── コミュニケーション系───────────────────────────────────────────────────
 
 export const comments = pgTable('comments', {

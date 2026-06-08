@@ -23,6 +23,8 @@ export type AITraceEvent =
   | { kind: 'response';      agentId?: string; text: string }
   | { kind: 'error';         agentId?: string; error: unknown }
   | { kind: 'tier_decision'; agentId?: string; tier: 'guide' | 'simple_write' | 'wizard'; intent: string; params?: Record<string, unknown> }
+  | { kind: 'skill_context'; agentId?: string; skills: { slug: string; name: string }[] }
+  | { kind: 'skill_call';    agentId?: string; round: number; slug: string; skillName: string }
 
 // ── Observer interface ────────────────────────────────────────────────────────
 

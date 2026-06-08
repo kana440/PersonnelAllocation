@@ -1,0 +1,72 @@
+# tool_routing.yaml — 正しいツールが選ばれるかを検証する
+#
+# 各テストケースは「ユーザー入力 → 期待するツール名」のペア。
+# tool_calls が返ってくることを確認し、意図しないツールが選ばれていないかをチェックする。
+
+description: Verify that the model routes to the correct tool for each user intent
+
+prompts:
+  - >
+    {{system_prompt}}
+
+    Human: {{user_input}}
+
+tests:
+  # 異動系
+  - vars:
+      system_prompt: "あなたは人事異動管理システムのAIアシスタントです。人事異動に関する操作をサポートします。"
+      user_input: "山田さんを営業部に異動させてください"
+    assert:
+      - type: javascript
+        value: |
+          // propose_transfer か propose_bulk_transfer が呼ばれること
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'propose_transfer' || n === 'propose_bulk_transfer')
+        threshold: 1
+
+  # 昇格系
+  - vars:
+      system_prompt: "あなたは人事異動管理システムのAIアシスタントです。人事異動に関する操作をサポートします。"
+      user_input: "田中さんを昇格させてください"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'propose_promotion')
+        threshold: 1
+
+  # レビュー系（変更サマリー）
+  - vars:
+      system_prompt: "あなたは人事異動管理システムのAIアシスタントです。人事異動に関する操作をサポートします。"
+      user_input: "今回の変更の概要を教えてください"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'getReviewSummary')
+        threshold: 1
+
+  # findPersons が propose より先に呼ばれること（ユーザーID確認ステップ）
+  - vars:
+      system_prompt: "あなたは人事異動管理システムのAIアシスタントです。人事異動に関する操作をサポートします。"
+      user_input: "佐藤さんを開発部に異動させて"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          const findIdx = calls.indexOf('findPersons')
+          const transferIdx = calls.findIndex(n => n.includes('transfer'))
+          // findPersons が transfer より先、または transfer のみ（既にIDが特定済みの場合）
+          return findIdx === -1 || findIdx < transferIdx || transferIdx === -1
+        threshold: 1
+
+  # 休職系
+  - vars:
+      system_prompt: "あなたは人事異動管理システムのAIアシスタントです。人事異動に関する操作をサポートします。"
+      user_input: "鈴木さんを休職にしてください"
+    assert:
+      - type: javascript
+        value: |
+          const calls = (output.toolCalls ?? []).map(t => t.function?.name ?? t.name)
+          return calls.some(n => n === 'propose_leave_of_absence')
+        threshold: 1

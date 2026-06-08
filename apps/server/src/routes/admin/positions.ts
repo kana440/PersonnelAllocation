@@ -15,10 +15,10 @@ const bulkRegisterSchema = z.object({
 })
 
 const positionUpdateSchema = z.object({
-  status:      z.enum(['available', 'in_use', 'retired']).optional(),
-  acquired_by: z.string().nullable().optional(),
-  acquired_at: z.string().nullable().optional(),
-  notes:       z.string().nullable().optional(),
+  status:     z.enum(['available', 'in_use', 'retired']).optional(),
+  acquiredBy: z.string().nullable().optional(),
+  acquiredAt: z.string().nullable().optional(),
+  notes:      z.string().nullable().optional(),
 })
 
 export interface AdminPosition {
@@ -112,10 +112,10 @@ app.put('/:code', zValidator('json', positionUpdateSchema), async (c) => {
   if (!existing) return c.json({ error: 'Not found' }, 404)
 
   const patch: Partial<typeof positions.$inferInsert> = { updatedAt: sql`now()` as unknown as string }
-  if (body.status      !== undefined) patch.status     = body.status
-  if (body.acquired_by !== undefined) patch.acquiredBy  = body.acquired_by
-  if (body.acquired_at !== undefined) patch.acquiredAt  = body.acquired_at
-  if (body.notes       !== undefined) patch.notes       = body.notes
+  if (body.status     !== undefined) patch.status     = body.status
+  if (body.acquiredBy !== undefined) patch.acquiredBy = body.acquiredBy
+  if (body.acquiredAt !== undefined) patch.acquiredAt = body.acquiredAt
+  if (body.notes      !== undefined) patch.notes      = body.notes
 
   await db.update(positions).set(patch).where(eq(positions.code, code))
 

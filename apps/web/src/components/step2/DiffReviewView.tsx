@@ -77,7 +77,7 @@ export function DiffReviewView({ submission, onBack }: Props) {
     finally { setActionLoading(null) }
   }
 
-  const roundLabel = submission.round_label ?? submission.round_company_id.slice(0, 8)
+  const roundLabel = submission.roundLabel ?? submission.roundCompanyId.slice(0, 8)
 
   const totalChanges = children.reduce((n, c) => n + c.diffs.length, 0)
 
@@ -128,7 +128,7 @@ export function DiffReviewView({ submission, onBack }: Props) {
                       className={`flex items-center gap-3 flex-1 min-w-0 text-left ${hasDiffs ? 'cursor-pointer' : 'cursor-default'}`}
                     >
                       <span className="font-medium text-gray-800 truncate">
-                        {child.assignee_name ?? child.assignee_id}
+                        {child.assigneeName ?? child.assigneeId}
                       </span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${statusColor}`}>
                         {statusLabel}

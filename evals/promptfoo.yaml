@@ -1,0 +1,30 @@
+# PersonnelAllocation — AI Skill Regression Evals
+#
+# 実行方法（Node.js v24 以降は @latest を使うこと）:
+#   export ANTHROPIC_API_KEY=sk-ant-...
+#   npx promptfoo@latest eval -c evals/promptfoo.yaml               # 全 eval
+#   npx promptfoo@latest eval -c evals/skills/skill_routing.yaml    # 個別
+#   npx promptfoo@latest view                                        # ブラウザで結果確認
+#
+# CI での使い方:
+#   skill_defs の変更 PR では GitHub Actions が自動実行する
+
+description: Personnel Allocation AI skill regression tests
+
+# デフォルトプロバイダー（コスト・速度優先で小モデルを使用）
+providers:
+  - id: anthropic:messages:claude-haiku-4-5-20251001
+    config:
+      max_tokens: 1024
+
+# 全テストに共通するシステムプロンプト（chatSession.ts の BASE_SYSTEM_PROMPT と揃える）
+defaultTest:
+  options:
+    provider: anthropic:messages:claude-haiku-4-5-20251001
+
+# テストスイート
+tests:
+  - $ref: ./skills/tool_routing.yaml
+  - $ref: ./skills/skill_routing.yaml
+  - $ref: ./skills/confirm_guard.yaml
+  - $ref: ./skills/injection_resistance.yaml
