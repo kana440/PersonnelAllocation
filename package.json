@@ -18,13 +18,6 @@
     "typecheck:web": "npm run typecheck --workspace=apps/web",
     "typecheck:server": "npm run typecheck --workspace=apps/server",
     "typecheck:domain": "npm run typecheck --workspace=packages/domain",
-    "db:reset": "npm run db:reset --workspace=apps/server",
-    "eval": "promptfoo eval -c evals/promptfoo.yaml",
-    "eval:routing": "promptfoo eval evals/skills/tool_routing.yaml",
-    "eval:guard": "promptfoo eval evals/skills/confirm_guard.yaml",
-    "eval:injection": "promptfoo eval evals/skills/injection_resistance.yaml"
-  },
-  "devDependencies": {
-    "promptfoo": "^0.103.7"
+    "db:reset": "npm run db:reset --workspace=apps/server"
   }
 }
