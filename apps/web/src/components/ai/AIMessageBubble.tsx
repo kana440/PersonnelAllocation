@@ -1,16 +1,18 @@
 import type { ChatMessage, WidgetCallbacks } from '../../application/aiTypes'
-import { FilePickerWidget }    from './widgets/FilePickerWidget'
-import { ExcelHelpWidget }     from './widgets/ExcelHelpWidget'
-import { OrgInputWidget }      from './widgets/OrgInputWidget'
-import { OrgMembersWidget }    from './widgets/OrgMembersWidget'
-import { OrgTreeWidget }       from './widgets/OrgTreeWidget'
-import { PersonInputWidget }   from './widgets/PersonInputWidget'
-import { PromoteConfirmWidget } from './widgets/PromoteConfirmWidget'
-import { ReportLineWidget }    from './widgets/ReportLineWidget'
-import { DiffPreviewWidget }   from './widgets/DiffPreviewWidget'
-import { ImpactCheckWidget }   from './widgets/ImpactCheckWidget'
-import { ExportConfirmWidget } from './widgets/ExportConfirmWidget'
-import { WizardStepsWidget }   from './widgets/WizardStepsWidget'
+import { FilePickerWidget }            from './widgets/FilePickerWidget'
+import { ExcelHelpWidget }             from './widgets/ExcelHelpWidget'
+import { OrgInputWidget }              from './widgets/OrgInputWidget'
+import { OrgMembersWidget }            from './widgets/OrgMembersWidget'
+import { OrgTreeWidget }               from './widgets/OrgTreeWidget'
+import { PersonInputWidget }           from './widgets/PersonInputWidget'
+import { PromoteConfirmWidget }        from './widgets/PromoteConfirmWidget'
+import { ReportLineWidget }            from './widgets/ReportLineWidget'
+import { DiffPreviewWidget }           from './widgets/DiffPreviewWidget'
+import { ImpactCheckWidget }           from './widgets/ImpactCheckWidget'
+import { ExportConfirmWidget }         from './widgets/ExportConfirmWidget'
+import { WizardStepsWidget }           from './widgets/WizardStepsWidget'
+import { TeachAIInputWidget }          from './widgets/TeachAIInputWidget'
+import { ClassificationResultWidget }  from './widgets/ClassificationResultWidget'
 
 interface Props {
   message: ChatMessage
@@ -49,6 +51,19 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
                 )}
               </div>
             ) : message.text}
+          </div>
+        )}
+
+        {/* AIに教えるボタン: AI messages that are fully loaded and have a teach handler */}
+        {isAI && !message.isLoading && message.text && callbacks.onTeachAI && (
+          <div className="mt-1 flex justify-end">
+            <button
+              className="text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 px-2 py-0.5 rounded-md transition-colors"
+              title="この回答を訂正してAIに教える"
+              onClick={() => callbacks.onTeachAI!(message.id)}
+            >
+              ✏️ AIに教える
+            </button>
           </div>
         )}
 
@@ -120,6 +135,20 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
                 isActive={isActiveWidget || !!message.llmConfirm}
                 onConfirm={message.llmConfirm ?? (() => {})}
                 onCancel={message.llmCancel  ?? (() => {})}
+              />
+            )}
+            {message.widget.type === 'teach-ai-input' && callbacks.onTeachAISubmit && (
+              <TeachAIInputWidget
+                conversationWindow={message.widget.conversationWindow}
+                onSubmit={callbacks.onTeachAISubmit}
+                onCancel={callbacks.onTeachAICancel ?? (() => {})}
+              />
+            )}
+            {message.widget.type === 'classification-result' && callbacks.onClassificationApply && callbacks.onClassificationReject && (
+              <ClassificationResultWidget
+                classified={message.widget.classified}
+                onApply={callbacks.onClassificationApply}
+                onReject={callbacks.onClassificationReject}
               />
             )}
           </div>

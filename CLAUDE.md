@@ -77,10 +77,12 @@ packages/domain/src/                             ← ドメイン層（外部依
     scenarios.ts          ←   複合操作（EditScenario）
     helpers.ts            ←   isRegularEmployee 等の判定ヘルパー
   patterns/               ← 変更パターン分類・検出
-    editPatterns.ts       ←   EditPattern 定数（23種）
-    editPatternMatcher.ts ←   差分からの EditPattern 検出
-    changeDetection.ts    ←   before/after 差分検出（RowChanges）
+    editPatterns.ts       ←   EditPattern 定数
+    editPatternMatcher.ts ←   EditPatternMeta（label/group/detect 等）の集約
+    changeDetection.ts    ←   detectChanges() 後方互換シム
     groupPatternMatcher.ts ←  グループ行（出向2行等）のパターン検出
+    defs/                 ←   パターンごとの detect() 実装（jobClassification / position / person / secondment / legacy）
+    detection/            ←   detectPatterns()・DetectContext・isNoCheckReason
   choices/                ← UI 選択肢・表示用ユーティリティ
     index.ts              ←   選択肢の生成・絞り込み（FIELD_CONSTRAINTS から導出）
     orgTree.ts            ←   組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
@@ -174,15 +176,54 @@ appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC]
 
 **新しい操作を追加するときの手順**（必ずこの順序で）:
 1. `EditPattern` に新ラベルを追加（`packages/domain/src/patterns/editPatterns.ts`）
-2. `EditCommand` の実装を追加（`packages/domain/src/commands/handlers/`）
-3. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-4. `OperationDef` を追加（`packages/domain/src/commands/defs/`）して `ALL_OPERATION_DEFS` に登録
-5. 複数行にまたがる操作なら `EditScenario` を組み立てる（`packages/domain/src/commands/scenarios.ts`）
+2. `packages/domain/src/patterns/defs/` の該当ファイルに `detect()` を実装する
+3. `EditCommand` の実装を追加（`packages/domain/src/commands/handlers/`）
+4. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
+5. `OperationDef` を追加（`packages/domain/src/commands/defs/`）して `DEFS` 配列に登録
+6. **`SummaryView.tsx` の `SECTIONS` に追加**（`apps/web/src/components/editor/PersonOperationPanel/SummaryView.tsx`）— これを忘れると UI に表示されない
+7. 複数行にまたがる操作なら `EditScenario` を組み立てる（`packages/domain/src/commands/scenarios.ts`）
 
-手順 3 を省略すると Excel 後方互換のリストア保証が崩れる。
+手順 4 を省略すると Excel 後方互換のリストア保証が崩れる。
 
 既存の実装例: `packages/domain/src/commands/handlers/positionOps.ts`（4種）, `directEdit.ts`, `moveRowsToOrg.ts`
 TDD ガイド: `docs/07-tdd-guide.md`
+
+### 取消操作のパターン（セッション内取消・トグル）
+
+「操作 X を実行した後に取り消せる」UIを作るときは、**別の `OperationDef`（`XCancelDef`）を `availableFor` の条件で排他制御する**。
+
+```typescript
+// 例: 休職 / 休職取消
+export const leaveOfAbsenceDef: OperationDef = {
+  availableFor: (row) => !!row.userId && !row.leaveOfAbsenceSign,
+  // ...
+}
+export const leaveOfAbsenceCancelDef: OperationDef = {
+  availableFor: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
+  inputs: [],   // 確認なしで即実行
+  createCommand: (rowId) => new DirectEditOperation(rowId, { leaveOfAbsenceSign: undefined, transferReason: undefined }, '休職取消'),
+}
+```
+
+- `prevXxx` フィールドを見て「セッション内で設定した値か（prev=空）」「元から設定済みか（prev=値あり）」を区別する
+- 取消は `DirectEditOperation` でフィールドを `undefined` に戻すだけでよいことが多い
+- 取消定義も `DEFS` 配列と `SummaryView.tsx SECTIONS` の両方に追加すること
+
+### `OperationDef` の補足オプション
+
+```typescript
+export const myDef: OperationDef = {
+  // ...
+  description: 'フォーム上部に表示する業務注意事項テキスト',
+
+  inputs: [
+    { field: 'transferReason', required: true, readOnly: true },
+    // inputType: 'checkbox' → truthy/falsy をチェックボックスで表示（readOnly と組み合わせて固定値の確認に使う）
+    { field: 'leaveOfAbsenceSign', required: true, readOnly: true, inputType: 'checkbox', label: '休職フラグ' },
+    { field: 'memo', required: false },
+  ],
+}
+```
 
 ---
 

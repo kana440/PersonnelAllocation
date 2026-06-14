@@ -4,8 +4,8 @@ import { runScenarios } from '../helpers/runner'
 import type { RowChanges } from '@personnel/domain/patterns/changeDetection'
 
 // ── RowChanges ヘルパー ───────────────────────────────────────────────────────
-const changes = (kinds: RowChanges['kinds']): RowChanges =>
-  ({ kinds, bandMismatch: false, diffCount: kinds.size })
+const changes = (patterns: RowChanges['patterns']): RowChanges =>
+  ({ patterns, bandMismatch: false, diffCount: patterns.size })
 
 // ══════════════════════════════════════════════════════════════════════════════
 // G1: 昇格・降格でポジションコードが変わっていない場合はエラー
@@ -26,7 +26,7 @@ runScenarios('G1: 昇降格時はポジションコードの変更が必要', [
   {
     id: 'G1-3', desc: '昇格 + 組織異動あり → エラーなし（transfer 伴う場合は許容）',
     row: { positionCode: 'P12345678', prevPositionCode: 'P12345678' },
-    changes: changes(new Set(['promotion', 'transfer'])),
+    changes: changes(new Set(['promotion', 'orgTransfer'])),
     expect: { noErrorFields: ['positionCode'] },
   },
   {

@@ -3,9 +3,7 @@ import { useStore } from '../../../store/useStore'
 import type { ReviewRow } from '../hooks/useReviewData'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 
-// フィルターチップ定義（EditPattern + newHire/termination）
-type FilterKey = EditPattern | 'newHire' | 'termination'
-const ALL_FILTER_CHIPS: { key: FilterKey; label: string; color: string }[] = [
+const ALL_FILTER_CHIPS: { key: EditPattern; label: string; color: string }[] = [
   { key: 'orgTransfer',           label: '社内異動',           color: 'bg-blue-100 text-blue-700 border-blue-200' },
   { key: 'orgRestructure',        label: '組織改変',           color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
   { key: 'promotion',             label: '昇格',               color: 'bg-green-100 text-green-700 border-green-200' },
@@ -24,13 +22,6 @@ const ALL_FILTER_CHIPS: { key: FilterKey; label: string; color: string }[] = [
   { key: 'newHire',               label: '新規採用',           color: 'bg-teal-100 text-teal-700 border-teal-200' },
   { key: 'termination',           label: '退職',               color: 'bg-red-100 text-red-700 border-red-200' },
 ]
-
-const EDIT_PATTERNS = new Set<string>([
-  'orgTransfer','orgRestructure','promotion','demotion','titleChange','jobTypeChange',
-  'secondmentOut','secondmentIn','secondmentOutRelease','secondmentInRelease',
-  'leaveOfAbsence','returnFromLeave','concurrentAdd','concurrentRelease',
-  'vacantPositionMove','noChange','resignation',
-])
 
 interface Props {
   rows:                ReviewRow[]
@@ -60,20 +51,20 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
 
   const [showChangedOnly, setShowChangedOnly] = useState(!!filterKind || !!filterIssues || !!defaultChangedOnly)
   const [showIssuesOnly,  setShowIssuesOnly]  = useState(!!filterIssues)
-  const [activeKinds,     setActiveKinds]     = useState<Set<string>>(
-    filterKind ? new Set([filterKind]) : new Set()
+  const [activeKinds,     setActiveKinds]     = useState<Set<EditPattern>>(
+    filterKind ? new Set([filterKind as EditPattern]) : new Set()
   )
   const [search, setSearch] = useState('')
 
   // ダイジェストから再ナビゲーション時に同期
   useEffect(() => {
     if (filterKind) {
-      setActiveKinds(new Set([filterKind]))
+      setActiveKinds(new Set([filterKind as EditPattern]))
       setShowChangedOnly(true)
     }
   }, [filterKind])
 
-  const toggleKind = (key: string) =>
+  const toggleKind = (key: EditPattern) =>
     setActiveKinds(prev => {
       const next = new Set(prev)
       next.has(key) ? next.delete(key) : next.add(key)
@@ -94,11 +85,7 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
     if (showChangedOnly) list = list.filter(r => r.changes.diffCount > 0)
     if (showIssuesOnly)  list = list.filter(r => r.issues.length > 0)
     if (activeKinds.size > 0) {
-      list = list.filter(r => [...activeKinds].some(k =>
-        EDIT_PATTERNS.has(k)
-          ? r.activePatterns.has(k as EditPattern)
-          : r.changes.kinds.has(k as never)
-      ))
+      list = list.filter(r => [...activeKinds].some(k => r.activePatterns.has(k)))
     }
     if (search) {
       const q = search.toLowerCase()
@@ -189,10 +176,7 @@ export function AttributeGrid({ rows, filterKind, filterIssues, defaultChangedOn
                   <td className="px-2 py-1.5 border-b border-gray-100 whitespace-nowrap">
                     <div className="flex flex-wrap gap-0.5">
                       {ALL_FILTER_CHIPS.map(({ key, label, color }) => {
-                        const hit = EDIT_PATTERNS.has(key)
-                          ? activePatterns.has(key as EditPattern)
-                          : changes.kinds.has(key as never)
-                        return hit
+                        return activePatterns.has(key)
                           ? <span key={key} className={`px-1 py-0.5 rounded text-[10px] border ${color}`}>{label}</span>
                           : null
                       })}

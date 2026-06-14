@@ -3,8 +3,7 @@ import { buildOrgMap } from '@personnel/domain/choices/rows'
 import type { Organization, Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
-import { detectChanges } from '@personnel/domain/patterns/changeDetection'
-import { deriveEditPatterns } from '@personnel/domain/patterns/editPattern'
+import { detectPatterns } from '@personnel/domain/patterns/detection'
 
 interface UseOrgViewDataDeps {
   allAfterOrgs:   Organization[]
@@ -63,8 +62,8 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList }: UseOrg
       const visit = (row: AllocationRow, depth: number) => {
         if (visited.has(row.rowId)) return
         visited.add(row.rowId)
-        const { active } = deriveEditPatterns(detectChanges(row).kinds, row)
-        entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth, activePatterns: new Set(active) })
+        const activePatterns = detectPatterns(row).patterns
+        entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth, activePatterns })
         if (row.positionCode) {
           const children = childrenByMgrCode.get(row.positionCode) ?? []
           for (const c of children) if (c.rowId !== row.rowId) visit(c, depth + 1)
@@ -73,8 +72,8 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList }: UseOrg
       rootRows.forEach(r => visit(r, 0))
       for (const row of rows) {
         if (!visited.has(row.rowId)) {
-          const { active } = deriveEditPatterns(detectChanges(row).kinds, row)
-          entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth: 0, activePatterns: new Set(active) })
+          const activePatterns = detectPatterns(row).patterns
+          entries.push({ row, person: row.userId ? (personBySfId.get(row.userId) ?? null) : null, depth: 0, activePatterns })
         }
       }
       result.set(orgId, entries)

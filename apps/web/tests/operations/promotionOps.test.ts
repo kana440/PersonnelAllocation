@@ -1,8 +1,8 @@
 // 昇格・降格操作のテスト（OperationDef + EditCommand）
 import { runOperationScenarios } from '../helpers/operationRunner'
 import { makePersonRow } from '../helpers/fixtures'
-import { promotionDef, demotionDef } from '@personnel/domain/commands/defs/jobClassificationDefs'
-import { PromotionOperation, DemotionOperation } from '@personnel/domain/commands/handlers/patternOps'
+import { promotionDef, demotionDef } from '@personnel/domain/commands/defs/promotionDefs'
+import { PromotionOperation, DemotionOperation } from '@personnel/domain/commands/handlers/promotionOps'
 
 // ── 昇格 ──────────────────────────────────────────────────────────────────────
 

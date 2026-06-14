@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { flattenOrgTree } from '@personnel/domain/choices/orgTree'
-import { detectChanges } from '@personnel/domain/patterns/changeDetection'
+import { detectPatterns } from '@personnel/domain/patterns/detection'
 import type { Organization } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { computeDirectBeforeMembers, computeDirectAfterMembers } from './helpers'
@@ -9,7 +9,7 @@ import type { OrgMapping } from './types'
 // ── PreviewMemberRow ──────────────────────────────────────────────────────────
 
 function PreviewMemberRow({ row }: { row: AllocationRow }) {
-  const { kinds, bandMismatch } = useMemo(() => detectChanges(row), [row])
+  const { patterns, bandMismatch } = useMemo(() => detectPatterns(row), [row])
   const bandChanged = (row.band ?? '') !== (row.prevBand ?? '')
   const bandN  = (s: string) => parseInt(s, 10)
   const bandUp = bandChanged && !isNaN(bandN(row.band ?? '')) && !isNaN(bandN(row.prevBand ?? ''))
@@ -31,13 +31,13 @@ function PreviewMemberRow({ row }: { row: AllocationRow }) {
         <span className="flex-shrink-0 text-[10px] text-gray-400">{row.band}</span>
       ) : null}
       <div className="flex flex-wrap gap-0.5 flex-1">
-        {kinds.has('transfer')    && <span className="px-1 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600">異動</span>}
-        {kinds.has('promotion')   && <span className="px-1 py-0.5 rounded text-[10px] bg-green-50 text-green-700 font-semibold">↑昇格</span>}
-        {kinds.has('demotion')    && <span className="px-1 py-0.5 rounded text-[10px] bg-orange-50 text-orange-700 font-semibold">↓降格</span>}
-        {kinds.has('titleChange') && <span className="px-1 py-0.5 rounded text-[10px] bg-purple-50 text-purple-600">職位変更</span>}
-        {kinds.has('newHire')     && <span className="px-1 py-0.5 rounded text-[10px] bg-teal-50 text-teal-700">新規</span>}
-        {kinds.has('termination') && <span className="px-1 py-0.5 rounded text-[10px] bg-red-50 text-red-600">退職</span>}
-        {kinds.has('concurrent')  && <span className="px-1 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600">兼務</span>}
+        {patterns.has('orgTransfer')  && <span className="px-1 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600">異動</span>}
+        {patterns.has('promotion')    && <span className="px-1 py-0.5 rounded text-[10px] bg-green-50 text-green-700 font-semibold">↑昇格</span>}
+        {patterns.has('demotion')     && <span className="px-1 py-0.5 rounded text-[10px] bg-orange-50 text-orange-700 font-semibold">↓降格</span>}
+        {patterns.has('titleChange')  && <span className="px-1 py-0.5 rounded text-[10px] bg-purple-50 text-purple-600">職位変更</span>}
+        {patterns.has('newHire')      && <span className="px-1 py-0.5 rounded text-[10px] bg-teal-50 text-teal-700">新規</span>}
+        {patterns.has('termination')  && <span className="px-1 py-0.5 rounded text-[10px] bg-red-50 text-red-600">退職</span>}
+        {row.concurrentType === '兼務' && <span className="px-1 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600">兼務</span>}
         {bandMismatch             && <span className="px-1 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600">⚠Band</span>}
       </div>
       {row.localJobTitle && <span className="flex-shrink-0 text-[10px] text-gray-400 truncate max-w-[100px]">{row.localJobTitle}</span>}
@@ -100,8 +100,8 @@ function PreviewOrgSection({ org, depth, newOrgIds, afterOrgs, allocationList, b
   const afterUserIds  = useMemo(() => new Set(afterMembers.map(r => r.userId!)), [afterMembers])
   const beforeUserIds = useMemo(() => new Set(beforeMembers.map(r => r.userId!)), [beforeMembers])
 
-  const changed   = afterMembers.filter(r => beforeUserIds.has(r.userId!) && detectChanges(r).diffCount > 0)
-  const unchanged = afterMembers.filter(r => beforeUserIds.has(r.userId!) && detectChanges(r).diffCount === 0)
+  const changed   = afterMembers.filter(r => beforeUserIds.has(r.userId!) && detectPatterns(r).diffCount > 0)
+  const unchanged = afterMembers.filter(r => beforeUserIds.has(r.userId!) && detectPatterns(r).diffCount === 0)
   const arriving  = afterMembers.filter(r => !beforeUserIds.has(r.userId!))
   const departing = beforeMembers.filter(r => !afterUserIds.has(r.userId!))
 

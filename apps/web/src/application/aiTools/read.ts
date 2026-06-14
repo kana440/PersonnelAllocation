@@ -1,8 +1,7 @@
 import type { HRApplicationService } from '../HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
-import { detectChanges } from '@personnel/domain/patterns/changeDetection'
-import { deriveEditPatterns } from '@personnel/domain/patterns/editPatternMatcher'
+import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
 import { ALL_OPERATION_DEFS } from '@personnel/domain/commands/defs'
 import { validateRow } from '@personnel/domain/validation/validateRow'
@@ -70,12 +69,12 @@ export function createReadMethods(service: HRApplicationService) {
 
     const name    = [row.lastName, row.firstName].filter(Boolean).join(' ') || `行 ${rowId}`
     const org     = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
-    const changes = detectChanges(row)
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const changes = detectPatterns(row, ctx)
     const issues  = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
 
     // 現在の変更種別ラベル
-    const { active } = deriveEditPatterns(changes.kinds, row, codeLists)
-    const changeKinds = active.map(p => EDIT_PATTERN_META[p]?.label ?? p)
+    const changeKinds = [...changes.patterns].map(p => EDIT_PATTERN_META[p]?.label ?? p)
 
     // この行で実行可能な操作
     const availableOps = ALL_OPERATION_DEFS
@@ -258,6 +257,7 @@ export function createReadMethods(service: HRApplicationService) {
     offset?:     number
   }): { items: PersonDetail[]; totalCount: number; truncated: boolean } {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
 
     // group by userId
     const byUserId = new Map<string, AllocationRow[]>()
@@ -289,7 +289,7 @@ export function createReadMethods(service: HRApplicationService) {
 
       // ── hasChanges ────────────────────────────────────────────────────
       if (query.hasChanges) {
-        const changed = rows.some(r => detectChanges(r).diffCount > 0)
+        const changed = rows.some(r => detectPatterns(r, ctx).diffCount > 0)
         if (!changed) continue
       }
 
@@ -297,7 +297,7 @@ export function createReadMethods(service: HRApplicationService) {
       let errorCount   = 0
       let warningCount = 0
       for (const r of rows) {
-        const issues = validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectChanges(r) })
+        const issues = validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectPatterns(r, ctx) })
         errorCount   += issues.filter(i => i.level === 'error').length
         warningCount += issues.filter(i => i.level === 'warning').length
       }
@@ -306,9 +306,8 @@ export function createReadMethods(service: HRApplicationService) {
       // ── derive changeKinds from all rows ──────────────────────────────
       const allKinds = new Set<string>()
       for (const r of rows) {
-        const { kinds } = detectChanges(r)
-        const { active } = deriveEditPatterns(kinds, r, codeLists)
-        active.forEach(p => allKinds.add(EDIT_PATTERN_META[p]?.label ?? p))
+        const { patterns } = detectPatterns(r, ctx)
+        patterns.forEach(p => allKinds.add(EDIT_PATTERN_META[p]?.label ?? p))
       }
 
       const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.departmentCode)?.name
@@ -367,7 +366,7 @@ export function createReadMethods(service: HRApplicationService) {
         payGradeChangeSign: primary.payGradeChangeSign || undefined,
         memo:              primary.memo,
         // Derived
-        hasChanges:   rows.some(r => detectChanges(r).diffCount > 0),
+        hasChanges:   rows.some(r => detectPatterns(r, ctx).diffCount > 0),
         changeKinds:  [...allKinds],
         errorCount,
         warningCount,
@@ -395,18 +394,19 @@ export function createReadMethods(service: HRApplicationService) {
     totalCount: number
     truncated:  boolean
   } {
-    const { allocationList, afterOrganizations } = service.getSnapshot()
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
     const limit  = options.limit  ?? CHANGED_ROWS_LIMIT
     const offset = options.offset ?? 0
 
     const changed = allocationList.filter(r => {
-      const { diffCount } = detectChanges(r)
+      const { diffCount } = detectPatterns(r, ctx)
       return diffCount > 0
     })
 
     const page = changed.slice(offset, offset + limit)
     const items = page.map(r => {
-      const { kinds } = detectChanges(r)
+      const { patterns } = detectPatterns(r, ctx)
       const orgName = afterOrganizations.find(
         o => (o.externalCode ?? o.id) === r.departmentCode
       )?.name ?? r.departmentCode ?? ''
@@ -415,7 +415,7 @@ export function createReadMethods(service: HRApplicationService) {
         userId:   r.userId,
         name:     [r.lastName, r.firstName].filter(Boolean).join(' '),
         orgName,
-        kinds:    [...kinds],
+        kinds:    [...patterns],
         grade:    r.prevPayGrade !== r.payGrade
           ? { before: r.prevPayGrade, after: r.payGrade } : null,
         position: r.prevOfficialPositionCode !== r.officialPositionCode

@@ -174,16 +174,40 @@ cascade 検出はヒューリスティックだが、**バリデーションが�
 
 ---
 
+## EditPattern 検出アーキテクチャ
+
+各 EditPattern には `detect()` 関数が定義されており、行データと `DetectContext` を受け取って `boolean` を返す。
+
+```typescript
+// packages/domain/src/patterns/detection/helpers.ts
+interface DetectContext extends DomainContext {
+  readonly sameOrgPairs?: Set<string>   // 組織改変ペア（orgRestructure 判定用）
+}
+
+// ctx.codeLists.transferReasons の noCheckRequired フラグを確認
+function isNoCheckReason(row: AllocationRow, ctx: DetectContext): boolean
+```
+
+- **`noCheckRequired`**: `transferReason` マスタで `true` のとき、フィールド差分ではなく `transferReason` の値そのものでパターンを判定する（業務上「異動事由だけ入れれば十分」な操作）
+- **`sameOrgPairs`**: 組織コードが変わっても同一組織の改称/統合のペアを Set で渡す。`orgRestructure` はペア内の移動、`orgTransfer` はペア外の移動として区別する
+- `detectPatterns(row, ctx?)` が全パターンを走査し `RowChanges` を返す。`ctx` 省略時は空コンテキストで動作（フィールド差分のみ判定）
+
+各グループの `detect()` 実装は `packages/domain/src/patterns/defs/` に配置する。
+
+---
+
 ## 拡張方法
 
 新しい業務操作を追加する手順（**この順序を守ること**）:
 
 1. `EditPattern` に新ラベルを追加（`src/domain/patterns/editPatterns.ts`）
-2. `EditCommand` の実装を追加（`src/domain/commands/handlers/`）
-3. `OperationDef` を追加（`src/domain/commands/defs/`）して `ALL_OPERATION_DEFS` に登録
+2. `src/domain/patterns/defs/` の該当グループファイルに `detect()` を実装
+3. `EditCommand` の実装を追加（`src/domain/commands/handlers/`）
 4. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-5. `EditScenario` の具体実装を追加（複数行にまたがる場合・`src/domain/commands/scenarios.ts`）
-6. TDD ガイドに従ってテストを追加（`docs/13-tdd-operation-patterns.md`）
+5. `OperationDef` を追加（`src/domain/commands/defs/`）して `DEFS` 配列に登録
+6. **`SummaryView.tsx` の `SECTIONS` に追加**（`apps/web/src/components/editor/PersonOperationPanel/SummaryView.tsx`）— 省略すると UI に表示されない
+7. `EditScenario` の具体実装を追加（複数行にまたがる場合・`src/domain/commands/scenarios.ts`）
+8. TDD ガイドに従ってテストを追加（`docs/07-tdd-guide.md`）
 
 手順 4 を省略するとリストア保証が崩れるため、EditPattern 追加と
 バリデーション追加は **必ずセットで行う**。

@@ -1,4 +1,4 @@
-// patterns/changeDetection.ts のテスト
+// patterns/changeDetection.ts のテスト（detectPatterns へのラッパー）
 import { describe, test, expect } from 'vitest'
 import {
   detectChanges,
@@ -41,84 +41,85 @@ describe('parsePositionBandRange', () => {
   })
 })
 
-// ── detectChanges ─────────────────────────────────────────────────────────────
+// ── detectChanges（= detectPatterns）─────────────────────────────────────────
 
 describe('detectChanges: 組織変更', () => {
-  test('組織コードが変わったとき transfer', () => {
+  test('組織コードが変わったとき orgTransfer', () => {
     const row = makeRow({ prevDepartmentCode: 'ORG001', departmentCode: 'ORG002' })
-    const { kinds } = detectChanges(row)
-    expect(kinds.has('transfer')).toBe(true)
+    const { patterns } = detectChanges(row)
+    expect(patterns.has('orgTransfer')).toBe(true)
   })
 
-  test('組織コードが同じなら transfer なし', () => {
+  test('組織コードが同じなら orgTransfer なし', () => {
     const row = makeRow({ prevDepartmentCode: 'ORG001', departmentCode: 'ORG001' })
-    const { kinds } = detectChanges(row)
-    expect(kinds.has('transfer')).toBe(false)
+    const { patterns } = detectChanges(row)
+    expect(patterns.has('orgTransfer')).toBe(false)
   })
 
-  test('sameOrgPairs に含まれる移動は transfer なし', () => {
-    const row   = makeRow({ prevDepartmentCode: 'ORG001', departmentCode: 'ORG002' })
+  test('sameOrgPairs に含まれる移動は orgTransfer なし（orgRestructure になる）', () => {
+    const row   = makeRow({ prevDepartmentCode: 'ORG001', departmentCode: 'ORG002', prevPositionCode: 'P1', positionCode: 'P1' })
     const pairs = new Set(['ORG001|ORG002'])
-    const { kinds } = detectChanges(row, pairs)
-    expect(kinds.has('transfer')).toBe(false)
+    const { patterns } = detectChanges(row, pairs)
+    expect(patterns.has('orgTransfer')).toBe(false)
+    expect(patterns.has('orgRestructure')).toBe(true)
   })
 })
 
 describe('detectChanges: 昇降格', () => {
   test('band が上昇したとき promotion', () => {
     const row = makeRow({ prevBand: 'M4', band: 'M5' })
-    const { kinds } = detectChanges(row)
-    expect(kinds.has('promotion')).toBe(true)
-    expect(kinds.has('demotion')).toBe(false)
+    const { patterns } = detectChanges(row)
+    expect(patterns.has('promotion')).toBe(true)
+    expect(patterns.has('demotion')).toBe(false)
   })
 
   test('band が下降したとき demotion', () => {
     const row = makeRow({ prevBand: 'M5', band: 'M4' })
-    const { kinds } = detectChanges(row)
-    expect(kinds.has('demotion')).toBe(true)
-    expect(kinds.has('promotion')).toBe(false)
+    const { patterns } = detectChanges(row)
+    expect(patterns.has('demotion')).toBe(true)
+    expect(patterns.has('promotion')).toBe(false)
   })
 
-  test('band が数値として比較できないとき bandChange', () => {
+  test('band が数値として比較できないとき titleChange', () => {
     const row = makeRow({ prevBand: 'M4', band: 'G4' })
-    const { kinds } = detectChanges(row)
-    // M=4, G=4 → 数値は同じなので bandChange
-    expect(kinds.has('bandChange')).toBe(true)
+    const { patterns } = detectChanges(row)
+    // M=4, G=4 → 数値は同じなので titleChange
+    expect(patterns.has('titleChange')).toBe(true)
   })
 
   test('band 変更なし → 昇降格なし', () => {
     const row = makeRow({ prevBand: 'M4', band: 'M4' })
-    const { kinds } = detectChanges(row)
-    expect(kinds.has('promotion')).toBe(false)
-    expect(kinds.has('demotion')).toBe(false)
-    expect(kinds.has('bandChange')).toBe(false)
+    const { patterns } = detectChanges(row)
+    expect(patterns.has('promotion')).toBe(false)
+    expect(patterns.has('demotion')).toBe(false)
+    expect(patterns.has('titleChange')).toBe(false)
   })
 })
 
 describe('detectChanges: その他の変更種別', () => {
   test('localJobTitle 変更 → titleChange', () => {
     const row = makeRow({ prevLocalJobTitle: '旧肩書', localJobTitle: '新肩書' })
-    expect(detectChanges(row).kinds.has('titleChange')).toBe(true)
+    expect(detectChanges(row).patterns.has('titleChange')).toBe(true)
   })
 
-  test('positionCode 変更 → positionChange', () => {
+  test('positionCode 変更（org 変更なし）→ vacantPositionMove', () => {
     const row = makeRow({ prevPositionCode: 'P001', positionCode: 'P002' })
-    expect(detectChanges(row).kinds.has('positionChange')).toBe(true)
+    expect(detectChanges(row).patterns.has('vacantPositionMove')).toBe(true)
   })
 
   test('prevDepartmentCode なし + userId あり → newHire', () => {
     const row = makeRow({ prevDepartmentCode: undefined, userId: 'u1' })
-    expect(detectChanges(row).kinds.has('newHire')).toBe(true)
+    expect(detectChanges(row).patterns.has('newHire')).toBe(true)
   })
 
   test('prevDepartmentCode あり + userId なし + departmentCode なし → termination', () => {
     const row = makeRow({ prevDepartmentCode: 'ORG001', userId: undefined, departmentCode: undefined })
-    expect(detectChanges(row).kinds.has('termination')).toBe(true)
+    expect(detectChanges(row).patterns.has('termination')).toBe(true)
   })
 
-  test('兼務行 → concurrent', () => {
+  test('兼務新規追加 → concurrentAdd', () => {
     const row = makeRow({ concurrentType: '兼務' })
-    expect(detectChanges(row).kinds.has('concurrent')).toBe(true)
+    expect(detectChanges(row).patterns.has('concurrentAdd')).toBe(true)
   })
 })
 

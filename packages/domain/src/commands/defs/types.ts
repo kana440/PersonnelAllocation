@@ -26,6 +26,34 @@ export interface OperationInput {
    * UI 側でステップ数セレクター（1段階/2段階/全て）と組み合わせて使用する。
    */
   readonly stepFilter?: 'up' | 'down'
+  /** true のとき値を表示するが編集不可にする。deriveInitial で設定した固定値の確認用 */
+  readonly readOnly?: boolean
+  /** 入力 UI の種別。省略時はテキスト入力（ComboInput）。'checkbox' のとき truthy/falsy をチェックボックスで表示 */
+  readonly inputType?: 'checkbox'
+  /**
+   * 専用ピッカーダイアログの種別。省略時は ComboInput。
+   *   'org'      : 組織検索ダイアログ（departmentCode など組織コードを選ぶフィールドに付与）
+   *   'position' : ポジション選択ダイアログ（managerPositionCode など positionCode を選ぶフィールドに付与）
+   */
+  readonly picker?: 'org' | 'position'
+  /**
+   * picker: 'position' のとき候補行を絞り込む述語。省略時は全ポジション行が候補。
+   * カリー化により外側でコスト高な計算（配下列挙など）を1回だけ行い、内側を高速にする。
+   */
+  readonly positionFilter?: (row: AllocationRow, ctx: DomainContext) => (candidate: AllocationRow) => boolean
+  /**
+   * このフィールドの値が変更されたとき、操作固有のサイドエフェクトを返す。
+   * - setValues       : 追加でセットするフィールド値（undefined = 空欄化）
+   * - openPickerFor   : 自動的に開くピッカー対象フィールド
+   * - openPickerInitialOrg : ピッカーを開く際の初期選択組織 ID
+   *
+   * deriveFieldUpdates（全操作共通）と共存する。afterChange の setValues が derived を上書きする。
+   */
+  readonly afterChange?: (value: string, ctx: DomainContext) => {
+    setValues?:            Partial<AllocationRow>
+    openPickerFor?:        keyof AllocationRow
+    openPickerInitialOrg?: string
+  }
 }
 
 /**
@@ -50,6 +78,17 @@ export interface OperationDef {
   /** バッジ色（Tailwind クラス） */
   readonly badgeColor: string
 
+  /** フォーム上部に表示する操作説明文。業務上の注意事項や手順を記載する */
+  readonly description?: string
+
+  /**
+   * 保存時に追加で適用するフィールド計算。
+   * - `undefined` を返したフィールドは空欄化
+   * - 値を返したフィールドは自動導出として上書き（例: 上司ポジションコード変更→上司名を再導出）
+   * UI はこの関数を事前呼び出しし、既存値が消えるフィールドがあれば確認ダイアログを表示する。
+   */
+  computeAfterFields?: (row: AllocationRow, ctx: DomainContext) => Partial<AllocationRow>
+
   /**
    * この操作が対象行に対してメニューに表示されるかどうか。
    * undefined = 常に表示。
@@ -66,6 +105,10 @@ export interface OperationDef {
   /** ユーザーが入力する必要があるフィールド（順序付き） */
   readonly inputs: OperationInput[]
 
-  /** 確定時の EditCommand を生成する */
-  createCommand(rowId: number, input: Partial<AllocationRow>): EditCommand
+  /**
+   * 確定時の EditCommand を生成する。
+   * `row` と `ctx` は `computeAfterFields` を内部で呼ぶ def のみ使用する。
+   * 既存 def はこれらを無視してよい。
+   */
+  createCommand(rowId: number, input: Partial<AllocationRow>, row?: AllocationRow, ctx?: DomainContext): EditCommand
 }

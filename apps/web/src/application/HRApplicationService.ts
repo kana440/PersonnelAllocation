@@ -14,19 +14,17 @@ import {
   UnassignPersonFromPositionOperation,
   AssignPersonToPositionOperation,
 } from '@personnel/domain/commands/handlers/positionOps'
+import { OrgTransferOperation } from '@personnel/domain/commands/handlers/orgTransferOps'
+import { PromotionOperation } from '@personnel/domain/commands/handlers/promotionOps'
+import type { PromotionFields } from '@personnel/domain/commands/handlers/promotionOps'
+import { JobTypeChangeOperation } from '@personnel/domain/commands/handlers/employmentTypeOps'
+import type { JobTypeFields } from '@personnel/domain/commands/handlers/employmentTypeOps'
 import {
-  OrgTransferOperation,
-  PromotionOperation,
-  JobTypeChangeOperation,
   ResignationOperation,
   VacantPositionMoveOperation,
   SecondmentReleaseOperation,
 } from '@personnel/domain/commands/handlers/patternOps'
-import type {
-  PromotionFields,
-  JobTypeFields,
-  SecondmentReleaseFields,
-} from '@personnel/domain/commands/handlers/patternOps'
+import type { SecondmentReleaseFields } from '@personnel/domain/commands/handlers/patternOps'
 import { AssignPositionCodesOperation } from '@personnel/domain/commands/handlers/assignPositionCodes'
 import type { PositionCodeAssignment } from '../ports'
 import { derivePersons } from '@personnel/domain/choices/rows'
@@ -304,7 +302,11 @@ export class HRApplicationService {
 
   /** 組織異動：departmentCode を変更し org sub-fields を自動補完する */
   executeOrgTransfer(rowId: number, departmentCode: string): ValidationResult {
-    return this.executeOperation(new OrgTransferOperation(rowId, departmentCode))
+    return this.executeOperation(new OrgTransferOperation(rowId, {
+      departmentCode,
+      managerPositionCode: undefined,
+      managerName:         undefined,
+    }))
   }
 
   /** 昇降格：役職・バンド・給与等級などを更新する */

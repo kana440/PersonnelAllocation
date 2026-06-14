@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { ManagerSearchDialog } from './ManagerSearchDialog'
+import { useState, useMemo } from 'react'
+import { PositionPickerModal }   from '../common/PositionPickerModal'
 import { ConfirmOverwriteDialog } from './ConfirmOverwriteDialog'
-import type { Organization } from '@personnel/domain/schemas'
+import type { Organization }  from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
 
@@ -20,6 +20,14 @@ interface Props {
 export function ManagerPositionRow({ label, value, prevVal, associatedName, afterOrganizations, allRows, issues, readOnly, onChange }: Props) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [pending, setPending]       = useState<{ posCode: string; managerName: string } | null>(null)
+
+  // 現在の上司ポジションの所属組織を初期選択にする
+  const initialOrgId = useMemo(() => {
+    if (!value) return undefined
+    const managerRow = allRows.find(r => r.positionCode === value)
+    if (!managerRow?.departmentCode) return undefined
+    return afterOrganizations.find(o => o.externalCode === managerRow.departmentCode)?.id
+  }, [value, allRows, afterOrganizations])
 
   const hasError   = issues.some(i => i.level === 'error')
   const hasWarning = issues.some(i => i.level === 'warning')
@@ -80,9 +88,11 @@ export function ManagerPositionRow({ label, value, prevVal, associatedName, afte
       </div>
 
       {searchOpen && (
-        <ManagerSearchDialog
-          afterOrganizations={afterOrganizations}
+        <PositionPickerModal
           allocationList={allRows}
+          afterOrganizations={afterOrganizations}
+          initialOrgId={initialOrgId}
+          occupiedOnly={true}
           onSelect={handleSelect}
           onClose={() => setSearchOpen(false)}
         />

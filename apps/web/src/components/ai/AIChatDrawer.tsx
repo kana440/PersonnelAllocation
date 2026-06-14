@@ -9,7 +9,8 @@ import { useChatDrop } from './useChatDrop'
 import { AIMessageThread } from './AIMessageThread'
 import { AITracePanel }    from './AITracePanel'
 import { AIContextSuggestions } from './AIContextSuggestions'
-import { SkillsPanel } from './SkillsPanel'
+import { SkillsPanel }    from './SkillsPanel'
+import { FeedbackPanel }  from './FeedbackPanel'
 import type { Skill } from '../../infrastructure/skills/types'
 
 const MOCK_MODEL = '__mock__'
@@ -33,6 +34,9 @@ export function AIChatDrawer({ onClose }: Props) {
     setSkillView(v)
     if (v === 'editor') setEditorSkill(skill ?? null)
   }
+
+  // ── フィードバックパネル表示状態 ────────────────────────────────────────────
+  const [showFeedback, setShowFeedback] = useState(false)
 
   // ── Model selection ─────────────────────────────────────────────────────────
   const [models,   setModels]   = useState<string[]>(DEFAULT_MODELS)
@@ -104,6 +108,20 @@ export function AIChatDrawer({ onClose }: Props) {
     )
   }
 
+  // フィードバックパネルが開いているときはチャット UI を非表示にする
+  if (showFeedback) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        <FeedbackPanel
+          onBack={() => setShowFeedback(false)}
+          onOpenSkills={() => { setShowFeedback(false); setShowSkills(true); setSkillView('list') }}
+          onApply={widgetCallbacks.onClassificationApply!}
+          onReject={widgetCallbacks.onClassificationReject!}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       className="flex flex-col h-full bg-white"
@@ -123,6 +141,13 @@ export function AIChatDrawer({ onClose }: Props) {
             )}
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowFeedback(true)}
+              className="text-gray-400 hover:text-gray-600 text-base leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 transition-colors"
+              title="AI 学習状況"
+            >
+              🧠
+            </button>
             <button
               onClick={() => { setShowSkills(true); setSkillView('list') }}
               className="text-gray-400 hover:text-gray-600 text-base leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 transition-colors"

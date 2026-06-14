@@ -87,6 +87,16 @@ export class AgentRunner {
   getSessionLog():  string { return this.summary.getLog() }
   clearSessionLog(): void  { this.summary.clear() }
 
+  /** Raw single-turn LLM call for the correction classifier (no tools, no loop). */
+  async runRaw(messages: APIMessage[]): Promise<string | null> {
+    try {
+      const result = await this.adapter.complete(messages, [])
+      return result.content ?? null
+    } catch {
+      return null
+    }
+  }
+
   async run(
     history: ChatMessage[],
     userText: string,

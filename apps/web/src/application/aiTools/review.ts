@@ -1,5 +1,6 @@
 import type { HRApplicationService } from '../HRApplicationService'
-import { detectChanges } from '@personnel/domain/patterns/changeDetection'
+import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
+import type { EditPattern } from '@personnel/domain/patterns/editPatterns'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 
 export function createReviewMethods(service: HRApplicationService) {
@@ -12,15 +13,15 @@ export function createReviewMethods(service: HRApplicationService) {
     warningCount: number
   } {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
     const byKind: Record<string, number> = {}
     let changedRows = 0, errorCount = 0, warningCount = 0
     for (const row of allocationList) {
-      const { diffCount, kinds } = detectChanges(row)
-      if (diffCount > 0) {
+      const changes = detectPatterns(row, ctx)
+      if (changes.diffCount > 0) {
         changedRows++
-        for (const k of kinds) byKind[k] = (byKind[k] ?? 0) + 1
+        for (const k of changes.patterns) byKind[k] = (byKind[k] ?? 0) + 1
       }
-      const changes = detectChanges(row)
       for (const issue of validateRow({ row, afterOrganizations, codeLists, allocationList, changes })) {
         issue.level === 'error' ? errorCount++ : warningCount++
       }
@@ -35,19 +36,20 @@ export function createReviewMethods(service: HRApplicationService) {
     kinds:   string[]
     rowId:   number
   }> {
-    const { allocationList, afterOrganizations } = service.getSnapshot()
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
     const results = []
     for (const row of allocationList) {
       if (!row.userId) continue
-      const { kinds } = detectChanges(row)
-      if (kinds.size === 0) continue
-      if (filter.kinds && !filter.kinds.some(k => kinds.has(k as never))) continue
+      const { patterns } = detectPatterns(row, ctx)
+      if (patterns.size === 0) continue
+      if (filter.kinds && !filter.kinds.some(k => patterns.has(k as EditPattern))) continue
       const org = afterOrganizations.find(o => o.externalCode === row.departmentCode || o.id === row.departmentCode)
       results.push({
         userId:  row.userId,
         name:    [row.lastName, row.firstName].filter(Boolean).join(' '),
         orgName: org?.name ?? row.departmentCode ?? '',
-        kinds:   [...kinds],
+        kinds:   [...patterns],
         rowId:   row.rowId,
       })
     }
@@ -63,9 +65,10 @@ export function createReviewMethods(service: HRApplicationService) {
     message: string
   }> {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
     const results = []
     for (const row of allocationList) {
-      const changes = detectChanges(row)
+      const changes = detectPatterns(row, ctx)
       const issues = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
       for (const issue of issues) {
         if (filter.level && issue.level !== filter.level) continue
@@ -98,11 +101,12 @@ export function createReviewMethods(service: HRApplicationService) {
     }>
   } {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
     type Entry = { level: 'error' | 'warning'; rowIds: Set<number> }
     const fieldMap = new Map<string, Entry>()
 
     for (const row of allocationList) {
-      const changes = detectChanges(row)
+      const changes = detectPatterns(row, ctx)
       for (const issue of validateRow({ row, afterOrganizations, codeLists, allocationList, changes })) {
         const key = String(issue.field)
         const existing = fieldMap.get(key)

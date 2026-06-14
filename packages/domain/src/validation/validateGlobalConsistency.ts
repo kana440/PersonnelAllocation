@@ -13,9 +13,9 @@ import { findEmpType } from '../fieldConstraints'
  */
 function checkG1_bandChangeRequiresNewPosition(row: AllocationRow, changes?: RowChanges): ValidationIssue[] {
   if (!changes) return []
-  const { kinds } = changes
+  const { patterns } = changes
   const isSameOrgBandChange =
-    (kinds.has('promotion') || kinds.has('demotion')) && !kinds.has('transfer')
+    (patterns.has('promotion') || patterns.has('demotion')) && !patterns.has('orgTransfer')
   if (!isSameOrgBandChange) return []
 
   const positionChanged = (row.positionCode ?? '') !== (row.prevPositionCode ?? '')

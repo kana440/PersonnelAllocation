@@ -10,13 +10,13 @@ import { nextRowId } from '@personnel/domain/allocationRow'
 import { ComboInput } from '../../common/ComboInput'
 import { TitleSuggestionModal } from '../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
+import { ClearFieldsConfirmModal }  from '../../common/ClearFieldsConfirmModal'
+import { PositionPickerModal }      from '../../common/PositionPickerModal'
 import type { OperationDef } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { OrgSearchDialog } from '../OrgSearchDialog'
 import { BandStepFilter, filterBandsByStep } from './BandStepFilter'
 import type { StepMode } from './BandStepFilter'
-
-const ORG_PICKER_FIELDS = new Set(['departmentCode', 'managerPositionCode'])
 
 interface Props {
   def:    OperationDef
@@ -37,25 +37,51 @@ export function OperationFormView({ def, row, onBack }: Props) {
   const [orgPickerField, setOrgPickerField] = useState<string | null>(null)
   const [submitError,    setSubmitError]    = useState<string | null>(null)
   const [stepMode,       setStepMode]       = useState<StepMode>('1')
-  const [titleSuggest,   setTitleSuggest]   = useState<string | null>(null)
-  const [showPosModal,   setShowPosModal]   = useState(false)
-  const [pendingPosCode, setPendingPosCode] = useState<string | null>(null)
+  const [titleSuggest,    setTitleSuggest]    = useState<string | null>(null)
+  const [showPosModal,    setShowPosModal]    = useState(false)
+  const [pendingPosCode,  setPendingPosCode]  = useState<string | null>(null)
+  const [showClearModal,    setShowClearModal]    = useState(false)
+  const [clearFieldLabels,  setClearFieldLabels]  = useState<string[]>([])
+  const [posPickerField,      setPosPickerField]      = useState<keyof AllocationRow | null>(null)
+  const [posPickerFilter,     setPosPickerFilter]     = useState<((r: AllocationRow) => boolean) | undefined>(undefined)
+  const [posPickerInitialOrg, setPosPickerInitialOrg] = useState<string | undefined>(undefined)
 
   const draftRow = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
 
   const handleChange = (field: keyof AllocationRow, value: string) => {
-    const changes = { [field]: value } as Partial<AllocationRow>
-    const derived = deriveFieldUpdates(changes, draftRow, codeLists, allocationList)
+    const changes  = { [field]: value } as Partial<AllocationRow>
+    const derived  = deriveFieldUpdates(changes, draftRow, codeLists, allocationList)
+    const inputDef = def.inputs.find(i => i.field === field)
+    const effects  = inputDef?.afterChange?.(value, ctx)
+
     if (field === 'officialPositionCode' && value) {
       const hasTitle = def.inputs.some(inp => inp.field === 'localJobTitle')
       if (hasTitle) setTitleSuggest(value)
     }
-    setValues(prev => ({ ...prev, ...changes, ...derived }))
+
+    setValues(prev => ({
+      ...prev,
+      ...changes,
+      ...derived,
+      ...(effects?.setValues ?? {}),
+    }))
+
+    if (effects?.openPickerFor) {
+      const targetInput = def.inputs.find(i => i.field === effects.openPickerFor)
+      if (targetInput?.picker === 'position') {
+        const predicate = targetInput.positionFilter ? targetInput.positionFilter(row, ctx) : undefined
+        setPosPickerFilter(() => predicate)
+        setPosPickerInitialOrg(effects.openPickerInitialOrg)
+        setPosPickerField(effects.openPickerFor!)
+      } else if (targetInput?.picker === 'org') {
+        setOrgPickerField(effects.openPickerFor as string)
+      }
+    }
   }
 
   const issues = useMemo(
     () => validateRow({ row: draftRow, afterOrganizations, codeLists, allocationList })
-      .filter(i => def.inputs.some(inp => inp.field === i.field)),
+      .filter(i => def.inputs.some(inp => inp.field === i.field && !inp.readOnly)),
     [draftRow, afterOrganizations, codeLists, allocationList, def.inputs]
   )
 
@@ -70,7 +96,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
   const doExecute = (vals: Partial<AllocationRow>) => {
     setSubmitError(null)
     try {
-      const command = def.createCommand(row.rowId, vals)
+      const command = def.createCommand(row.rowId, vals, row, ctx)
       const result  = appService.executeOperation(command)
       if (!result.ok) { setSubmitError(result.errors.map(e => e.message).join(' / ')); return }
       onBack()
@@ -86,6 +112,19 @@ export function OperationFormView({ def, row, onBack }: Props) {
       setPendingPosCode(code)
       setShowPosModal(true)
       return
+    }
+    if (def.computeAfterFields) {
+      const afterFields = def.computeAfterFields(row, ctx)
+      const populated = (Object.entries(afterFields) as [keyof AllocationRow, unknown][])
+        .filter(([, v]) => v === undefined)
+        .map(([k]) => k)
+        .filter(k => { const v = row[k]; return v !== undefined && v !== '' })
+        .map(k => ALLOCATION_LIST_LABEL_MAP[k as string]?.ja ?? k as string)
+      if (populated.length > 0) {
+        setClearFieldLabels(populated)
+        setShowClearModal(true)
+        return
+      }
     }
     doExecute(values)
   }
@@ -116,7 +155,12 @@ export function OperationFormView({ def, row, onBack }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {def.inputs.map(({ field, required, label, stepFilter }) => {
+          {def.description && (
+            <div className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded px-3 py-2 leading-relaxed">
+              {def.description}
+            </div>
+          )}
+          {def.inputs.map(({ field, required, label, stepFilter, readOnly, picker, positionFilter, inputType }) => {
             const fieldKey    = field as string
             const fieldLabel  = label ?? ALLOCATION_LIST_LABEL_MAP[fieldKey]?.ja ?? fieldKey
             const currentVal  = (values[field] as string | undefined) ?? ''
@@ -125,7 +169,41 @@ export function OperationFormView({ def, row, onBack }: Props) {
             const fieldIssues = issues.filter(i => i.field === fieldKey)
             const hasIssue    = fieldIssues.some(i => i.level === 'error' || i.level === 'warning')
 
-            if (ORG_PICKER_FIELDS.has(fieldKey)) {
+            if (picker === 'position') {
+              return (
+                <div key={fieldKey}>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    {fieldLabel}{required && <span className="text-red-400 ml-0.5">*</span>}
+                  </label>
+                  <div className="flex gap-1.5">
+                    <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} />
+                    <button
+                      onClick={() => {
+                        const predicate = positionFilter ? positionFilter(row, ctx) : undefined
+                        setPosPickerFilter(() => predicate)
+                        // 現在値のポジションが属する組織、なければ自行の組織を初期選択
+                        const currentCode = (values[field] as string | undefined) ?? (row[field] as string | undefined)
+                        const managerRow  = currentCode ? allocationList.find(r => r.positionCode === currentCode) : undefined
+                        const deptCode    = managerRow?.departmentCode ?? row.departmentCode
+                        const orgId       = afterOrganizations.find(o => o.externalCode === deptCode)?.id
+                        setPosPickerInitialOrg(orgId)
+                        setPosPickerField(field)
+                      }}
+                      className="px-2.5 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
+                      title="ポジションを検索"
+                    >🔍</button>
+                  </div>
+                  {prevVal && <p className="text-[10px] text-gray-400 mt-0.5">現在: {prevVal}</p>}
+                  {fieldIssues.map((issue, i) => (
+                    <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
+                      {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
+                    </p>
+                  ))}
+                </div>
+              )
+            }
+
+            if (picker === 'org') {
               const orgName = afterOrganizations.find(
                 o => o.externalCode === currentVal || o.id === currentVal
               )?.name ?? ''
@@ -147,6 +225,36 @@ export function OperationFormView({ def, row, onBack }: Props) {
                       {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
                     </p>
                   ))}
+                </div>
+              )
+            }
+
+            if (inputType === 'checkbox') {
+              const checked = !!currentVal && currentVal !== '0'
+              return (
+                <div key={fieldKey}>
+                  <label className="flex items-center gap-2 cursor-default select-none">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={readOnly}
+                      readOnly={readOnly}
+                      className="w-4 h-4 accent-blue-600 disabled:opacity-60"
+                      onChange={readOnly ? undefined : (e) => handleChange(field, e.target.checked ? '1' : '')}
+                    />
+                    <span className="text-xs font-medium text-gray-600">{fieldLabel}</span>
+                  </label>
+                </div>
+              )
+            }
+
+            if (readOnly) {
+              return (
+                <div key={fieldKey}>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{fieldLabel}</label>
+                  <div className="text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-500 select-none">
+                    {currentVal || '（空）'}
+                  </div>
                 </div>
               )
             }
@@ -208,6 +316,36 @@ export function OperationFormView({ def, row, onBack }: Props) {
           />
         )}
       </div>
+
+      {/* ポジション選択モーダル */}
+      {posPickerField && (
+        <PositionPickerModal
+          allocationList={allocationList}
+          afterOrganizations={afterOrganizations}
+          initialOrgId={posPickerInitialOrg}
+          filter={posPickerFilter}
+          onSelect={(code, _name) => {
+            handleChange(posPickerField, code)
+            setPosPickerField(null)
+            setPosPickerFilter(undefined)
+            setPosPickerInitialOrg(undefined)
+          }}
+          onClose={() => {
+            setPosPickerField(null)
+            setPosPickerFilter(undefined)
+            setPosPickerInitialOrg(undefined)
+          }}
+        />
+      )}
+
+      {/* 空欄化確認モーダル */}
+      {showClearModal && (
+        <ClearFieldsConfirmModal
+          fieldLabels={clearFieldLabels}
+          onConfirm={() => { setShowClearModal(false); doExecute(values) }}
+          onCancel={() => setShowClearModal(false)}
+        />
+      )}
 
       {/* 役職→タイトル提案モーダル */}
       {titleSuggest && (

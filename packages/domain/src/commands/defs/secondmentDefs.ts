@@ -297,8 +297,14 @@ export const secondmentInReleaseSFDef: OperationDef = {
   availableFor: (row, cl) =>
     wasSecondedIn(row) && prevWasSecondmentIn(row, cl) &&
     isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, cl),
-  inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ employmentType: row.prevEmploymentType as string | undefined }),
+  inputs: [
+    { field: 'transferReason', required: true, label: '異動事由', readOnly: true },
+    { field: 'memo', required: true, label: 'メモ' },
+  ],
+  deriveInitial: (row) => ({
+    transferReason:     '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    memo:               row.memo as string | undefined,
+  }),
   createCommand: (rowId, input) =>
     new SecondmentInReleaseOperation(rowId, {
       employmentType: input.employmentType as string | undefined,
@@ -314,8 +320,14 @@ export const secondmentInReleaseNonSFDef: OperationDef = {
   availableFor: (row, cl) =>
     wasSecondedIn(row) && prevWasSecondmentIn(row, cl) &&
     !isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, cl),
-  inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ employmentType: row.prevEmploymentType as string | undefined }),
+  inputs: [
+    { field: 'transferReason', required: true, label: '異動事由', readOnly: true },
+    { field: 'memo', required: true, label: 'メモ' },
+  ],
+  deriveInitial: (row) => ({
+    transferReason:     '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    memo:               row.memo as string | undefined,
+  }),
   createCommand: (rowId, input) =>
     new SecondmentInReleaseOperation(rowId, {
       employmentType: input.employmentType as string | undefined,
@@ -331,8 +343,14 @@ export const concurrentSecondmentOutReleaseSFDef: OperationDef = {
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentToCompany &&
     isSFIntegratedCompany(row.secondmentToCompany as string | undefined, cl),
-  inputs: [],
-  deriveInitial: () => ({}),
+  inputs: [
+    { field: 'transferReason', required: true, label: '異動事由', readOnly: true },
+    { field: 'memo', required: true, label: 'メモ' },
+  ],
+  deriveInitial: (row) => ({
+    transferReason:     '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    memo:               row.memo as string | undefined,
+  }),
   createCommand: (rowId) => new ConcurrentSecondmentOutReleaseOperation(rowId),
 }
 
@@ -344,8 +362,14 @@ export const concurrentSecondmentOutReleaseNonSFDef: OperationDef = {
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentToCompany &&
     !isSFIntegratedCompany(row.secondmentToCompany as string | undefined, cl),
-  inputs: [],
-  deriveInitial: () => ({}),
+  inputs: [
+    { field: 'transferReason', required: true, label: '異動事由', readOnly: true },
+    { field: 'memo', required: true, label: 'メモ' },
+  ],
+  deriveInitial: (row) => ({
+    transferReason:     '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    memo:               row.memo as string | undefined,
+  }),
   createCommand: (rowId) => new ConcurrentSecondmentOutReleaseOperation(rowId),
 }
 
@@ -357,20 +381,44 @@ export const concurrentSecondmentInReleaseSFDef: OperationDef = {
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentFromCompany &&
     isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, cl),
-  inputs: [],
-  deriveInitial: () => ({}),
+  inputs: [
+    { field: 'transferReason', required: true, label: '異動事由', readOnly: true },
+    { field: 'memo', required: true, label: 'メモ' },
+  ],
+  deriveInitial: (row) => ({
+    transferReason:     '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    memo:               row.memo as string | undefined,
+  }),
   createCommand: (rowId) => new ConcurrentSecondmentInReleaseOperation(rowId),
 }
 
 // ── 兼務出向受入解除（SF未導入先） ────────────────────────────────────────────
 
 export const concurrentSecondmentInReleaseNonSFDef: OperationDef = {
-  id: 'ConcurrentSecondmentInReleaseNonSF', label: '兼務出向受入解除（SF未導入先）',
+  id: 'ConcurrentSecondmentInReleaseNonSF',
+  label: '兼務出向受入解除（SF未導入先）',
   group: 'person', badgeColor: 'bg-red-50 text-red-500',
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentFromCompany &&
     !isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, cl),
-  inputs: [],
-  deriveInitial: () => ({}),
+  inputs: [
+    { field: 'transferReason', required: true, label: '異動事由', readOnly: true },
+    { field: 'memo', required: true, label: 'メモ' },
+  ],
+  deriveInitial: (row) => ({
+    transferReason:     '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    memo:               row.memo as string | undefined,
+  }),
   createCommand: (rowId) => new ConcurrentSecondmentInReleaseOperation(rowId),
 }
+
+export const DEFS: OperationDef[] = [
+  secondmentOutSFDef,              secondmentOutNonSFDef,
+  secondmentInSFDef,               secondmentInNonSFDef,
+  concurrentSecondmentOutSFDef,    concurrentSecondmentOutNonSFDef,
+  concurrentSecondmentInSFDef,     concurrentSecondmentInNonSFDef,
+  secondmentOutReleaseSFDef,       secondmentOutReleaseNonSFDef,
+  secondmentInReleaseSFDef,        secondmentInReleaseNonSFDef,
+  concurrentSecondmentOutReleaseSFDef, concurrentSecondmentOutReleaseNonSFDef,
+  concurrentSecondmentInReleaseSFDef,  concurrentSecondmentInReleaseNonSFDef,
+]

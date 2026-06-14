@@ -1,5 +1,5 @@
-import { detectChanges }                              from '@personnel/domain/patterns/changeDetection'
-import { deriveEditPatterns, EDIT_PATTERN_META }      from '@personnel/domain/patterns/editPattern'
+import { detectPatterns }                              from '@personnel/domain/patterns/detection'
+import { EDIT_PATTERN_META }                           from '@personnel/domain/patterns/editPattern'
 import type { EditPattern }                            from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow }                          from '@personnel/domain/allocationRow'
 import { useStore }                                    from '../../store/useStore'
@@ -72,10 +72,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
   const empBadge = useEmpBadge(row)
 
   // 設定済みパターン（ヘッダー表示用）
-  const active = (() => {
-    const ch = detectChanges(row)
-    return new Set(deriveEditPatterns(ch.kinds, row, codeLists).active)
-  })()
+  const active = detectPatterns(row).patterns
 
   // availableFor を通過した操作セット
   const passesFilter = (p: EditPattern) => {

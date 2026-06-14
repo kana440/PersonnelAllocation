@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
 import { useSkillStore } from '../../store/skillStore'
@@ -17,8 +17,12 @@ import { reportLineScenario, buildReportLineMembers } from '../../infrastructure
 import { promotePersonsScenario }     from '../../infrastructure/ai/scenarios/promotePersons'
 import { checkImpactScenario, buildImpactGroups } from '../../infrastructure/ai/scenarios/checkImpact'
 import { exportExcelScenario, buildExportChangeSummary } from '../../infrastructure/ai/scenarios/exportExcel'
-import type { ChatWidget, ConfirmResult, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
+import type { ChatWidget, ClassificationWidgetData, ConversationItem, ConfirmResult, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
 import type { ChatPhase } from '../../store/useChatStore'
+import { feedbackStore, CURRENT_SESSION_ID } from '../../infrastructure/ai/feedback/feedbackStore'
+import { buildClassifierPrompt, parseClassifierOutput } from '../../infrastructure/ai/feedback/correctionClassifier'
+import { toolRegistry } from '../../infrastructure/ai/toolRegistry'
+import type { Skill } from '../../infrastructure/skills/types'
 
 const AFFIRMATIONS = ['進めて', 'はい', 'yes', 'ok', 'やって', '適用', '確認して']
 const isAffirmation = (text: string) =>
@@ -75,8 +79,17 @@ export function useChatHandlers({
       rowCtxs.length > 0 ? rowCtxs : undefined,
       session,
     )
+    // 学習済み業務ルールをシステムプロンプトに注入
+    const learnedRules = feedbackStore.getAppliedRules()
+      .filter(r => r.kind === 'learned_rule' && r.isActive)
+      .map(r => `- ${r.newContent}`)
+      .join('\n')
+    const withRules = learnedRules
+      ? `${base}\n\n【学習済み業務ルール】\n${learnedRules}`
+      : base
+
     // スキルのメタデータだけをヒントとして注入（full instructions はツール呼び出し時に渡す）
-    if (activeSkills.length === 0) return base
+    if (activeSkills.length === 0) return withRules
     const skillHint = [
       '# 利用可能なスキル',
       '以下のスキルに該当するタスクが来た場合は、テキストで回答する前に必ずスキルツールを呼び出してから作業を開始してください。',
@@ -85,7 +98,7 @@ export function useChatHandlers({
         `- **${s.name}** (\`skill_${s.slug.replace(/-/g, '_')}\`): ${s.description}`
       ),
     ].join('\n')
-    return `${base}\n\n${skillHint}`
+    return `${withRules}\n\n${skillHint}`
   }, [])
 
   const buildSkillEntries = useCallback((): SkillToolEntry[] => {
@@ -472,16 +485,231 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     addMessage({ role: 'ai', text: 'エクスポートをキャンセルしました。' })
   }, [addMessage, setPhase])
 
+  // ── Teach AI (Phase 1 — STEP1 active learning) ────────────────────────────────
+
+  // 起動時: 適用済みtool descriptionをlocalStorageから復元
+  useEffect(() => {
+    const activeDescriptions = Object.fromEntries(
+      feedbackStore.getAppliedRules()
+        .filter(r => r.kind === 'tool_description' && r.isActive)
+        .map(r => [r.targetKey, r.newContent])
+    )
+    if (Object.keys(activeDescriptions).length > 0) {
+      toolRegistry.applyDescriptionOverrides(activeDescriptions)
+    }
+  }, [])
+
+  // 「AIに教える」ボタン → 訂正入力ウィジェットを追加
+  const handleTeachAI = useCallback((messageId: string) => {
+    const currentMessages = useChatStore.getState().messages
+    const msgIndex = currentMessages.findIndex(m => m.id === messageId)
+    const window: ConversationItem[] = currentMessages
+      .slice(Math.max(0, msgIndex - 9), msgIndex + 1)
+      .filter(m => !m.isLoading)
+      .map(m => ({
+        role:    m.role === 'user' ? 'user' : 'assistant' as const,
+        content: m.text,
+      }))
+    addMessage({
+      role:   'ai',
+      text:   'どのように修正すべきかを説明してください。',
+      widget: { type: 'teach-ai-input', conversationWindow: window },
+    })
+  }, [addMessage])
+
+  const handleTeachAICancel = useCallback(() => {
+    // 最後の teach-ai-input メッセージを削除（updatemessage で widget を外す）
+    const msgs = useChatStore.getState().messages
+    const last = [...msgs].reverse().find(m => m.widget?.type === 'teach-ai-input')
+    if (last) updateMessage(last.id, { widget: undefined, text: 'キャンセルしました。' })
+  }, [updateMessage])
+
+  // 訂正送信 → 分類器を起動し結果をチャットに表示
+  const handleTeachAISubmit = useCallback(async (
+    correction: string,
+    conversationWindow: ConversationItem[],
+  ) => {
+    if (!agentRunner) {
+      addMessage({ role: 'ai', text: 'AI接続が設定されていないため、分類できません。' })
+      return
+    }
+
+    // 訂正入力ウィジェットを「分類中...」に切り替え
+    const msgs = useChatStore.getState().messages
+    const inputMsg = [...msgs].reverse().find(m => m.widget?.type === 'teach-ai-input')
+    const loadingId = inputMsg
+      ? (updateMessage(inputMsg.id, { widget: undefined, text: '🔍 分類中...', isLoading: true }), inputMsg.id)
+      : addAILoading()
+
+    // CorrectionCapture を保存
+    const captureId = `cap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+    feedbackStore.saveCapture({
+      id:                 captureId,
+      sessionId:          CURRENT_SESSION_ID,
+      trigger:            'explicit',
+      conversationWindow,
+      userCorrection:     correction,
+      createdAt:          Date.now(),
+    })
+
+    try {
+      // ツール説明文の一覧を取得（分類器への入力）
+      const toolDescriptions = Object.fromEntries(
+        toolRegistry.definitions.map(d => [
+          d.function.name,
+          d.function.description ?? '',
+        ])
+      )
+      const prompt = buildClassifierPrompt(
+        { id: captureId, sessionId: CURRENT_SESSION_ID, trigger: 'explicit', conversationWindow, userCorrection: correction, createdAt: Date.now() },
+        toolDescriptions,
+      )
+      const raw = await agentRunner.runRaw([{ role: 'user', content: prompt }])
+      const classified = raw ? parseClassifierOutput(captureId, raw) : null
+
+      if (!classified) {
+        updateMessage(loadingId, { isLoading: false, text: '分類に失敗しました。もう一度お試しください。' })
+        return
+      }
+
+      feedbackStore.saveClassified(classified)
+      updateMessage(loadingId, {
+        isLoading: false,
+        text:      '',
+        widget:    { type: 'classification-result', classified: classified as unknown as ClassificationWidgetData },
+      })
+    } catch (err) {
+      updateMessage(loadingId, { isLoading: false, text: `エラーが発生しました: ${String(err)}` })
+    }
+  }, [agentRunner, addMessage, addAILoading, updateMessage])
+
+  // 分類結果を適用
+  const handleClassificationApply = useCallback(async (classified: ClassificationWidgetData) => {
+    const makeRuleId = () => `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+
+    if (classified.kind === 'tool_description_issue' && classified.toolDescriptionDraft) {
+      const { targetTool, currentDescription, proposedDescription } = classified.toolDescriptionDraft
+      toolRegistry.applyDescriptionOverrides({ [targetTool]: proposedDescription })
+      feedbackStore.saveAppliedRule({
+        id:                makeRuleId(),
+        kind:              'tool_description',
+        targetKey:         targetTool,
+        prevContent:       currentDescription,
+        newContent:        proposedDescription,
+        appliedAt:         Date.now(),
+        isActive:          true,
+        basedOnProposedId: classified.id,
+      })
+
+    } else if (classified.kind === 'business_rule_gap' && classified.businessRuleDraft) {
+      const ruleKey = makeRuleId()
+      feedbackStore.saveAppliedRule({
+        id:                ruleKey,
+        kind:              'learned_rule',
+        targetKey:         ruleKey,
+        newContent:        classified.businessRuleDraft.ruleText,
+        appliedAt:         Date.now(),
+        isActive:          true,
+        basedOnProposedId: classified.id,
+      })
+
+    } else if (classified.kind === 'workflow_pattern' && classified.skillDraft) {
+      const draft = classified.skillDraft
+      const skill: Skill = {
+        slug:         draft.slug,
+        name:         draft.name,
+        description:  draft.description,
+        instructions: draft.instructions,
+        allowedTools: draft.allowedTools,
+        status:       'active',
+        isBuiltin:    false,
+        updatedAt:    new Date().toISOString(),
+      }
+      await useSkillStore.getState().save(skill)
+      feedbackStore.saveAppliedRule({
+        id:                makeRuleId(),
+        kind:              'skill',
+        targetKey:         draft.slug,
+        newContent:        draft.name,
+        appliedAt:         Date.now(),
+        isActive:          true,
+        basedOnProposedId: classified.id,
+      })
+
+    } else if ((classified.kind === 'tool_logic_bug' || classified.kind === 'missing_tool') && classified.codeFixDraft) {
+      feedbackStore.saveCodeFix({
+        id:               `fix-${Date.now().toString(36)}`,
+        classification:   classified.kind,
+        targetKey:        classified.codeFixDraft.targetTool,
+        title:            classified.codeFixDraft.title,
+        description:      classified.codeFixDraft.description,
+        expectedBehavior: classified.codeFixDraft.expectedBehavior,
+        exampleInputs:    [],
+        status:           'pending',
+        createdAt:        Date.now(),
+      })
+    }
+
+    // 分類結果のステータスを更新
+    const stored = feedbackStore.getClassified().find(c => c.id === classified.id)
+    if (stored) feedbackStore.saveClassified({ ...stored, status: 'applied' })
+
+    // ウィジェットのステータスを即時更新して「適用済み」と表示
+    const msgs = useChatStore.getState().messages
+    const target = msgs.find(m => m.widget?.type === 'classification-result' && (m.widget as { classified: ClassificationWidgetData }).classified.id === classified.id)
+    if (target) {
+      updateMessage(target.id, {
+        widget: {
+          type:       'classification-result',
+          classified: { ...classified, status: 'applied' },
+        },
+      })
+    }
+
+    const kindMsg: Record<string, string> = {
+      tool_description_issue: 'ツール説明を更新しました。次のメッセージから有効です。',
+      business_rule_gap:      '業務ルールを追加しました。次のメッセージから有効です。',
+      workflow_pattern:       'スキルを作成しました。次のメッセージから利用できます。',
+      tool_logic_bug:         'Code Fix依頼として記録しました。',
+      missing_tool:           'Code Fix依頼として記録しました。',
+    }
+    addMessage({ role: 'ai', text: kindMsg[classified.kind] ?? '適用しました。' })
+  }, [addMessage, updateMessage])
+
+  const handleClassificationReject = useCallback((classifiedId: string) => {
+    const stored = feedbackStore.getClassified().find(c => c.id === classifiedId)
+    if (stored) feedbackStore.saveClassified({ ...stored, status: 'rejected' })
+
+    const msgs = useChatStore.getState().messages
+    const target = msgs.find(m =>
+      m.widget?.type === 'classification-result' &&
+      (m.widget as { classified: ClassificationWidgetData }).classified.id === classifiedId
+    )
+    if (target) {
+      updateMessage(target.id, {
+        widget: {
+          type:       'classification-result',
+          classified: { ...(target.widget as { classified: ClassificationWidgetData }).classified, status: 'rejected' },
+        },
+      })
+    }
+  }, [updateMessage])
+
   // ── assembled callbacks & routing ─────────────────────────────────────────────
   const widgetCallbacks: WidgetCallbacks = {
-    onFileSelected:      handleFileSelected,
-    onImportCancel:      handleImportCancel,
-    onOrgNameSubmit:     handleOrgNameSubmit,
-    onPersonNamesSubmit: handlePersonNamesSubmit,
-    onPromoteConfirm:    handlePromoteConfirm,
-    onPromoteCancel:     handlePromoteCancel,
-    onExportConfirm:     handleExportConfirm,
-    onExportCancel:      handleExportCancel,
+    onFileSelected:          handleFileSelected,
+    onImportCancel:          handleImportCancel,
+    onOrgNameSubmit:         handleOrgNameSubmit,
+    onPersonNamesSubmit:     handlePersonNamesSubmit,
+    onPromoteConfirm:        handlePromoteConfirm,
+    onPromoteCancel:         handlePromoteCancel,
+    onExportConfirm:         handleExportConfirm,
+    onExportCancel:          handleExportCancel,
+    onTeachAI:               handleTeachAI,
+    onTeachAICancel:         handleTeachAICancel,
+    onTeachAISubmit:         handleTeachAISubmit,
+    onClassificationApply:   handleClassificationApply,
+    onClassificationReject:  handleClassificationReject,
   }
 
   const handlePromptClick = useCallback((id: string) => {

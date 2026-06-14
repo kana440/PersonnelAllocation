@@ -1,3 +1,26 @@
+export type CorrectionKind =
+  | 'tool_description_issue'
+  | 'business_rule_gap'
+  | 'workflow_pattern'
+  | 'tool_logic_bug'
+  | 'missing_tool'
+
+/** Classification result payload stored in the chat widget (mirrored from feedback/types.ts) */
+export interface ClassificationWidgetData {
+  id: string
+  captureId: string
+  kind: CorrectionKind
+  confidence: number
+  reasoning: string
+  toolDescriptionDraft?: { targetTool: string; currentDescription: string; proposedDescription: string }
+  businessRuleDraft?: { ruleText: string }
+  skillDraft?: { slug: string; name: string; description: string; instructions: string; allowedTools: string[] }
+  codeFixDraft?: { title: string; description: string; expectedBehavior: string; targetTool?: string }
+  status: 'pending' | 'applied' | 'rejected'
+}
+
+export type ConversationItem = { role: 'user' | 'assistant'; content: string }
+
 export interface PersonInfo {
   userId: string
   name: string
@@ -60,6 +83,8 @@ export type ChatWidget =
   | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'wizard-steps'; title: string; steps: WizardStep[] }
+  | { type: 'teach-ai-input'; conversationWindow: ConversationItem[] }
+  | { type: 'classification-result'; classified: ClassificationWidgetData }
 
 /** 選択中の行のコンテキスト情報。AI のシステムプロンプトに注入する */
 export interface SelectedRowContext {
@@ -107,4 +132,10 @@ export interface WidgetCallbacks {
   onPromoteCancel:     () => void
   onExportConfirm:     () => void
   onExportCancel:      () => void
+  // AI feedback (Phase 1 — STEP1 active learning)
+  onTeachAI?:               (messageId: string) => void
+  onTeachAICancel?:         () => void
+  onTeachAISubmit?:         (correction: string, window: ConversationItem[]) => void
+  onClassificationApply?:   (classified: ClassificationWidgetData) => void
+  onClassificationReject?:  (classifiedId: string) => void
 }

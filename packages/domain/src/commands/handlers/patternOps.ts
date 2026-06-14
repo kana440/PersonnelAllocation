@@ -1,128 +1,13 @@
-// Pattern-level domain operations.
-// Each represents one semantic business intent (org transfer, promotion, etc.).
-// These are coarser-grained than DirectEditOperation and carry meaningful undo labels.
-// Both Web pattern dialogs and AI tools converge here via HRApplicationService methods.
-
+// UI・サービス直呼び操作（OperationDef を持たない）
+// ResignationOperation / VacantPositionMoveOperation / SecondmentReleaseOperation
+// これらは HRApplicationService から直接呼ばれ、操作パネルのメニューには出ない。
 import type { EditCommand, DomainContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { deriveOrgSubFields } from '../orgHelpers'
 import { AssignPersonToPositionOperation } from './positionOps'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
-}
-
-// ── OrgTransfer ───────────────────────────────────────────────────────────────
-
-export class OrgTransferOperation implements EditCommand {
-  readonly kind = 'OrgTransfer'
-
-  constructor(
-    private readonly rowId:          number,
-    private readonly departmentCode: string,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    if (!this.departmentCode)
-      return fail('組織コードは必須です')
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    const row     = ctx.allocationList.find(r => r.rowId === this.rowId)!
-    const orgName = ctx.afterOrganizations.find(o => o.externalCode === this.departmentCode)?.name
-                 ?? this.departmentCode
-    const subFields = deriveOrgSubFields(this.departmentCode, ctx.codeLists)
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId
-          ? { ...r, departmentCode: this.departmentCode, ...subFields }
-          : r
-      ),
-      label: `組織異動: ${personName(row)} → ${orgName}`,
-    }
-  }
-}
-
-// ── Promotion / Demotion ─────────────────────────────────────────────────────
-
-export interface PromotionFields {
-  officialPositionCode?: string
-  localJobTitle?:        string
-  positionCode?:         string
-  positionBand?:         string
-  band?:                 string
-  payGrade?:             string
-  promotionSign?:        string
-  payGradeChangeSign?:   string
-}
-
-export class PromotionOperation implements EditCommand {
-  readonly kind = 'Promotion'
-
-  constructor(
-    private readonly rowId:  number,
-    private readonly fields: PromotionFields,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
-    const changes = Object.fromEntries(
-      Object.entries(this.fields).filter(([, v]) => v !== undefined)
-    )
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId ? { ...r, ...changes } : r
-      ),
-      label: `昇降格: ${personName(row)}`,
-    }
-  }
-}
-
-// ── JobTypeChange ─────────────────────────────────────────────────────────────
-
-export interface JobTypeFields {
-  jobFamily?: string
-  jobType?:   string
-}
-
-export class JobTypeChangeOperation implements EditCommand {
-  readonly kind = 'JobTypeChange'
-
-  constructor(
-    private readonly rowId:  number,
-    private readonly fields: JobTypeFields,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
-    const changes = Object.fromEntries(
-      Object.entries(this.fields).filter(([, v]) => v !== undefined)
-    )
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId ? { ...r, ...changes } : r
-      ),
-      label: `ジョブタイプ変更: ${personName(row)}`,
-    }
-  }
 }
 
 // ── Resignation ───────────────────────────────────────────────────────────────
@@ -182,7 +67,6 @@ export class VacantPositionMoveOperation implements EditCommand {
     const source = ctx.allocationList.find(r => r.rowId === this.sourceRowId)!
     const target = ctx.allocationList.find(r => r.rowId === this.targetRowId)!
 
-    // AssignPersonToPositionOperation の Case B ロジックを再利用
     const innerResult = new AssignPersonToPositionOperation(
       this.targetRowId,
       source.userId!,
@@ -192,112 +76,6 @@ export class VacantPositionMoveOperation implements EditCommand {
     return {
       ...innerResult,
       label: `ポジション異動: ${personName(source)} → ${posTitle}`,
-    }
-  }
-}
-
-// ── Demotion ──────────────────────────────────────────────────────────────────
-
-export interface DemotionFields {
-  officialPositionCode?: string
-  localJobTitle?:        string
-  positionCode?:         string
-  positionBand?:         string
-  band?:                 string
-  payGrade?:             string
-  demotionReason?:       string
-  payGradeChangeSign?:   string
-}
-
-export class DemotionOperation implements EditCommand {
-  readonly kind = 'Demotion'
-
-  constructor(
-    private readonly rowId:  number,
-    private readonly fields: DemotionFields,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
-    const changes = Object.fromEntries(
-      Object.entries(this.fields).filter(([, v]) => v !== undefined)
-    )
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId ? { ...r, ...changes } : r
-      ),
-      label: `降格: ${personName(row)}`,
-    }
-  }
-}
-
-// ── TitleChange ───────────────────────────────────────────────────────────────
-
-export interface TitleChangeFields {
-  officialPositionCode?: string
-  localJobTitle?:        string
-}
-
-export class TitleChangeOperation implements EditCommand {
-  readonly kind = 'TitleChange'
-
-  constructor(
-    private readonly rowId:  number,
-    private readonly fields: TitleChangeFields,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
-    const changes = Object.fromEntries(
-      Object.entries(this.fields).filter(([, v]) => v !== undefined)
-    )
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId ? { ...r, ...changes } : r
-      ),
-      label: `役職変更: ${personName(row)}`,
-    }
-  }
-}
-
-// ── ManagerChange ─────────────────────────────────────────────────────────────
-
-export class ManagerChangeOperation implements EditCommand {
-  readonly kind = 'ManagerChange'
-
-  constructor(
-    private readonly rowId:               number,
-    private readonly managerPositionCode: string | undefined,
-    private readonly managerName:         string | undefined,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    if (!ctx.allocationList.find(r => r.rowId === this.rowId))
-      return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    const row = ctx.allocationList.find(r => r.rowId === this.rowId)!
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId
-          ? { ...r, managerPositionCode: this.managerPositionCode, managerName: this.managerName }
-          : r
-      ),
-      label: `上司変更: ${personName(row)}`,
     }
   }
 }

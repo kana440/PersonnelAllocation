@@ -13,7 +13,7 @@ interface Stat {
   color:        string
   bgColor:      string
   tab?:         string
-  filterKind?:  EditPattern | 'newHire' | 'termination'
+  filterKind?:  EditPattern
 }
 
 export function ChangeDigest({ data, onSelectTab }: Props) {
@@ -46,8 +46,8 @@ export function ChangeDigest({ data, onSelectTab }: Props) {
         { label: '出向解除',         value: p('secondmentOutRelease'),     color: 'text-red-600',     bgColor: 'bg-red-50',     tab: 'grid', filterKind: 'secondmentOutRelease' },
         { label: '休職',             value: p('leaveOfAbsence'),           color: 'text-gray-600',    bgColor: 'bg-gray-50',    tab: 'grid', filterKind: 'leaveOfAbsence' },
         { label: 'ポジション異動',   value: p('vacantPositionMove'),       color: 'text-cyan-600',    bgColor: 'bg-cyan-50',    tab: 'grid', filterKind: 'vacantPositionMove' },
-        { label: '新規採用',         value: summary.newHires,              color: 'text-teal-600',    bgColor: 'bg-teal-50',    tab: 'grid', filterKind: 'newHire' },
-        { label: '退職',             value: summary.terminations,          color: 'text-red-600',     bgColor: 'bg-red-50',     tab: 'grid', filterKind: 'termination' },
+        { label: '新規採用',         value: p('newHire'),                  color: 'text-teal-600',    bgColor: 'bg-teal-50',    tab: 'grid', filterKind: 'newHire' },
+        { label: '退職',             value: p('termination'),              color: 'text-red-600',     bgColor: 'bg-red-50',     tab: 'grid', filterKind: 'termination' },
       ],
     },
     {

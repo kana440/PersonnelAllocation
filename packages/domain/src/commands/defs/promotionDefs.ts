@@ -1,14 +1,12 @@
-// 職務情報操作 — 昇格・降格・役職変更・ジョブタイプ変更・雇用延長
+// 昇降格・役職変更 — 昇格・降格・役職変更
 import type { OperationDef } from './types'
 import {
   PromotionOperation,
   DemotionOperation,
   TitleChangeOperation,
-  JobTypeChangeOperation,
-} from '../handlers/patternOps'
-import { EmploymentExtensionOperation } from '../handlers/statusOps'
+} from '../handlers/promotionOps'
 import { derivePromotionSign } from '../../derivation'
-import { isRegularEmployee, isSecondmentAcceptance, isExtendedEmployeeTarget } from '../helpers'
+import { isRegularEmployee, isSecondmentAcceptance } from '../helpers'
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
 
@@ -119,59 +117,4 @@ export const titleChangeDef: OperationDef = {
     }),
 }
 
-// ── ジョブタイプ変更 ──────────────────────────────────────────────────────────
-
-export const jobTypeChangeDef: OperationDef = {
-  id:         'JobTypeChange',
-  label:      'ジョブタイプ変更',
-  group:      'jobClassification',
-  badgeColor: 'bg-purple-100 text-purple-700',
-
-  availableFor: (row, cl) => !isSecondmentAcceptance(row, cl),
-
-  inputs: [
-    { field: 'jobFamily', required: false },
-    { field: 'jobType',   required: true  },
-  ],
-
-  deriveInitial: (row) => ({
-    jobFamily: row.jobFamily as string | undefined,
-    jobType:   row.jobType   as string | undefined,
-  }),
-
-  createCommand: (rowId, input) =>
-    new JobTypeChangeOperation(rowId, {
-      jobFamily: input.jobFamily as string | undefined,
-      jobType:   input.jobType   as string | undefined,
-    }),
-}
-
-// ── 雇用延長 ─────────────────────────────────────────────────────────────────
-
-export const employmentExtensionDef: OperationDef = {
-  id:         'EmploymentExtension',
-  label:      '雇用延長',
-  group:      'jobClassification',
-  badgeColor: 'bg-teal-100 text-teal-700',
-
-  availableFor: (row, cl) => isExtendedEmployeeTarget(row, cl),
-
-  inputs: [
-    { field: 'employmentType', required: true  },
-    { field: 'band',           required: true  },
-    { field: 'payGrade',       required: false },
-  ],
-
-  deriveInitial: (row) => ({
-    employmentType: row.employmentType as string | undefined,
-    band:           row.band           as string | undefined,
-    payGrade:       row.payGrade       as string | undefined,
-  }),
-
-  createCommand: (rowId, input) =>
-    new EmploymentExtensionOperation(rowId, {
-      employmentType: input.employmentType as string,
-      band:           input.band           as string | undefined,
-      payGrade:       input.payGrade       as string | undefined,
-    }),
-}
+export const DEFS: OperationDef[] = [promotionDef, demotionDef, titleChangeDef]

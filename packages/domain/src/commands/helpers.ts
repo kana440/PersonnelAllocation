@@ -55,3 +55,26 @@ export function isSFIntegratedCompany(companyLabel: string | undefined, codeList
   if (!companyLabel) return false
   return codeLists.companies.find(c => c.label === companyLabel || c.code === companyLabel)?.isSFIntegrated ?? false
 }
+
+/**
+ * 指定ポジションの配下にあるポジションコードを BFS で列挙する。
+ * 上司変更時のループ防止（自分の配下を上司に選べないようにする）に使用する。
+ */
+export function getDescendantPositionCodes(
+  positionCode: string,
+  allocationList: AllocationRow[],
+): Set<string> {
+  const result = new Set<string>()
+  const queue  = [positionCode]
+  while (queue.length > 0) {
+    const pc = queue.shift()!
+    for (const row of allocationList) {
+      const rpc = row.positionCode as string | undefined
+      if (row.managerPositionCode === pc && rpc && !result.has(rpc)) {
+        result.add(rpc)
+        queue.push(rpc)
+      }
+    }
+  }
+  return result
+}

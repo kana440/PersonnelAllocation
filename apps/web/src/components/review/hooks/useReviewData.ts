@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { useScopedStore } from '../../../store/useScopedStore'
 import { validateRow, type ValidationIssue } from '@personnel/domain/validation/validateRow'
-import { detectChanges, type RowChanges } from '@personnel/domain/patterns/changeDetection'
-import { deriveEditPatterns, type EditPattern } from '@personnel/domain/patterns/editPattern'
+import { detectPatterns, type RowChanges, type DetectContext } from '@personnel/domain/patterns/detection'
+import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 export interface ReviewRow {
@@ -16,11 +16,9 @@ export interface ReviewData {
   rows:        ReviewRow[]
   totalIssues: number
   summary: {
-    byPattern:    Map<EditPattern, number>
-    newHires:     number
-    terminations: number
+    byPattern:      Map<EditPattern, number>
     bandMismatches: number
-    withIssues:   number
+    withIssues:     number
   }
 }
 
@@ -52,37 +50,35 @@ export function useReviewData(): ReviewData {
     return pairs
   }, [orgMapping, beforeCodeById, afterCodeById])
 
-  // positionBand code → promotionDemotionWarningLevel（昇降格ワーニング用チェック）
-  const jobLevelWarningMap = useMemo(
-    () => new Map((codeLists?.jobLevels ?? []).map(e => [e.code, e.promotionDemotionWarningLevel])),
-    [codeLists]
-  )
+  const detectCtx = useMemo((): DetectContext => ({
+    allocationList,
+    afterOrganizations,
+    codeLists,
+    sameOrgPairs,
+  }), [allocationList, afterOrganizations, codeLists, sameOrgPairs])
 
   const rows = useMemo((): ReviewRow[] =>
     allocationList.map(row => {
-      const changes = detectChanges(row, sameOrgPairs, jobLevelWarningMap)
-      const { active } = deriveEditPatterns(changes.kinds, row, codeLists)
+      const changes = detectPatterns(row, detectCtx)
       return {
         row,
         changes,
-        activePatterns: new Set(active),
+        activePatterns: changes.patterns,
         issues: validateRow({ row, afterOrganizations, codeLists, allocationList: [], changes }),
       }
     }),
-    [allocationList, afterOrganizations, codeLists, sameOrgPairs, jobLevelWarningMap]
+    [allocationList, afterOrganizations, codeLists, detectCtx]
   )
 
   const summary = useMemo(() => {
     const byPattern = new Map<EditPattern, number>()
-    let newHires = 0, terminations = 0, bandMismatches = 0, withIssues = 0
+    let bandMismatches = 0, withIssues = 0
     for (const { changes, activePatterns, issues } of rows) {
       for (const p of activePatterns) byPattern.set(p, (byPattern.get(p) ?? 0) + 1)
-      if (changes.kinds.has('newHire'))     newHires++
-      if (changes.kinds.has('termination')) terminations++
-      if (changes.bandMismatch)             bandMismatches++
-      if (issues.length > 0)                withIssues++
+      if (changes.bandMismatch) bandMismatches++
+      if (issues.length > 0)    withIssues++
     }
-    return { byPattern, newHires, terminations, bandMismatches, withIssues }
+    return { byPattern, bandMismatches, withIssues }
   }, [rows])
 
   const totalIssues = useMemo(() => rows.reduce((acc, r) => acc + r.issues.length, 0), [rows])

@@ -1,78 +1,84 @@
 import { useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
-import { rowDiff } from '@personnel/domain/allocationRow'
+import { rowDiff, type AllocationRow } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { ALL_OPERATION_DEFS, type OperationDef } from '@personnel/domain/commands/defs/index'
 import { useUnavailableOperationDisplay } from '../../../hooks/useFieldStrictness'
-import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { PanelView } from './types'
 
 // ── セクション定義（業務語） ────────────────────────────────────────────────────
-const SECTIONS: { label: string; defIds: string[] }[] = [
-  { label: '昇降格・役職変更',    defIds: ['Promotion', 'Demotion', 'TitleChange'] },
-  { label: '職務内容・雇用形態',  defIds: ['JobTypeChange', 'EmploymentExtension'] },
-  { label: '組織への異動',        defIds: ['OrgTransfer', 'OrgRestructure', 'ManagerChange'] },
-  { label: '兼務',                defIds: ['ConcurrentAdd', 'ConcurrentRelease'] },
+// id は OperationDef.id と 1:1 対応。shortLabel はバッジ表示用の短縮ラベル。
+// 出向セクションは SF区別をセクションタイトルで示すため同じ shortLabel を使い分けて問題なし。
+// Domain 側の def を変更したときはここも合わせて更新する。
+const SECTIONS: { label: string; ops: { id: string; shortLabel: string }[] }[] = [
+  {
+    label: '昇降格・役職変更',
+    ops: [
+      { id: 'Promotion',   shortLabel: '昇格' },
+      { id: 'Demotion',    shortLabel: '降格' },
+      { id: 'TitleChange', shortLabel: '役職変更' },
+    ],
+  },
+  {
+    label: '職務内容・雇用形態',
+    ops: [
+      { id: 'JobTypeChange',       shortLabel: '職種変更' },
+      { id: 'EmploymentExtension', shortLabel: '雇用延長' },
+    ],
+  },
+  {
+    label: '組織への異動',
+    ops: [
+      { id: 'OrgTransfer',    shortLabel: '社内異動' },
+      { id: 'OrgRestructure', shortLabel: '組織改変' },
+      { id: 'ManagerChange',  shortLabel: '上司変更' },
+    ],
+  },
+  {
+    label: '兼務',
+    ops: [
+      { id: 'ConcurrentAdd',     shortLabel: '兼務追加' },
+      { id: 'ConcurrentRelease', shortLabel: '兼務解除' },
+    ],
+  },
   {
     label: '出向・出向解除（SF導入会社）',
-    defIds: [
-      'SecondmentOutSF',               'SecondmentInSF',
-      'SecondmentOutReleaseSF',        'SecondmentInReleaseSF',
-      'ConcurrentSecondmentOutSF',     'ConcurrentSecondmentInSF',
-      'ConcurrentSecondmentOutReleaseSF', 'ConcurrentSecondmentInReleaseSF',
+    ops: [
+      { id: 'SecondmentOutSF',                   shortLabel: '本務出向' },
+      { id: 'SecondmentInSF',                    shortLabel: '本務出向受入' },
+      { id: 'SecondmentOutReleaseSF',             shortLabel: '本務出向解除' },
+      { id: 'SecondmentInReleaseSF',              shortLabel: '本務出向受入解除' },
+      { id: 'ConcurrentSecondmentOutSF',          shortLabel: '兼務出向' },
+      { id: 'ConcurrentSecondmentInSF',           shortLabel: '兼務出向受入' },
+      { id: 'ConcurrentSecondmentOutReleaseSF',   shortLabel: '兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseSF',    shortLabel: '兼務出向受入解除' },
     ],
   },
   {
     label: '出向・出向解除（SF未導入会社）',
-    defIds: [
-      'SecondmentOutNonSF',               'SecondmentInNonSF',
-      'SecondmentOutReleaseNonSF',        'SecondmentInReleaseNonSF',
-      'ConcurrentSecondmentOutNonSF',     'ConcurrentSecondmentInNonSF',
-      'ConcurrentSecondmentOutReleaseNonSF', 'ConcurrentSecondmentInReleaseNonSF',
+    ops: [
+      { id: 'SecondmentOutNonSF',                   shortLabel: '本務出向' },
+      { id: 'SecondmentInNonSF',                    shortLabel: '本務出向受入' },
+      { id: 'SecondmentOutReleaseNonSF',             shortLabel: '本務出向解除' },
+      { id: 'SecondmentInReleaseNonSF',              shortLabel: '本務出向受入解除' },
+      { id: 'ConcurrentSecondmentOutNonSF',          shortLabel: '兼務出向' },
+      { id: 'ConcurrentSecondmentInNonSF',           shortLabel: '兼務出向受入' },
+      { id: 'ConcurrentSecondmentOutReleaseNonSF',   shortLabel: '兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseNonSF',    shortLabel: '兼務出向受入解除' },
     ],
   },
-  { label: '在籍・退職', defIds: ['LeaveOfAbsence', 'ReturnFromLeave', 'EmploymentTransferOut', 'EmploymentTransferIn', 'NoChange'] },
+  {
+    label: '在籍・退職',
+    ops: [
+      { id: 'LeaveOfAbsence',       shortLabel: '休職' },
+      { id: 'LeaveOfAbsenceCancel', shortLabel: '休職取消' },
+      { id: 'ReturnFromLeave',      shortLabel: '復職' },
+      { id: 'EmploymentTransferOut', shortLabel: '移籍（出）' },
+      { id: 'EmploymentTransferIn',  shortLabel: '移籍（入）' },
+      { id: 'NoChange',              shortLabel: '変更なし' },
+    ],
+  },
 ]
-
-// OperationDef.id → バッジ短縮ラベル
-// 出向セクション内は SF区別をセクションタイトルで示すためラベルから省略
-// 命名規則: 本務/兼務 × 出向/出向受入 × (空)/解除
-const SHORT_LABEL: Record<string, string> = {
-  Promotion:                          '昇格',
-  Demotion:                           '降格',
-  TitleChange:                        '役職変更',
-  JobTypeChange:                      '職種変更',
-  EmploymentExtension:                '雇用延長',
-  OrgTransfer:                        '社内異動',
-  OrgRestructure:                     '組織改変',
-  ManagerChange:                      '上司変更',
-  ConcurrentAdd:                      '兼務追加',
-  ConcurrentRelease:                  '兼務解除',
-  // 出向（SF導入）
-  SecondmentOutSF:                    '本務出向',
-  SecondmentInSF:                     '本務出向受入',
-  SecondmentOutReleaseSF:             '本務出向解除',
-  SecondmentInReleaseSF:              '本務出向受入解除',
-  ConcurrentSecondmentOutSF:          '兼務出向',
-  ConcurrentSecondmentInSF:           '兼務出向受入',
-  ConcurrentSecondmentOutReleaseSF:   '兼務出向解除',
-  ConcurrentSecondmentInReleaseSF:    '兼務出向受入解除',
-  // 出向（SF未導入）— セクションが違うので同じラベルで問題なし
-  SecondmentOutNonSF:                 '本務出向',
-  SecondmentInNonSF:                  '本務出向受入',
-  SecondmentOutReleaseNonSF:          '本務出向解除',
-  SecondmentInReleaseNonSF:           '本務出向受入解除',
-  ConcurrentSecondmentOutNonSF:       '兼務出向',
-  ConcurrentSecondmentInNonSF:        '兼務出向受入',
-  ConcurrentSecondmentOutReleaseNonSF:'兼務出向解除',
-  ConcurrentSecondmentInReleaseNonSF: '兼務出向受入解除',
-  // 在籍・退職
-  LeaveOfAbsence:                     '休職',
-  ReturnFromLeave:                    '復職',
-  EmploymentTransferOut:              '移籍（出）',
-  EmploymentTransferIn:               '移籍（入）',
-  NoChange:                           '変更なし',
-}
 
 // 2色のみ: 有効 / 無効
 const COLOR_AVAILABLE   = 'bg-blue-100 text-blue-700'
@@ -130,14 +136,14 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
 
       {/* 操作ボタン群 */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {SECTIONS.map(({ label, defIds }) => {
-          const defs = defIds
-            .map(id => defById.get(id))
-            .filter((d): d is OperationDef => !!d)
-            .map(d => ({ def: d, available: d.availableFor(row, codeLists) }))
+        {SECTIONS.map(({ label, ops }) => {
+          const items = ops
+            .map(({ id, shortLabel }) => ({ def: defById.get(id), shortLabel }))
+            .filter((x): x is { def: OperationDef; shortLabel: string } => !!x.def)
+            .map(({ def, shortLabel }) => ({ def, shortLabel, available: def.availableFor(row, codeLists) }))
             .filter(({ available }) => unavailableDisplay !== 'hide' || available)
 
-          if (defs.length === 0) return null
+          if (items.length === 0) return null
 
           return (
             <div key={label}>
@@ -145,7 +151,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
                 {label}
               </div>
               <div className="grid grid-cols-3 gap-1">
-                {defs.map(({ def, available }) => {
+                {items.map(({ def, shortLabel, available }) => {
                   const disabled = !available && unavailableDisplay === 'show-disabled'
                   return (
                     <button
@@ -161,7 +167,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
                       ].join(' ')}
                       title={available ? def.label : `${def.label}（この行では通常使用しません）`}
                     >
-                      {SHORT_LABEL[def.id] ?? def.label}
+                      {shortLabel}
                     </button>
                   )
                 })}

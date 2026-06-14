@@ -1,7 +1,10 @@
 // 人操作 — 休職・復職・移籍・変更なし
 import type { OperationDef } from './types'
-import { LeaveOfAbsenceOperation, ReturnFromLeaveOperation, NoChangeOperation } from '../handlers/statusOps'
-import { EmploymentTransferOutOperation, EmploymentTransferInOperation } from '../handlers/transferOps'
+import {
+  LeaveOfAbsenceOperation, ReturnFromLeaveOperation, NoChangeOperation,
+  EmploymentTransferOutOperation, EmploymentTransferInOperation,
+} from '../handlers/personOps'
+import { DirectEditOperation } from '../handlers/directEdit'
 
 // ── 休職 ─────────────────────────────────────────────────────────────────────
 
@@ -11,20 +14,60 @@ export const leaveOfAbsenceDef: OperationDef = {
   group:      'person',
   badgeColor: 'bg-gray-100 text-gray-600',
 
+  description: '4/1付で休職する場合は個別対応します。3/31以前の休職については通常の申請を行った上で、必要な異動をしてください。',
+
   availableFor: (row) => !!row.userId && !row.leaveOfAbsenceSign,
 
   inputs: [
-    { field: 'leaveOfAbsenceSign', required: true,  label: '休職フラグ' },
-    { field: 'memo',      required: false, label: '休職種別メモ' },
+    { field: 'transferReason',     required: true,  readOnly: true },
+    { field: 'leaveOfAbsenceSign', required: true,  readOnly: true, inputType: 'checkbox', label: '休職フラグ' },
+    { field: 'memo',               required: false },
   ],
 
-  deriveInitial: () => ({}),
+  deriveInitial: (row) => ({
+    transferReason:     '【個別対応】4/1付休職・復職',
+    leaveOfAbsenceSign: '1',
+    memo:               row.memo as string | undefined,
+  }),
 
   createCommand: (rowId, input) =>
     new LeaveOfAbsenceOperation(
       rowId,
-      input.leaveOfAbsenceSign as '1',
-      input.memo      as string | undefined,
+      input.transferReason as string,
+      input.memo           as string | undefined,
+    ),
+}
+
+// ── 休職取消 ──────────────────────────────────────────────────────────────────
+
+export const leaveOfAbsenceCancelDef: OperationDef = {
+  id:         'LeaveOfAbsenceCancel',
+  label:      '休職取消',
+  group:      'person',
+  badgeColor: 'bg-gray-100 text-gray-600',
+
+  description: '4/1付休職を取り消します。4/1以前に休職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
+
+  // セッション内で休職を設定した行（prev=空、after='1'）にのみ表示
+  availableFor: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
+
+  inputs: [
+    { field: 'transferReason',     required: false, readOnly: true },
+    { field: 'leaveOfAbsenceSign', required: false, readOnly: true, inputType: 'checkbox', label: '休職フラグ' },
+    { field: 'memo',               required: false },
+  ],
+
+  deriveInitial: (row) => ({
+    transferReason:     undefined,
+    leaveOfAbsenceSign: '',
+    memo:               row.memo as string | undefined,
+  }),
+
+  createCommand: (rowId, input) =>
+    new DirectEditOperation(
+      rowId,
+      { leaveOfAbsenceSign: undefined, transferReason: undefined, memo: input.memo as string | undefined },
+      '休職取消',
     ),
 }
 
@@ -36,13 +79,28 @@ export const returnFromLeaveDef: OperationDef = {
   group:      'person',
   badgeColor: 'bg-gray-100 text-gray-600',
 
+  description: '4/1付で復職します。4/1以前に復職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
+
   availableFor: (row) => !!row.leaveOfAbsenceSign,
 
-  inputs: [],
+  inputs: [
+    { field: 'transferReason',     required: false, readOnly: true },
+    { field: 'leaveOfAbsenceSign', required: false, readOnly: true, inputType: 'checkbox', label: '休職フラグ（クリア）' },
+    { field: 'memo',               required: false },
+  ],
 
-  deriveInitial: () => ({}),
+  deriveInitial: (row) => ({
+    transferReason:     undefined,
+    leaveOfAbsenceSign: '',
+    memo:               row.memo as string | undefined,
+  }),
 
-  createCommand: (rowId) => new ReturnFromLeaveOperation(rowId),
+  createCommand: (rowId, input) =>
+    new ReturnFromLeaveOperation(
+      rowId,
+      input.transferReason as string | undefined,
+      input.memo           as string | undefined,
+    ),
 }
 
 // ── 移籍（出る）──────────────────────────────────────────────────────────────
@@ -119,14 +177,26 @@ export const noChangeDef: OperationDef = {
   group:      'person',
   badgeColor: 'bg-neutral-100 text-neutral-500',
 
+  description: '変更がない場合はこちらを選らんでください。',
+
   availableFor: () => true,
 
   inputs: [
-    { field: 'transferReason', required: true, label: '変更なし事由' },
+    { field: 'transferReason', required: true, label: '異動事由' },
+    { field: 'memo', required: true, label: 'メモ' },
   ],
 
-  deriveInitial: () => ({}),
+  deriveInitial: (row) => ({
+    transferReason: '【対応なし】変更なし',
+    memo: row.memo as string | undefined,
+  }),
 
   createCommand: (rowId, input) =>
     new NoChangeOperation(rowId, input.transferReason as string),
 }
+
+export const DEFS: OperationDef[] = [
+  leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef,
+  employmentTransferOutDef, employmentTransferInDef,
+  noChangeDef,
+]

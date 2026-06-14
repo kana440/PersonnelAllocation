@@ -6,10 +6,10 @@ import { ChangeTitleOperation, derivePersonGradeFields } from '@personnel/domain
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { BulkMoveToOrgOperation } from '@personnel/domain/commands/handlers/bulkMoveToOrg'
 import { TransferPersonOperation } from '@personnel/domain/commands/handlers/transferPerson'
-import { LeaveOfAbsenceOperation, ReturnFromLeaveOperation } from '@personnel/domain/commands/handlers/statusOps'
+import { LeaveOfAbsenceOperation, ReturnFromLeaveOperation } from '@personnel/domain/commands/handlers/personOps'
 import { ConcurrentAddOperation, ConcurrentReleaseOperation } from '@personnel/domain/commands/handlers/concurrentOps'
-import { DemotionOperation } from '@personnel/domain/commands/handlers/patternOps'
-import { detectChanges } from '@personnel/domain/patterns/changeDetection'
+import { DemotionOperation } from '@personnel/domain/commands/handlers/promotionOps'
+import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import type { ValidationIssue } from '@personnel/domain/validation/types'
 import type { PositionCodeAssignment } from '../../ports'
@@ -23,12 +23,13 @@ export function createWriteMethods(service: HRApplicationService) {
     beforeList: AllocationRow[],
   ): Array<{ rowId: number; issues: ValidationIssue[] }> {
     const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
     const beforeMap = new Map(beforeList.map(r => [r.rowId, r]))
     return allocationList
       .filter(r => beforeMap.get(r.rowId) !== r)
       .map(r => ({
         rowId:  r.rowId,
-        issues: validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectChanges(r) }),
+        issues: validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectPatterns(r, ctx) }),
       }))
       .filter(v => v.issues.length > 0)
   }
@@ -375,7 +376,7 @@ export function createWriteMethods(service: HRApplicationService) {
     const primary = rows.find(r => !r.concurrentType) ?? rows[0]
     if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(new ReturnFromLeaveOperation(primary.rowId))
+    const result = service.executeOperation(new ReturnFromLeaveOperation(primary.rowId, '【個別対応】4/1付休職・復職'))
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
