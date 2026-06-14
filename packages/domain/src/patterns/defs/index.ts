@@ -7,6 +7,7 @@ export type EditPattern =
   | 'titleChange'
   | 'jobTypeChange'
   | 'employmentExtension'
+  | 'employmentTypeChange'
   // ポジション系
   | 'orgTransfer'
   | 'orgRestructure'
@@ -36,7 +37,7 @@ export type EditPattern =
   | 'vacantPositionMove'
 
 export const ALL_EDIT_PATTERNS: EditPattern[] = [
-  'promotion', 'demotion', 'titleChange', 'jobTypeChange', 'employmentExtension',
+  'promotion', 'demotion', 'titleChange', 'jobTypeChange', 'employmentExtension', 'employmentTypeChange',
   'orgTransfer', 'orgRestructure', 'managerChange', 'concurrentAdd', 'concurrentRelease',
   'secondmentOut', 'secondmentIn', 'secondmentOutRelease', 'secondmentInRelease',
   'concurrentSecondmentOut', 'concurrentSecondmentIn',

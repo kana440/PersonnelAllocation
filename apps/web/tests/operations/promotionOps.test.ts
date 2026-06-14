@@ -1,8 +1,7 @@
-// 昇格・降格操作のテスト（OperationDef + EditCommand）
+// 昇格・降格操作のテスト（EditOperation）
 import { runOperationScenarios } from '../helpers/operationRunner'
 import { makePersonRow } from '../helpers/fixtures'
-import { promotionDef, demotionDef } from '@personnel/domain/commands/defs/promotionDefs'
-import { PromotionOperation, DemotionOperation } from '@personnel/domain/commands/handlers/promotionOps'
+import { promotionDef, demotionDef, bindOperation } from '@personnel/domain/commands/defs'
 
 // ── 昇格 ──────────────────────────────────────────────────────────────────────
 
@@ -32,7 +31,7 @@ runOperationScenarios('昇格 — validate', promotionDef, [
     id: 'promo-val-1',
     desc: '対象行が存在すれば validate 成功',
     row: { employmentType: '社員' },
-    createCommand: (row) => new PromotionOperation(row.rowId, { band: 'M5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5' }),
     expect: { validateOk: true },
   },
   {
@@ -40,7 +39,7 @@ runOperationScenarios('昇格 — validate', promotionDef, [
     desc: '対象行が存在しなければ validate 失敗',
     row: { employmentType: '社員' },
     allocationList: [],
-    createCommand: (row) => new PromotionOperation(row.rowId, { band: 'M5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5' }),
     expect: { validateOk: false, validateErrorContains: '見つかりません' },
   },
 ])
@@ -50,21 +49,21 @@ runOperationScenarios('昇格 — apply', promotionDef, [
     id: 'promo-apply-1',
     desc: 'band が更新される',
     row: { employmentType: '社員', band: 'M4', lastName: '山田', firstName: '太郎' },
-    createCommand: (row) => new PromotionOperation(row.rowId, { band: 'M5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5' }),
     expect: { applyFields: { band: 'M5' } },
   },
   {
     id: 'promo-apply-2',
     desc: 'ラベルに氏名が含まれる',
     row: { employmentType: '社員', band: 'M4', lastName: '山田', firstName: '太郎' },
-    createCommand: (row) => new PromotionOperation(row.rowId, { band: 'M5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5' }),
     expect: { applyLabelContains: '山田' },
   },
   {
     id: 'promo-apply-3',
     desc: '複数フィールドを一度に更新できる',
     row: { employmentType: '社員', band: 'M4', payGrade: 'G4' },
-    createCommand: (row) => new PromotionOperation(row.rowId, { band: 'M5', payGrade: 'G5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5', payGrade: 'G5' }),
     expect: { applyFields: { band: 'M5', payGrade: 'G5' } },
   },
   {
@@ -75,7 +74,7 @@ runOperationScenarios('昇格 — apply', promotionDef, [
       makePersonRow({ band: 'M4', lastName: '山田', firstName: '太郎' }),
       makePersonRow({ userId: 'u2', groupEmployeeId: 'u2', band: 'M3', lastName: '鈴木', firstName: '花子' }),
     ],
-    createCommand: (row) => new PromotionOperation(row.rowId, { band: 'M5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5' }),
     expect: { applyFields: { band: 'M5' } },
   },
 ])
@@ -102,7 +101,7 @@ runOperationScenarios('降格 — apply', demotionDef, [
     id: 'demo-apply-1',
     desc: 'band が更新される',
     row: { employmentType: '社員', band: 'M5', lastName: '山田', firstName: '太郎' },
-    createCommand: (row) => new DemotionOperation(row.rowId, { band: 'M4' }),
+    createCommand: (row) => bindOperation(demotionDef, row.rowId, { band: 'M4' }),
     expect: { applyFields: { band: 'M4' } },
   },
 ])

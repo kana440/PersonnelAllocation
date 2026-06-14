@@ -2,7 +2,7 @@ import { describe, test, expect } from 'vitest'
 import type { AllocationRow }   from '@personnel/domain/allocationRow'
 import type { AllCodeLists }    from '@personnel/domain/masters/aggregate'
 import type { Organization }    from '@personnel/domain/schemas'
-import type { OperationDef }    from '@personnel/domain/commands/defs/types'
+import type { EditOperation }   from '@personnel/domain/commands/defs/types'
 import type { EditCommand, DomainContext } from '@personnel/domain/commands/types'
 import { makeRow, makeCL, MOCK_ORGS }        from './fixtures'
 
@@ -60,7 +60,7 @@ export interface OperationScenario {
 
 export function runOperationScenarios(
   suiteName: string,
-  def: OperationDef,
+  def: EditOperation,
   scenarios: OperationScenario[],
 ) {
   describe(suiteName, () => {

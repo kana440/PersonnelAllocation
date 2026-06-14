@@ -1,12 +1,18 @@
 // 組織への異動 — 社内異動・組織改変・上司変更
-import type { OperationDef } from './types'
-import { OrgTransferOperation, OrgRestructureOperation, ManagerChangeOperation } from '../handlers/orgTransferOps'
+import type { EditOperation } from './types'
+import { ok, fail } from '../types'
+import { deriveOrgSubFields } from '../orgHelpers'
 import { deriveManagerName } from '../../derivation'
 import { isMainAssignment, getDescendantPositionCodes } from '../helpers'
+import type { AllocationRow } from '../../allocationRow'
+
+function personName(row: AllocationRow): string {
+  return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
+}
 
 // ── 社内異動 ─────────────────────────────────────────────────────────────────
 
-export const orgTransferDef: OperationDef = {
+export const orgTransferDef: EditOperation = {
   id:         'OrgTransfer',
   label:      '社内異動',
   group:      'position',
@@ -38,17 +44,36 @@ export const orgTransferDef: OperationDef = {
     }
   },
 
-  createCommand: (rowId, input) =>
-    new OrgTransferOperation(rowId, {
-      departmentCode:      input.departmentCode      as string,
-      managerPositionCode: input.managerPositionCode as string | undefined,
-      managerName:         input.managerName         as string | undefined,
-    }),
+  validate(ctx, rowId, values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.departmentCode)
+      return fail('組織コードは必須です')
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row     = ctx.allocationList.find(r => r.rowId === rowId)!
+    const deptCode = values.departmentCode as string
+    const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
+    const subFields = deriveOrgSubFields(deptCode, ctx.codeLists)
+    const managerFields = values.managerPositionCode !== undefined
+      ? { managerPositionCode: values.managerPositionCode, managerName: values.managerName }
+      : {}
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? { ...r, departmentCode: deptCode, ...subFields, ...managerFields }
+          : r
+      ),
+      label: `組織異動: ${personName(row)} → ${orgName}`,
+    }
+  },
 }
 
 // ── 組織改変 ─────────────────────────────────────────────────────────────────
 
-export const orgRestructureDef: OperationDef = {
+export const orgRestructureDef: EditOperation = {
   id:         'OrgRestructure',
   label:      '組織改変',
   group:      'position',
@@ -64,13 +89,33 @@ export const orgRestructureDef: OperationDef = {
     departmentCode: row.departmentCode as string | undefined,
   }),
 
-  createCommand: (rowId, input) =>
-    new OrgRestructureOperation(rowId, input.departmentCode as string),
+  validate(ctx, rowId, values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.departmentCode)
+      return fail('継承先の組織コードは必須です')
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+    const deptCode = values.departmentCode as string
+    const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
+    const subFields = deriveOrgSubFields(deptCode, ctx.codeLists)
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? { ...r, departmentCode: deptCode, ...subFields }
+          : r
+      ),
+      label: `組織改変: ${personName(row)} → ${orgName}`,
+    }
+  },
 }
 
 // ── 上司変更 ─────────────────────────────────────────────────────────────────
 
-export const managerChangeDef: OperationDef = {
+export const managerChangeDef: EditOperation = {
   id:         'ManagerChange',
   label:      '上司変更',
   group:      'position',
@@ -103,12 +148,23 @@ export const managerChangeDef: OperationDef = {
     }
   },
 
-  createCommand: (rowId, input) =>
-    new ManagerChangeOperation(
-      rowId,
-      input.managerPositionCode as string | undefined,
-      input.managerName as string | undefined,
-    ),
+  validate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? { ...r, managerPositionCode: values.managerPositionCode, managerName: values.managerName }
+          : r
+      ),
+      label: `上司変更: ${personName(row)}`,
+    }
+  },
 }
 
-export const DEFS: OperationDef[] = [orgTransferDef, orgRestructureDef, managerChangeDef]
+export const DEFS: EditOperation[] = [orgTransferDef, orgRestructureDef, managerChangeDef]

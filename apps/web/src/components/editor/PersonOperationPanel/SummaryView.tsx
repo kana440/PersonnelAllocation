@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { rowDiff, type AllocationRow } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
-import { ALL_OPERATION_DEFS, type OperationDef } from '@personnel/domain/commands/defs/index'
+import { ALL_EDIT_OPERATIONS, type EditOperation } from '@personnel/domain/commands/defs/index'
 import { useUnavailableOperationDisplay } from '../../../hooks/useFieldStrictness'
 import type { PanelView } from './types'
 
@@ -22,8 +22,9 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string }[] }[] =
   {
     label: '職務内容・雇用形態',
     ops: [
-      { id: 'JobTypeChange',       shortLabel: '職種変更' },
-      { id: 'EmploymentExtension', shortLabel: '雇用延長' },
+      { id: 'JobTypeChange',        shortLabel: '職種変更' },
+      { id: 'EmploymentExtension',  shortLabel: '雇用延長' },
+      { id: 'EmploymentTypeChange', shortLabel: '雇用タイプ変更' },
     ],
   },
   {
@@ -84,7 +85,7 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string }[] }[] =
 const COLOR_AVAILABLE   = 'bg-blue-100 text-blue-700'
 const COLOR_UNAVAILABLE = 'bg-gray-100 text-gray-400'
 
-const defById = new Map(ALL_OPERATION_DEFS.map(d => [d.id, d]))
+const defById = new Map(ALL_EDIT_OPERATIONS.map(d => [d.id, d]))
 
 interface Props {
   row:          AllocationRow
@@ -139,7 +140,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
         {SECTIONS.map(({ label, ops }) => {
           const items = ops
             .map(({ id, shortLabel }) => ({ def: defById.get(id), shortLabel }))
-            .filter((x): x is { def: OperationDef; shortLabel: string } => !!x.def)
+            .filter((x): x is { def: EditOperation; shortLabel: string } => !!x.def)
             .map(({ def, shortLabel }) => ({ def, shortLabel, available: def.availableFor(row, codeLists) }))
             .filter(({ available }) => unavailableDisplay !== 'hide' || available)
 
@@ -150,7 +151,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
               <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
                 {label}
               </div>
-              <div className="grid grid-cols-3 gap-1">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1">
                 {items.map(({ def, shortLabel, available }) => {
                   const disabled = !available && unavailableDisplay === 'show-disabled'
                   return (
@@ -159,7 +160,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
                       onClick={disabled ? undefined : () => onSelect({ def, rowId: row.rowId })}
                       disabled={disabled}
                       className={[
-                        'px-1 py-1.5 min-h-[2.5rem] rounded text-[11px] font-medium text-center leading-tight',
+                        'px-1 py-0.5 min-h-[1.75rem] rounded text-[10px] font-medium text-center leading-tight',
                         disabled
                           ? 'cursor-not-allowed opacity-50'
                           : 'transition-all hover:brightness-95 active:scale-95',
@@ -184,7 +185,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
           <div className="grid grid-cols-3 gap-1">
             <button
               onClick={onDirectEdit}
-              className="px-1 py-1.5 min-h-[2.5rem] rounded text-[11px] font-medium text-center leading-tight bg-gray-100 text-gray-500 hover:brightness-95 active:scale-95 transition-all"
+              className="px-1 py-0.5 min-h-[1.75rem] rounded text-[10px] font-medium text-center leading-tight bg-gray-100 text-gray-500 hover:brightness-95 active:scale-95 transition-all"
             >
               直接編集
             </button>

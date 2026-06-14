@@ -14,11 +14,7 @@ import {
   UnassignPersonFromPositionOperation,
   AssignPersonToPositionOperation,
 } from '@personnel/domain/commands/handlers/positionOps'
-import { OrgTransferOperation } from '@personnel/domain/commands/handlers/orgTransferOps'
-import { PromotionOperation } from '@personnel/domain/commands/handlers/promotionOps'
-import type { PromotionFields } from '@personnel/domain/commands/handlers/promotionOps'
-import { JobTypeChangeOperation } from '@personnel/domain/commands/handlers/employmentTypeOps'
-import type { JobTypeFields } from '@personnel/domain/commands/handlers/employmentTypeOps'
+import { bindOperation, orgTransferDef, promotionDef, jobTypeChangeDef } from '@personnel/domain/commands/defs'
 import {
   ResignationOperation,
   VacantPositionMoveOperation,
@@ -302,7 +298,7 @@ export class HRApplicationService {
 
   /** 組織異動：departmentCode を変更し org sub-fields を自動補完する */
   executeOrgTransfer(rowId: number, departmentCode: string): ValidationResult {
-    return this.executeOperation(new OrgTransferOperation(rowId, {
+    return this.executeOperation(bindOperation(orgTransferDef, rowId, {
       departmentCode,
       managerPositionCode: undefined,
       managerName:         undefined,
@@ -310,13 +306,13 @@ export class HRApplicationService {
   }
 
   /** 昇降格：役職・バンド・給与等級などを更新する */
-  executePromotion(rowId: number, fields: PromotionFields): ValidationResult {
-    return this.executeOperation(new PromotionOperation(rowId, fields))
+  executePromotion(rowId: number, fields: Partial<AllocationRow>): ValidationResult {
+    return this.executeOperation(bindOperation(promotionDef, rowId, fields))
   }
 
   /** ジョブタイプ変更：jobFamily / jobType を更新する */
-  executeJobTypeChange(rowId: number, fields: JobTypeFields): ValidationResult {
-    return this.executeOperation(new JobTypeChangeOperation(rowId, fields))
+  executeJobTypeChange(rowId: number, fields: Partial<AllocationRow>): ValidationResult {
+    return this.executeOperation(bindOperation(jobTypeChangeDef, rowId, fields))
   }
 
   /** 退職設定：異動事由を退職値に設定し、メモを更新する */

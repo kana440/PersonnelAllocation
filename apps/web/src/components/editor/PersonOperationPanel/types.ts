@@ -1,3 +1,3 @@
-import type { OperationDef } from '@personnel/domain/commands/defs/index'
+import type { EditOperation } from '@personnel/domain/commands/defs/index'
 
-export type PanelView = 'summary' | { def: OperationDef; rowId: number }
+export type PanelView = 'summary' | { def: EditOperation; rowId: number }

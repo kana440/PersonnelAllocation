@@ -17,9 +17,12 @@ import type { ChatWidget, PersonInfo } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import * as P from './proposalBuilders'
-import { SecondmentOutReleaseOperation } from '@personnel/domain/commands/handlers/secondmentOps'
-import { ConcurrentSecondmentOutOperation } from '@personnel/domain/commands/handlers/secondmentOps'
-import { EmploymentTransferOutOperation } from '@personnel/domain/commands/handlers/personOps'
+import {
+  bindOperation,
+  secondmentOutReleaseSFDef,
+  concurrentSecondmentOutSFDef,
+  employmentTransferOutDef,
+} from '@personnel/domain/commands/defs'
 import type { ToolDefinition, ToolCall } from '../../ports'
 
 export interface ToolResult {
@@ -782,11 +785,11 @@ const TOOL_ENTRIES: ToolEntry[] = [
       return aiTools.executeScenario({
         label: `本務出向→兼務出向: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
         commands: [
-          new SecondmentOutReleaseOperation(rowId, { departmentCode: homeDeptCode }),
-          new ConcurrentSecondmentOutOperation(rowId, {
+          bindOperation(secondmentOutReleaseSFDef, rowId, { departmentCode: homeDeptCode }),
+          bindOperation(concurrentSecondmentOutSFDef, rowId, {
             secondmentToCompany,
-            departmentCode:    secondmentDeptCode,
-            concurrentReason:  args.concurrentReason as string | undefined,
+            departmentCode:   secondmentDeptCode,
+            concurrentReason: args.concurrentReason as string | undefined,
           }),
         ],
       })
@@ -826,8 +829,8 @@ const TOOL_ENTRIES: ToolEntry[] = [
       return aiTools.executeScenario({
         label: `出向先転籍: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
         commands: [
-          new SecondmentOutReleaseOperation(rowId, { departmentCode: homeDeptCode }),
-          new EmploymentTransferOutOperation(rowId, transferReason),
+          bindOperation(secondmentOutReleaseSFDef, rowId, { departmentCode: homeDeptCode }),
+          bindOperation(employmentTransferOutDef, rowId, { transferReason }),
         ],
       })
     },

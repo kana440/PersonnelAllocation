@@ -92,4 +92,21 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
       )
     },
   },
+  employmentTypeChange: {
+    label: '雇用タイプ変更', addLabel: '雇用タイプ変更', editLabel: '雇用タイプ変更',
+    badgeColor: C_BLUE, group: 'jobClassification',
+    detect: (row, ctx) => {
+      if (isNoCheckReason(row, ctx)) {
+        const reason = (row.transferReason as string | undefined) ?? ''
+        return reason.includes('従業員区分変更')
+      }
+      const prevEt  = (row.prevEmploymentType as string | undefined) ?? ''
+      const afterEt = (row.employmentType     as string | undefined) ?? ''
+      // band が変化しない雇用タイプ変更（雇用延長は band を空欄化するので除外される）
+      return !!(
+        prevEt && afterEt && prevEt !== afterEt &&
+        (row.band ?? '') === (row.prevBand ?? '')
+      )
+    },
+  },
 }

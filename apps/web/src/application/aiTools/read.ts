@@ -3,7 +3,7 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
-import { ALL_OPERATION_DEFS } from '@personnel/domain/commands/defs'
+import { ALL_EDIT_OPERATIONS } from '@personnel/domain/commands/defs'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/choices'
 import type { OrgTreeNode, SelectedRowContext } from '../aiTypes'
@@ -77,7 +77,7 @@ export function createReadMethods(service: HRApplicationService) {
     const changeKinds = [...changes.patterns].map(p => EDIT_PATTERN_META[p]?.label ?? p)
 
     // この行で実行可能な操作
-    const availableOps = ALL_OPERATION_DEFS
+    const availableOps = ALL_EDIT_OPERATIONS
       .filter(def => def.availableFor(row, codeLists))
       .map(def => def.label)
 

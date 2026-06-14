@@ -6,9 +6,12 @@ import { ChangeTitleOperation, derivePersonGradeFields } from '@personnel/domain
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { BulkMoveToOrgOperation } from '@personnel/domain/commands/handlers/bulkMoveToOrg'
 import { TransferPersonOperation } from '@personnel/domain/commands/handlers/transferPerson'
-import { LeaveOfAbsenceOperation, ReturnFromLeaveOperation } from '@personnel/domain/commands/handlers/personOps'
-import { ConcurrentAddOperation, ConcurrentReleaseOperation } from '@personnel/domain/commands/handlers/concurrentOps'
-import { DemotionOperation } from '@personnel/domain/commands/handlers/promotionOps'
+import {
+  bindOperation,
+  leaveOfAbsenceDef, returnFromLeaveDef,
+  concurrentAddDef, concurrentReleaseDef,
+  demotionDef,
+} from '@personnel/domain/commands/defs'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import type { ValidationIssue } from '@personnel/domain/validation/types'
@@ -365,7 +368,13 @@ export function createWriteMethods(service: HRApplicationService) {
     const primary = rows.find(r => !r.concurrentType) ?? rows[0]
     if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(new LeaveOfAbsenceOperation(primary.rowId, '1', memo))
+    const result = service.executeOperation(
+      bindOperation(leaveOfAbsenceDef, primary.rowId, {
+        leaveOfAbsenceSign: '1',
+        transferReason: '【個別対応】4/1付休職・復職',
+        ...(memo !== undefined ? { memo } : {}),
+      })
+    )
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
@@ -376,7 +385,11 @@ export function createWriteMethods(service: HRApplicationService) {
     const primary = rows.find(r => !r.concurrentType) ?? rows[0]
     if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(new ReturnFromLeaveOperation(primary.rowId, '【個別対応】4/1付休職・復職'))
+    const result = service.executeOperation(
+      bindOperation(returnFromLeaveDef, primary.rowId, {
+        transferReason: '【個別対応】4/1付休職・復職',
+      })
+    )
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
@@ -393,7 +406,12 @@ export function createWriteMethods(service: HRApplicationService) {
     const org = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
     if (!org) return { ok: false, errors: [{ message: '兼務先組織が見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(new ConcurrentAddOperation(primary.rowId, org.id, concurrentReason))
+    const result = service.executeOperation(
+      bindOperation(concurrentAddDef, primary.rowId, {
+        departmentCode: org.id,
+        concurrentReason,
+      })
+    )
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
@@ -412,7 +430,7 @@ export function createWriteMethods(service: HRApplicationService) {
     }
     if (!targetRow) return { ok: false, errors: [{ message: '解除対象の社内兼務行が見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(new ConcurrentReleaseOperation(targetRow.rowId))
+    const result = service.executeOperation(bindOperation(concurrentReleaseDef, targetRow.rowId, {}))
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
@@ -426,7 +444,7 @@ export function createWriteMethods(service: HRApplicationService) {
     const primary = rows.find(r => !r.concurrentType) ?? rows[0]
     if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(new DemotionOperation(primary.rowId, fields))
+    const result = service.executeOperation(bindOperation(demotionDef, primary.rowId, fields))
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }

@@ -12,14 +12,16 @@ import { TitleSuggestionModal } from '../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
 import { ClearFieldsConfirmModal }  from '../../common/ClearFieldsConfirmModal'
 import { PositionPickerModal }      from '../../common/PositionPickerModal'
-import type { OperationDef } from '@personnel/domain/commands/defs/index'
+import { computeSideEffects, hasSideEffects, type SideEffectSummary } from './operationPreview'
+import type { EditOperation } from '@personnel/domain/commands/defs/index'
+import { bindOperation } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { OrgSearchDialog } from '../OrgSearchDialog'
 import { BandStepFilter, filterBandsByStep } from './BandStepFilter'
 import type { StepMode } from './BandStepFilter'
 
 interface Props {
-  def:    OperationDef
+  def:    EditOperation
   row:    AllocationRow
   onBack: () => void
 }
@@ -37,11 +39,11 @@ export function OperationFormView({ def, row, onBack }: Props) {
   const [orgPickerField, setOrgPickerField] = useState<string | null>(null)
   const [submitError,    setSubmitError]    = useState<string | null>(null)
   const [stepMode,       setStepMode]       = useState<StepMode>('1')
-  const [titleSuggest,    setTitleSuggest]    = useState<string | null>(null)
+  const [titleSuggest,    setTitleSuggest]    = useState<{ field: keyof AllocationRow; fieldLabel: string; value: string } | null>(null)
   const [showPosModal,    setShowPosModal]    = useState(false)
   const [pendingPosCode,  setPendingPosCode]  = useState<string | null>(null)
-  const [showClearModal,    setShowClearModal]    = useState(false)
-  const [clearFieldLabels,  setClearFieldLabels]  = useState<string[]>([])
+  const [showSideEffectModal,  setShowSideEffectModal]  = useState(false)
+  const [sideEffectSummary,    setSideEffectSummary]    = useState<SideEffectSummary>({ cleared: [], changed: [] })
   const [posPickerField,      setPosPickerField]      = useState<keyof AllocationRow | null>(null)
   const [posPickerFilter,     setPosPickerFilter]     = useState<((r: AllocationRow) => boolean) | undefined>(undefined)
   const [posPickerInitialOrg, setPosPickerInitialOrg] = useState<string | undefined>(undefined)
@@ -54,17 +56,22 @@ export function OperationFormView({ def, row, onBack }: Props) {
     const inputDef = def.inputs.find(i => i.field === field)
     const effects  = inputDef?.afterChange?.(value, ctx)
 
-    if (field === 'officialPositionCode' && value) {
-      const hasTitle = def.inputs.some(inp => inp.field === 'localJobTitle')
-      if (hasTitle) setTitleSuggest(value)
-    }
-
     setValues(prev => ({
       ...prev,
       ...changes,
       ...derived,
       ...(effects?.setValues ?? {}),
     }))
+
+    if (effects?.suggestFieldValue && !titleSuggest) {
+      const { field: suggestField, value: suggestVal } = effects.suggestFieldValue
+      const targetInput = def.inputs.find(i => i.field === suggestField)
+      const currentTargetVal = (values[suggestField] as string | undefined) ?? ''
+      if (targetInput && suggestVal !== currentTargetVal) {
+        const fieldLabel = targetInput.label ?? ALLOCATION_LIST_LABEL_MAP[suggestField as string]?.ja ?? suggestField as string
+        setTitleSuggest({ field: suggestField, fieldLabel, value: suggestVal })
+      }
+    }
 
     if (effects?.openPickerFor) {
       const targetInput = def.inputs.find(i => i.field === effects.openPickerFor)
@@ -96,7 +103,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
   const doExecute = (vals: Partial<AllocationRow>) => {
     setSubmitError(null)
     try {
-      const command = def.createCommand(row.rowId, vals, row, ctx)
+      const command = bindOperation(def, row.rowId, vals)
       const result  = appService.executeOperation(command)
       if (!result.ok) { setSubmitError(result.errors.map(e => e.message).join(' / ')); return }
       onBack()
@@ -113,18 +120,11 @@ export function OperationFormView({ def, row, onBack }: Props) {
       setShowPosModal(true)
       return
     }
-    if (def.computeAfterFields) {
-      const afterFields = def.computeAfterFields(row, ctx)
-      const populated = (Object.entries(afterFields) as [keyof AllocationRow, unknown][])
-        .filter(([, v]) => v === undefined)
-        .map(([k]) => k)
-        .filter(k => { const v = row[k]; return v !== undefined && v !== '' })
-        .map(k => ALLOCATION_LIST_LABEL_MAP[k as string]?.ja ?? k as string)
-      if (populated.length > 0) {
-        setClearFieldLabels(populated)
-        setShowClearModal(true)
-        return
-      }
+    const effects = computeSideEffects(def, row, values, ctx)
+    if (hasSideEffects(effects)) {
+      setSideEffectSummary(effects)
+      setShowSideEffectModal(true)
+      return
     }
     doExecute(values)
   }
@@ -193,7 +193,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
                       title="ポジションを検索"
                     >🔍</button>
                   </div>
-                  {prevVal && <p className="text-[10px] text-gray-400 mt-0.5">現在: {prevVal}</p>}
+                  {prevVal && <p className="text-xs text-gray-500 mt-1">変更前: <span className="font-medium">{prevVal}</span></p>}
                   {fieldIssues.map((issue, i) => (
                     <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
                       {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
@@ -219,7 +219,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
                       title="組織を検索">🔍</button>
                   </div>
                   {orgName && <p className="text-[10px] text-blue-600 mt-0.5 truncate">{orgName}</p>}
-                  {prevVal && <p className="text-[10px] text-gray-400 mt-0.5">現在: {prevVal}</p>}
+                  {prevVal && <p className="text-xs text-gray-500 mt-1">変更前: <span className="font-medium">{prevVal}</span></p>}
                   {fieldIssues.map((issue, i) => (
                     <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
                       {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
@@ -280,7 +280,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
                   strictness={resolveFieldStrictness(fieldKey, {})}
                   hasIssue={hasIssue}
                 />
-                {prevVal && <p className="text-[10px] text-gray-400 mt-0.5">現在: {prevVal}</p>}
+                {prevVal && <p className="text-xs text-gray-500 mt-1">変更前: <span className="font-medium">{prevVal}</span></p>}
                 {fieldIssues.map((issue, i) => (
                   <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
                     {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
@@ -338,21 +338,23 @@ export function OperationFormView({ def, row, onBack }: Props) {
         />
       )}
 
-      {/* 空欄化確認モーダル */}
-      {showClearModal && (
+      {/* 副作用確認モーダル */}
+      {showSideEffectModal && (
         <ClearFieldsConfirmModal
-          fieldLabels={clearFieldLabels}
-          onConfirm={() => { setShowClearModal(false); doExecute(values) }}
-          onCancel={() => setShowClearModal(false)}
+          cleared={sideEffectSummary.cleared}
+          changed={sideEffectSummary.changed}
+          onConfirm={() => { setShowSideEffectModal(false); doExecute(values) }}
+          onCancel={() => setShowSideEffectModal(false)}
         />
       )}
 
-      {/* 役職→タイトル提案モーダル */}
+      {/* フィールド値提案モーダル */}
       {titleSuggest && (
         <TitleSuggestionModal
-          suggestedTitle={titleSuggest}
+          fieldLabel={titleSuggest.fieldLabel}
+          suggestedValue={titleSuggest.value}
           onConfirm={() => {
-            setValues(prev => ({ ...prev, localJobTitle: titleSuggest ?? undefined }))
+            setValues(prev => ({ ...prev, [titleSuggest!.field]: titleSuggest!.value }))
             setTitleSuggest(null)
           }}
           onSkip={() => setTitleSuggest(null)}

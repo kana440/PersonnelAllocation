@@ -1,39 +1,14 @@
 // 職務内容・雇用形態 — ジョブタイプ変更・雇用延長
-import type { OperationDef } from './types'
+import type { EditOperation } from './types'
+import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { JobTypeChangeOperation, EmploymentExtensionOperation } from '../handlers/employmentTypeOps'
 import { isRegularEmployee, isSecondmentAcceptance, isExtendedEmployeeTarget } from '../helpers'
 
-// ── ジョブタイプ変更 ──────────────────────────────────────────────────────────
-
-export const jobTypeChangeDef: OperationDef = {
-  id:         'JobTypeChange',
-  label:      'ジョブタイプ変更',
-  group:      'jobClassification',
-  badgeColor: 'bg-purple-100 text-purple-700',
-
-  availableFor: (row, cl) => !isSecondmentAcceptance(row, cl),
-
-  inputs: [
-    { field: 'jobFamily', required: false },
-    { field: 'jobType',   required: true  },
-  ],
-
-  deriveInitial: (row) => ({
-    jobFamily: row.jobFamily as string | undefined,
-    jobType:   row.jobType   as string | undefined,
-  }),
-
-  createCommand: (rowId, input) =>
-    new JobTypeChangeOperation(rowId, {
-      jobFamily: input.jobFamily as string | undefined,
-      jobType:   input.jobType   as string | undefined,
-    }),
+function personName(row: AllocationRow): string {
+  return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
 }
 
-// ── 雇用延長 ─────────────────────────────────────────────────────────────────
-
-// 雇用延長保存時に空欄化するフィールド（def と command で共有するローカル関数）
+// 雇用延長保存時に空欄化するフィールド
 const computeEmploymentExtensionAfter = (): Partial<AllocationRow> => ({
   band:                          undefined,
   payGrade:                      undefined,
@@ -51,15 +26,51 @@ const computeEmploymentExtensionAfter = (): Partial<AllocationRow> => ({
   trainingPositionFlag:          undefined,
 })
 
-export const employmentExtensionDef: OperationDef = {
+// ── ジョブタイプ変更 ──────────────────────────────────────────────────────────
+
+export const jobTypeChangeDef: EditOperation = {
+  id:         'JobTypeChange',
+  label:      'ジョブタイプ変更',
+  group:      'jobClassification',
+  badgeColor: 'bg-purple-100 text-purple-700',
+
+  availableFor: (row, cl) => !isSecondmentAcceptance(row, cl),
+
+  inputs: [
+    { field: 'jobFamily', required: false },
+    { field: 'jobType',   required: true  },
+  ],
+
+  deriveInitial: (row) => ({
+    jobFamily: row.jobFamily as string | undefined,
+    jobType:   row.jobType   as string | undefined,
+  }),
+
+  validate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const changes = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
+    return {
+      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
+      label: `ジョブタイプ変更: ${personName(row)}`,
+    }
+  },
+}
+
+// ── 雇用延長 ─────────────────────────────────────────────────────────────────
+
+export const employmentExtensionDef: EditOperation = {
   id:         'EmploymentExtension',
   label:      '雇用延長',
   group:      'jobClassification',
   badgeColor: 'bg-teal-100 text-teal-700',
 
   description: '３月末に雇用延長する対象者については、当個別に雇用延長登録いたします。申請書上は申請区分を入力いただき、他の入力項目は空欄にしてください。',
-
-  computeAfterFields: () => computeEmploymentExtensionAfter(),
 
   availableFor: (row, cl) => isExtendedEmployeeTarget(row, cl) || isRegularEmployee(row, cl),
 
@@ -73,12 +84,69 @@ export const employmentExtensionDef: OperationDef = {
     memo:           row.memo as string | undefined,
   }),
 
-  createCommand: (rowId, input) =>
-    new EmploymentExtensionOperation(rowId, {
-      transferReason:  input.transferReason as string,
-      memo:            input.memo           as string | undefined,
-      computedFields:  computeEmploymentExtensionAfter(),
-    }),
+  validate(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)
+    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.transferReason) return fail('変更事由は必須です')
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const newRow = { ...row }
+    for (const [key, value] of Object.entries(computeEmploymentExtensionAfter())) {
+      ;(newRow as Record<string, unknown>)[key] = value
+    }
+    newRow.transferReason = values.transferReason as AllocationRow['transferReason']
+    if (values.memo !== undefined) {
+      newRow.memo = values.memo as AllocationRow['memo']
+    }
+    return {
+      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? newRow : r),
+      label: `雇用延長: ${personName(row)}`,
+    }
+  },
 }
 
-export const DEFS: OperationDef[] = [jobTypeChangeDef, employmentExtensionDef]
+// ── 雇用タイプ変更 ───────────────────────────────────────────────────────────
+
+export const employmentTypeChangeDef: EditOperation = {
+  id:         'EmploymentTypeChange',
+  label:      '雇用タイプ変更',
+  group:      'jobClassification',
+  badgeColor: 'bg-indigo-100 text-indigo-700',
+
+  availableFor: (row) => !!row.userId,
+
+  inputs: [
+    { field: 'transferReason', required: true, readOnly: true },
+    { field: 'employmentType', required: true },
+    { field: 'memo',           required: false },
+  ],
+
+  deriveInitial: (row) => ({
+    transferReason: '【個別対応】従業員区分変更（社員⇔社員B・嘱託など）' as string | undefined,
+    employmentType: row.employmentType as string | undefined,
+    memo:           row.memo           as string | undefined,
+  }),
+
+  validate(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)
+    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.employmentType) return fail('雇用タイプは必須です')
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const changes = Object.fromEntries(
+      Object.entries(values).filter(([, v]) => v !== undefined)
+    )
+    return {
+      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
+      label: `雇用タイプ変更: ${personName(row)}`,
+    }
+  },
+}
+
+export const DEFS: EditOperation[] = [jobTypeChangeDef, employmentExtensionDef, employmentTypeChangeDef]

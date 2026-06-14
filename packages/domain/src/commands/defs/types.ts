@@ -1,7 +1,6 @@
 import type { AllocationRow }  from '../../allocationRow'
 import type { AllCodeLists }   from '../../masters/aggregate'
-import type { EditCommand }    from '../types'
-import type { DomainContext } from '../types'
+import type { DomainContext, ValidationResult, OperationResult } from '../types'
 
 /**
  * 操作の概念グループ。UI でのメニュー分類・説明文に使用する。
@@ -43,9 +42,10 @@ export interface OperationInput {
   readonly positionFilter?: (row: AllocationRow, ctx: DomainContext) => (candidate: AllocationRow) => boolean
   /**
    * このフィールドの値が変更されたとき、操作固有のサイドエフェクトを返す。
-   * - setValues       : 追加でセットするフィールド値（undefined = 空欄化）
-   * - openPickerFor   : 自動的に開くピッカー対象フィールド
-   * - openPickerInitialOrg : ピッカーを開く際の初期選択組織 ID
+   * - setValues          : 追加でセットするフィールド値（undefined = 空欄化）
+   * - openPickerFor      : 自動的に開くピッカー対象フィールド
+   * - openPickerInitialOrg: ピッカーを開く際の初期選択組織 ID
+   * - suggestFieldValue  : 別フィールドへの値提案（UI が確認モーダルを表示）
    *
    * deriveFieldUpdates（全操作共通）と共存する。afterChange の setValues が derived を上書きする。
    */
@@ -53,23 +53,21 @@ export interface OperationInput {
     setValues?:            Partial<AllocationRow>
     openPickerFor?:        keyof AllocationRow
     openPickerInitialOrg?: string
+    suggestFieldValue?:    { field: keyof AllocationRow; value: string }
   }
 }
 
 /**
- * EditCommand 操作の宣言的定義。
+ * 業務操作の統合定義。OperationDef（UI メタデータ）と EditCommand（ロジック）を統合した概念。
  *
- * 各操作はこのインターフェースを実装するオブジェクトとして
- * src/domain/commands/defs/ に配置する。
+ * - availableFor / inputs / deriveInitial: UI・AI 向けメタデータ
+ * - validate / apply: ドメインロジック（DomainContext + rowId + values を受け取る純粋関数）
  *
- * 追加・調整のルール:
- *   1. availableFor — メニュー表示条件をここで管理する
- *   2. inputs       — UI フォームのフィールド定義をここで管理する
- *   3. deriveInitial — 操作選択時の初期値（プレビュー・UndoStack 非対象）
- *   4. createCommand — 確定時の EditCommand 生成
+ * bindOperation(op, rowId, values) で EditCommand（パラメータ束縛済み）に変換できる。
+ * UI は apply() をドライランして inputs 外フィールドの変化を検出し、確認ダイアログを表示する。
  */
-export interface OperationDef {
-  /** 操作 ID。EditCommand.kind と対応させる */
+export interface EditOperation {
+  /** 操作 ID */
   readonly id:         string
   /** UI 表示名 */
   readonly label:      string
@@ -82,23 +80,18 @@ export interface OperationDef {
   readonly description?: string
 
   /**
-   * 保存時に追加で適用するフィールド計算。
-   * - `undefined` を返したフィールドは空欄化
-   * - 値を返したフィールドは自動導出として上書き（例: 上司ポジションコード変更→上司名を再導出）
-   * UI はこの関数を事前呼び出しし、既存値が消えるフィールドがあれば確認ダイアログを表示する。
+   * true のとき apply() ドライランによる副作用警告を表示しない。
+   * 昇格サイン等の自動付与など、副作用が操作名から自明な場合に設定する。
    */
-  computeAfterFields?: (row: AllocationRow, ctx: DomainContext) => Partial<AllocationRow>
+  readonly suppressSideEffectWarning?: boolean
 
   /**
    * この操作が対象行に対してメニューに表示されるかどうか。
-   * undefined = 常に表示。
    */
   availableFor(row: AllocationRow, codeLists: AllCodeLists): boolean
 
   /**
    * 操作選択時の初期フィールド値を計算する（プレビュー用・UndoStack 非対象）。
-   * deriveFieldUpdates() はこの後に呼ばれるため、
-   * ここでは操作固有の初期値のみ返せばよい。
    */
   deriveInitial(row: AllocationRow, ctx: DomainContext): Partial<AllocationRow>
 
@@ -106,9 +99,16 @@ export interface OperationDef {
   readonly inputs: OperationInput[]
 
   /**
-   * 確定時の EditCommand を生成する。
-   * `row` と `ctx` は `computeAfterFields` を内部で呼ぶ def のみ使用する。
-   * 既存 def はこれらを無視してよい。
+   * 現在の状態と入力値に対してバリデーションを実行する。
+   * HRApplicationService.executeOperation() が apply() 前に呼ぶ。
    */
-  createCommand(rowId: number, input: Partial<AllocationRow>, row?: AllocationRow, ctx?: DomainContext): EditCommand
+  validate(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): ValidationResult
+
+  /**
+   * バリデーション通過後、新しい状態を返す純粋関数。
+   */
+  apply(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): OperationResult
 }
+
+/** 後方互換エイリアス */
+export type OperationDef = EditOperation

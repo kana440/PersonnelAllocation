@@ -223,9 +223,10 @@ export function PromotionDialog({ rowId, onClose }: Props) {
       {/* 役職→タイトル提案モーダル */}
       {titleSuggest && (
         <TitleSuggestionModal
-          suggestedTitle={titleSuggest}
+          fieldLabel="フリータイトル"
+          suggestedValue={titleSuggest}
           onConfirm={() => {
-            setBuffer(prev => ({ ...prev, localJobTitle: titleSuggest }))
+            setBuffer(prev => ({ ...prev, localJobTitle: titleSuggest ?? undefined }))
             setTitleSuggest(null)
           }}
           onSkip={() => setTitleSuggest(null)}

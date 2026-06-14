@@ -1,20 +1,35 @@
 // 昇降格・役職変更 — 昇格・降格・役職変更
-import type { OperationDef } from './types'
-import {
-  PromotionOperation,
-  DemotionOperation,
-  TitleChangeOperation,
-} from '../handlers/promotionOps'
+import type { EditOperation } from './types'
+import { ok, fail } from '../types'
 import { derivePromotionSign } from '../../derivation'
 import { isRegularEmployee, isSecondmentAcceptance } from '../helpers'
+import type { AllocationRow } from '../../allocationRow'
+
+function personName(row: AllocationRow): string {
+  return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
+}
+
+function applyFields(
+  list: AllocationRow[],
+  rowId: number,
+  values: Partial<AllocationRow>,
+  label: string,
+) {
+  const changes = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
+  return {
+    updatedList: list.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
+    label,
+  }
+}
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
 
-export const promotionDef: OperationDef = {
+export const promotionDef: EditOperation = {
   id:         'Promotion',
   label:      '昇格',
   group:      'jobClassification',
   badgeColor: 'bg-green-100 text-green-700',
+  suppressSideEffectWarning: true,
 
   availableFor: (row, cl) =>
     isRegularEmployee(row, cl) && !isSecondmentAcceptance(row, cl),
@@ -23,7 +38,8 @@ export const promotionDef: OperationDef = {
     { field: 'band',               required: true,  stepFilter: 'up' },
     { field: 'positionBand',       required: false },
     { field: 'payGrade',           required: false },
-    { field: 'officialPositionCode', required: false },
+    { field: 'officialPositionCode', required: false,
+      afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
     { field: 'localJobTitle',      required: false },
   ],
 
@@ -36,26 +52,26 @@ export const promotionDef: OperationDef = {
     ...derivePromotionSign(row.band as string | undefined, row.prevBand as string | undefined, ctx.codeLists),
   }),
 
-  createCommand: (rowId, input) =>
-    new PromotionOperation(rowId, {
-      band:               input.band               as string | undefined,
-      positionBand:       input.positionBand       as string | undefined,
-      positionCode:       input.positionCode       as string | undefined,
-      payGrade:           input.payGrade           as string | undefined,
-      officialPositionCode: input.officialPositionCode as string | undefined,
-      localJobTitle:      input.localJobTitle      as string | undefined,
-      promotionSign:      input.promotionSign      as string | undefined,
-      payGradeChangeSign: input.payGradeChangeSign as string | undefined,
-    }),
+  validate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return applyFields(ctx.allocationList, rowId, values, `昇降格: ${personName(row)}`)
+  },
 }
 
 // ── 降格 ─────────────────────────────────────────────────────────────────────
 
-export const demotionDef: OperationDef = {
+export const demotionDef: EditOperation = {
   id:         'Demotion',
   label:      '降格',
   group:      'jobClassification',
   badgeColor: 'bg-orange-100 text-orange-700',
+  suppressSideEffectWarning: true,
 
   availableFor: (row, cl) =>
     isRegularEmployee(row, cl) && !isSecondmentAcceptance(row, cl),
@@ -65,7 +81,8 @@ export const demotionDef: OperationDef = {
     { field: 'positionBand',       required: false },
     { field: 'payGrade',           required: false },
     { field: 'demotionReason',     required: true  },
-    { field: 'officialPositionCode', required: false },
+    { field: 'officialPositionCode', required: false,
+      afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
     { field: 'localJobTitle',      required: false },
   ],
 
@@ -77,22 +94,21 @@ export const demotionDef: OperationDef = {
     localJobTitle:      row.localJobTitle as string | undefined,
   }),
 
-  createCommand: (rowId, input) =>
-    new DemotionOperation(rowId, {
-      band:               input.band               as string | undefined,
-      positionBand:       input.positionBand       as string | undefined,
-      positionCode:       input.positionCode       as string | undefined,
-      payGrade:           input.payGrade           as string | undefined,
-      demotionReason:     input.demotionReason     as string | undefined,
-      officialPositionCode: input.officialPositionCode as string | undefined,
-      localJobTitle:      input.localJobTitle      as string | undefined,
-      payGradeChangeSign: input.payGradeChangeSign as string | undefined,
-    }),
+  validate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return applyFields(ctx.allocationList, rowId, values, `降格: ${personName(row)}`)
+  },
 }
 
 // ── 役職変更（昇降格なし）────────────────────────────────────────────────────
 
-export const titleChangeDef: OperationDef = {
+export const titleChangeDef: EditOperation = {
   id:         'TitleChange',
   label:      '役職変更（昇降格なし）',
   group:      'jobClassification',
@@ -101,7 +117,8 @@ export const titleChangeDef: OperationDef = {
   availableFor: () => true,
 
   inputs: [
-    { field: 'officialPositionCode', required: true  },
+    { field: 'officialPositionCode', required: true,
+      afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
     { field: 'localJobTitle',        required: false },
   ],
 
@@ -110,11 +127,16 @@ export const titleChangeDef: OperationDef = {
     localJobTitle:        row.localJobTitle        as string | undefined,
   }),
 
-  createCommand: (rowId, input) =>
-    new TitleChangeOperation(rowId, {
-      officialPositionCode: input.officialPositionCode as string | undefined,
-      localJobTitle:        input.localJobTitle        as string | undefined,
-    }),
+  validate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  apply(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return applyFields(ctx.allocationList, rowId, values, `役職変更: ${personName(row)}`)
+  },
 }
 
-export const DEFS: OperationDef[] = [promotionDef, demotionDef, titleChangeDef]
+export const DEFS: EditOperation[] = [promotionDef, demotionDef, titleChangeDef]
