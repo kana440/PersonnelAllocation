@@ -44,6 +44,7 @@ export interface OrgViewContextValue {
   handleDrop:               (e: React.DragEvent, orgId: string) => void
   handleDropOnVacantSlot:   (e: React.DragEvent, rowId: number) => void
   handleAddPosition:        (orgId: string, orgCode: string) => void
+  handleSecondmentIn:       (orgId: string, orgCode: string, sfIntegrated: boolean, concurrent: boolean) => void
   topPositionCodeOfOrg:     (orgId: string) => string | undefined
   setBulkMoveSourceId:      (id: string | null) => void
   setConfirmDialog:         (d: { message: string; onConfirm: () => void } | null) => void

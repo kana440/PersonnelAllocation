@@ -1,12 +1,15 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
+import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useChatStore } from '../../store/useChatStore'
+import { ComparisonCanvas } from './comparison'
+import { OrgPickerModal } from '../common/OrgPickerModal'
 import { SetPositionManagerOperation } from '@personnel/domain/commands/handlers/positionOps'
 import { ReorderRowOperation }         from '@personnel/domain/commands/handlers/reorderRow'
 import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
 import { ReportLineView }   from './components/ReportLineView'
-import { OrgBox, DropZone } from './components/OrgBox'
+import { OrgBox, DropZone, AddPositionButton } from './components/OrgBox'
 import { PersonContextMenu } from './CanvasContextMenus'
 // import { RowContextMenu } from './RowContextMenu'  // PersonOperationPanel に統合
 import { OrgTransferDialog }       from './patternDialogs/OrgTransferDialog'
@@ -15,6 +18,8 @@ import { JobTypeDialog }           from './patternDialogs/JobTypeDialog'
 import { ResignationDialog }       from './patternDialogs/ResignationDialog'
 import { VacantPositionDialog }    from './patternDialogs/VacantPositionDialog'
 import { SecondmentReleaseDialog } from './patternDialogs/SecondmentReleaseDialog'
+import { SecondmentInAddModal }    from './SecondmentInAddModal'
+import type { SecondmentInValues } from './SecondmentInAddModal'
 import type { EditPattern }   from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }     from './CanvasModals'
 import { PositionRows }     from './components/PositionRows'
@@ -32,11 +37,18 @@ export function OrgOperationView() {
   const store = useScopedStore()
   const {
     afterOrganizations: allAfterOrgsUnscoped,
+    beforeOrganizations,
     isHistoryPreviewMode, historyPreviewPosition,
     previewAllocationList, previewPersons, previewAfterOrganizations,
     applyHistoryPreview, cancelHistoryPreview,
     undoHistory,
   } = useStore()
+  const {
+    comparisonMode, toggleComparisonMode,
+    comparisonPanels, comparisonOrgMapping,
+    pendingMappingBeforeOrgId, setPendingMappingBeforeOrgId, setComparisonOrgMap,
+    removeComparisonPanel,
+  } = useCanvasLayoutStore()
   const {
     focusedOrgId, focusOrg,
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
@@ -78,6 +90,9 @@ export function OrgOperationView() {
   const [moveModalOpen,     setMoveModalOpen]     = useState(false)
   const [bulkActionModal,   setBulkActionModal]   = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
   const [changeTitleRowId,   setChangeTitleRowId]   = useState<number | null>(null)
+  const [secondmentInModal,  setSecondmentInModal]  = useState<{
+    orgId: string; orgCode: string; sfIntegrated: boolean; concurrent: boolean
+  } | null>(null)
   // rowContextMenu と activePatternDialog は PersonOperationPanel に統合したため廃止
   // （後方互換のため宣言は残すが、新フローでは使わない）
   const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
@@ -182,6 +197,16 @@ export function OrgOperationView() {
     return rows.find(r => !r.managerPositionCode || !posSet.has(r.managerPositionCode))?.positionCode
   }
 
+  const handleSecondmentIn = (orgId: string, orgCode: string, sfIntegrated: boolean, concurrent: boolean) => {
+    setSecondmentInModal({ orgId, orgCode, sfIntegrated, concurrent })
+  }
+
+  const handleSecondmentInConfirm = (values: SecondmentInValues) => {
+    if (!secondmentInModal) return
+    appService.createSecondmentInRow(secondmentInModal.orgCode, values)
+    setSecondmentInModal(null)
+  }
+
   const handleAddPosition = (orgId: string, orgCode: string) => {
     const { allocationList: current } = appService.getSnapshot()
     const newRowId = current.length === 0 ? 1 : Math.max(...current.map(r => r.rowId)) + 1
@@ -191,7 +216,8 @@ export function OrgOperationView() {
   }
 
   // ── Early returns ──────────────────────────────────────────────
-  if (!focusedOrgId) {
+  // 比較モード時は focusedOrgId がなくても ComparisonCanvas を表示する
+  if (!focusedOrgId && !comparisonMode) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400 text-sm">
         ← 左の組織ツリーから組織を選択してください
@@ -199,8 +225,8 @@ export function OrgOperationView() {
     )
   }
 
-  const focusedOrg = organizations.find(o => o.id === focusedOrgId)
-  if (!focusedOrg) return null
+  const focusedOrg = focusedOrgId ? organizations.find(o => o.id === focusedOrgId) : null
+  if (focusedOrgId && !focusedOrg && !comparisonMode) return null
 
   const buildBreadcrumb = (orgId: string): Array<{ id: string; name: string }> => {
     const path: Array<{ id: string; name: string }> = []
@@ -212,9 +238,9 @@ export function OrgOperationView() {
     return path
   }
 
-  const breadcrumb = buildBreadcrumb(focusedOrgId)
-  const parentOrg  = focusedOrg.parentId ? organizations.find(o => o.id === focusedOrg.parentId) : null
-  const childOrgs  = organizations.filter(o => o.parentId === focusedOrgId)
+  const breadcrumb = focusedOrgId ? buildBreadcrumb(focusedOrgId) : []
+  const parentOrg  = focusedOrg?.parentId ? organizations.find(o => o.id === focusedOrg!.parentId) : null
+  const childOrgs  = focusedOrgId ? organizations.filter(o => o.parentId === focusedOrgId) : []
 
   const previewLabel = historyPreviewPosition !== null
     ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '')
@@ -226,6 +252,7 @@ export function OrgOperationView() {
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition:    isHistoryPreviewMode ? () => {} : handleAddPosition,
+    handleSecondmentIn:   isHistoryPreviewMode ? () => {} : handleSecondmentIn,
     topPositionCodeOfOrg,
     setBulkMoveSourceId:  isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
     setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
@@ -243,7 +270,12 @@ export function OrgOperationView() {
 
         {/* Header */}
         <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
-          {canvasMode === 'レポートライン' ? (
+          {comparisonMode ? (
+            <>
+              <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">比較モード</span>
+              <span className="text-xs text-gray-400 flex-1">旧→新の変化を表示中</span>
+            </>
+          ) : canvasMode === 'レポートライン' ? (
             <>
               <button
                 onClick={() => { if (rlRootManagerId) setReportLineRootId(rlRootManagerId) }}
@@ -281,15 +313,17 @@ export function OrgOperationView() {
             </>
           )}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
-              {(['組織図', 'レポートライン'] as CanvasMode[]).map(mode => (
-                <button key={mode} onClick={() => setCanvasMode(mode)}
-                  className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${canvasMode === mode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                  {mode}
-                </button>
-              ))}
-            </div>
-            {canvasMode === '組織図' && (
+            {!comparisonMode && (
+              <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
+                {(['組織図', 'レポートライン'] as CanvasMode[]).map(mode => (
+                  <button key={mode} onClick={() => setCanvasMode(mode)}
+                    className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${canvasMode === mode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!comparisonMode && canvasMode === '組織図' && (
               <>
                 <button
                   onClick={() => setFieldPickerOpen(true)}
@@ -304,6 +338,15 @@ export function OrgOperationView() {
                 >{isSelectMode ? '✓ 選択中' : '複数選択'}</button>
               </>
             )}
+            <button
+              onClick={toggleComparisonMode}
+              className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
+                comparisonMode
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="旧→新の変化を組織パネルで比較表示"
+            >{comparisonMode ? '比較終了' : '比較'}</button>
           </div>
         </div>
 
@@ -342,48 +385,70 @@ export function OrgOperationView() {
 
         {/* Canvas */}
         <div
-          className="flex-1 overflow-y-auto p-3"
+          className="flex-1 overflow-hidden"
           onDragOverCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
           onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
         >
-          {canvasMode === 'レポートライン' ? (
-            <ReportLineView
-              allocationList={allocationList}
-              personBySfId={personBySfId}
-              afterOrgByCode={afterOrgByCode}
-              organizations={organizations}
-              persons={persons}
-              selectedPersonId={selectedPersonId}
-              selectPerson={selectPerson}
-              saveRow={saveRow}
-              handlePersonDoubleClick={handlePersonDoubleClick}
-              handlePersonContextMenu={handlePersonContextMenu}
-              reportLineRootId={reportLineRootId}
-              setReportLineRootId={setReportLineRootId}
-              rlRootManagerId={rlRootManagerId}
-              expandedNodes={expandedNodes}
-              setExpandedNodes={setExpandedNodes}
-              isReportLineInternalSelect={isReportLineInternalSelect}
-            />
-          ) : childOrgs.length === 0 ? (
-            <OrgBox orgId={focusedOrgId} depth={0} />
+          {comparisonMode ? (
+            <>
+              <ComparisonCanvas
+                comparisonPanels={comparisonPanels}
+                comparisonOrgMapping={comparisonOrgMapping}
+                afterOrgs={organizations}
+                beforeOrgs={beforeOrganizations}
+                allocationList={allocationList}
+                onRemovePanel={panelId => removeComparisonPanel(panelId)}
+                onRequestMap={beforeOrgId => setPendingMappingBeforeOrgId(beforeOrgId)}
+              />
+              {/* 旧→新マッピング用モーダル */}
+              <OrgPickerModal
+                open={pendingMappingBeforeOrgId !== null}
+                onClose={() => setPendingMappingBeforeOrgId(null)}
+                onSelect={afterOrgId => {
+                  if (pendingMappingBeforeOrgId) setComparisonOrgMap(pendingMappingBeforeOrgId, afterOrgId)
+                  setPendingMappingBeforeOrgId(null)
+                }}
+                title="対応する新組織を選択"
+              />
+            </>
           ) : (
-            <div className={`border-2 rounded-lg transition-all ${dragOverOrgId === focusedOrgId ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'}`}>
-              <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center gap-1">
-                <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
-                <button
-                  onClick={() => handleAddPosition(focusedOrgId, focusedOrg.externalCode ?? focusedOrg.id)}
-                  className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
-                  title="ポジションを追加（空席）"
-                >＋席</button>
-              </div>
-              <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
-                <PositionRows orgId={focusedOrgId} />
-                <DropZone orgId={focusedOrgId} compact />
-              </div>
-              <div className="px-3 pb-3 grid grid-cols-2 gap-3">
-                {childOrgs.map(c => <OrgBox key={c.id} orgId={c.id} depth={0} />)}
-              </div>
+            <div className="h-full overflow-y-auto p-3">
+              {canvasMode === 'レポートライン' ? (
+                <ReportLineView
+                  allocationList={allocationList}
+                  personBySfId={personBySfId}
+                  afterOrgByCode={afterOrgByCode}
+                  organizations={organizations}
+                  persons={persons}
+                  selectedPersonId={selectedPersonId}
+                  selectPerson={selectPerson}
+                  saveRow={saveRow}
+                  handlePersonDoubleClick={handlePersonDoubleClick}
+                  handlePersonContextMenu={handlePersonContextMenu}
+                  reportLineRootId={reportLineRootId}
+                  setReportLineRootId={setReportLineRootId}
+                  rlRootManagerId={rlRootManagerId}
+                  expandedNodes={expandedNodes}
+                  setExpandedNodes={setExpandedNodes}
+                  isReportLineInternalSelect={isReportLineInternalSelect}
+                />
+              ) : focusedOrgId && focusedOrg && childOrgs.length === 0 ? (
+                <OrgBox orgId={focusedOrgId} depth={0} />
+              ) : focusedOrgId && focusedOrg ? (
+                <div className={`border-2 rounded-lg transition-all ${dragOverOrgId === focusedOrgId ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'}`}>
+                  <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center gap-1">
+                    <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
+                    <AddPositionButton orgId={focusedOrgId} orgCode={focusedOrg.externalCode ?? focusedOrg.id} />
+                  </div>
+                  <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
+                    <PositionRows orgId={focusedOrgId} />
+                    <DropZone orgId={focusedOrgId} compact />
+                  </div>
+                  <div className="px-3 pb-3 grid grid-cols-2 gap-3">
+                    {childOrgs.map(c => <OrgBox key={c.id} orgId={c.id} depth={0} />)}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -422,6 +487,20 @@ export function OrgOperationView() {
           />
         )}
 
+
+        {secondmentInModal && (() => {
+          const org = organizations.find(o => o.externalCode === secondmentInModal.orgCode || o.id === secondmentInModal.orgCode)
+          return (
+            <SecondmentInAddModal
+              orgCode={secondmentInModal.orgCode}
+              orgName={org?.name ?? secondmentInModal.orgCode}
+              sfIntegrated={secondmentInModal.sfIntegrated}
+              concurrent={secondmentInModal.concurrent}
+              onConfirm={handleSecondmentInConfirm}
+              onClose={() => setSecondmentInModal(null)}
+            />
+          )
+        })()}
 
         <CanvasModals
           isSelectMode={isSelectMode}

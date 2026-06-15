@@ -251,6 +251,25 @@ export class HRApplicationService {
     this.executeOperation(new CreateVacantPositionOperation(departmentCode, localJobTitle, extraFields))
   }
 
+  createSecondmentInRow(departmentCode: string, values: {
+    userId?:                      string
+    employeeNumber?:              string
+    lastName?:                    string
+    firstName?:                   string
+    secondmentFromCompany:        string
+    secondmentFromEmployeeNumber?: string
+    employmentType?:              string
+    concurrentType?:              '兼務'
+    concurrentReason?:            string
+  }): void {
+    const { concurrentType, ...rest } = values
+    const extra: Partial<AllocationRow> = {
+      ...rest,
+      ...(concurrentType ? { concurrentType } : {}),
+    }
+    this.executeOperation(new CreateVacantPositionOperation(departmentCode, '', extra))
+  }
+
   removePosition(rowId: number): void {
     this.executeOperation(new RemovePositionOperation(rowId))
   }

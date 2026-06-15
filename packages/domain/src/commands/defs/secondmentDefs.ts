@@ -5,6 +5,7 @@ import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { isRegularEmployee, isSecondmentAcceptance, wasSecondedOut, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany } from '../helpers'
+import type { AllCodeLists } from '../../masters/aggregate'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -696,6 +697,78 @@ export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
   },
 }
 
+// ── 出向受入取消（セッション内追加分・SF別） ────────────────────────────────────
+// createSecondmentInRow で追加した行を削除する（prevSecondmentFromCompany が空 = このセッションで追加）
+// SF/非SF 別に分けることで SummaryView の対応セクションに配置できる
+
+const isCancelAvailableSF = (row: AllocationRow, cl: AllCodeLists) =>
+  !!row.secondmentFromCompany && !row.prevSecondmentFromCompany &&
+  isSFIntegratedCompany(row.secondmentFromCompany as string, cl)
+
+const isCancelAvailableNonSF = (row: AllocationRow, cl: AllCodeLists) =>
+  !!row.secondmentFromCompany && !row.prevSecondmentFromCompany &&
+  !isSFIntegratedCompany(row.secondmentFromCompany as string, cl)
+
+export const secondmentInCancelSFDef: EditOperation = {
+  id: 'SecondmentInCancelSF', label: '本務出向受入取消（SF導入先）',
+  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  availableFor: (row, cl) => isMainAssignment(row) && isCancelAvailableSF(row, cl),
+  inputs: [], deriveInitial: () => ({}),
+  validate(ctx, rowId) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+  apply(ctx, rowId) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${personName(row)}` }
+  },
+}
+
+export const secondmentInCancelNonSFDef: EditOperation = {
+  id: 'SecondmentInCancelNonSF', label: '本務出向受入取消（SF未導入先）',
+  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  availableFor: (row, cl) => isMainAssignment(row) && isCancelAvailableNonSF(row, cl),
+  inputs: [], deriveInitial: () => ({}),
+  validate(ctx, rowId) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+  apply(ctx, rowId) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${personName(row)}` }
+  },
+}
+
+export const concurrentSecondmentInCancelSFDef: EditOperation = {
+  id: 'ConcurrentSecondmentInCancelSF', label: '兼務出向受入取消（SF導入先）',
+  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  availableFor: (row, cl) => row.concurrentType === '兼務' && isCancelAvailableSF(row, cl),
+  inputs: [], deriveInitial: () => ({}),
+  validate(ctx, rowId) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+  apply(ctx, rowId) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${personName(row)}` }
+  },
+}
+
+export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
+  id: 'ConcurrentSecondmentInCancelNonSF', label: '兼務出向受入取消（SF未導入先）',
+  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  availableFor: (row, cl) => row.concurrentType === '兼務' && isCancelAvailableNonSF(row, cl),
+  inputs: [], deriveInitial: () => ({}),
+  validate(ctx, rowId) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+  apply(ctx, rowId) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${personName(row)}` }
+  },
+}
+
 export const DEFS: EditOperation[] = [
   secondmentOutSFDef,              secondmentOutNonSFDef,
   secondmentInSFDef,               secondmentInNonSFDef,
@@ -705,4 +778,6 @@ export const DEFS: EditOperation[] = [
   secondmentInReleaseSFDef,        secondmentInReleaseNonSFDef,
   concurrentSecondmentOutReleaseSFDef, concurrentSecondmentOutReleaseNonSFDef,
   concurrentSecondmentInReleaseSFDef,  concurrentSecondmentInReleaseNonSFDef,
+  secondmentInCancelSFDef,             secondmentInCancelNonSFDef,
+  concurrentSecondmentInCancelSFDef,   concurrentSecondmentInCancelNonSFDef,
 ]

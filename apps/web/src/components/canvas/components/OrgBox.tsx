@@ -1,5 +1,58 @@
+import { useState, useRef, useEffect } from 'react'
 import { useOrgView } from '../OrgViewContext'
 import { PositionRows } from './PositionRows'
+
+// ── ＋席パネル（SummaryView 風ボタングリッド）────────────────────────────────
+function AddPositionPanel({ orgId, orgCode, onClose }: { orgId: string; orgCode: string; onClose: () => void }) {
+  const { handleAddPosition, handleSecondmentIn } = useOrgView()
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const btn = (label: string, color: string, onClick: () => void) => (
+    <button
+      key={label}
+      onClick={() => { onClick(); onClose() }}
+      className={`px-1 py-1 min-h-[2.5rem] rounded text-[10px] font-medium text-center leading-tight whitespace-pre-line transition-all hover:brightness-95 active:scale-95 ${color}`}
+    >{label}</button>
+  )
+
+  return (
+    <div ref={ref} className="absolute right-0 top-full mt-0.5 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-2 w-48">
+      <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">ポジション</div>
+      <div className="grid grid-cols-2 gap-1 mb-2">
+        {btn('空席を追加', 'bg-gray-100 text-gray-600', () => handleAddPosition(orgId, orgCode))}
+      </div>
+      <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">出向受入登録</div>
+      <div className="grid grid-cols-2 gap-1">
+        {btn('SF導入\n本務受入',   'bg-amber-50 text-amber-700', () => handleSecondmentIn(orgId, orgCode, true,  false))}
+        {btn('SF導入\n兼務受入',   'bg-amber-50 text-amber-700', () => handleSecondmentIn(orgId, orgCode, true,  true))}
+        {btn('SF未導入\n本務受入', 'bg-amber-50 text-amber-700', () => handleSecondmentIn(orgId, orgCode, false, false))}
+        {btn('SF未導入\n兼務受入', 'bg-amber-50 text-amber-700', () => handleSecondmentIn(orgId, orgCode, false, true))}
+      </div>
+    </div>
+  )
+}
+
+export function AddPositionButton({ orgId, orgCode }: { orgId: string; orgCode: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(v => !v) }}
+        className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+        title="ポジション/出向受入を追加"
+      >＋席</button>
+      {open && <AddPositionPanel orgId={orgId} orgCode={orgCode} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
 
 export function DropZone({ orgId, compact = false }: { orgId: string; compact?: boolean }) {
   const { dragOverOrgId, afterMembersByOrgId } = useOrgView()
@@ -20,7 +73,6 @@ export function CollapsedOrgChip({ orgId }: { orgId: string }) {
     organizations, afterMembersByOrgId,
     dragOverOrgId, highlightedOrgId,
     handleDragOver, handleDragLeave, handleDrop,
-    handleAddPosition,
     setBulkMoveSourceId, expandedChipIds, toggleChip,
   } = useOrgView()
 
@@ -65,11 +117,7 @@ export function CollapsedOrgChip({ orgId }: { orgId: string }) {
       <div className="px-2 py-1 border-b border-gray-200 bg-gray-50 rounded-t-lg text-xs font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 flex items-center gap-1" onClick={() => toggleChip(orgId)}>
         <span className="text-gray-400">▾</span>
         <span className="flex-1">{org.name}</span>
-        <button
-          onClick={e => { e.stopPropagation(); handleAddPosition(orgId, org.externalCode ?? org.id) }}
-          className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
-          title="ポジションを追加（空席）"
-        >＋席</button>
+        <AddPositionButton orgId={orgId} orgCode={org.externalCode ?? org.id} />
         <button
           onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId) }}
           className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
@@ -94,7 +142,6 @@ export function OrgBox({ orgId, depth = 0 }: { orgId: string; depth?: number }) 
     organizations,
     dragOverOrgId, highlightedOrgId,
     handleDragOver, handleDragLeave, handleDrop,
-    handleAddPosition,
     setBulkMoveSourceId,
   } = useOrgView()
 
@@ -119,11 +166,7 @@ export function OrgBox({ orgId, depth = 0 }: { orgId: string; depth?: number }) 
         depth === 0 ? 'border-gray-300 text-gray-600 bg-gray-100 rounded-t-lg' : 'border-gray-200 text-gray-500 bg-gray-50 rounded-t-lg'
       }`}>
         <span className="flex-1">{org.name}</span>
-        <button
-          onClick={e => { e.stopPropagation(); handleAddPosition(orgId, org.externalCode ?? org.id) }}
-          className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
-          title="ポジションを追加（空席）"
-        >＋席</button>
+        <AddPositionButton orgId={orgId} orgCode={org.externalCode ?? org.id} />
         <button
           onClick={e => { e.stopPropagation(); setBulkMoveSourceId(orgId) }}
           className="px-1.5 py-0.5 rounded text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"

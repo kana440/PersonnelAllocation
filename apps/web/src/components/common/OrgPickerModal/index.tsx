@@ -1,4 +1,5 @@
 import { useMemo }        from 'react'
+import type { Organization } from '@personnel/domain/schemas'
 import { useStore }        from '../../../store/useStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { OrgTreePicker }   from '../OrgTreePicker'
@@ -9,24 +10,32 @@ interface Props {
   onClose:  () => void
   onSelect: (orgId: string) => void
   title?:   string
+  /** 渡した場合はこちらを優先して使う（比較モードで before-org 一覧を渡す用途） */
+  orgs?:            Organization[]
+  /** 渡した場合はこちらを優先して使う（比較モードで追加済み ID を渡す用途） */
+  alreadyAddedIds?: Set<string>
 }
 
-export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選択' }: Props) {
+export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選択', orgs, alreadyAddedIds }: Props) {
   const { allocationList, afterOrganizations } = useStore()
   const { panels } = useCanvasLayoutStore()
 
-  const relevantOrgIds = useMemo(
+  const defaultRelevantOrgIds = useMemo(
     () => collectTopLevelRelevantOrgIds(allocationList, afterOrganizations),
     [allocationList, afterOrganizations],
   )
 
-  // すでにパネルに登録済みの org ID セット
-  const alreadyAddedOrgIds = useMemo(
+  const defaultAlreadyAddedOrgIds = useMemo(
     () => new Set(panels.map(p => p.orgId)),
     [panels],
   )
 
   if (!open) return null
+
+  const displayOrgs      = orgs ?? afterOrganizations
+  const addedIds         = alreadyAddedIds ?? defaultAlreadyAddedOrgIds
+  // orgs を外部から渡した場合は relevantOrgIds によるフィルタは使わない
+  const relevantOrgIds   = orgs ? undefined : defaultRelevantOrgIds
 
   const handleSelect = (orgId: string) => { onSelect(orgId); onClose() }
 
@@ -46,11 +55,11 @@ export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選�
         </div>
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <OrgTreePicker
-            allOrgs={afterOrganizations}
+            allOrgs={displayOrgs}
             allocationList={allocationList}
             onSelect={handleSelect}
             relevantOrgIds={relevantOrgIds}
-            alreadyAddedOrgIds={alreadyAddedOrgIds}
+            alreadyAddedOrgIds={addedIds}
           />
         </div>
       </div>

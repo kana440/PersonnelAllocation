@@ -1,0 +1,1 @@
+export { ComparisonCanvas } from './ComparisonCanvas'

@@ -10,7 +10,7 @@ import type { PanelView } from './types'
 // id は OperationDef.id と 1:1 対応。shortLabel はバッジ表示用の短縮ラベル。
 // 出向セクションは SF区別をセクションタイトルで示すため同じ shortLabel を使い分けて問題なし。
 // Domain 側の def を変更したときはここも合わせて更新する。
-const SECTIONS: { label: string; ops: { id: string; shortLabel: string }[] }[] = [
+const SECTIONS: { label: string; ops: { id: string; shortLabel: string; cancel?: boolean }[] }[] = [
   {
     label: '昇降格・役職変更',
     ops: [
@@ -45,34 +45,34 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string }[] }[] =
   {
     label: '出向・出向解除（SF導入会社）',
     ops: [
-      { id: 'SecondmentOutSF',                   shortLabel: '本務出向' },
-      { id: 'SecondmentInSF',                    shortLabel: '本務出向受入' },
-      { id: 'SecondmentOutReleaseSF',             shortLabel: '本務出向解除' },
-      { id: 'SecondmentInReleaseSF',              shortLabel: '本務出向受入解除' },
-      { id: 'ConcurrentSecondmentOutSF',          shortLabel: '兼務出向' },
-      { id: 'ConcurrentSecondmentInSF',           shortLabel: '兼務出向受入' },
-      { id: 'ConcurrentSecondmentOutReleaseSF',   shortLabel: '兼務出向解除' },
-      { id: 'ConcurrentSecondmentInReleaseSF',    shortLabel: '兼務出向受入解除' },
+      { id: 'SecondmentOutSF',                   shortLabel: 'SF導入\n本務出向' },
+      { id: 'SecondmentOutReleaseSF',             shortLabel: 'SF導入\n本務出向解除' },
+      { id: 'SecondmentInReleaseSF',              shortLabel: 'SF導入\n本務受入解除' },
+      { id: 'SecondmentInCancelSF',               shortLabel: 'SF導入\n本務受入取消', cancel: true },
+      { id: 'ConcurrentSecondmentOutSF',          shortLabel: 'SF導入\n兼務出向' },
+      { id: 'ConcurrentSecondmentOutReleaseSF',   shortLabel: 'SF導入\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseSF',    shortLabel: 'SF導入\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInCancelSF',     shortLabel: 'SF導入\n兼務受入取消', cancel: true },
     ],
   },
   {
     label: '出向・出向解除（SF未導入会社）',
     ops: [
-      { id: 'SecondmentOutNonSF',                   shortLabel: '本務出向' },
-      { id: 'SecondmentInNonSF',                    shortLabel: '本務出向受入' },
-      { id: 'SecondmentOutReleaseNonSF',             shortLabel: '本務出向解除' },
-      { id: 'SecondmentInReleaseNonSF',              shortLabel: '本務出向受入解除' },
-      { id: 'ConcurrentSecondmentOutNonSF',          shortLabel: '兼務出向' },
-      { id: 'ConcurrentSecondmentInNonSF',           shortLabel: '兼務出向受入' },
-      { id: 'ConcurrentSecondmentOutReleaseNonSF',   shortLabel: '兼務出向解除' },
-      { id: 'ConcurrentSecondmentInReleaseNonSF',    shortLabel: '兼務出向受入解除' },
+      { id: 'SecondmentOutNonSF',                     shortLabel: 'SF未導入\n本務出向' },
+      { id: 'SecondmentOutReleaseNonSF',               shortLabel: 'SF未導入\n本務出向解除' },
+      { id: 'SecondmentInReleaseNonSF',                shortLabel: 'SF未導入\n本務受入解除' },
+      { id: 'SecondmentInCancelNonSF',                 shortLabel: 'SF未導入\n本務受入取消', cancel: true },
+      { id: 'ConcurrentSecondmentOutNonSF',            shortLabel: 'SF未導入\n兼務出向' },
+      { id: 'ConcurrentSecondmentOutReleaseNonSF',     shortLabel: 'SF未導入\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseNonSF',      shortLabel: 'SF未導入\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInCancelNonSF',       shortLabel: 'SF未導入\n兼務受入取消', cancel: true },
     ],
   },
   {
     label: '在籍・退職',
     ops: [
       { id: 'LeaveOfAbsence',       shortLabel: '休職' },
-      { id: 'LeaveOfAbsenceCancel', shortLabel: '休職取消' },
+      { id: 'LeaveOfAbsenceCancel', shortLabel: '休職取消', cancel: true },
       { id: 'ReturnFromLeave',      shortLabel: '復職' },
       { id: 'EmploymentTransferOut', shortLabel: '移籍（出）' },
       { id: 'EmploymentTransferIn',  shortLabel: '移籍（入）' },
@@ -81,8 +81,8 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string }[] }[] =
   },
 ]
 
-// 2色のみ: 有効 / 無効
 const COLOR_AVAILABLE   = 'bg-blue-100 text-blue-700'
+const COLOR_CANCEL      = 'bg-red-100 text-red-600'
 const COLOR_UNAVAILABLE = 'bg-gray-100 text-gray-400'
 
 const defById = new Map(ALL_EDIT_OPERATIONS.map(d => [d.id, d]))
@@ -139,9 +139,9 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {SECTIONS.map(({ label, ops }) => {
           const items = ops
-            .map(({ id, shortLabel }) => ({ def: defById.get(id), shortLabel }))
-            .filter((x): x is { def: EditOperation; shortLabel: string } => !!x.def)
-            .map(({ def, shortLabel }) => ({ def, shortLabel, available: def.availableFor(row, codeLists) }))
+            .map(({ id, shortLabel, cancel }) => ({ def: defById.get(id), shortLabel, cancel }))
+            .filter((x): x is { def: EditOperation; shortLabel: string; cancel: boolean | undefined } => !!x.def)
+            .map(({ def, shortLabel, cancel }) => ({ def, shortLabel, cancel, available: def.availableFor(row, codeLists) }))
             .filter(({ available }) => unavailableDisplay !== 'hide' || available)
 
           if (items.length === 0) return null
@@ -152,19 +152,22 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
                 {label}
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1">
-                {items.map(({ def, shortLabel, available }) => {
+                {items.map(({ def, shortLabel, cancel, available }) => {
                   const disabled = !available && unavailableDisplay === 'show-disabled'
+                  const color = available
+                    ? (cancel ? COLOR_CANCEL : COLOR_AVAILABLE)
+                    : COLOR_UNAVAILABLE
                   return (
                     <button
                       key={def.id}
                       onClick={disabled ? undefined : () => onSelect({ def, rowId: row.rowId })}
                       disabled={disabled}
                       className={[
-                        'px-1 py-0.5 min-h-[1.75rem] rounded text-[10px] font-medium text-center leading-tight',
+                        'px-1 py-0.5 min-h-[1.75rem] rounded text-[10px] font-medium text-center leading-tight whitespace-pre-line',
                         disabled
                           ? 'cursor-not-allowed opacity-50'
                           : 'transition-all hover:brightness-95 active:scale-95',
-                        available ? COLOR_AVAILABLE : COLOR_UNAVAILABLE,
+                        color,
                       ].join(' ')}
                       title={available ? def.label : `${def.label}（この行では通常使用しません）`}
                     >
