@@ -50,7 +50,9 @@ export interface OrgViewContextValue {
   setConfirmDialog:         (d: { message: string; onConfirm: () => void } | null) => void
   isSelectMode:             boolean
   selectedPersonIds:        Set<string>
-  togglePersonSelection:    (id: string) => void
+  handlePersonClick:        (personId: string, panelId: string, mods: { ctrl: boolean; shift: boolean }) => void
+  addPersonsToSelection:    (ids: Set<string>) => void
+  clearSelection:           () => void
   selectedPersonId:         string | null
   selectPerson:             (id: string) => void
   isHistoryPreviewMode:         boolean

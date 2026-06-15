@@ -20,7 +20,7 @@ export function OrgSearchSidebar() {
     selectedPersonId, selectPerson, enterEditMode,
   } = useScopedStore()
 
-  const { addPanel, isInPanels } = useCanvasLayoutStore()
+  const { panels, setOrgOpen } = useCanvasLayoutStore()
 
   const treeScrollRef = useRef<HTMLDivElement>(null)
 
@@ -51,18 +51,10 @@ export function OrgSearchSidebar() {
   // スコープ内に親がない = この表示内でのルート組織（スコープ選択時は true root でなくなる）
   const viewOrgIds = useMemo(() => new Set(viewOrgs.map(o => o.id)), [viewOrgs])
 
-  // スコープ変更など viewOrgs が変わった際、有効ルートを自動展開する
+  // スコープ変更など viewOrgs が変わった際、会社グループを自動展開する
   useEffect(() => {
     const effectiveRoots = viewOrgs.filter(o => !o.parentId || !viewOrgIds.has(o.parentId))
     if (effectiveRoots.length === 0) return
-    setExpandedOrgs(prev => {
-      const next = new Set(prev)
-      for (const root of effectiveRoots) {
-        next.add(root.id)
-        viewOrgs.filter(c => c.parentId === root.id).forEach(c => next.add(c.id))
-      }
-      return next
-    })
     setExpandedCompanies(prev => {
       const next = new Set(prev)
       effectiveRoots.forEach(o => { if (o.companyId) next.add(o.companyId) })
@@ -90,11 +82,10 @@ export function OrgSearchSidebar() {
       setExpandedCompanies(prev => { const s = new Set(prev); s.add(personOrg.companyId!); return s })
     }
 
-    // 祖先 + 当該組織を展開
-    const toExpand: string[] = [personOrg.id]
+    // 祖先 + 当該組織をキャンバスストアで open に
+    setOrgOpen(personOrg.id, true)
     let cur = personOrg.parentId ? orgById.get(personOrg.parentId) : undefined
-    while (cur) { toExpand.push(cur.id); cur = cur.parentId ? orgById.get(cur.parentId) : undefined }
-    setExpandedOrgs(prev => { const s = new Set(prev); for (const id of toExpand) s.add(id); return s })
+    while (cur) { setOrgOpen(cur.id, true); cur = cur.parentId ? orgById.get(cur.parentId) : undefined }
 
     // 展開後にスクロール（二重 rAF で React の描画を待つ）
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -169,15 +160,8 @@ export function OrgSearchSidebar() {
   }
 
   const [orgSearch, setOrgSearch] = useState('')
-  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(() => {
-    const expanded = new Set<string>()
-    const roots = viewOrgs.filter(o => o.parentId === null)
-    roots.forEach(o => {
-      expanded.add(o.id)
-      viewOrgs.filter(c => c.parentId === o.id).forEach(c => expanded.add(c.id))
-    })
-    return expanded
-  })
+  // 組織の展開/折りたたみ状態はキャンバスストアと共有（panels の open フィールド）
+  const expandedOrgs = new Set(panels.filter(p => p.open).map(p => p.orgId))
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(
     () => new Set(viewOrgs.map(o => o.companyId).filter(Boolean))
   )
@@ -202,14 +186,14 @@ export function OrgSearchSidebar() {
     return null
   }
 
-  const toggleOrg     = (id: string) => setExpandedOrgs(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleOrg     = (id: string) => setOrgOpen(id, !expandedOrgs.has(id))
   const toggleCompany = (id: string) => setExpandedCompanies(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
   const renderOrgNode = (org: Organization, depth: number): React.ReactNode => {
     const children     = viewOrgs.filter(o => o.parentId === org.id)
     const directPeople = getPersonsInOrg(org.id)
     const isExpanded   = expandedOrgs.has(org.id)
-    const isSelected   = isInPanels(org.id)
+    const isSelected   = panels.some(p => p.orgId === org.id && p.open)
     const changeStatus = getOrgChangeStatus(org.id)
     const isNewOrg     = !beforeOrgs.find(o => o.id === org.id)
 
@@ -229,7 +213,7 @@ export function OrgSearchSidebar() {
               : <span className="w-4" />}
           </button>
           <button
-            onClick={() => addPanel(org.id)}
+            onClick={() => setOrgOpen(org.id, !isSelected)}
             className={`flex-1 text-left text-xs py-0.5 truncate font-medium ${
               isSelected ? 'text-blue-700 font-semibold' : 'text-gray-700 hover:text-blue-600'
             }`}
@@ -326,20 +310,23 @@ export function OrgSearchSidebar() {
               onClick={() => {
                 if (r.personId) {
                   selectPerson(r.personId)
-                  if (r.orgId) addPanel(r.orgId)
+                  if (r.orgId) setOrgOpen(r.orgId, true)
                   setOrgSearch('')
                   return
                 }
                 if (r.orgId) {
-                  addPanel(r.orgId)
+                  setOrgOpen(r.orgId, true)
                   const org = viewOrgs.find(o => o.id === r.orgId)
                   if (org) {
                     if (org.companyId)
                       setExpandedCompanies(prev => { const s = new Set(prev); s.add(org.companyId!); return s })
-                    const toExpand: string[] = []
+                    // 祖先の open も連鎖展開
                     let cur: Organization | undefined = org
-                    while (cur) { toExpand.push(cur.id); const pid: string | null | undefined = cur.parentId; cur = pid ? viewOrgs.find(o => o.id === pid) : undefined }
-                    setExpandedOrgs(prev => { const s = new Set(prev); for (const id of toExpand) s.add(id); return s })
+                    while (cur) {
+                      if (cur.id !== org.id) setOrgOpen(cur.id, true)
+                      const pid: string | null | undefined = cur.parentId
+                      cur = pid ? viewOrgs.find(o => o.id === pid) : undefined
+                    }
                     const orgId = r.orgId
                     requestAnimationFrame(() => requestAnimationFrame(() => {
                       treeScrollRef.current

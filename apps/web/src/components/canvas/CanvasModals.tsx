@@ -55,7 +55,7 @@ export interface CanvasModalsProps {
 }
 
 export function CanvasModals({
-  isSelectMode, selectedPersonIds, exitSelectMode,
+  isSelectMode: _isSelectMode, selectedPersonIds, exitSelectMode,
   moveModalOpen, setMoveModalOpen,
   bulkActionModal, setBulkActionModal,
   bulkMoveSourceId, setBulkMoveSourceId,
@@ -88,7 +88,7 @@ export function CanvasModals({
   return (
     <>
       {/* 選択モード アクションバー */}
-      {isSelectMode && selectedPersonIds.size > 0 && (
+      {selectedPersonIds.size > 0 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 bg-gray-900 text-white rounded-full px-4 py-2 shadow-2xl text-xs">
           <span className="font-semibold mr-1">{selectedPersonIds.size}名選択中</span>
           <div className="w-px h-4 bg-gray-600" />

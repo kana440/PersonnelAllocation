@@ -1,9 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useChatStore } from '../../store/useChatStore'
-import { ComparisonCanvas } from './comparison'
-import { OrgPickerModal } from '../common/OrgPickerModal'
+import { ComparisonSplitView } from './ComparisonSplitView'
 import { SetPositionManagerOperation } from '@personnel/domain/commands/handlers/positionOps'
 import { ReorderRowOperation }         from '@personnel/domain/commands/handlers/reorderRow'
 import { appService } from '../../application/HRApplicationService'
@@ -31,7 +30,6 @@ export function OrgOperationView() {
   const store = useScopedStore()
   const {
     afterOrganizations: allAfterOrgsUnscoped,
-    beforeOrganizations,
     isHistoryPreviewMode, historyPreviewPosition,
     previewAllocationList, previewPersons, previewAfterOrganizations,
     applyHistoryPreview, cancelHistoryPreview,
@@ -39,9 +37,6 @@ export function OrgOperationView() {
   } = useStore()
   const {
     comparisonMode, toggleComparisonMode,
-    comparisonPanels, comparisonOrgMapping,
-    pendingMappingBeforeOrgId, setPendingMappingBeforeOrgId, setComparisonOrgMap,
-    removeComparisonPanel,
   } = useCanvasLayoutStore()
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
@@ -66,7 +61,6 @@ export function OrgOperationView() {
   // ── UI state ───────────────────────────────────────────────────
   const [confirmDialog,      setConfirmDialog]      = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [fieldPickerOpen,    setFieldPickerOpen]    = useState(false)
-  const [isSelectMode,       setIsSelectMode]       = useState(false)
   const [selectedPersonIds,  setSelectedPersonIds]  = useState<Set<string>>(new Set())
   const [moveModalOpen,      setMoveModalOpen]      = useState(false)
   const [bulkActionModal,    setBulkActionModal]    = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
@@ -75,6 +69,11 @@ export function OrgOperationView() {
     orgId: string; orgCode: string; sfIntegrated: boolean; concurrent: boolean
   } | null>(null)
   const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
+
+  const isSelectMode = selectedPersonIds.size > 0
+  const lastClickRef        = useRef<{ personId: string; panelId: string } | null>(null)
+  const selectedPersonIdRef = useRef(selectedPersonId)
+  selectedPersonIdRef.current = selectedPersonId
 
   // ── Hooks ──────────────────────────────────────────────────────
   const handleSelectPerson = useCallback((personId: string) => {
@@ -153,11 +152,55 @@ export function OrgOperationView() {
     appService.executeOperation(new ReorderRowOperation(rowId, beforeRowId))
   }
 
-  const togglePersonSelection = (personId: string) => setSelectedPersonIds(prev => {
-    const next = new Set(prev); next.has(personId) ? next.delete(personId) : next.add(personId); return next
-  })
+  const clearSelection = useCallback(() => {
+    setSelectedPersonIds(new Set())
+    useStore.setState({ selectedPersonId: null })
+  }, [])
 
-  const exitSelectMode = () => { setIsSelectMode(false); setSelectedPersonIds(new Set()) }
+  const exitSelectMode = clearSelection
+
+  const addPersonsToSelection = useCallback((ids: Set<string>) => {
+    setSelectedPersonIds(prev => new Set([...prev, ...ids]))
+  }, [])
+
+  const handlePersonClick = useCallback((
+    personId: string, panelId: string,
+    { ctrl, shift }: { ctrl: boolean; shift: boolean },
+  ) => {
+    if (ctrl) {
+      setSelectedPersonIds(prev => {
+        const next = new Set(prev)
+        // 初回 Ctrl+クリック時: 単体選択中の人も引き継ぐ
+        if (prev.size === 0 && selectedPersonIdRef.current) {
+          next.add(selectedPersonIdRef.current)
+        }
+        next.has(personId) ? next.delete(personId) : next.add(personId)
+        return next
+      })
+      lastClickRef.current = { personId, panelId }
+    } else if (shift) {
+      const last     = lastClickRef.current
+      const panelEl  = document.querySelector(`[data-panelid="${panelId}"]`)
+      if (panelEl && last?.panelId === panelId) {
+        const pids = [...panelEl.querySelectorAll<HTMLElement>('[data-personid]:not([data-personid=""])')]
+          .map(el => el.getAttribute('data-personid')!)
+        const a = pids.indexOf(last.personId)
+        const b = pids.indexOf(personId)
+        if (a !== -1 && b !== -1) {
+          setSelectedPersonIds(prev => new Set([...prev, ...pids.slice(Math.min(a, b), Math.max(a, b) + 1)]))
+        } else {
+          setSelectedPersonIds(prev => new Set([...prev, personId]))
+        }
+      } else {
+        setSelectedPersonIds(prev => new Set([...prev, personId]))
+        lastClickRef.current = { personId, panelId }
+      }
+    } else {
+      setSelectedPersonIds(new Set())
+      handleSelectPerson(personId)
+      lastClickRef.current = { personId, panelId }
+    }
+  }, [handleSelectPerson])
 
   const topPositionCodeOfOrg = (orgId: string): string | undefined => {
     const rows   = allocationList.filter(r => afterOrgByCode.get(r.departmentCode ?? '')?.id === orgId && !!r.positionCode)
@@ -183,6 +226,19 @@ export function OrgOperationView() {
     enterEditMode(newRowId)
   }
 
+  // 複数選択時にAIチャットコンテキストを連動
+  useEffect(() => {
+    if (selectedPersonIds.size === 0) return
+    const rowIds = [...selectedPersonIds].flatMap(personId => {
+      const p = persons.find(q => q.id === personId)
+      if (!p?.sfPersonId) return []
+      const rows = allocationList.filter(r => r.userId === p.sfPersonId)
+      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+      return primary ? [primary.rowId] : []
+    })
+    if (rowIds.length > 0) useChatStore.getState().setChatContext(rowIds)
+  }, [selectedPersonIds, persons, allocationList])
+
   const previewLabel = historyPreviewPosition !== null
     ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '')
     : ''
@@ -197,7 +253,8 @@ export function OrgOperationView() {
     topPositionCodeOfOrg,
     setBulkMoveSourceId:  isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
     setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
-    isSelectMode, selectedPersonIds, togglePersonSelection,
+    isSelectMode, selectedPersonIds,
+    handlePersonClick, addPersonsToSelection, clearSelection,
     selectedPersonId, selectPerson: handleSelectPerson,
     isHistoryPreviewMode,
     handlePersonDoubleClick, handleRowDoubleClick,
@@ -217,17 +274,7 @@ export function OrgOperationView() {
           )}
           <div className="flex-1" />
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {!comparisonMode && (
-              <>
-                <DisplayFieldCombobox />
-                <button
-                  onClick={() => { setIsSelectMode(m => !m); setSelectedPersonIds(new Set()) }}
-                  className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
-                    isSelectMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}
-                >{isSelectMode ? '✓ 選択中' : '複数選択'}</button>
-              </>
-            )}
+            {!comparisonMode && <DisplayFieldCombobox />}
             <button
               onClick={toggleComparisonMode}
               className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
@@ -280,26 +327,7 @@ export function OrgOperationView() {
           onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
         >
           {comparisonMode ? (
-            <>
-              <ComparisonCanvas
-                comparisonPanels={comparisonPanels}
-                comparisonOrgMapping={comparisonOrgMapping}
-                afterOrgs={organizations}
-                beforeOrgs={beforeOrganizations}
-                allocationList={allocationList}
-                onRemovePanel={panelId => removeComparisonPanel(panelId)}
-                onRequestMap={beforeOrgId => setPendingMappingBeforeOrgId(beforeOrgId)}
-              />
-              <OrgPickerModal
-                open={pendingMappingBeforeOrgId !== null}
-                onClose={() => setPendingMappingBeforeOrgId(null)}
-                onSelect={afterOrgId => {
-                  if (pendingMappingBeforeOrgId) setComparisonOrgMap(pendingMappingBeforeOrgId, afterOrgId)
-                  setPendingMappingBeforeOrgId(null)
-                }}
-                title="対応する新組織を選択"
-              />
-            </>
+            <ComparisonSplitView />
           ) : (
             <TreeWindowCanvas />
           )}

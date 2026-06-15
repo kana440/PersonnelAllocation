@@ -6,7 +6,6 @@ import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
 import { getDescendantOrgIds } from '@personnel/domain/choices/orgTree'
-import { collectTopLevelRelevantOrgIds } from '@personnel/domain/choices/relevantOrgs'
 import type { ImportMode, AssigneeImportMode, MergeResult } from '../application/importMerge'
 import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 import { DEFAULT_SESSION } from '../application/userSession'
@@ -215,8 +214,7 @@ export const useStore = create<AppState>()((set, get) => {
         initPanels:  m.useCanvasLayoutStore.getState().initPanels,
       }))
       clearPanels()
-      const topOrgIds = [...collectTopLevelRelevantOrgIds(result.allocationList, result.afterOrganizations)]
-      initPanels(topOrgIds)
+      initPanels(result.afterOrganizations)
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),

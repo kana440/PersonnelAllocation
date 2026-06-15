@@ -54,7 +54,7 @@ export function RowCard({
   const { row, person, depth, activePatterns } = entry
   const {
     isSelectMode, selectedPersonIds, selectedPersonId,
-    togglePersonSelection, selectPerson,
+    handlePersonClick,
     handleRowDoubleClick,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDropOnVacantSlot,
@@ -98,6 +98,7 @@ export function RowCard({
   return (
     <div style={{ paddingLeft: `${depth * 12}px` }}>
       <div
+        data-personid={!isVacant ? (person?.id ?? '') : ''}
         className={`my-0.5 px-2 py-1 text-xs rounded border border-l-4 shadow-sm select-none min-w-0
           ${empBorder} ${isVacant || isOnLeave ? 'border-dashed' : ''}
           ${borderColorClass} ${bgClass} ${cursorClass}`}
@@ -112,10 +113,15 @@ export function RowCard({
           e.dataTransfer.setData('application/json', JSON.stringify(data))
           e.dataTransfer.effectAllowed = 'move'
         } : undefined}
-        onClick={() => {
-          if (isVacant) return
-          if (isSelectMode) togglePersonSelection(person!.id)
-          else selectPerson(person!.id)
+        onClick={e => {
+          if (isVacant || isHistoryPreviewMode) return
+          handlePersonClick(person!.id, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey })
+        }}
+        onContextMenu={e => {
+          if ((e.ctrlKey || e.metaKey) && !isVacant && !isHistoryPreviewMode) {
+            e.preventDefault()
+            handlePersonClick(person!.id, panelId, { ctrl: true, shift: false })
+          }
         }}
         onDoubleClick={e => {
           if (!isSelectMode && !isHistoryPreviewMode) handleRowDoubleClick(e, row.rowId)
