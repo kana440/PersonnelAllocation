@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useScopedStore } from '../../store/useScopedStore'
+import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { rowDiff } from '@personnel/domain/allocationRow'
 import { buildOrgMap } from '@personnel/domain/choices/rows'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
@@ -16,9 +17,10 @@ export function OrgSearchSidebar() {
   const {
     afterOrganizations, organizations: beforeOrgs,
     persons, allocationList,
-    focusedOrgId, focusOrg, selectedPersonId, selectPerson, enterEditMode,
-    selectPersonAndFocusOrg,
+    selectedPersonId, selectPerson, enterEditMode,
   } = useScopedStore()
+
+  const { addPanel, isInPanels } = useCanvasLayoutStore()
 
   const treeScrollRef = useRef<HTMLDivElement>(null)
 
@@ -207,7 +209,7 @@ export function OrgSearchSidebar() {
     const children     = viewOrgs.filter(o => o.parentId === org.id)
     const directPeople = getPersonsInOrg(org.id)
     const isExpanded   = expandedOrgs.has(org.id)
-    const isSelected   = focusedOrgId === org.id
+    const isSelected   = isInPanels(org.id)
     const changeStatus = getOrgChangeStatus(org.id)
     const isNewOrg     = !beforeOrgs.find(o => o.id === org.id)
 
@@ -227,7 +229,7 @@ export function OrgSearchSidebar() {
               : <span className="w-4" />}
           </button>
           <button
-            onClick={() => focusOrg(org.id)}
+            onClick={() => addPanel(org.id)}
             className={`flex-1 text-left text-xs py-0.5 truncate font-medium ${
               isSelected ? 'text-blue-700 font-semibold' : 'text-gray-700 hover:text-blue-600'
             }`}
@@ -323,12 +325,13 @@ export function OrgSearchSidebar() {
               key={`${r.type}-${r.id}`}
               onClick={() => {
                 if (r.personId) {
-                  selectPersonAndFocusOrg(r.personId)
+                  selectPerson(r.personId)
+                  if (r.orgId) addPanel(r.orgId)
                   setOrgSearch('')
                   return
                 }
                 if (r.orgId) {
-                  focusOrg(r.orgId)
+                  addPanel(r.orgId)
                   const org = viewOrgs.find(o => o.id === r.orgId)
                   if (org) {
                     if (org.companyId)

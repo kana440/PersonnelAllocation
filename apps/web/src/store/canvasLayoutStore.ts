@@ -18,6 +18,8 @@ interface CanvasLayoutState {
   isInPanels:    (orgId: string) => boolean
   /** Excel ロード時などにパネルをすべてクリアする */
   clearPanels:   () => void
+  /** clearPanels 直後に初期パネルをセットする（Excel ロード後の自動追加用） */
+  initPanels:    (orgIds: string[]) => void
 
   // ── 比較モード ──────────────────────────────────────────────────
   comparisonMode:               boolean
@@ -62,6 +64,9 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   isInPanels: (orgId) => get().panels.some(p => p.orgId === orgId),
 
   clearPanels: () => set({ panels: [], comparisonPanels: [], comparisonOrgMapping: {}, pendingMappingBeforeOrgId: null }),
+
+  initPanels: (orgIds) =>
+    set({ panels: orgIds.map(orgId => ({ id: genId(), orgId })) }),
 
   // ── 比較モード ──────────────────────────────────────────────────
   comparisonMode:            false,

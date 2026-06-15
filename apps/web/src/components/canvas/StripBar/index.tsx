@@ -1,5 +1,6 @@
 import { useState, useMemo }      from 'react'
 import type { Organization }     from '@personnel/domain/schemas'
+import { collectTopLevelRelevantOrgIds } from '@personnel/domain/choices/relevantOrgs'
 import { useStore }              from '../../../store/useStore'
 import { useCanvasLayoutStore }  from '../../../store/canvasLayoutStore'
 import type { PanelDef }         from '../../../store/canvasLayoutStore'
@@ -17,7 +18,7 @@ const MAX_CANDIDATE_ROWS = 5
  * 外側コンテナは親（LeftSidebar）が担う。
  */
 export function PanelTabContent() {
-  const { focusedOrgId, beforeOrganizations } = useStore()
+  const { allocationList, afterOrganizations, beforeOrganizations } = useStore()
   const {
     panels, addPanel, removePanel, reorderPanels,
     comparisonMode,
@@ -125,7 +126,6 @@ export function PanelTabContent() {
                 ) : (
                   <PanelItem
                     panel={panel}
-                    isActive={focusedOrgId === panel.orgId}
                     isDragging={draggedId === panel.id}
                     onDragStart={e => handleDragStart(e, panel.id)}
                     onDragOver={e => handleDragOverSlot(e, index)}
@@ -144,7 +144,18 @@ export function PanelTabContent() {
               onDragOver={e => handleDragOverSlot(e, activePanels.length)}
               onDrop={e => handleDropOnSlot(e, activePanels.length)}
             />
-            <div className="px-2 pb-1">
+            <div className="px-2 pb-1 space-y-1">
+              {!comparisonMode && (
+                <button
+                  onClick={() => {
+                    const ids = collectTopLevelRelevantOrgIds(allocationList, afterOrganizations)
+                    ids.forEach(id => addPanel(id))
+                  }}
+                  className="w-full py-1 text-xs text-gray-500 border border-dashed border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                >
+                  全追加
+                </button>
+              )}
               <button
                 onClick={() => setAddModalOpen(true)}
                 className="w-full py-1 text-xs text-blue-500 border border-dashed border-blue-300 rounded hover:bg-blue-50 transition-colors"

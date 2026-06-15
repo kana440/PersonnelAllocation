@@ -8,10 +8,6 @@ import { SetPositionManagerOperation } from '@personnel/domain/commands/handlers
 import { ReorderRowOperation }         from '@personnel/domain/commands/handlers/reorderRow'
 import { appService } from '../../application/HRApplicationService'
 import { useScopedStore } from '../../store/useScopedStore'
-import { ReportLineView }   from './components/ReportLineView'
-import { OrgBox, DropZone, AddPositionButton } from './components/OrgBox'
-import { PersonContextMenu } from './CanvasContextMenus'
-// import { RowContextMenu } from './RowContextMenu'  // PersonOperationPanel に統合
 import { OrgTransferDialog }       from './patternDialogs/OrgTransferDialog'
 import { PromotionDialog }         from './patternDialogs/PromotionDialog'
 import { JobTypeDialog }           from './patternDialogs/JobTypeDialog'
@@ -22,16 +18,14 @@ import { SecondmentInAddModal }    from './SecondmentInAddModal'
 import type { SecondmentInValues } from './SecondmentInAddModal'
 import type { EditPattern }   from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }     from './CanvasModals'
-import { PositionRows }     from './components/PositionRows'
+import { TreeWindowCanvas }       from './TreeWindowCanvas'
+import { DisplayFieldCombobox }   from './components/DisplayFieldCombobox'
 import { OrgViewContext }   from './OrgViewContext'
 import type { OrgViewContextValue } from './OrgViewContext'
 import { useOrgDrag }       from './hooks/useOrgDrag'
 import { usePersonMove }    from './hooks/usePersonMove'
 import { useBulkMove }      from './hooks/useBulkMove'
 import { useOrgViewData }   from './hooks/useOrgViewData'
-import { useReportLine }    from './hooks/useReportLine'
-
-type CanvasMode = '組織図' | 'レポートライン'
 
 export function OrgOperationView() {
   const store = useScopedStore()
@@ -50,13 +44,10 @@ export function OrgOperationView() {
     removeComparisonPanel,
   } = useCanvasLayoutStore()
   const {
-    focusedOrgId, focusOrg,
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
     selectedPersonId, selectPerson, enterEditMode, saveRow,
     operationPanelRowId, enterOperationPanel,
-    mainCanvasMode, setMainCanvasMode,
-    expandedChipIds, toggleChip,
     assignPersonToVacantPosition,
     assigneeWarnings,
   } = store
@@ -66,39 +57,26 @@ export function OrgOperationView() {
   const persons        = (isHistoryPreviewMode && previewPersons)            ? previewPersons            : scopedPersons
   const allocationList = (isHistoryPreviewMode && previewAllocationList)     ? previewAllocationList     : scopedAllocList
 
-  const canvasMode    = mainCanvasMode
-  const setCanvasMode = (mode: CanvasMode) => setMainCanvasMode(mode)
   const organizations = allAfterOrgs.filter(o => !o.isAbandoned)
 
-  const { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({
+  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({
     allAfterOrgs, persons, allocationList,
   })
 
-  const {
-    expandedNodes, setExpandedNodes,
-    reportLineRootId, setReportLineRootId,
-    isReportLineInternalSelect,
-    rlRootManagerId, rlRootPersonInfo,
-  } = useReportLine({ allocationList, personBySfId, afterOrgByCode, canvasMode, selectedPersonId })
-
   // ── UI state ───────────────────────────────────────────────────
-  const [contextMenu,         setContextMenu]         = useState<{ x: number; y: number; personId: string } | null>(null)
-  const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
-  const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
-  const [isSelectMode,        setIsSelectMode]        = useState(false)
-  const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set())
-  const [moveModalOpen,     setMoveModalOpen]     = useState(false)
-  const [bulkActionModal,   setBulkActionModal]   = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
+  const [confirmDialog,      setConfirmDialog]      = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [fieldPickerOpen,    setFieldPickerOpen]    = useState(false)
+  const [isSelectMode,       setIsSelectMode]       = useState(false)
+  const [selectedPersonIds,  setSelectedPersonIds]  = useState<Set<string>>(new Set())
+  const [moveModalOpen,      setMoveModalOpen]      = useState(false)
+  const [bulkActionModal,    setBulkActionModal]    = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
   const [changeTitleRowId,   setChangeTitleRowId]   = useState<number | null>(null)
   const [secondmentInModal,  setSecondmentInModal]  = useState<{
     orgId: string; orgCode: string; sfIntegrated: boolean; concurrent: boolean
   } | null>(null)
-  // rowContextMenu と activePatternDialog は PersonOperationPanel に統合したため廃止
-  // （後方互換のため宣言は残すが、新フローでは使わない）
   const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
 
   // ── Hooks ──────────────────────────────────────────────────────
-  // selectPerson をラップしてチャットコンテキストも更新（案1: クリックで全クリア→1件）
   const handleSelectPerson = useCallback((personId: string) => {
     selectPerson(personId)
     const p = persons.find(q => q.id === personId)
@@ -138,8 +116,6 @@ export function OrgOperationView() {
   const handleRowDoubleClick = useCallback((e: React.MouseEvent, rowId: number) => {
     e.preventDefault(); e.stopPropagation()
     if (isHistoryPreviewMode) return
-
-    // 別行の操作パネルが開いている場合は確認
     if (operationPanelRowId !== null && operationPanelRowId !== rowId) {
       setConfirmDialog({
         message: '別の行の操作パネルが開いています。切り替えますか？（変更は保持されます）',
@@ -149,12 +125,6 @@ export function OrgOperationView() {
     }
     enterOperationPanel(rowId)
   }, [isHistoryPreviewMode, operationPanelRowId, enterOperationPanel])
-
-  const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
-    e.preventDefault(); e.stopPropagation()
-    selectPerson(personId)
-    setContextMenu({ x: e.clientX, y: e.clientY, personId })
-  }
 
   const handleDropPositionOnPosition = (e: React.DragEvent, targetRowId: number) => {
     e.preventDefault(); e.stopPropagation()
@@ -166,17 +136,15 @@ export function OrgOperationView() {
     const targetRow = allocationList.find(r => r.rowId === targetRowId)
     if (!sourceRow?.positionCode || !targetRow?.positionCode) return
 
-    // 循環チェック: target が source の子孫なら設定しない
     const mgrCodeByPosCode = new Map(
       allocationList.filter(r => r.positionCode).map(r => [r.positionCode!, r.managerPositionCode])
     )
     let cur: string | undefined = targetRow.managerPositionCode
     const seen = new Set<string>()
     while (cur && !seen.has(cur)) {
-      if (cur === sourceRow.positionCode) return  // cycle
+      if (cur === sourceRow.positionCode) return
       seen.add(cur); cur = mgrCodeByPosCode.get(cur)
     }
-
     appService.executeOperation(new SetPositionManagerOperation(data.fromRowId, targetRow.positionCode))
   }
 
@@ -215,33 +183,6 @@ export function OrgOperationView() {
     enterEditMode(newRowId)
   }
 
-  // ── Early returns ──────────────────────────────────────────────
-  // 比較モード時は focusedOrgId がなくても ComparisonCanvas を表示する
-  if (!focusedOrgId && !comparisonMode) {
-    return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        ← 左の組織ツリーから組織を選択してください
-      </div>
-    )
-  }
-
-  const focusedOrg = focusedOrgId ? organizations.find(o => o.id === focusedOrgId) : null
-  if (focusedOrgId && !focusedOrg && !comparisonMode) return null
-
-  const buildBreadcrumb = (orgId: string): Array<{ id: string; name: string }> => {
-    const path: Array<{ id: string; name: string }> = []
-    let current = organizations.find(o => o.id === orgId)
-    while (current) {
-      path.unshift({ id: current.id, name: current.name })
-      current = current.parentId ? organizations.find(o => o.id === current!.parentId) : undefined
-    }
-    return path
-  }
-
-  const breadcrumb = focusedOrgId ? buildBreadcrumb(focusedOrgId) : []
-  const parentOrg  = focusedOrg?.parentId ? organizations.find(o => o.id === focusedOrg!.parentId) : null
-  const childOrgs  = focusedOrgId ? organizations.filter(o => o.parentId === focusedOrgId) : []
-
   const previewLabel = historyPreviewPosition !== null
     ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '')
     : ''
@@ -261,7 +202,8 @@ export function OrgOperationView() {
     isHistoryPreviewMode,
     handlePersonDoubleClick, handleRowDoubleClick,
     handleDropPositionOnPosition, handleReorderRow,
-    expandedChipIds, toggleChip,
+    expandedChipIds: new Set(),
+    toggleChip:      () => {},
   }
 
   return (
@@ -269,67 +211,15 @@ export function OrgOperationView() {
       <div className="flex flex-col h-full overflow-hidden" onDragEnd={() => setDragOverOrgId(null)}>
 
         {/* Header */}
-        <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
-          {comparisonMode ? (
-            <>
-              <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">比較モード</span>
-              <span className="text-xs text-gray-400 flex-1">旧→新の変化を表示中</span>
-            </>
-          ) : canvasMode === 'レポートライン' ? (
-            <>
-              <button
-                onClick={() => { if (rlRootManagerId) setReportLineRootId(rlRootManagerId) }}
-                className={`text-xs flex-shrink-0 ${rlRootManagerId ? 'text-gray-500 hover:text-blue-600' : 'text-gray-300 cursor-default'}`}
-              >↑ 上へ</button>
-              <span className="text-gray-300 flex-shrink-0">|</span>
-              <div className="text-xs flex-1 min-w-0 truncate text-gray-700">
-                {rlRootPersonInfo
-                  ? `${rlRootPersonInfo.name}${rlRootPersonInfo.orgName ? ` (${rlRootPersonInfo.orgName})` : ''}`
-                  : <span className="text-gray-400">全体</span>
-                }
-              </div>
-              {reportLineRootId && (
-                <button onClick={() => setReportLineRootId(null)} className="text-xs text-gray-400 hover:text-gray-600 flex-shrink-0">全体</button>
-              )}
-            </>
-          ) : (
-            <>
-              {parentOrg && (
-                <>
-                  <button onClick={() => focusOrg(parentOrg.id)} className="text-xs text-gray-500 hover:text-blue-600 flex-shrink-0">← 上へ</button>
-                  <span className="text-gray-300 flex-shrink-0">|</span>
-                </>
-              )}
-              <div className="flex items-center gap-0.5 text-xs flex-1 min-w-0 overflow-hidden">
-                {breadcrumb.map((crumb, i) => (
-                  <span key={crumb.id} className="flex items-center gap-0.5 flex-shrink-0">
-                    {i > 0 && <span className="text-gray-400">›</span>}
-                    <button onClick={() => focusOrg(crumb.id)} className={`hover:text-blue-600 truncate max-w-24 ${i === breadcrumb.length - 1 ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
-                      {crumb.name}
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </>
+        <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2">
+          {comparisonMode && (
+            <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">比較モード</span>
           )}
+          <div className="flex-1" />
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {!comparisonMode && (
-              <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
-                {(['組織図', 'レポートライン'] as CanvasMode[]).map(mode => (
-                  <button key={mode} onClick={() => setCanvasMode(mode)}
-                    className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${canvasMode === mode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                    {mode}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!comparisonMode && canvasMode === '組織図' && (
               <>
-                <button
-                  onClick={() => setFieldPickerOpen(true)}
-                  className="px-2 py-0.5 text-xs font-medium rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
-                  title="カードに表示するフィールドを設定"
-                >表示設定</button>
+                <DisplayFieldCombobox />
                 <button
                   onClick={() => { setIsSelectMode(m => !m); setSelectedPersonIds(new Set()) }}
                   className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
@@ -400,7 +290,6 @@ export function OrgOperationView() {
                 onRemovePanel={panelId => removeComparisonPanel(panelId)}
                 onRequestMap={beforeOrgId => setPendingMappingBeforeOrgId(beforeOrgId)}
               />
-              {/* 旧→新マッピング用モーダル */}
               <OrgPickerModal
                 open={pendingMappingBeforeOrgId !== null}
                 onClose={() => setPendingMappingBeforeOrgId(null)}
@@ -412,48 +301,9 @@ export function OrgOperationView() {
               />
             </>
           ) : (
-            <div className="h-full overflow-y-auto p-3">
-              {canvasMode === 'レポートライン' ? (
-                <ReportLineView
-                  allocationList={allocationList}
-                  personBySfId={personBySfId}
-                  afterOrgByCode={afterOrgByCode}
-                  organizations={organizations}
-                  persons={persons}
-                  selectedPersonId={selectedPersonId}
-                  selectPerson={selectPerson}
-                  saveRow={saveRow}
-                  handlePersonDoubleClick={handlePersonDoubleClick}
-                  handlePersonContextMenu={handlePersonContextMenu}
-                  reportLineRootId={reportLineRootId}
-                  setReportLineRootId={setReportLineRootId}
-                  rlRootManagerId={rlRootManagerId}
-                  expandedNodes={expandedNodes}
-                  setExpandedNodes={setExpandedNodes}
-                  isReportLineInternalSelect={isReportLineInternalSelect}
-                />
-              ) : focusedOrgId && focusedOrg && childOrgs.length === 0 ? (
-                <OrgBox orgId={focusedOrgId} depth={0} />
-              ) : focusedOrgId && focusedOrg ? (
-                <div className={`border-2 rounded-lg transition-all ${dragOverOrgId === focusedOrgId ? 'border-blue-400 bg-blue-50' : 'border-gray-300 bg-gray-50'}`}>
-                  <div className="px-3 py-2 border-b border-gray-300 bg-gray-100 rounded-t-lg flex items-center gap-1">
-                    <span className="text-sm font-semibold text-gray-700 flex-1">{focusedOrg.name}</span>
-                    <AddPositionButton orgId={focusedOrgId} orgCode={focusedOrg.externalCode ?? focusedOrg.id} />
-                  </div>
-                  <div className="px-3 py-2" onDragOver={e => handleDragOver(e, focusedOrgId)} onDragLeave={handleDragLeave} onDrop={e => handleDrop(e, focusedOrgId)}>
-                    <PositionRows orgId={focusedOrgId} />
-                    <DropZone orgId={focusedOrgId} compact />
-                  </div>
-                  <div className="px-3 pb-3 grid grid-cols-2 gap-3">
-                    {childOrgs.map(c => <OrgBox key={c.id} orgId={c.id} depth={0} />)}
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            <TreeWindowCanvas />
           )}
         </div>
-
-        {/* RowContextMenu は PersonOperationPanel に統合したため不使用 */}
 
         {activePatternDialog?.pattern === 'orgTransfer' && (
           <OrgTransferDialog       rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
@@ -473,18 +323,6 @@ export function OrgOperationView() {
         {(activePatternDialog?.pattern === 'secondmentOutRelease' ||
           activePatternDialog?.pattern === 'secondmentInRelease') && (
           <SecondmentReleaseDialog rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-
-        {contextMenu && (
-          <PersonContextMenu
-            x={contextMenu.x} y={contextMenu.y}
-            personId={contextMenu.personId}
-            persons={persons}
-            canvasMode={canvasMode}
-            onEdit={id => { handlePersonDoubleClick(id) }}
-            onReportRoot={id => { setReportLineRootId(id); setExpandedNodes(prev => new Set([...prev, id])) }}
-            onClose={() => setContextMenu(null)}
-          />
         )}
 
 

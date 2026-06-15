@@ -1,13 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import type { PanelDef }      from '../../../store/canvasLayoutStore'
-import { useStore }           from '../../../store/useStore'
 import { useStripCardData }   from './useStripCardData'
 import { PanelChips }         from './PanelChips'
 import { usePanelDrop }       from './usePanelDrop'
 
 interface Props {
   panel:       PanelDef
-  isActive:    boolean
   isDragging:  boolean
   onDragStart: (e: React.DragEvent) => void
   onDragOver:  (e: React.DragEvent) => void
@@ -17,10 +15,9 @@ interface Props {
 }
 
 export function PanelItem({
-  panel, isActive, isDragging,
+  panel, isDragging,
   onDragStart, onDragOver, onDrop, onDragEnd, onRemove,
 }: Props) {
-  const { focusOrg }  = useStore()
   const { org, orgById, childrenOf, allMembers, subtreeCountByOrg } = useStripCardData(panel.orgId)
 
   const [currentOrgId, setCurrentOrgId] = useState(panel.orgId)
@@ -77,11 +74,9 @@ export function PanelItem({
       onDrop={handleDrop}
       onDragLeave={handleDragLeave}
       onDragEnd={onDragEnd}
-      onClick={() => focusOrg(panel.orgId)}
-      className={`mx-2 mb-1 rounded-lg border-2 cursor-pointer select-none transition-all
-        ${isDragging      ? 'opacity-40' : ''}
-        ${isActive        ? 'border-blue-400 bg-blue-50'
-          : personDragOver ? 'border-green-400 bg-green-50'
+      className={`mx-2 mb-1 rounded-lg border-2 select-none transition-all
+        ${isDragging       ? 'opacity-40' : ''}
+        ${personDragOver   ? 'border-green-400 bg-green-50'
           :                  'border-gray-200 bg-white hover:border-blue-200 hover:bg-gray-50'}`}
     >
       {/* ヘッダー行 */}
@@ -89,7 +84,7 @@ export function PanelItem({
         <span className="text-gray-300 text-[10px] flex-shrink-0 cursor-grab">⠿</span>
         <button
           onClick={e => { e.stopPropagation(); setCurrentOrgId(panel.orgId) }}
-          className={`flex-1 text-xs font-semibold truncate text-left ${isActive ? 'text-blue-700' : 'text-gray-700'}`}
+          className="flex-1 text-xs font-semibold truncate text-left text-gray-700"
           title={org.name}
         >{org.name}</button>
         {!isDrilledDown && childOrgs.length > 0 && (

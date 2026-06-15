@@ -6,6 +6,7 @@ import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
 import { getDescendantOrgIds } from '@personnel/domain/choices/orgTree'
+import { collectTopLevelRelevantOrgIds } from '@personnel/domain/choices/relevantOrgs'
 import type { ImportMode, AssigneeImportMode, MergeResult } from '../application/importMerge'
 import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 import { DEFAULT_SESSION } from '../application/userSession'
@@ -208,9 +209,14 @@ export const useStore = create<AppState>()((set, get) => {
       })
       await save(result.codeLists)
       set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
-      // 新しいデータが読み込まれたらパネル設定をリセット
-      const { clearPanels } = await import('../store/canvasLayoutStore').then(m => ({ clearPanels: m.useCanvasLayoutStore.getState().clearPanels }))
+      // 新しいデータが読み込まれたらパネルをリセットして関連組織を自動追加
+      const { clearPanels, initPanels } = await import('../store/canvasLayoutStore').then(m => ({
+        clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
+        initPanels:  m.useCanvasLayoutStore.getState().initPanels,
+      }))
       clearPanels()
+      const topOrgIds = [...collectTopLevelRelevantOrgIds(result.allocationList, result.afterOrganizations)]
+      initPanels(topOrgIds)
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),
