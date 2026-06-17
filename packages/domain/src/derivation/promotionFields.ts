@@ -1,6 +1,46 @@
 import type { AllCodeLists }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
+/**
+ * 2つのバンド間の昇降格ステップ差を返す（warningLevel の差）。
+ * 正 = 昇格方向、負 = 降格方向、undefined = どちらかのバンドが不明。
+ */
+export function computeBandStepDiff(
+  fromBand: string | undefined,
+  toBand:   string | undefined,
+  codeLists: AllCodeLists,
+): number | undefined {
+  if (!fromBand || !toBand || fromBand === toBand) return undefined
+  const fromLevel = codeLists.jobLevels.find(e => e.label === fromBand)?.promotionDemotionWarningLevel
+  const toLevel   = codeLists.jobLevels.find(e => e.label === toBand)?.promotionDemotionWarningLevel
+  if (!fromLevel || !toLevel) return undefined
+  return toLevel - fromLevel
+}
+
+/**
+ * 現在バンドから指定ステップ数だけ上/下にあるバンドラベル一覧を返す。
+ * steps=1 なら「1段上のバンドのみ」、steps=2 なら「1〜2段上」。
+ */
+export function getBandsByStep(
+  currentBand: string | undefined,
+  steps:       number,
+  direction:   'up' | 'down',
+  codeLists:   AllCodeLists,
+): string[] {
+  if (!currentBand) return []
+  const baseLevel = codeLists.jobLevels.find(e => e.label === currentBand)?.promotionDemotionWarningLevel
+  if (!baseLevel) return []
+  return codeLists.jobLevels
+    .filter(e => {
+      if (!e.promotionDemotionWarningLevel) return false
+      const diff = e.promotionDemotionWarningLevel - baseLevel
+      return direction === 'up'
+        ? diff >= 1 && diff <= steps
+        : diff <= -1 && diff >= -steps
+    })
+    .map(e => e.label)
+}
+
 /** 給与等級ラベルから数字部分（Level）を抽出する */
 function extractLevelNumber(payGrade: string | undefined): number | undefined {
   if (!payGrade) return undefined

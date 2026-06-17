@@ -22,19 +22,10 @@ export interface ClassificationWidgetData {
 export type ConversationItem = { role: 'user' | 'assistant'; content: string }
 
 export interface PersonInfo {
-  userId: string
+  userId?: string
   name: string
   orgName?: string
   rowIds: number[]
-}
-
-export interface PersonMatch {
-  userId: string
-  name: string
-  currentOrgName?: string
-  rowId: number
-  currentGrade?: string
-  currentPosition?: string
 }
 
 export interface PersonDiff {
@@ -54,15 +45,6 @@ export interface OrgTreeNode {
   children: OrgTreeNode[]
 }
 
-export interface ReportLineMember {
-  userId: string
-  name: string
-  orgName: string
-  isSameOrg: boolean
-  position?: string
-  grade?: string
-}
-
 export interface WizardStep {
   stepNumber:  number
   title:       string
@@ -73,14 +55,9 @@ export interface WizardStep {
 export type ChatWidget =
   | { type: 'file-picker' }
   | { type: 'excel-help' }
-  | { type: 'org-input' }
-  | { type: 'person-input' }
   | { type: 'org-members'; orgName: string; members: PersonInfo[] }
-  | { type: 'promote-confirm'; persons: PersonMatch[] }
   | { type: 'org-tree'; orgName: string; tree: OrgTreeNode }
-  | { type: 'report-line'; managerName: string; managerOrgName: string; members: ReportLineMember[] }
   | { type: 'diff-preview'; persons: PersonDiff[]; label?: string }
-  | { type: 'impact-check'; targetOrgName: string; hasImpact: boolean; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'export-confirm'; changeCount: number; groups: Array<{ orgName: string; persons: PersonDiff[] }> }
   | { type: 'wizard-steps'; title: string; steps: WizardStep[] }
   | { type: 'teach-ai-input'; conversationWindow: ConversationItem[] }
@@ -107,8 +84,19 @@ export interface SelectedRowContext {
   }
 }
 
+/** confirm ツールの確認UIに表示する入力フォームの1フィールド */
+export interface FormInput {
+  field:    string      // フィールドキー（usedValues のキーになる）
+  label:    string      // 表示名
+  value?:   string      // AI が提案した初期値（空なら未入力）
+  required: boolean
+  options?: string[]    // 選択肢がある場合
+}
+
+/** confirm ツールの承認/却下結果。ユーザーが formInputs に入力した値も含む */
 export interface ConfirmResult {
-  approved: boolean
+  approved:    boolean
+  userInputs?: Record<string, string>  // ユーザーが確認・上書きした formInputs の値
 }
 
 export interface ChatMessage {
@@ -124,14 +112,10 @@ export interface ChatMessage {
 }
 
 export interface WidgetCallbacks {
-  onFileSelected:      (file: File) => void
-  onImportCancel:      () => void
-  onOrgNameSubmit:     (name: string) => void
-  onPersonNamesSubmit: (names: string) => void
-  onPromoteConfirm:    () => void
-  onPromoteCancel:     () => void
-  onExportConfirm:     () => void
-  onExportCancel:      () => void
+  onFileSelected:   (file: File) => void
+  onImportCancel:   () => void
+  onExportConfirm:  () => void
+  onExportCancel:   () => void
   // AI feedback (Phase 1 — STEP1 active learning)
   onTeachAI?:               (messageId: string) => void
   onTeachAICancel?:         () => void

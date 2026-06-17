@@ -88,15 +88,29 @@ export function parseSkillMd(raw: string, defaults?: Partial<Skill>): Skill | nu
     ? rawStatus
     : (defaults?.status ?? 'active')
 
+  // risk フィールド
+  const rawRisk = fields['risk']
+  const risk = (rawRisk === 'low' || rawRisk === 'medium' || rawRisk === 'high')
+    ? rawRisk
+    : defaults?.risk
+
+  // requires-confirmation フィールド
+  const rawConfirm = fields['requires-confirmation']
+  const requiresConfirmation = rawConfirm !== undefined
+    ? rawConfirm === 'true'
+    : defaults?.requiresConfirmation
+
   return {
     slug,
-    name:         displayName,
-    description:  fields['description'] ?? defaults?.description ?? '',
-    instructions: (fmMatch[2] ?? '').trim(),
-    allowedTools: allowedTools.length ? allowedTools : (defaults?.allowedTools ?? []),
+    name:                 displayName,
+    description:          fields['description'] ?? defaults?.description ?? '',
+    instructions:         (fmMatch[2] ?? '').trim(),
+    allowedTools:         allowedTools.length ? allowedTools : (defaults?.allowedTools ?? []),
+    risk,
+    requiresConfirmation,
     status,
-    isBuiltin:    defaults?.isBuiltin ?? false,
-    updatedAt:    defaults?.updatedAt ?? new Date().toISOString(),
+    isBuiltin:            defaults?.isBuiltin ?? false,
+    updatedAt:            defaults?.updatedAt ?? new Date().toISOString(),
   }
 }
 
@@ -109,11 +123,16 @@ export function toSkillMd(skill: Skill): string {
     ? `allowed-tools: ${skill.allowedTools.join(' ')}\n`
     : ''
 
+  const riskLine                = skill.risk ? `risk: ${skill.risk}\n` : ''
+  const requiresConfirmationLine = skill.requiresConfirmation !== undefined
+    ? `requires-confirmation: ${skill.requiresConfirmation}\n`
+    : ''
+
   return [
     '---',
     `name: ${skill.slug}`,
     `description: ${skill.description}`,
-    allowedToolsLine + 'metadata:',
+    riskLine + requiresConfirmationLine + allowedToolsLine + 'metadata:',
     ...metaLines,
     '---',
     '',

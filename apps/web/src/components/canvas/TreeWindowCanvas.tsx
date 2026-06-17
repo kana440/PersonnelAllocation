@@ -16,18 +16,23 @@ const MARGIN    = 40    // キャンバス周囲の余白
 // スタンドアロン = キャンバス上に独立ウィンドウとして描画されるべきパネル
 // ・root 組織（parentId なし）は常にスタンドアロン
 // ・子組織は「親が windowed モード AND 自身 open AND 親もスタンドアロン」のとき
+// ancestors: 循環参照ガード（組織データに A→B→A のような循環があっても stack overflow しない）
 function isStandaloneWindow(
   panel: PanelDef,
   allPanels: PanelDef[],
   orgs: Organization[],
+  ancestors = new Set<string>(),
 ): boolean {
+  if (ancestors.has(panel.id)) return true  // 循環 → standalone 扱い
   const org = orgs.find(o => o.id === panel.orgId)
   if (!org?.parentId) return true  // root org
   const parentPanel = allPanels.find(p => p.orgId === org.parentId)
   if (!parentPanel) return true    // 親パネルなし → root 扱い
+  const next = new Set(ancestors)
+  next.add(panel.id)
   return parentPanel.childrenMode === 'windowed'
     && panel.open
-    && isStandaloneWindow(parentPanel, allPanels, orgs)
+    && isStandaloneWindow(parentPanel, allPanels, orgs, next)
 }
 
 // ── 整列レイアウト計算 ─────────────────────────────────────────────
@@ -49,10 +54,13 @@ function computeLayout(
       return org?.parentId === p.orgId
     })
 
-  const subtreeW = (p: PanelDef): number => {
+  const subtreeW = (p: PanelDef, ancestors = new Set<string>()): number => {
+    if (ancestors.has(p.id)) return WINDOW_W  // 循環ガード
+    const next = new Set(ancestors)
+    next.add(p.id)
     const children = getChildren(p)
     if (children.length === 0) return WINDOW_W
-    const childTotal = children.reduce((s, c, i) => s + subtreeW(c) + (i ? H_GAP : 0), 0)
+    const childTotal = children.reduce((s, c, i) => s + subtreeW(c, next) + (i ? H_GAP : 0), 0)
     return Math.max(WINDOW_W, childTotal)
   }
 

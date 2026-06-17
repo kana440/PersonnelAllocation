@@ -12,6 +12,8 @@ import {
   concurrentAddDef, concurrentReleaseDef,
   demotionDef,
 } from '@personnel/domain/commands/defs'
+import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
+import { deriveFieldUpdates } from '@personnel/domain/derivation'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import type { ValidationIssue } from '@personnel/domain/validation/types'
@@ -157,17 +159,35 @@ export function createWriteMethods(service: HRApplicationService) {
   function executeBulkTransfer(
     sourceOrgCode: string,
     targetOrgCode: string,
+    options?: { includeSubtree?: boolean },
   ): { applied: boolean; sourceOrgName: string; targetOrgName: string } | { ok: false; error: string } {
     const { afterOrganizations } = service.getSnapshot()
-    const sourceOrg = afterOrganizations.find(o => o.externalCode === sourceOrgCode || o.id === sourceOrgCode)
     const targetOrg = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
-    if (!sourceOrg) return { ok: false, error: '移動元組織が見つかりません' }
     if (!targetOrg) return { ok: false, error: '移動先組織が見つかりません' }
-    const label  = `${sourceOrg.name} 全員 → ${targetOrg.name} 一括異動`
-    const result = service.executeOperation(new BulkMoveToOrgOperation(sourceOrg.id, targetOrg.id, label))
-    return result.ok
-      ? { applied: true, sourceOrgName: sourceOrg.name, targetOrgName: targetOrg.name }
-      : { ok: false, error: result.errors?.[0]?.message ?? 'エラー' }
+
+    let sourceOrgIds: string[]
+    let sourceOrgName: string
+    if (options?.includeSubtree) {
+      const view = buildFlatOrgView(afterOrganizations)
+      const root = view.find(e => e.orgCode === sourceOrgCode)
+      if (!root) return { ok: false, error: '移動元組織が見つかりません' }
+      const allCodes = new Set([root.orgCode, ...root.descendantCodes])
+      sourceOrgIds  = afterOrganizations.filter(o => allCodes.has(o.externalCode ?? o.id)).map(o => o.id)
+      sourceOrgName = `${root.orgName}（配下含む）`
+    } else {
+      const sourceOrg = afterOrganizations.find(o => o.externalCode === sourceOrgCode || o.id === sourceOrgCode)
+      if (!sourceOrg) return { ok: false, error: '移動元組織が見つかりません' }
+      sourceOrgIds  = [sourceOrg.id]
+      sourceOrgName = sourceOrg.name
+    }
+
+    for (const sourceOrgId of sourceOrgIds) {
+      const sourceOrg = afterOrganizations.find(o => o.id === sourceOrgId)!
+      service.executeOperation(
+        new BulkMoveToOrgOperation(sourceOrgId, targetOrg.id, `${sourceOrg.name} 全員 → ${targetOrg.name} 一括異動`)
+      )
+    }
+    return { applied: true, sourceOrgName, targetOrgName: targetOrg.name }
   }
 
   // propose_field_edit で変更を許可するフィールドと表示ラベル。
@@ -196,18 +216,17 @@ export function createWriteMethods(service: HRApplicationService) {
 
   /** ALLOWED_FIELDS 以外のフィールドはエラーを返す（セキュリティゲート）。 */
   function executeFieldEdit(
-    userId: string,
-    field:  string,
-    value:  string,
+    rowId: number,
+    field: string,
+    value: string,
   ): { applied: boolean; name: string; field: string; value: string } | { ok: false; error: string } {
     if (!FIELD_EDIT_LABELS[field]) return { ok: false, error: `フィールド "${field}" は編集できません` }
-    const rows    = service.getSnapshot().allocationList.filter(r => r.userId === userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return { ok: false, error: 'ユーザーが見つかりません' }
-    const name    = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
+    const row = service.getSnapshot().allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, error: '行が見つかりません' }
+    const name    = [row.lastName, row.firstName].filter(Boolean).join(' ')
     const changes = { [field]: value || undefined } as AfterValues
     const label   = `${name} ${FIELD_EDIT_LABELS[field]}: ${value || '（削除）'}`
-    const result  = service.executeOperation(new DirectEditOperation(primary.rowId, changes, label))
+    const result  = service.executeOperation(new DirectEditOperation(rowId, changes, label))
     return result.ok
       ? { applied: true, name, field: FIELD_EDIT_LABELS[field], value }
       : { ok: false, error: result.errors?.[0]?.message ?? 'エラー' }
@@ -233,10 +252,32 @@ export function createWriteMethods(service: HRApplicationService) {
     return { applied: true, appliedCount, failedCount }
   }
 
+  function resolveTransferRowIds(filter: { name?: string; subtreeOrgCode?: string }): number[] {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+    let subtreeCodes: Set<string> | null = null
+    if (filter.subtreeOrgCode) {
+      const view = buildFlatOrgView(afterOrganizations)
+      const root = view.find(e => e.orgCode === filter.subtreeOrgCode)
+      if (root) subtreeCodes = new Set([root.orgCode, ...root.descendantCodes])
+    }
+    return allocationList
+      .filter(row => {
+        if (!row.userId && !row.lastName && !row.firstName) return false
+        if (filter.name) {
+          const name = [row.lastName, row.firstName].filter(Boolean).join(' ')
+          if (!name.includes(filter.name)) return false
+        }
+        if (subtreeCodes && !subtreeCodes.has(row.departmentCode ?? '')) return false
+        return true
+      })
+      .map(r => r.rowId)
+  }
+
   function executeTransferPersons(
-    userIds:       string[],
-    targetOrgCode: string,
-  ): { applied: number; targetOrgName: string; errors?: string[] } | { ok: false; error: string } {
+    rowIds:          number[],
+    targetOrgCode:   string,
+    transferReason?: string,
+  ): { applied: number; targetOrgName: string; transferReason?: string; errors?: string[] } | { ok: false; error: string } {
     const { afterOrganizations, allocationList } = service.getSnapshot()
     const targetOrg = afterOrganizations.find(
       o => o.externalCode === targetOrgCode || o.id === targetOrgCode
@@ -245,53 +286,80 @@ export function createWriteMethods(service: HRApplicationService) {
 
     let applied = 0
     const errors: string[] = []
-    for (const userId of userIds) {
-      const rows    = allocationList.filter(r => r.userId === userId)
-      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-      if (!primary) continue
-      const result = service.executeOperation(
-        new TransferPersonOperation(primary.rowId, targetOrg.id, false)
-      )
-      if (result.ok) applied++
-      else errors.push(result.errors?.[0]?.message ?? 'エラー')
+    for (const rowId of rowIds) {
+      const row = allocationList.find(r => r.rowId === rowId)
+      if (!row) continue
+      const result = service.executeOperation(new TransferPersonOperation(rowId, targetOrg.id, false))
+      if (result.ok) {
+        applied++
+        // transferReason が指定されていれば別途 DirectEdit で設定
+        if (transferReason) {
+          service.saveRow(rowId, { transferReason } as AfterValues)
+        }
+      } else {
+        errors.push(result.errors?.[0]?.message ?? 'エラー')
+      }
     }
 
     if (applied === 0) return { ok: false, error: errors[0] ?? '対象行が見つかりません' }
-    return { applied, targetOrgName: targetOrg.name, errors: errors.length ? errors : undefined }
+    return { applied, targetOrgName: targetOrg.name, transferReason, errors: errors.length ? errors : undefined }
   }
 
-  function executeSetPromotion(userIds: string[]): { applied: number; total: number } {
-    const { allocationList } = service.getSnapshot()
-    let applied = 0
-    for (const userId of userIds) {
-      const rows    = allocationList.filter(r => r.userId === userId)
-      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-      if (!primary) continue
-      const name   = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
-      const result = service.executeOperation(
-        new DirectEditOperation(primary.rowId, { promotionSign: '1' }, `${name} 昇格`)
-      )
-      if (result.ok) applied++
+  /**
+   * 昇格実行: positionBand → band（社員のみ連動）→ payGrade（自動導出）の連鎖を実行する。
+   * officialPositionCode / localJobTitle が指定されれば同時に変更する。
+   */
+  function executePromotion(opts: {
+    rowId:                    number
+    newPositionBand:          string
+    newOfficialPositionCode?: string
+    newLocalJobTitle?:        string
+  }): { ok: true; name: string; diff: Record<string, { before: string | undefined; after: string | undefined }> } | { ok: false; error: string } {
+    const { allocationList, codeLists } = service.getSnapshot()
+    const row = allocationList.find(r => r.rowId === opts.rowId)
+    if (!row) return { ok: false, error: '対象行が見つかりません' }
+
+    const changes: Partial<AllocationRow> = { positionBand: opts.newPositionBand }
+
+    // positionBand → band（社員なら連動）→ payGrade は deriveFieldUpdates が一括処理
+    const derived = deriveFieldUpdates(changes as AfterValues, row, codeLists, allocationList)
+    Object.assign(changes, derived)
+
+    if (opts.newOfficialPositionCode !== undefined) changes.officialPositionCode = opts.newOfficialPositionCode
+    if (opts.newLocalJobTitle        !== undefined) changes.localJobTitle        = opts.newLocalJobTitle
+
+    const name   = [row.lastName, row.firstName].filter(Boolean).join(' ')
+    const result = service.executeOperation(
+      new DirectEditOperation(opts.rowId, changes as AfterValues, `${name} 昇格`)
+    )
+    if (!result.ok) return { ok: false, error: result.errors?.[0]?.message ?? 'エラー' }
+
+    // LLM に実際の変更内容を返す
+    const diff: Record<string, { before: string | undefined; after: string | undefined }> = {}
+    for (const [field, after] of Object.entries(changes)) {
+      const before = (row as Record<string, unknown>)[field] as string | undefined
+      if (String(before ?? '') !== String(after ?? '')) {
+        diff[field] = { before, after: after as string | undefined }
+      }
     }
-    return { applied, total: userIds.length }
+    return { ok: true, name, diff }
   }
 
   function executeChangePosition(
-    userId:      string,
+    rowId:       number,
     newJobTitle: string,
   ): { applied: boolean; newJobTitle: string; orgName: string } | { ok: false; error: string } {
     const { allocationList, afterOrganizations } = service.getSnapshot()
-    const rows    = allocationList.filter(r => r.userId === userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return { ok: false, error: '対象行が見つかりません' }
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, error: '対象行が見つかりません' }
 
     const targetOrg = afterOrganizations.find(
-      o => o.externalCode === primary.departmentCode || o.id === primary.departmentCode
+      o => o.externalCode === row.departmentCode || o.id === row.departmentCode
     )
     if (!targetOrg) return { ok: false, error: '所属組織が見つかりません' }
 
     const result = service.executeOperation(
-      new TransferPersonOperation(primary.rowId, targetOrg.id, true, { localJobTitle: newJobTitle })
+      new TransferPersonOperation(rowId, targetOrg.id, true, { localJobTitle: newJobTitle })
     )
     return result.ok
       ? { applied: true, newJobTitle, orgName: targetOrg.name }
@@ -303,19 +371,6 @@ export function createWriteMethods(service: HRApplicationService) {
   function executeOrgTransfer(rowId: number, departmentCode: string): AIOperationResult {
     const beforeList = service.getSnapshot().allocationList
     const result     = service.executeOrgTransfer(rowId, departmentCode)
-    if (!result.ok) return result
-    return { ok: true, postValidation: runPostValidation(beforeList) }
-  }
-
-  function executePromotion(rowId: number, fields: {
-    officialPositionCode?: string
-    localJobTitle?:        string
-    positionBand?:         string
-    band?:                 string
-    payGrade?:             string
-  }): AIOperationResult {
-    const beforeList = service.getSnapshot().allocationList
-    const result     = service.executePromotion(rowId, fields)
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
@@ -360,16 +415,15 @@ export function createWriteMethods(service: HRApplicationService) {
   // ── Tier 2 operations ────────────────────────────────────────────────────
 
   function executeLeaveOfAbsence(
-    userId: string,
-    memo?:  string,
+    rowId: number,
+    memo?: string,
   ): AIOperationResult {
     const { allocationList } = service.getSnapshot()
-    const rows    = allocationList.filter(r => r.userId === userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, errors: [{ message: '行が見つかりません' }] }
     const beforeList = allocationList
     const result = service.executeOperation(
-      bindOperation(leaveOfAbsenceDef, primary.rowId, {
+      bindOperation(leaveOfAbsenceDef, rowId, {
         leaveOfAbsenceSign: '1',
         transferReason: '【個別対応】4/1付休職・復職',
         ...(memo !== undefined ? { memo } : {}),
@@ -379,14 +433,13 @@ export function createWriteMethods(service: HRApplicationService) {
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
-  function executeReturnFromLeave(userId: string): AIOperationResult {
+  function executeReturnFromLeave(rowId: number): AIOperationResult {
     const { allocationList } = service.getSnapshot()
-    const rows    = allocationList.filter(r => r.userId === userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, errors: [{ message: '行が見つかりません' }] }
     const beforeList = allocationList
     const result = service.executeOperation(
-      bindOperation(returnFromLeaveDef, primary.rowId, {
+      bindOperation(returnFromLeaveDef, rowId, {
         transferReason: '【個別対応】4/1付休職・復職',
       })
     )
@@ -395,19 +448,18 @@ export function createWriteMethods(service: HRApplicationService) {
   }
 
   function executeConcurrentAdd(
-    userId:          string,
-    targetOrgCode:   string,
+    rowId:             number,
+    targetOrgCode:     string,
     concurrentReason?: string,
   ): AIOperationResult {
     const { allocationList, afterOrganizations } = service.getSnapshot()
-    const rows    = allocationList.filter(r => r.userId === userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, errors: [{ message: '行が見つかりません' }] }
     const org = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
     if (!org) return { ok: false, errors: [{ message: '兼務先組織が見つかりません' }] }
     const beforeList = allocationList
     const result = service.executeOperation(
-      bindOperation(concurrentAddDef, primary.rowId, {
+      bindOperation(concurrentAddDef, rowId, {
         departmentCode: org.id,
         concurrentReason,
       })
@@ -416,35 +468,27 @@ export function createWriteMethods(service: HRApplicationService) {
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
-  function executeConcurrentRelease(
-    userId:      string,
-    targetOrgCode?: string,
-  ): AIOperationResult {
+  function executeConcurrentRelease(rowId: number): AIOperationResult {
     const { allocationList } = service.getSnapshot()
-    const concurrentRows = allocationList.filter(
-      r => r.userId === userId && r.concurrentType === '兼務' && !r.secondmentToCompany && !r.secondmentFromCompany
-    )
-    let targetRow = concurrentRows[0]
-    if (targetOrgCode && concurrentRows.length > 1) {
-      targetRow = concurrentRows.find(r => r.departmentCode === targetOrgCode) ?? targetRow
-    }
-    if (!targetRow) return { ok: false, errors: [{ message: '解除対象の社内兼務行が見つかりません' }] }
+    const targetRow = allocationList.find(r => r.rowId === rowId)
+    if (!targetRow) return { ok: false, errors: [{ message: '対象行が見つかりません' }] }
+    if (targetRow.concurrentType !== '兼務')
+      return { ok: false, errors: [{ message: '社内兼務行ではありません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(bindOperation(concurrentReleaseDef, targetRow.rowId, {}))
+    const result = service.executeOperation(bindOperation(concurrentReleaseDef, rowId, {}))
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
   function executeDemotionForUser(
-    userId: string,
+    rowId:  number,
     fields: { officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
   ): AIOperationResult {
     const { allocationList } = service.getSnapshot()
-    const rows    = allocationList.filter(r => r.userId === userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return { ok: false, errors: [{ message: 'ユーザーが見つかりません' }] }
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, errors: [{ message: '行が見つかりません' }] }
     const beforeList = allocationList
-    const result = service.executeOperation(bindOperation(demotionDef, primary.rowId, fields))
+    const result = service.executeOperation(bindOperation(demotionDef, rowId, fields))
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
@@ -472,8 +516,8 @@ export function createWriteMethods(service: HRApplicationService) {
     setManagerPosition,
     reDeriveManagerNames, reDeriveOrgSubFields,
     executeBulkTransfer, executeFieldEdit, executeBulkSetField,
-    executeTransferPersons, executeSetPromotion, executeChangePosition,
-    executeOrgTransfer, executePromotion, executeJobTypeChange,
+    resolveTransferRowIds, executeTransferPersons, executePromotion, executeChangePosition,
+    executeOrgTransfer, executeJobTypeChange,
     executeResignation, executeVacantPositionMove, executeSecondmentRelease,
     executeLeaveOfAbsence, executeReturnFromLeave,
     executeConcurrentAdd, executeConcurrentRelease, executeDemotionForUser,

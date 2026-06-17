@@ -3,21 +3,14 @@ import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
 import { useSkillStore } from '../../store/skillStore'
 import { aiTools } from '../../application/aiTools'
-import { appService } from '../../application/HRApplicationService'
 import { ChatSession, buildSystemPrompt, type SessionState } from '../../application/chatSession'
-import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { mockApiService } from '../../infrastructure/ai/chatServiceFactory'
 import type { AgentRunner, SkillToolEntry } from '../../infrastructure/ai/agentRunner'
 import type { InMemoryTraceObserver } from '../../infrastructure/ai/aiTrace'
-import { importExcelScenario }        from '../../infrastructure/ai/scenarios/importExcel'
-import { excelHelpScenario }          from '../../infrastructure/ai/scenarios/excelHelp'
-import { checkOrgMembersScenario }    from '../../infrastructure/ai/scenarios/checkOrgMembers'
-import { checkDepartmentScenario, buildOrgTree } from '../../infrastructure/ai/scenarios/checkDepartment'
-import { reportLineScenario, buildReportLineMembers } from '../../infrastructure/ai/scenarios/reportLine'
-import { promotePersonsScenario }     from '../../infrastructure/ai/scenarios/promotePersons'
-import { checkImpactScenario, buildImpactGroups } from '../../infrastructure/ai/scenarios/checkImpact'
-import { exportExcelScenario, buildExportChangeSummary } from '../../infrastructure/ai/scenarios/exportExcel'
-import type { ChatWidget, ClassificationWidgetData, ConversationItem, ConfirmResult, PersonDiff, WidgetCallbacks } from '../../application/aiTypes'
+import { importFromFile, buildExportBuffer } from '../../infrastructure/excel/engine'
+import { toAllocationRows } from '../../infrastructure/allocationListMapper'
+import { buildExportChangeSummary } from '../../infrastructure/excel/exportSummary'
+import type { ChatWidget, ClassificationWidgetData, ConversationItem, ConfirmResult, WidgetCallbacks } from '../../application/aiTypes'
 import type { ChatPhase } from '../../store/useChatStore'
 import { feedbackStore, CURRENT_SESSION_ID } from '../../infrastructure/ai/feedback/feedbackStore'
 import { buildClassifierPrompt, parseClassifierOutput } from '../../infrastructure/ai/feedback/correctionClassifier'
@@ -29,37 +22,28 @@ const isAffirmation = (text: string) =>
   AFFIRMATIONS.some(a => text.trim().toLowerCase().includes(a.toLowerCase()))
 
 export const WIDGET_PHASE_MAP: Partial<Record<ChatPhase, ChatWidget['type']>> = {
-  'awaiting-file':            'file-picker',
-  'awaiting-org-name':        'org-input',
-  'awaiting-dept-select':     'org-input',
-  'awaiting-person-names':    'person-input',
-  'awaiting-report-target':   'person-input',
-  'awaiting-promote-confirm': 'diff-preview',
-  'awaiting-impact-org':      'org-input',
-  'awaiting-export-confirm':  'export-confirm',
+  'awaiting-file':           'file-picker',
+  'awaiting-export-confirm': 'export-confirm',
 }
 
 const BUSY_EXEMPT_PHASES: ChatPhase[] = [
-  'idle', 'awaiting-file', 'awaiting-org-name', 'awaiting-dept-select',
-  'awaiting-person-names', 'awaiting-report-target', 'awaiting-promote-confirm',
-  'awaiting-impact-org', 'awaiting-export-confirm',
+  'idle', 'awaiting-file', 'awaiting-export-confirm',
 ]
 
 export function useChatHandlers({
   agentRunner,
-  traceObserver,
 }: {
   agentRunner:    AgentRunner | null
   traceObserver?: InMemoryTraceObserver
 }) {
   const store = useStore()
   const {
-    messages, phase, pendingPersons,
+    messages, phase,
     addMessage, updateMessage,
-    setPhase, setPendingPersons,
+    setPhase,
   } = useChatStore()
 
-  const buildCurrentSystemPrompt = useCallback(() => {
+  const buildCurrentSystemPrompt = useCallback((highlightSkills?: Skill[]) => {
     const { scopeOrgId, afterOrganizations } = useStore.getState()
     const { chatContextRowIds } = useChatStore.getState()
     const { activeSkills } = useSkillStore.getState()
@@ -79,7 +63,6 @@ export function useChatHandlers({
       rowCtxs.length > 0 ? rowCtxs : undefined,
       session,
     )
-    // 学習済み業務ルールをシステムプロンプトに注入
     const learnedRules = feedbackStore.getAppliedRules()
       .filter(r => r.kind === 'learned_rule' && r.isActive)
       .map(r => `- ${r.newContent}`)
@@ -88,7 +71,6 @@ export function useChatHandlers({
       ? `${base}\n\n【学習済み業務ルール】\n${learnedRules}`
       : base
 
-    // スキルのメタデータだけをヒントとして注入（full instructions はツール呼び出し時に渡す）
     if (activeSkills.length === 0) return withRules
     const skillHint = [
       '# 利用可能なスキル',
@@ -98,16 +80,22 @@ export function useChatHandlers({
         `- **${s.name}** (\`skill_${s.slug.replace(/-/g, '_')}\`): ${s.description}`
       ),
     ].join('\n')
-    return `${withRules}\n\n${skillHint}`
+
+    const highlightNote = highlightSkills && highlightSkills.length > 0
+      ? `\n\n【このリクエストに適用するスキル】\n${highlightSkills.map(s => `- ${s.name}`).join('\n')}\nまずこのスキルツールを呼び出してください。`
+      : ''
+
+    return `${withRules}\n\n${skillHint}${highlightNote}`
   }, [])
 
-  const buildSkillEntries = useCallback((): SkillToolEntry[] => {
-    const { activeSkills } = useSkillStore.getState()
-    return activeSkills.map(s => ({
+  /** 指定スキル（未指定時は全アクティブスキル）を SkillToolEntry に変換する。 */
+  const buildSkillEntries = useCallback((skills?: Skill[]): SkillToolEntry[] => {
+    const effectiveSkills = skills ?? useSkillStore.getState().activeSkills
+    return effectiveSkills.map(s => ({
       slug:         s.slug,
       name:         s.name,
       instructions: s.instructions,
-      allowedTools: s.allowedTools,  // SKILL.md の allowed-tools（スキル起動後のツール絞り込み用）
+      allowedTools: s.allowedTools,
       definition: {
         type: 'function' as const,
         function: {
@@ -122,13 +110,16 @@ export function useChatHandlers({
   const chatSession = useMemo(() => new ChatSession(mockApiService), [])
 
   const [isAgentRunning, setIsAgentRunning] = useState(false)
+  /** 直前のターンで使われたパス（Fast / Structured）。透明性表示に使う。 */
+  const [lastRunPath, setLastRunPath] = useState<'fast' | 'structured' | null>(null)
+  /** 直前の Structured Path で選択されたスキル slug。フィードバック送信時に付与する。 */
+  const [lastRunSkills, setLastRunSkills] = useState<string[]>([])
 
   const isBusy = isAgentRunning || !BUSY_EXEMPT_PHASES.includes(phase)
 
-  // Pending confirm: most recent message with llmConfirm set (agent loop awaiting user approval)
   const pendingConfirmMsg = [...messages].reverse().find(m => !!m.llmConfirm) ?? null
 
-const activeWidgetType = WIDGET_PHASE_MAP[phase]
+  const activeWidgetType = WIDGET_PHASE_MAP[phase]
   let activeWidgetMsgId: string | null = null
   if (activeWidgetType) {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -145,23 +136,24 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
 
   // ── unknown query (free text) ─────────────────────────────────────────────────
   const handleUnknownQuery = useCallback(async (text: string) => {
-    // Snapshot before adding the new message — chatSession.send / agentRunner.run
-    // both append the user text themselves when building the API payload.
     const snapshot = useChatStore.getState().messages.filter(m => !m.isLoading)
     addMessage({ role: 'user', text })
     const id = addAILoading()
 
-    // confirm ツールが呼ばれたとき、ローディングバブルを確認ウィジェットに切り替え、
-    // ユーザーが操作するまで agentRunner のループを Promise で停止する。
-    const onConfirm = (widget: ChatWidget): Promise<ConfirmResult> =>
+    const onConfirm = (proposal: { widget: ChatWidget; formInputs?: import('../../application/aiTypes').FormInput[] }): Promise<ConfirmResult> =>
       new Promise(resolve => {
         updateMessage(id, {
           isLoading:  false,
           text:       '以下の内容を確認してください。',
-          widget,
+          widget:     proposal.widget,
           llmConfirm: () => {
             updateMessage(id, { isLoading: true, text: '適用中...', widget: undefined, llmConfirm: undefined, llmCancel: undefined })
-            resolve({ approved: true })
+            // formInputs の現在値を userInputs として収集（初期値をそのまま使用）
+            const userInputs = proposal.formInputs?.reduce<Record<string, string>>((acc, f) => {
+              if (f.value != null) acc[f.field] = f.value
+              return acc
+            }, {})
+            resolve({ approved: true, userInputs })
           },
           llmCancel: () => {
             updateMessage(id, { isLoading: true, text: 'キャンセル処理中...', widget: undefined, llmConfirm: undefined, llmCancel: undefined })
@@ -172,35 +164,93 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
 
     setIsAgentRunning(true)
     try {
-      let replyText: string
+      let replyText   = ''
       let replyWidget: ChatWidget | undefined
+      let runPath: 'fast' | 'structured' = 'fast'
+      let runSkills: string[] = []
+      let runToolCallNames: string[] = []
+
       if (agentRunner) {
-        const result = await agentRunner.run(snapshot, text, {
-          onProgress:   (label: string) => updateMessage(id, { text: label }),
+        const systemPrompt = buildCurrentSystemPrompt()
+
+        // ── Step 1: Fast Path ────────────────────────────────────────────────
+        const fastResult = await agentRunner.runFastPath(snapshot, text, {
+          onProgress: (label) => updateMessage(id, { text: label }),
           onConfirm,
-          systemPrompt: buildCurrentSystemPrompt(),
-          skillEntries: buildSkillEntries(),
+          systemPrompt,
         })
-        replyText   = result.text
-        replyWidget = result.widget
+        runToolCallNames = fastResult.toolCallNames
+
+        if (fastResult.kind === 'final') {
+          runPath     = 'fast'
+          replyText   = fastResult.text
+          replyWidget = fastResult.widget
+
+        } else {
+          // ── Step 2: Structured Path ───────────────────────────────────────
+          runPath = 'structured'
+          const frame = fastResult.frame
+
+          const { activeSkills } = useSkillStore.getState()
+          const candidateSlugs   = frame.skillCandidates ?? []
+          const matchedSkills    = candidateSlugs.length > 0
+            ? activeSkills.filter(s => candidateSlugs.includes(s.slug))
+            : []
+          runSkills = matchedSkills.map(s => s.slug)
+
+          const structuredSystemPrompt = buildCurrentSystemPrompt(matchedSkills)
+          const skillEntries           = buildSkillEntries(
+            matchedSkills.length > 0 ? matchedSkills : undefined
+          )
+
+          updateMessage(id, { text: '詳細な手順で処理中...' })
+
+          const structuredResult = await agentRunner.run(snapshot, text, {
+            onProgress: (label) => updateMessage(id, { text: label }),
+            onConfirm,
+            systemPrompt: structuredSystemPrompt,
+            skillEntries,
+          })
+          replyText        = structuredResult.text
+          replyWidget      = structuredResult.widget
+          runToolCallNames = [...runToolCallNames, ...structuredResult.toolCallNames]
+        }
+
+        setLastRunPath(runPath)
+        setLastRunSkills(runSkills)
+
+        feedbackStore.saveRunLog({
+          id:          `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+          sessionId:   CURRENT_SESSION_ID,
+          userMessage: text,
+          path:        runPath,
+          selectedSkills:  runSkills.length > 0        ? runSkills        : undefined,
+          toolCallNames:   runToolCallNames.length > 0 ? runToolCallNames : undefined,
+          finalResponse:   replyText,
+          createdAt:   Date.now(),
+        })
+
       } else {
-        // Mock / fallback
         replyText = await chatSession.send(snapshot, text)
       }
+
       updateMessage(id, { isLoading: false, text: replyText, widget: replyWidget, llmConfirm: undefined, llmCancel: undefined })
     } catch (err) {
       updateMessage(id, { isLoading: false, text: `エラーが発生しました: ${String(err)}`, llmConfirm: undefined, llmCancel: undefined })
     } finally {
       setIsAgentRunning(false)
     }
-  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession, setIsAgentRunning, traceObserver])
+  }, [addMessage, addAILoading, updateMessage, agentRunner, chatSession, setIsAgentRunning, buildCurrentSystemPrompt, buildSkillEntries])
 
   // ── import Excel ──────────────────────────────────────────────────────────────
   const startImportExcel = useCallback(async () => {
     addMessage({ role: 'user', text: 'Excelをインポートして開始' })
     const id = addAILoading()
-    const text = await importExcelScenario.initialMessage()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'file-picker' } })
+    updateMessage(id, {
+      isLoading: false,
+      text: 'Excelファイルを選択してください。要員配置リスト・組織CD一覧・各種TBLシートが含まれたファイルに対応しています。',
+      widget: { type: 'file-picker' },
+    })
     setPhase('awaiting-file')
   }, [addMessage, addAILoading, updateMessage, setPhase])
 
@@ -215,11 +265,17 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     addMessage({ role: 'user', text: `📎 ${file.name}` })
     const id = addAILoading()
     try {
-      const result = await importExcelScenario.loadFile(file, msg => updateMessage(id, { text: msg }))
+      const result = await importFromFile(file, msg => updateMessage(id, { text: msg }))
       await store.loadExcelData(result)
-      updateMessage(id, { isLoading: false, text: importExcelScenario.successMessage(result) })
+      updateMessage(id, {
+        isLoading: false,
+        text: `読み込みが完了しました。\n\n• 要員データ: ${result.allocationRowCount.toLocaleString()} 件\n• 組織データ: ${result.orgEntries.length} 件\n\n続けて操作を選択してください。`,
+      })
     } catch (e) {
-      updateMessage(id, { isLoading: false, text: importExcelScenario.errorMessage(e) })
+      updateMessage(id, {
+        isLoading: false,
+        text: `読み込みエラーが発生しました: ${String(e)}\n別のファイルで試してください。`,
+      })
     }
     setPhase('idle')
   }, [addMessage, addAILoading, updateMessage, setPhase, store])
@@ -228,201 +284,12 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
   const startExcelHelp = useCallback(async () => {
     addMessage({ role: 'user', text: 'Excelについて聞く' })
     const id = addAILoading()
-    const text = await excelHelpScenario.message()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'excel-help' } })
+    updateMessage(id, {
+      isLoading: false,
+      text: '対応しているExcelファイルの形式は以下の通りです。',
+      widget: { type: 'excel-help' },
+    })
     setPhase('idle')
-  }, [addMessage, addAILoading, updateMessage, setPhase])
-
-  // ── check org members (legacy) ────────────────────────────────────────────────
-  const startCheckOrgMembers = useCallback(async () => {
-    addMessage({ role: 'user', text: '組織のメンバーを確認する' })
-    const id = addAILoading()
-    const text = await checkOrgMembersScenario.promptMessage()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'org-input' } })
-    setPhase('awaiting-org-name')
-  }, [addMessage, addAILoading, updateMessage, setPhase])
-
-  // ── check department (org tree) ───────────────────────────────────────────────
-  const startCheckDepartment = useCallback(async () => {
-    addMessage({ role: 'user', text: '担当部門を確認する' })
-    const id = addAILoading()
-    const text = await checkDepartmentScenario.promptMessage()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'org-input' } })
-    setPhase('awaiting-dept-select')
-  }, [addMessage, addAILoading, updateMessage, setPhase])
-
-  // ── report line ───────────────────────────────────────────────────────────────
-  const startReportLine = useCallback(async () => {
-    addMessage({ role: 'user', text: 'レポートラインを確認する' })
-    const id = addAILoading()
-    const text = await reportLineScenario.promptMessage()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'person-input' } })
-    setPhase('awaiting-report-target')
-  }, [addMessage, addAILoading, updateMessage, setPhase])
-
-  // ── org-input submit (dispatches by phase) ────────────────────────────────────
-  const handleOrgNameSubmit = useCallback(async (orgName: string) => {
-    if (phase === 'awaiting-org-name') {
-      setPhase('searching-org')
-      addMessage({ role: 'user', text: orgName })
-      const id = addAILoading()
-      const org   = aiTools.findOrgs({ name: orgName })[0] ?? null
-      const found = org
-        ? { orgName: org.name, members: aiTools.findPersons({ orgCode: org.externalCode ?? org.id }) }
-        : null
-      const reply = await checkOrgMembersScenario.searchMessage(orgName, found)
-      if ('found' in reply) {
-        updateMessage(id, {
-          isLoading: false, text: reply.text,
-          widget: { type: 'org-members', orgName: reply.found.orgName, members: reply.found.members },
-        })
-      } else {
-        updateMessage(id, { isLoading: false, text: reply.text })
-      }
-      setPhase('idle')
-
-    } else if (phase === 'awaiting-dept-select') {
-      setPhase('searching-dept')
-      addMessage({ role: 'user', text: orgName })
-      const id = addAILoading()
-      const org      = aiTools.findOrgs({ name: orgName })[0] ?? null
-      const allOrgs  = aiTools.getOrgs()
-      const allPersons = aiTools.findPersons({})
-      const tree = org ? buildOrgTree(org, allOrgs, allPersons) : null
-      const reply = await checkDepartmentScenario.searchMessage(orgName, org, tree)
-      if ('tree' in reply) {
-        updateMessage(id, {
-          isLoading: false, text: reply.text,
-          widget: { type: 'org-tree', orgName: reply.orgName, tree: reply.tree },
-        })
-      } else {
-        updateMessage(id, { isLoading: false, text: reply.text })
-      }
-      setPhase('idle')
-
-    } else if (phase === 'awaiting-impact-org') {
-      setPhase('checking-impact')
-      addMessage({ role: 'user', text: orgName })
-      const id = addAILoading()
-      const org     = aiTools.findOrgs({ name: orgName })[0] ?? null
-      const allOrgs = aiTools.getOrgs()
-      const groups  = org ? buildImpactGroups(org, allOrgs, store.allocationList) : []
-      const reply   = await checkImpactScenario.scanMessage(orgName, org, groups)
-      if ('targetOrgName' in reply) {
-        updateMessage(id, {
-          isLoading: false, text: reply.text,
-          widget: { type: 'impact-check', targetOrgName: reply.targetOrgName, hasImpact: reply.hasImpact, groups: reply.groups },
-        })
-      } else {
-        updateMessage(id, { isLoading: false, text: reply.text })
-      }
-      setPhase('idle')
-    }
-  }, [phase, addMessage, addAILoading, updateMessage, setPhase, store.allocationList])
-
-  // ── person-input submit (dispatches by phase) ─────────────────────────────────
-  const handlePersonNamesSubmit = useCallback(async (namesInput: string) => {
-    addMessage({ role: 'user', text: namesInput })
-
-    if (phase === 'awaiting-person-names') {
-      setPhase('searching-persons')
-      const id = addAILoading()
-      const names = namesInput.split(/[,、，]/).map(n => n.trim()).filter(Boolean)
-      const diffs: PersonDiff[] = []
-      for (const name of names) {
-        for (const r of aiTools.findPersons({ name })) {
-          const row = aiTools.getRow(r.rowIds[0])
-          diffs.push({
-            userId: r.userId, name: r.name, orgName: r.orgName, rowId: r.rowIds[0],
-            before: { grade: row?.prevPayGrade, position: row?.prevOfficialPositionCode },
-            after:  { note: '昇格' },
-          })
-        }
-      }
-      const reply = await promotePersonsScenario.confirmMessage(diffs)
-      if ('persons' in reply) {
-        setPendingPersons(reply.persons.map(d => ({
-          userId: d.userId, name: d.name, currentOrgName: d.orgName, rowId: d.rowId,
-          currentGrade: d.before.grade, currentPosition: d.before.position,
-        })))
-        updateMessage(id, {
-          isLoading: false, text: reply.text,
-          widget: { type: 'diff-preview', persons: reply.persons },
-        })
-        setPhase('awaiting-promote-confirm')
-      } else {
-        updateMessage(id, { isLoading: false, text: reply.text })
-        setPhase('idle')
-      }
-
-    } else if (phase === 'awaiting-report-target') {
-      setPhase('searching-report')
-      const id = addAILoading()
-      const name  = namesInput.split(/[,、，]/)[0].trim()
-      const found = aiTools.findPersons({ name })[0] ?? null
-      const allOrgs = aiTools.getOrgs()
-      let result: { managerName: string; managerOrgName: string; members: ReturnType<typeof buildReportLineMembers> } | null = null
-      if (found) {
-        const targetRows = aiTools.getPersonRows(found.userId)
-        result = {
-          managerName:    found.name,
-          managerOrgName: found.orgName ?? '',
-          members:        buildReportLineMembers(targetRows, store.allocationList, allOrgs),
-        }
-      }
-      const reply = await reportLineScenario.searchMessage(namesInput, result)
-      if ('managerName' in reply) {
-        updateMessage(id, {
-          isLoading: false, text: reply.text,
-          widget: { type: 'report-line', managerName: reply.managerName, managerOrgName: reply.managerOrgName, members: reply.members },
-        })
-      } else {
-        updateMessage(id, { isLoading: false, text: reply.text })
-      }
-      setPhase('idle')
-    }
-  }, [phase, addMessage, addAILoading, updateMessage, setPhase, setPendingPersons, store.allocationList])
-
-  // ── promote confirm / cancel ──────────────────────────────────────────────────
-  const handlePromoteConfirm = useCallback(async () => {
-    setPhase('applying-promotion')
-    const id = addAILoading()
-    let applied = 0
-    for (const p of pendingPersons) {
-      const result = appService.executeOperation(
-        new DirectEditOperation(p.rowId, { promotionSign: '1' }, `${p.name} 昇格`)
-      )
-      if (result.ok) applied++
-    }
-    const text = await promotePersonsScenario.applyMessage(applied)
-    updateMessage(id, { isLoading: false, text })
-    setPendingPersons([])
-    setPhase('idle')
-  }, [addAILoading, updateMessage, setPhase, setPendingPersons, pendingPersons])
-
-  const handlePromoteCancel = useCallback(() => {
-    setPhase('idle')
-    setPendingPersons([])
-    addMessage({ role: 'user', text: 'キャンセル' })
-    addMessage({ role: 'ai', text: '昇進の操作をキャンセルしました。' })
-  }, [addMessage, setPhase, setPendingPersons])
-
-  // ── promote persons start ─────────────────────────────────────────────────────
-  const startPromotePersons = useCallback(async () => {
-    addMessage({ role: 'user', text: '昇進する人を選択' })
-    const id = addAILoading()
-    const text = await promotePersonsScenario.promptMessage()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'person-input' } })
-    setPhase('awaiting-person-names')
-  }, [addMessage, addAILoading, updateMessage, setPhase])
-
-  // ── impact check ──────────────────────────────────────────────────────────────
-  const startCheckImpact = useCallback(async () => {
-    addMessage({ role: 'user', text: '担当外への影響をチェック' })
-    const id = addAILoading()
-    const text = await checkImpactScenario.promptMessage()
-    updateMessage(id, { isLoading: false, text, widget: { type: 'org-input' } })
-    setPhase('awaiting-impact-org')
   }, [addMessage, addAILoading, updateMessage, setPhase])
 
   // ── export Excel ──────────────────────────────────────────────────────────────
@@ -431,9 +298,9 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     const id = addAILoading()
     const allOrgs = [...store.organizations, ...store.afterOrganizations]
     const { changeCount, groups } = buildExportChangeSummary(store.allocationList, allOrgs)
-    const text = await exportExcelScenario.confirmMessage()
     updateMessage(id, {
-      isLoading: false, text,
+      isLoading: false,
+      text: '変更内容を確認しました。出力内容を確認してください。',
       widget: { type: 'export-confirm', changeCount, groups },
     })
     setPhase('awaiting-export-confirm')
@@ -444,9 +311,13 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     const id = addAILoading()
     updateMessage(id, { isLoading: true, text: '出力中です...' })
     try {
-      const { buffer, fileName } = await exportExcelScenario.buildBuffer(
-        store.allocationList, store.organizations, store.afterOrganizations, store.effectiveDate,
-      )
+      const { organizations: beforeOrgs, afterOrganizations: afterOrgs, allocationList, effectiveDate } = store
+      const allOrgs = [
+        ...beforeOrgs,
+        ...afterOrgs.filter(o => !beforeOrgs.find(b => b.id === o.id)),
+      ]
+      const rows = toAllocationRows(allocationList, allOrgs)
+      const { buffer, fileName } = await buildExportBuffer(rows, effectiveDate)
       const ext      = fileName.endsWith('.xlsm') ? 'xlsm' : 'xlsx'
       const mimeType = ext === 'xlsm'
         ? 'application/vnd.ms-excel.sheet.macroEnabled.12'
@@ -469,11 +340,11 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
         document.body.appendChild(a); a.click()
         document.body.removeChild(a); URL.revokeObjectURL(url)
       }
-      updateMessage(id, { isLoading: false, text: exportExcelScenario.successMessage(fileName) })
+      updateMessage(id, { isLoading: false, text: `「${fileName}」のエクスポートが完了しました。` })
     } catch (e) {
       const text = (e instanceof DOMException && e.name === 'AbortError')
-        ? exportExcelScenario.abortMessage()
-        : exportExcelScenario.errorMessage(e)
+        ? 'エクスポートをキャンセルしました。'
+        : `エクスポートエラーが発生しました: ${String(e)}`
       updateMessage(id, { isLoading: false, text })
     }
     setPhase('idle')
@@ -487,7 +358,6 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
 
   // ── Teach AI (Phase 1 — STEP1 active learning) ────────────────────────────────
 
-  // 起動時: 適用済みtool descriptionをlocalStorageから復元
   useEffect(() => {
     const activeDescriptions = Object.fromEntries(
       feedbackStore.getAppliedRules()
@@ -499,7 +369,6 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     }
   }, [])
 
-  // 「AIに教える」ボタン → 訂正入力ウィジェットを追加
   const handleTeachAI = useCallback((messageId: string) => {
     const currentMessages = useChatStore.getState().messages
     const msgIndex = currentMessages.findIndex(m => m.id === messageId)
@@ -518,13 +387,11 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
   }, [addMessage])
 
   const handleTeachAICancel = useCallback(() => {
-    // 最後の teach-ai-input メッセージを削除（updatemessage で widget を外す）
     const msgs = useChatStore.getState().messages
     const last = [...msgs].reverse().find(m => m.widget?.type === 'teach-ai-input')
     if (last) updateMessage(last.id, { widget: undefined, text: 'キャンセルしました。' })
   }, [updateMessage])
 
-  // 訂正送信 → 分類器を起動し結果をチャットに表示
   const handleTeachAISubmit = useCallback(async (
     correction: string,
     conversationWindow: ConversationItem[],
@@ -534,26 +401,25 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
       return
     }
 
-    // 訂正入力ウィジェットを「分類中...」に切り替え
     const msgs = useChatStore.getState().messages
     const inputMsg = [...msgs].reverse().find(m => m.widget?.type === 'teach-ai-input')
     const loadingId = inputMsg
       ? (updateMessage(inputMsg.id, { widget: undefined, text: '🔍 分類中...', isLoading: true }), inputMsg.id)
       : addAILoading()
 
-    // CorrectionCapture を保存
     const captureId = `cap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
     feedbackStore.saveCapture({
-      id:                 captureId,
-      sessionId:          CURRENT_SESSION_ID,
-      trigger:            'explicit',
+      id:             captureId,
+      sessionId:      CURRENT_SESSION_ID,
+      trigger:        'explicit',
       conversationWindow,
-      userCorrection:     correction,
-      createdAt:          Date.now(),
+      userCorrection: correction,
+      createdAt:      Date.now(),
+      agentPath:      lastRunPath ?? undefined,
+      selectedSkills: lastRunSkills.length > 0 ? lastRunSkills : undefined,
     })
 
     try {
-      // ツール説明文の一覧を取得（分類器への入力）
       const toolDescriptions = Object.fromEntries(
         toolRegistry.definitions.map(d => [
           d.function.name,
@@ -561,7 +427,12 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
         ])
       )
       const prompt = buildClassifierPrompt(
-        { id: captureId, sessionId: CURRENT_SESSION_ID, trigger: 'explicit', conversationWindow, userCorrection: correction, createdAt: Date.now() },
+        {
+          id: captureId, sessionId: CURRENT_SESSION_ID, trigger: 'explicit',
+          conversationWindow, userCorrection: correction, createdAt: Date.now(),
+          agentPath:      lastRunPath ?? undefined,
+          selectedSkills: lastRunSkills.length > 0 ? lastRunSkills : undefined,
+        },
         toolDescriptions,
       )
       const raw = await agentRunner.runRaw([{ role: 'user', content: prompt }])
@@ -581,9 +452,8 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     } catch (err) {
       updateMessage(loadingId, { isLoading: false, text: `エラーが発生しました: ${String(err)}` })
     }
-  }, [agentRunner, addMessage, addAILoading, updateMessage])
+  }, [agentRunner, addMessage, addAILoading, updateMessage, lastRunPath, lastRunSkills])
 
-  // 分類結果を適用
   const handleClassificationApply = useCallback(async (classified: ClassificationWidgetData) => {
     const makeRuleId = () => `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 
@@ -650,11 +520,9 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
       })
     }
 
-    // 分類結果のステータスを更新
     const stored = feedbackStore.getClassified().find(c => c.id === classified.id)
     if (stored) feedbackStore.saveClassified({ ...stored, status: 'applied' })
 
-    // ウィジェットのステータスを即時更新して「適用済み」と表示
     const msgs = useChatStore.getState().messages
     const target = msgs.find(m => m.widget?.type === 'classification-result' && (m.widget as { classified: ClassificationWidgetData }).classified.id === classified.id)
     if (target) {
@@ -697,38 +565,28 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
 
   // ── assembled callbacks & routing ─────────────────────────────────────────────
   const widgetCallbacks: WidgetCallbacks = {
-    onFileSelected:          handleFileSelected,
-    onImportCancel:          handleImportCancel,
-    onOrgNameSubmit:         handleOrgNameSubmit,
-    onPersonNamesSubmit:     handlePersonNamesSubmit,
-    onPromoteConfirm:        handlePromoteConfirm,
-    onPromoteCancel:         handlePromoteCancel,
-    onExportConfirm:         handleExportConfirm,
-    onExportCancel:          handleExportCancel,
-    onTeachAI:               handleTeachAI,
-    onTeachAICancel:         handleTeachAICancel,
-    onTeachAISubmit:         handleTeachAISubmit,
-    onClassificationApply:   handleClassificationApply,
-    onClassificationReject:  handleClassificationReject,
+    onFileSelected:         handleFileSelected,
+    onImportCancel:         handleImportCancel,
+    onExportConfirm:        handleExportConfirm,
+    onExportCancel:         handleExportCancel,
+    onTeachAI:              handleTeachAI,
+    onTeachAICancel:        handleTeachAICancel,
+    onTeachAISubmit:        handleTeachAISubmit,
+    onClassificationApply:  handleClassificationApply,
+    onClassificationReject: handleClassificationReject,
   }
 
   const handlePromptClick = useCallback((id: string) => {
     if (isBusy) return
     switch (id) {
-      case 'import-excel':  startImportExcel();     break
-      case 'excel-help':    startExcelHelp();        break
-      case 'check-org':     startCheckOrgMembers();  break
-      case 'check-dept':    startCheckDepartment();  break
-      case 'report-line':   startReportLine();       break
-      case 'promote':       startPromotePersons();   break
-      case 'check-impact':  startCheckImpact();      break
-      case 'export-excel':  startExportExcel();      break
+      case 'import-excel': startImportExcel();  break
+      case 'excel-help':   startExcelHelp();    break
+      case 'export-excel': startExportExcel();  break
     }
-  }, [isBusy, startImportExcel, startExcelHelp, startCheckOrgMembers, startCheckDepartment, startReportLine, startPromotePersons, startCheckImpact, startExportExcel])
+  }, [isBusy, startImportExcel, startExcelHelp, startExportExcel])
 
   const handleTextSubmit = useCallback((text: string) => {
     if (!text.trim()) return
-    // Pending confirm widget: intercept affirmation words and auto-confirm instead of starting a new run
     if (pendingConfirmMsg?.llmConfirm && isAffirmation(text)) {
       addMessage({ role: 'user', text })
       pendingConfirmMsg.llmConfirm()
@@ -736,7 +594,7 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     }
     if (isBusy) return
     handleUnknownQuery(text)
-  }, [isBusy, handleUnknownQuery, pendingConfirmMsg, isAffirmation, addMessage])
+  }, [isBusy, handleUnknownQuery, pendingConfirmMsg, addMessage])
 
   return {
     widgetCallbacks,
@@ -744,5 +602,7 @@ const activeWidgetType = WIDGET_PHASE_MAP[phase]
     handleTextSubmit,
     isBusy,
     activeWidgetMsgId,
+    /** 直前のターンで使われた実行パス（透明性表示用）。 */
+    lastRunPath,
   }
 }

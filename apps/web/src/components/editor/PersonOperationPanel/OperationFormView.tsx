@@ -131,7 +131,6 @@ export function OperationFormView({ def, row, onBack }: Props) {
 
   const hasBlockingError   = issues.some(i => i.level === 'error') || !!submitError
   const currentJobFamily   = (values.jobFamily ?? row.jobFamily) as string | undefined
-  const baseBand           = row.band as string | undefined
   const derivedPromSign    = (values.promotionSign ?? '') as string
   const derivedPayGradeSign = (values.payGradeChangeSign ?? '') as string
 
@@ -260,8 +259,9 @@ export function OperationFormView({ def, row, onBack }: Props) {
             }
 
             const { valid, invalid } = getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
+            const fieldBaseBand = (row[field] as string | undefined)
             const filteredValid = stepFilter
-              ? filterBandsByStep(valid, baseBand, codeLists, stepMode, stepFilter)
+              ? filterBandsByStep(valid, fieldBaseBand, codeLists, stepMode, stepFilter)
               : valid
 
             return (

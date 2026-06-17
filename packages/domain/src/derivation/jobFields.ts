@@ -1,7 +1,7 @@
 import type { AllCodeLists }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
-/** jobType + band → payGrade を導出する（compensationCategory 経由） */
+/** jobType + band → payGrade を導出する（昇降格判定読み替えバンド × 報酬区分） */
 export function computePayGrade(
   jobTypeLabel: string | undefined,
   bandLabel:    string | undefined,
@@ -10,8 +10,11 @@ export function computePayGrade(
   if (!jobTypeLabel || !bandLabel) return undefined
   const sub = codeLists.jobTypes.find(s => s.label === jobTypeLabel)
   if (!sub?.compensationCategory) return undefined
+  // バンドから昇降格判定読み替えバンドを取得（なければバンドラベル自体を使用）
+  const jobLevel    = codeLists.jobLevels.find(e => e.label === bandLabel)
+  const gradingBand = jobLevel?.promotionDemotionBand ?? bandLabel
   return codeLists.payGrades.find(
-    p => p.compensationCategory === sub.compensationCategory && p.band === bandLabel
+    p => p.compensationCategory === sub.compensationCategory && p.band === gradingBand
   )?.label
 }
 

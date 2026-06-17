@@ -14,7 +14,7 @@ interface TreeNodeProps {
 
 export function TreeNode({ orgId, panelId, onNavigate, isRoot }: TreeNodeProps) {
   const { organizations, positionTreeByOrgId } = useOrgView()
-  const { panels, setOrgOpen } = useCanvasLayoutStore()
+  const { panels, setOrgOpen, addPanel } = useCanvasLayoutStore()
 
   const panel        = panels.find(p => p.id === panelId)
   const childrenMode = panel?.childrenMode ?? 'inline'
@@ -39,7 +39,7 @@ export function TreeNode({ orgId, panelId, onNavigate, isRoot }: TreeNodeProps) 
           const isOpen     = childPanel?.open ?? false
 
           if (!isOpen) {
-            // 閉じている: グレーチップ（クリックで開く）
+            // 閉じている: グレーチップ（クリックで開く。パネルがない場合は新規作成）
             const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
             return (
               <ChildChip
@@ -47,7 +47,7 @@ export function TreeNode({ orgId, panelId, onNavigate, isRoot }: TreeNodeProps) 
                 child={child}
                 count={count}
                 variant="closed"
-                onClick={() => setOrgOpen(child.id, true)}
+                onClick={() => childPanel ? setOrgOpen(child.id, true) : addPanel(child.id)}
               />
             )
           }

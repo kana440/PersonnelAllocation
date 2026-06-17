@@ -1,7 +1,6 @@
 // 昇降格・役職変更 — 昇格・降格・役職変更
 import type { EditOperation } from './types'
 import { ok, fail } from '../types'
-import { derivePromotionSign } from '../../derivation'
 import { isRegularEmployee, isSecondmentAcceptance } from '../helpers'
 import type { AllocationRow } from '../../allocationRow'
 
@@ -23,6 +22,11 @@ function applyFields(
 }
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
+//
+// 主操作: positionBand（ポジションのバンド）
+// 自動連動: positionBand → band（社員のみ、deriveFieldUpdates が処理）
+//           band × jobType → payGrade（deriveFieldUpdates が処理）
+// availableFor が社員限定のため、band / payGrade は常に自動導出される（readOnly）
 
 export const promotionDef: EditOperation = {
   id:         'Promotion',
@@ -35,36 +39,39 @@ export const promotionDef: EditOperation = {
     isRegularEmployee(row, cl) && !isSecondmentAcceptance(row, cl),
 
   inputs: [
-    { field: 'band',               required: true,  stepFilter: 'up' },
-    { field: 'positionBand',       required: false },
-    { field: 'payGrade',           required: false },
+    { field: 'positionBand',         required: true,  stepFilter: 'up' },
+    { field: 'band',                 required: false },
+    { field: 'payGrade',             required: false },
     { field: 'officialPositionCode', required: false,
       afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
-    { field: 'localJobTitle',      required: false },
+    { field: 'localJobTitle',        required: false },
   ],
 
-  deriveInitial: (row, ctx) => ({
-    band:               row.band               as string | undefined,
-    positionBand:       row.positionBand       as string | undefined,
-    payGrade:           row.payGrade           as string | undefined,
+  deriveInitial: (row) => ({
+    positionBand:         row.positionBand         as string | undefined,
+    band:                 row.band                 as string | undefined,
+    payGrade:             row.payGrade             as string | undefined,
     officialPositionCode: row.officialPositionCode as string | undefined,
-    localJobTitle:      row.localJobTitle      as string | undefined,
-    ...derivePromotionSign(row.band as string | undefined, row.prevBand as string | undefined, ctx.codeLists),
+    localJobTitle:        row.localJobTitle        as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  validate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.positionBand)
+      return fail('ポジションバンドは必須です')
     return ok()
   },
 
   apply(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return applyFields(ctx.allocationList, rowId, values, `昇降格: ${personName(row)}`)
+    return applyFields(ctx.allocationList, rowId, values, `昇格: ${personName(row)}`)
   },
 }
 
 // ── 降格 ─────────────────────────────────────────────────────────────────────
+//
+// 昇格と同じ自動連動モデル（方向が down）
 
 export const demotionDef: EditOperation = {
   id:         'Demotion',
@@ -77,26 +84,30 @@ export const demotionDef: EditOperation = {
     isRegularEmployee(row, cl) && !isSecondmentAcceptance(row, cl),
 
   inputs: [
-    { field: 'band',               required: true,  stepFilter: 'down' },
-    { field: 'positionBand',       required: false },
-    { field: 'payGrade',           required: false },
-    { field: 'demotionReason',     required: true  },
+    { field: 'positionBand',         required: true,  stepFilter: 'down' },
+    { field: 'band',                 required: false },
+    { field: 'payGrade',             required: false },
+    { field: 'demotionReason',       required: true },
     { field: 'officialPositionCode', required: false,
       afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
-    { field: 'localJobTitle',      required: false },
+    { field: 'localJobTitle',        required: false },
   ],
 
   deriveInitial: (row) => ({
-    band:               row.band    as string | undefined,
-    positionBand:       row.positionBand as string | undefined,
-    payGrade:           row.payGrade as string | undefined,
+    positionBand:         row.positionBand         as string | undefined,
+    band:                 row.band                 as string | undefined,
+    payGrade:             row.payGrade             as string | undefined,
     officialPositionCode: row.officialPositionCode as string | undefined,
-    localJobTitle:      row.localJobTitle as string | undefined,
+    localJobTitle:        row.localJobTitle        as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  validate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.positionBand)
+      return fail('ポジションバンドは必須です')
+    if (!values.demotionReason)
+      return fail('降格理由は必須です')
     return ok()
   },
 

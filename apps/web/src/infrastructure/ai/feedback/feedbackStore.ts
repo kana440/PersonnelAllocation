@@ -1,4 +1,4 @@
-import type { CorrectionCapture, ClassifiedCorrection, AiAppliedRule, AiCodeFixRequest } from './types'
+import type { CorrectionCapture, ClassifiedCorrection, AiAppliedRule, AiCodeFixRequest, AgentRunLog, FeedbackLabel } from './types'
 
 // Module-level session ID (per page load, persists across tabs in same session)
 export const CURRENT_SESSION_ID = `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
@@ -8,9 +8,11 @@ const LS_KEYS = {
   classified:   'ai_feedback:classified',
   codeFixes:    'ai_feedback:codefixes',
   appliedRules: 'ai_feedback:applied',
+  runLogs:      'ai_feedback:runlogs',
 }
 
 const MAX_CAPTURES = 100
+const MAX_RUN_LOGS = 200
 
 function readJSON<T>(key: string): T[] {
   try {
@@ -82,6 +84,43 @@ export const feedbackStore = {
     return readJSON<AiCodeFixRequest>(LS_KEYS.codeFixes)
   },
 
+  // ── Agent run logs ────────────────────────────────────────────────────────────
+
+  saveRunLog(log: AgentRunLog): void {
+    const list = readJSON<AgentRunLog>(LS_KEYS.runLogs)
+    list.push(log)
+    writeJSON(LS_KEYS.runLogs, list.length > MAX_RUN_LOGS ? list.slice(-MAX_RUN_LOGS) : list)
+  },
+
+  getRunLogs(): AgentRunLog[] {
+    return readJSON<AgentRunLog>(LS_KEYS.runLogs)
+  },
+
+  /** フィードバックラベルを後から付与する（「AIに教える」で分類後に呼ぶ）。 */
+  updateRunLogFeedback(logId: string, label: FeedbackLabel, note?: string): void {
+    const list = readJSON<AgentRunLog>(LS_KEYS.runLogs)
+    const idx = list.findIndex(x => x.id === logId)
+    if (idx >= 0) {
+      list[idx] = { ...list[idx]!, feedbackLabel: label, feedbackNote: note }
+      writeJSON(LS_KEYS.runLogs, list)
+    }
+  },
+
+  /** path 別・スキル別の実行統計を返す（改善判断用）。 */
+  getRunStats() {
+    const logs = this.getRunLogs()
+    const fastCount       = logs.filter(l => l.path === 'fast').length
+    const structuredCount = logs.filter(l => l.path === 'structured').length
+    const withFeedback    = logs.filter(l => l.feedbackLabel)
+    const labelCounts: Partial<Record<FeedbackLabel, number>> = {}
+    for (const log of withFeedback) {
+      if (log.feedbackLabel) {
+        labelCounts[log.feedbackLabel] = (labelCounts[log.feedbackLabel] ?? 0) + 1
+      }
+    }
+    return { fastCount, structuredCount, totalCount: logs.length, labelCounts }
+  },
+
   // ── Stats ─────────────────────────────────────────────────────────────────────
 
   getStats() {
@@ -109,6 +148,7 @@ export const feedbackStore = {
   clearHistory(): void {
     localStorage.removeItem(LS_KEYS.corrections)
     localStorage.removeItem(LS_KEYS.classified)
+    localStorage.removeItem(LS_KEYS.runLogs)
   },
 
   resetAll(): void {

@@ -12,10 +12,7 @@
     "typecheck": "tsc --noEmit",
     "depcruise": "depcruise --config .dependency-cruiser.cjs src",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:context": "node scripts/test-context.js",
-    "test:save": "node scripts/save-test.js",
-    "review:context": "node scripts/review-context.js"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@personnel/domain": "*",

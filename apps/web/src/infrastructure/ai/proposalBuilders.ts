@@ -7,57 +7,73 @@
 //       読み取り専用（副作用なし）。書き込みは toolRegistry の executeOnApprove
 //       が aiTools メソッドを呼ぶことで行う。
 
-import type { ChatWidget, PersonDiff, WizardStep } from '../../application/aiTypes'
+import type { ChatWidget, PersonDiff, WizardStep, FormInput } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '@personnel/domain/commands/orgHelpers'
+import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
+import { deriveFieldUpdates, computeBandStepDiff } from '@personnel/domain/derivation'
 
-type ProposalResult = { widget: ChatWidget } | { error: string }
+type ProposalResult = { widget: ChatWidget; formInputs?: FormInput[] } | { error: string }
 
 // ── 一括異動 ─────────────────────────────────────────────────────────────────
 
 export function buildBulkTransferProposal(
   sourceOrgCode: string,
   targetOrgCode: string,
+  options?: { includeSubtree?: boolean },
 ): ProposalResult {
   const { allocationList, afterOrganizations } = appService.getSnapshot()
-  const sourceOrg = afterOrganizations.find(o => o.externalCode === sourceOrgCode || o.id === sourceOrgCode)
   const targetOrg = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
+
+  let sourceCodes: Set<string>
+  if (options?.includeSubtree) {
+    const view = buildFlatOrgView(afterOrganizations)
+    const root = view.find(e => e.orgCode === sourceOrgCode)
+    if (!root) return { error: '移動元組織が見つかりません' }
+    sourceCodes = new Set([root.orgCode, ...root.descendantCodes])
+  } else {
+    sourceCodes = new Set([sourceOrgCode])
+  }
+
   const persons: PersonDiff[] = allocationList
-    .filter(r => r.departmentCode === sourceOrgCode && r.userId)
-    .map(r => ({
-      userId:  r.userId!,
-      name:    [r.lastName, r.firstName].filter(Boolean).join(' '),
-      orgName: sourceOrg?.name ?? sourceOrgCode,
-      rowId:   r.rowId,
-      before:  { orgName: sourceOrg?.name ?? sourceOrgCode },
-      after:   { orgName: targetOrg?.name ?? targetOrgCode },
-    }))
-  return { widget: { type: 'diff-preview', persons, label: '一括異動の確認' } }
+    .filter(r => r.userId && sourceCodes.has(r.departmentCode ?? ''))
+    .map(r => {
+      const org = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)
+      return {
+        userId:  r.userId!,
+        name:    [r.lastName, r.firstName].filter(Boolean).join(' '),
+        orgName: org?.name ?? r.departmentCode ?? '',
+        rowId:   r.rowId,
+        before:  { orgName: org?.name ?? r.departmentCode ?? '' },
+        after:   { orgName: targetOrg?.name ?? targetOrgCode },
+      }
+    })
+  const label = options?.includeSubtree ? '一括異動（配下含む）の確認' : '一括異動の確認'
+  return { widget: { type: 'diff-preview', persons, label } }
 }
 
 // ── フィールド編集 ────────────────────────────────────────────────────────────
 
 export function buildFieldEditProposal(
-  userId: string,
-  field:  string,
-  value:  string,
+  rowId: number,
+  field: string,
+  value: string,
 ): ProposalResult {
   const LABELS: Record<string, string> = {
     localJobTitle: '役職名', band: 'バンド', payGrade: '給与等級',
     officialPositionCode: '役職コード', transferReason: '異動事由',
   }
-  const { afterOrganizations } = appService.getSnapshot()
-  const rows    = aiTools.getPersonRows(userId)
-  const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-  if (!primary) return { widget: { type: 'diff-preview', persons: [] } }
-  const org          = afterOrganizations.find(o => o.externalCode === primary.departmentCode || o.id === primary.departmentCode)
-  const currentValue = String(primary[field as keyof typeof primary] ?? '')
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  if (!row) return { widget: { type: 'diff-preview', persons: [] } }
+  const org          = afterOrganizations.find(o => o.externalCode === row.departmentCode || o.id === row.departmentCode)
+  const currentValue = String(row[field as keyof typeof row] ?? '')
   const isGrade      = field === 'band' || field === 'payGrade'
   const person: PersonDiff = {
-    userId, rowId: primary.rowId,
-    name:    [primary.lastName, primary.firstName].filter(Boolean).join(' '),
-    orgName: org?.name ?? primary.departmentCode ?? '',
+    userId: row.userId ?? '', rowId,
+    name:    [row.lastName, row.firstName].filter(Boolean).join(' '),
+    orgName: org?.name ?? row.departmentCode ?? '',
     before:  isGrade ? { grade: `${LABELS[field] ?? field}: ${currentValue || '（未設定）'}` } : { position: `${LABELS[field] ?? field}: ${currentValue || '（未設定）'}` },
     after:   isGrade ? { grade: value || '（削除）' }                                          : { position: value || '（削除）' },
   }
@@ -92,50 +108,129 @@ export function buildBulkSetFieldProposal(
 
 // ── 個人異動 ─────────────────────────────────────────────────────────────────
 
-export function buildTransferProposal(
-  userIds:       string[],
-  targetOrgCode: string,
-): ProposalResult {
-  const { afterOrganizations } = appService.getSnapshot()
+export function buildTransferProposal(opts: {
+  rowIds?:         number[]
+  name?:           string
+  subtreeOrgCode?: string
+  targetOrgCode:   string
+  transferReason?: string
+}): ProposalResult {
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const { targetOrgCode, transferReason } = opts
+
+  // filter → rowIds の解決
+  let targetRowIds = opts.rowIds ?? []
+  if (targetRowIds.length === 0) {
+    let subtreeCodes: Set<string> | null = null
+    if (opts.subtreeOrgCode) {
+      const view = buildFlatOrgView(afterOrganizations)
+      const root = view.find(e => e.orgCode === opts.subtreeOrgCode)
+      if (root) subtreeCodes = new Set([root.orgCode, ...root.descendantCodes])
+    }
+    targetRowIds = allocationList
+      .filter(row => {
+        if (!row.userId && !row.lastName && !row.firstName) return false
+        if (opts.name) {
+          const name = [row.lastName, row.firstName].filter(Boolean).join(' ')
+          if (!name.includes(opts.name)) return false
+        }
+        if (subtreeCodes && !subtreeCodes.has(row.departmentCode ?? '')) return false
+        return true
+      })
+      .map(r => r.rowId)
+  }
+
+  if (targetRowIds.length === 0) return { error: '対象者が見つかりません' }
+
   const targetOrg = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
-  const persons: PersonDiff[] = userIds.flatMap(userId => {
-    const rows    = aiTools.getPersonRows(userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return []
+  const persons: PersonDiff[] = targetRowIds.flatMap(rowId => {
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return []
     const currentOrg = afterOrganizations.find(
-      o => o.externalCode === primary.departmentCode || o.id === primary.departmentCode
+      o => o.externalCode === row.departmentCode || o.id === row.departmentCode
     )
     return [{
-      userId,
-      name:    [primary.lastName, primary.firstName].filter(Boolean).join(' '),
-      orgName: currentOrg?.name ?? primary.departmentCode ?? '',
-      rowId:   primary.rowId,
-      before:  { orgName: currentOrg?.name ?? primary.departmentCode ?? '' },
+      userId:  row.userId ?? '',
+      name:    [row.lastName, row.firstName].filter(Boolean).join(' '),
+      orgName: currentOrg?.name ?? row.departmentCode ?? '',
+      rowId,
+      before:  { orgName: currentOrg?.name ?? row.departmentCode ?? '' },
       after:   { orgName: targetOrg?.name ?? targetOrgCode },
     }]
   })
-  return { widget: { type: 'diff-preview', persons, label: '異動の確認' } }
+
+  const formInputs: FormInput[] = [
+    {
+      field:    'transferReason',
+      label:    '異動事由',
+      value:    transferReason,
+      required: true,
+      options:  ['分掌異動（改組）', '分掌異動'],
+    },
+  ]
+
+  return { widget: { type: 'diff-preview', persons, label: '異動の確認' }, formInputs }
 }
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
 
-export function buildPromotionProposal(userIds: string[]): ProposalResult {
-  const { afterOrganizations } = appService.getSnapshot()
-  const persons: PersonDiff[] = userIds.flatMap(userId => {
-    const rows    = aiTools.getPersonRows(userId)
-    const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-    if (!primary) return []
-    const org = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.departmentCode)
-    return [{
-      userId,
-      name:    [primary.lastName, primary.firstName].filter(Boolean).join(' '),
-      orgName: org?.name ?? primary.departmentCode,
-      rowId:   primary.rowId,
-      before:  { grade: primary.prevPayGrade, position: primary.prevOfficialPositionCode },
-      after:   { note: '昇格' },
-    }]
-  })
-  return { widget: { type: 'diff-preview', persons, label: '昇格の確認' } }
+export function buildPromotionProposal(opts: {
+  rowId:                    number
+  newPositionBand:          string
+  newOfficialPositionCode?: string
+  newLocalJobTitle?:        string
+}): ProposalResult {
+  const { allocationList, afterOrganizations, codeLists } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === opts.rowId)
+  if (!row) return { error: '対象行が見つかりません' }
+
+  const org  = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
+  const name = [row.lastName, row.firstName].filter(Boolean).join(' ')
+
+  // DryRun: positionBand → band（社員なら連動）→ payGrade を deriveFieldUpdates が一括処理
+  const changes: Record<string, string | undefined> = { positionBand: opts.newPositionBand }
+  const derived = deriveFieldUpdates(changes as Parameters<typeof deriveFieldUpdates>[0], row, codeLists, allocationList)
+  Object.assign(changes, derived)
+  if (opts.newOfficialPositionCode !== undefined) changes['officialPositionCode'] = opts.newOfficialPositionCode
+  if (opts.newLocalJobTitle        !== undefined) changes['localJobTitle']        = opts.newLocalJobTitle
+
+  const after: Record<string, string | undefined> = {}
+  for (const [k, v] of Object.entries(changes)) {
+    const cur = (row as Record<string, unknown>)[k] as string | undefined
+    if (String(cur ?? '') !== String(v ?? '')) after[k] = v as string | undefined
+  }
+
+  // ステップ差を計算（2段階以上の昇格は注意喚起）
+  const stepDiff = computeBandStepDiff(row.positionBand as string | undefined, opts.newPositionBand, codeLists)
+  const stepNote = stepDiff !== undefined && stepDiff >= 2
+    ? `⚠️ ${stepDiff}段階昇格`
+    : stepDiff !== undefined && stepDiff <= -1
+      ? `⚠️ ${Math.abs(stepDiff)}段階降格`
+      : undefined
+
+  const person: PersonDiff = {
+    userId:  row.userId ?? '',
+    name,
+    orgName: org?.name ?? row.departmentCode ?? '',
+    rowId:   opts.rowId,
+    before: {
+      grade:    row.payGrade,
+      position: row.positionBand,
+      note:     row.officialPositionCode,
+    },
+    after: {
+      grade:    after['payGrade']             ?? row.payGrade,
+      position: after['positionBand']         ?? row.positionBand,
+      note:     after['officialPositionCode'] ?? row.officialPositionCode,
+      orgName:  stepNote,
+    },
+  }
+
+  const label = stepDiff !== undefined && Math.abs(stepDiff) >= 2
+    ? `昇格の確認（DryRun）— ${Math.abs(stepDiff)}段階変更`
+    : '昇格の確認（DryRun）'
+
+  return { widget: { type: 'diff-preview', persons: [person], label } }
 }
 
 // ── 空席ポジション作成 ────────────────────────────────────────────────────────
@@ -179,18 +274,17 @@ export function buildAssignPersonProposal(
 // ── 役職名変更 ────────────────────────────────────────────────────────────────
 
 export function buildChangePositionProposal(
-  userId:      string,
+  rowId:       number,
   newJobTitle: string,
 ): ProposalResult {
-  const rows    = aiTools.getPersonRows(userId)
-  const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-  const { afterOrganizations } = appService.getSnapshot()
-  const org = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  const org = afterOrganizations.find(o => o.externalCode === row?.departmentCode || o.id === row?.departmentCode)
   const person: PersonDiff = {
-    userId, rowId: primary?.rowId ?? -1,
-    name:    primary ? [primary.lastName, primary.firstName].filter(Boolean).join(' ') : userId,
-    orgName: org?.name ?? primary?.departmentCode ?? '',
-    before:  { position: primary?.localJobTitle ?? primary?.officialPositionCode ?? '（未設定）' },
+    userId: row?.userId ?? '', rowId,
+    name:    row ? [row.lastName, row.firstName].filter(Boolean).join(' ') : String(rowId),
+    orgName: org?.name ?? row?.departmentCode ?? '',
+    before:  { position: row?.localJobTitle ?? row?.officialPositionCode ?? '（未設定）' },
     after:   { position: newJobTitle },
   }
   return { widget: { type: 'diff-preview', persons: [person], label: '役職変更の確認' } }
@@ -292,15 +386,14 @@ export function buildReDeriveOrgSubFieldsProposal(): ProposalResult {
 
 // ── 休職 ─────────────────────────────────────────────────────────────────────
 
-export function buildLeaveOfAbsenceProposal(userId: string, memo?: string): ProposalResult {
-  const { afterOrganizations } = appService.getSnapshot()
-  const rows    = aiTools.getPersonRows(userId)
-  const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-  const org = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
+export function buildLeaveOfAbsenceProposal(rowId: number, memo?: string): ProposalResult {
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  const org = afterOrganizations.find(o => o.externalCode === row?.departmentCode || o.id === row?.departmentCode)
   const person: PersonDiff = {
-    userId, rowId: primary?.rowId ?? -1,
-    name:    primary ? [primary.lastName, primary.firstName].filter(Boolean).join(' ') : userId,
-    orgName: org?.name ?? primary?.departmentCode ?? '',
+    userId: row?.userId ?? '', rowId,
+    name:    row ? [row.lastName, row.firstName].filter(Boolean).join(' ') : String(rowId),
+    orgName: org?.name ?? row?.departmentCode ?? '',
     before:  { note: '在籍中' },
     after:   { note: memo ? `休職（${memo}）` : '休職' },
   }
@@ -309,15 +402,14 @@ export function buildLeaveOfAbsenceProposal(userId: string, memo?: string): Prop
 
 // ── 復職 ─────────────────────────────────────────────────────────────────────
 
-export function buildReturnFromLeaveProposal(userId: string): ProposalResult {
-  const { afterOrganizations } = appService.getSnapshot()
-  const rows    = aiTools.getPersonRows(userId)
-  const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-  const org = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
+export function buildReturnFromLeaveProposal(rowId: number): ProposalResult {
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  const org = afterOrganizations.find(o => o.externalCode === row?.departmentCode || o.id === row?.departmentCode)
   const person: PersonDiff = {
-    userId, rowId: primary?.rowId ?? -1,
-    name:    primary ? [primary.lastName, primary.firstName].filter(Boolean).join(' ') : userId,
-    orgName: org?.name ?? primary?.departmentCode ?? '',
+    userId: row?.userId ?? '', rowId,
+    name:    row ? [row.lastName, row.firstName].filter(Boolean).join(' ') : String(rowId),
+    orgName: org?.name ?? row?.departmentCode ?? '',
     before:  { note: '休職中' },
     after:   { note: '復職' },
   }
@@ -327,19 +419,18 @@ export function buildReturnFromLeaveProposal(userId: string): ProposalResult {
 // ── 兼務追加 ──────────────────────────────────────────────────────────────────
 
 export function buildConcurrentAddProposal(
-  userId:        string,
-  targetOrgCode: string,
+  rowId:             number,
+  targetOrgCode:     string,
   concurrentReason?: string,
 ): ProposalResult {
-  const { afterOrganizations } = appService.getSnapshot()
-  const rows    = aiTools.getPersonRows(userId)
-  const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-  const srcOrg  = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
-  const dstOrg  = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const row    = allocationList.find(r => r.rowId === rowId)
+  const srcOrg = afterOrganizations.find(o => o.externalCode === row?.departmentCode || o.id === row?.departmentCode)
+  const dstOrg = afterOrganizations.find(o => o.externalCode === targetOrgCode || o.id === targetOrgCode)
   const person: PersonDiff = {
-    userId, rowId: primary?.rowId ?? -1,
-    name:    primary ? [primary.lastName, primary.firstName].filter(Boolean).join(' ') : userId,
-    orgName: srcOrg?.name ?? primary?.departmentCode ?? '',
+    userId: row?.userId ?? '', rowId,
+    name:    row ? [row.lastName, row.firstName].filter(Boolean).join(' ') : String(rowId),
+    orgName: srcOrg?.name ?? row?.departmentCode ?? '',
     before:  { note: '本務のみ' },
     after:   { orgName: dstOrg?.name ?? targetOrgCode, note: concurrentReason ? `兼務追加（${concurrentReason}）` : '兼務追加' },
   }
@@ -348,20 +439,18 @@ export function buildConcurrentAddProposal(
 
 // ── 兼務解除 ──────────────────────────────────────────────────────────────────
 
-export function buildConcurrentReleaseProposal(userId: string, targetOrgCode?: string): ProposalResult {
+export function buildConcurrentReleaseProposal(rowId: number): ProposalResult {
   const { allocationList, afterOrganizations } = appService.getSnapshot()
-  const concurrentRows = allocationList.filter(
-    r => r.userId === userId && r.concurrentType === '兼務' && !r.secondmentToCompany && !r.secondmentFromCompany
-  )
-  const target = (targetOrgCode ? concurrentRows.find(r => r.departmentCode === targetOrgCode) : undefined) ?? concurrentRows[0]
-  const concOrg = afterOrganizations.find(o => o.externalCode === target?.departmentCode || o.id === target?.departmentCode)
-  const primary = allocationList.find(r => r.userId === userId && !r.concurrentType)
-  const srcOrg  = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
+  const concRow   = allocationList.find(r => r.rowId === rowId)
+  const concOrg   = afterOrganizations.find(o => o.externalCode === concRow?.departmentCode || o.id === concRow?.departmentCode)
+  const primary   = concRow?.userId ? allocationList.find(r => r.userId === concRow.userId && !r.concurrentType) : undefined
+  const srcOrg    = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
+  const displayRow = primary ?? concRow
   const person: PersonDiff = {
-    userId, rowId: target?.rowId ?? -1,
-    name:    primary ? [primary.lastName, primary.firstName].filter(Boolean).join(' ') : userId,
+    userId: concRow?.userId ?? '', rowId,
+    name:    displayRow ? [displayRow.lastName, displayRow.firstName].filter(Boolean).join(' ') : String(rowId),
     orgName: srcOrg?.name ?? primary?.departmentCode ?? '',
-    before:  { orgName: concOrg?.name ?? target?.departmentCode ?? '（不明）', note: '兼務中' },
+    before:  { orgName: concOrg?.name ?? concRow?.departmentCode ?? '（不明）', note: '兼務中' },
     after:   { note: '兼務解除' },
   }
   return { widget: { type: 'diff-preview', persons: [person], label: '社内兼務解除の確認' } }
@@ -370,20 +459,19 @@ export function buildConcurrentReleaseProposal(userId: string, targetOrgCode?: s
 // ── 降格 ─────────────────────────────────────────────────────────────────────
 
 export function buildDemotionProposal(
-  userId:  string,
-  fields:  { officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
+  rowId:  number,
+  fields: { officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
 ): ProposalResult {
-  const { afterOrganizations } = appService.getSnapshot()
-  const rows    = aiTools.getPersonRows(userId)
-  const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-  const org = afterOrganizations.find(o => o.externalCode === primary?.departmentCode || o.id === primary?.departmentCode)
+  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  const org = afterOrganizations.find(o => o.externalCode === row?.departmentCode || o.id === row?.departmentCode)
   const person: PersonDiff = {
-    userId, rowId: primary?.rowId ?? -1,
-    name:    primary ? [primary.lastName, primary.firstName].filter(Boolean).join(' ') : userId,
-    orgName: org?.name ?? primary?.departmentCode ?? '',
+    userId: row?.userId ?? '', rowId,
+    name:    row ? [row.lastName, row.firstName].filter(Boolean).join(' ') : String(rowId),
+    orgName: org?.name ?? row?.departmentCode ?? '',
     before:  {
-      grade:    primary?.band ?? primary?.payGrade,
-      position: primary?.officialPositionCode ?? primary?.localJobTitle,
+      grade:    row?.band ?? row?.payGrade,
+      position: row?.officialPositionCode ?? row?.localJobTitle,
     },
     after:   {
       grade:    fields.band ?? fields.payGrade,

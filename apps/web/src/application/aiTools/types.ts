@@ -18,6 +18,7 @@ export type AIOperationResult =
   | ValidationError
   | { ok: true; postValidation: Array<{ rowId: number; issues: ValidationIssue[] }> }
 
+/** buildOrgTree 内部で使う軽量な人物表現。orgTree.ts 専用。 */
 export interface PersonSearchResult {
   userId:   string
   name:     string
@@ -26,27 +27,50 @@ export interface PersonSearchResult {
   rowIds:   number[]
 }
 
-/** searchPersons の戻り値。1人につき1エントリ（本務行ベース）。 */
-export interface PersonDetail {
-  // ── Identity ──────────────────────────────────────────────────────────
-  userId:             string
-  name:               string
-  primaryRowId:       number
-  /** 兼務行の rowId 一覧（本務を除く）。空なら兼務なし。 */
-  concurrentRowIds:   number[]
-
-  // ── Organization ──────────────────────────────────────────────────────
-  departmentCode?:    string
-  orgName?:           string
+/** findPersons の positions[] 要素。現在状態と変更前状態を両方含む。 */
+export interface PersonPosition {
+  rowId: number
+  // 現在状態（after）— AllocationRow フィールド名と一致
+  departmentCode?: string
+  orgName?:        string
+  positionCode?:   string
+  localJobTitle?:  string
+  concurrentType?: string
+  secondmentToCompany?:   string
+  secondmentFromCompany?: string
+  // 変更前状態（prev）— filter のキーと対応
   prevDepartmentCode?: string
-  prevOrgName?:       string
-  businessUnit?:      string
-  division?:          string
-  subDivision?:       string
-  group?:             string
-  team?:              string
+  prevOrgName?:        string
+  prevPositionCode?:   string
+  prevLocalJobTitle?:  string
+  prevConcurrentType?: string
+  prevSecondmentToCompany?:   string
+  prevSecondmentFromCompany?: string
+}
 
-  // ── Person fields ──────────────────────────────────────────────────────
+/** findPersons の戻り値。1人1エントリ、兼務は positions[] に複数。 */
+export interface PersonResult {
+  userId?:          string
+  groupEmployeeId?: string
+  employeeNumber?:  string
+  name:             string
+  positions:        PersonPosition[]
+}
+
+/** getPersonsDetail の戻り値。1 rowId につき 1 エントリ（全フィールド）。 */
+export interface PersonRowDetail {
+  rowId:            number
+  name:             string
+  userId?:          string
+  groupEmployeeId?: string
+  employeeNumber?:  string
+  concurrentType?:  string
+  // Organization
+  departmentCode?:     string
+  orgName?:            string
+  prevDepartmentCode?: string
+  prevOrgName?:        string
+  // Person fields
   employmentType?:        string
   prevEmploymentType?:    string
   band?:                  string
@@ -54,9 +78,7 @@ export interface PersonDetail {
   payGrade?:              string
   prevPayGrade?:          string
   leaveOfAbsenceSign?:    string
-  prevLeaveOfAbsenceSign?: string
-
-  // ── Position fields ────────────────────────────────────────────────────
+  // Position fields
   positionCode?:              string
   prevPositionCode?:          string
   officialPositionCode?:      string
@@ -70,26 +92,22 @@ export interface PersonDetail {
   costCenter?:                string
   jobFamily?:                 string
   jobType?:                   string
-
-  // ── Allocation（出向・兼務）──────────────────────────────────────────────
-  concurrentType?:                string
-  concurrentReason?:              string
-  secondmentFromCompany?:         string
-  prevSecondmentFromCompany?:     string
-  secondmentToCompany?:           string
-  prevSecondmentToCompany?:       string
-  secondmentFromEmployeeNumber?:  string
-
-  // ── Transaction meta ───────────────────────────────────────────────────
-  transferReason?:    string
-  promotionSign?:     string
-  demotionReason?:    string
+  businessUnit?:              string
+  division?:                  string
+  subDivision?:               string
+  group?:                     string
+  team?:                      string
+  // Allocation（出向・兼務）
+  concurrentReason?:             string
+  secondmentFromCompany?:        string
+  prevSecondmentFromCompany?:    string
+  secondmentToCompany?:          string
+  prevSecondmentToCompany?:      string
+  secondmentFromEmployeeNumber?: string
+  // Transaction meta
+  transferReason?:     string
+  promotionSign?:      string
+  demotionReason?:     string
   payGradeChangeSign?: string
-  memo?:              string
-
-  // ── Derived ────────────────────────────────────────────────────────────
-  hasChanges:     boolean
-  changeKinds:    string[]
-  errorCount:     number
-  warningCount:   number
+  memo?:               string
 }

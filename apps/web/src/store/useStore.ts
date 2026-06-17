@@ -214,7 +214,20 @@ export const useStore = create<AppState>()((set, get) => {
         initPanels:  m.useCanvasLayoutStore.getState().initPanels,
       }))
       clearPanels()
-      initPanels(result.afterOrganizations)
+      // メンバー（userId あり）が属する組織 ID を収集して initPanels に渡す
+      // → メンバーがいる組織とその祖先のみパネルを生成し、空の枝を初期表示から除外
+      const orgByCode = new Map(
+        result.afterOrganizations
+          .filter(o => o.externalCode)
+          .map(o => [o.externalCode!, o])
+      )
+      const memberOrgIds = new Set<string>()
+      for (const row of result.allocationList) {
+        if (!row.userId || !row.departmentCode) continue
+        const org = orgByCode.get(row.departmentCode)
+        if (org) memberOrgIds.add(org.id)
+      }
+      initPanels(result.afterOrganizations, memberOrgIds.size > 0 ? memberOrgIds : undefined)
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),

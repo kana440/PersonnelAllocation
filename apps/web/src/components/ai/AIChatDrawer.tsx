@@ -69,7 +69,7 @@ export function AIChatDrawer({ onClose }: Props) {
     agentRunner?.clearSessionLog()
   }, [clearMessages, agentRunner])
 
-  const { widgetCallbacks, handleTextSubmit, isBusy, activeWidgetMsgId } =
+  const { widgetCallbacks, handleTextSubmit, isBusy, activeWidgetMsgId, lastRunPath } =
     useChatHandlers({ agentRunner, traceObserver })
 
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useChatDrop()
@@ -138,6 +138,12 @@ export function AIChatDrawer({ onClose }: Props) {
             <span className="text-sm font-semibold text-gray-700">AI アシスタント</span>
             {IS_MOCK_MODE && (
               <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded leading-tight">モック</span>
+            )}
+            {lastRunPath === 'fast' && (
+              <span className="text-xs text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded leading-tight" title="直前のターン: 読み取り・表示操作のみで完結しました">Fast</span>
+            )}
+            {lastRunPath === 'structured' && (
+              <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded leading-tight" title="直前のターン: スキルと書き込み操作を使用しました">Structured</span>
             )}
           </div>
           <div className="flex items-center gap-1">

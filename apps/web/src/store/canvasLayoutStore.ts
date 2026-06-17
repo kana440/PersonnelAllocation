@@ -38,8 +38,8 @@ function makePanelDef(
 interface CanvasLayoutState {
   panels: PanelDef[]
 
-  /** Excel 読み込み時: 全 orgs のパネルを作成。root (parentId なし) は open=true、それ以外は false */
-  initPanels:    (orgs: { id: string; parentId?: string | null }[]) => void
+  /** Excel 読み込み時: メンバーがいる組織とその祖先のみパネルを作成。memberOrgIds 省略時は全組織 */
+  initPanels:    (orgs: { id: string; parentId?: string | null }[], memberOrgIds?: Set<string>) => void
   addPanel:      (orgId: string) => void
   removePanel:   (panelId: string) => void
   reorderPanels: (orderedIds: string[]) => void
@@ -92,8 +92,25 @@ interface CanvasLayoutState {
 export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   panels: [],
 
-  initPanels: (orgs) => {
-    const panels: PanelDef[] = orgs.map((org, i) =>
+  initPanels: (orgs, memberOrgIds) => {
+    let orgsToShow = orgs
+    if (memberOrgIds && memberOrgIds.size > 0) {
+      // 直接メンバーがいる組織のうち、祖先にも直接メンバーがいるものは除外する
+      // （その子組織は祖先パネルの中にチップとして折りたたまれる）
+      const orgById = new Map(orgs.map(o => [o.id, o]))
+      const toShow = new Set<string>()
+      for (const orgId of memberOrgIds) {
+        let ancestorId = orgById.get(orgId)?.parentId
+        let dominated = false
+        while (ancestorId) {
+          if (memberOrgIds.has(ancestorId)) { dominated = true; break }
+          ancestorId = orgById.get(ancestorId)?.parentId
+        }
+        if (!dominated) toShow.add(orgId)
+      }
+      orgsToShow = orgs.filter(o => toShow.has(o.id))
+    }
+    const panels: PanelDef[] = orgsToShow.map((org, i) =>
       makePanelDef(
         org.id,
         { x: 40 + (i % 5) * (WINDOW_W + WINDOW_GAP), y: 40 + Math.floor(i / 5) * 420 },

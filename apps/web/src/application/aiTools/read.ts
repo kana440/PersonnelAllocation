@@ -1,53 +1,149 @@
 import type { HRApplicationService } from '../HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
+import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
 import { ALL_EDIT_OPERATIONS } from '@personnel/domain/commands/defs'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/choices'
+import { computeBandStepDiff, getBandsByStep } from '@personnel/domain/derivation'
 import type { OrgTreeNode, SelectedRowContext } from '../aiTypes'
-import type { PersonSearchResult, PersonDetail, VacantPositionResult } from './types'
+import type {
+  PersonSearchResult, PersonResult, PersonRowDetail, VacantPositionResult,
+} from './types'
 import { buildOrgTree } from './orgTree'
 
 export function createReadMethods(service: HRApplicationService) {
 
+  /**
+   * 従業員を検索し、各人のポジション情報（現在 + 変更前）を返す。
+   *
+   * 明示的パラメータ（name / userId / groupEmployeeId / employeeNumber）は部分一致。
+   * それ以外のフィールドは filter に AllocationRow のフィールド名をそのまま指定する
+   * （例: { departmentCode: 'D001' } / { prevDepartmentCode: 'D001' } / { concurrentType: '兼務' }）。
+   * 兼務行も含む。userId なし（新規メンバー等）も対象。
+   */
   function findPersons(query: {
-    name?:    string
-    userId?:  string
-    orgCode?: string
-  }): PersonSearchResult[] {
+    name?:            string
+    userId?:          string
+    groupEmployeeId?: string
+    employeeNumber?:  string
+    subtreeOrgCode?:  string   // この org 以下のメンバーを取得（配下の組織も含む）
+    filter?:          Record<string, string>
+  }): PersonResult[] {
     const { allocationList, afterOrganizations } = service.getSnapshot()
-    const byUserId = new Map<string, AllocationRow[]>()
-    for (const row of allocationList) {
-      if (!row.userId) continue
-      const bucket = byUserId.get(row.userId) ?? []
-      bucket.push(row)
-      byUserId.set(row.userId, bucket)
+
+    // subtreeOrgCode が指定された場合、配下 org の orgCode セットを構築
+    let subtreeCodes: Set<string> | null = null
+    if (query.subtreeOrgCode) {
+      const view = buildFlatOrgView(afterOrganizations)
+      const root = view.find(e => e.orgCode === query.subtreeOrgCode)
+      if (root) {
+        subtreeCodes = new Set([root.orgCode, ...root.descendantCodes])
+      }
     }
-    const results: PersonSearchResult[] = []
-    for (const [userId, rows] of byUserId) {
+
+    // Group rows by person key
+    const byKey = new Map<string, AllocationRow[]>()
+    for (const row of allocationList) {
+      // Skip truly vacant positions (position slot with no person identity at all)
+      const hasName = row.lastName || row.firstName
+      if (!row.userId && !row.groupEmployeeId && !row.employeeNumber && !hasName) continue
+
+      const key = row.userId
+        ? `uid:${row.userId}`
+        : row.groupEmployeeId
+        ? `gid:${row.groupEmployeeId}`
+        : row.employeeNumber
+        ? `emp:${row.employeeNumber}`
+        : `row:${row.rowId}`
+
+      const bucket = byKey.get(key) ?? []
+      bucket.push(row)
+      byKey.set(key, bucket)
+    }
+
+    const results: PersonResult[] = []
+
+    for (const [, rows] of byKey) {
       const primary = rows.find(r => !r.concurrentType) ?? rows[0]
       const name    = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
-      if (query.name    && !name.includes(query.name))              continue
-      if (query.userId  && !userId.includes(query.userId))           continue
-      if (query.orgCode && primary.departmentCode !== query.orgCode) continue
-      const org = afterOrganizations.find(
-        o => o.externalCode === primary.departmentCode || o.id === primary.departmentCode
-      )
-      results.push({ userId, name, orgCode: primary.departmentCode ?? '', orgName: org?.name, rowIds: rows.map(r => r.rowId) })
+
+      // Identity filters (partial match)
+      if (query.name           && !name.includes(query.name))                                    continue
+      if (query.userId         && !(primary.userId         ?? '').includes(query.userId))         continue
+      if (query.groupEmployeeId && !(primary.groupEmployeeId ?? '').includes(query.groupEmployeeId)) continue
+      if (query.employeeNumber  && !(primary.employeeNumber  ?? '').includes(query.employeeNumber))  continue
+
+      // Subtree filter: primary row の departmentCode が対象サブツリーに含まれるか
+      if (subtreeCodes && !subtreeCodes.has(primary.departmentCode ?? '')) continue
+
+      // Arbitrary field filter (exact match on primary row)
+      if (query.filter) {
+        const skip = Object.entries(query.filter).some(
+          ([field, val]) => String((primary as Record<string, unknown>)[field] ?? '') !== val
+        )
+        if (skip) continue
+      }
+
+      const positions = rows.map(r => {
+        const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)?.name
+        const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.prevDepartmentCode)?.name
+        return {
+          rowId:                  r.rowId,
+          departmentCode:         r.departmentCode,
+          orgName,
+          positionCode:           r.positionCode           || undefined,
+          localJobTitle:          r.localJobTitle          || undefined,
+          concurrentType:         r.concurrentType,
+          secondmentToCompany:    r.secondmentToCompany    || undefined,
+          secondmentFromCompany:  r.secondmentFromCompany  || undefined,
+          prevDepartmentCode:     r.prevDepartmentCode,
+          prevOrgName,
+          prevPositionCode:       r.prevPositionCode       || undefined,
+          prevLocalJobTitle:      r.prevLocalJobTitle      || undefined,
+          prevConcurrentType:     r.prevConcurrentType,
+          prevSecondmentToCompany:   r.prevSecondmentToCompany   || undefined,
+          prevSecondmentFromCompany: r.prevSecondmentFromCompany || undefined,
+        }
+      })
+
+      results.push({
+        userId:          primary.userId,
+        groupEmployeeId: primary.groupEmployeeId,
+        employeeNumber:  primary.employeeNumber,
+        name,
+        positions,
+      })
     }
+
     return results
   }
 
-  function findOrgs(query: { name?: string; code?: string; company?: string }): Organization[] {
+  function findOrgs(query: { name?: string; code?: string; level?: number; company?: string }): Array<{
+    orgCode:            string
+    orgName:            string
+    level:              number
+    parentOrgCode?:     string
+    path:               string[]
+    descendantOrgCodes: string[]
+  }> {
     const { afterOrganizations } = service.getSnapshot()
-    return afterOrganizations.filter(o => {
-      if (query.name    && !o.name.includes(query.name))                  return false
-      if (query.code    && !(o.externalCode ?? o.id).includes(query.code)) return false
-      if (query.company && o.companyId !== query.company)                  return false
-      return true
-    })
+    const view = buildFlatOrgView(afterOrganizations)
+    return view
+      .filter(e => !query.name    || e.orgName.includes(query.name))
+      .filter(e => !query.code    || e.orgCode.includes(query.code))
+      .filter(e => query.level == null || e.level === query.level)
+      .filter(e => !query.company || e.companyId === query.company)
+      .map(e => ({
+        orgCode:            e.orgCode,
+        orgName:            e.orgName,
+        level:              e.level,
+        parentOrgCode:      e.parentOrgCode,
+        path:               e.path,
+        descendantOrgCodes: e.descendantCodes,
+      }))
   }
 
   function getPersonRows(userId: string): AllocationRow[] {
@@ -73,10 +169,8 @@ export function createReadMethods(service: HRApplicationService) {
     const changes = detectPatterns(row, ctx)
     const issues  = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
 
-    // 現在の変更種別ラベル
     const changeKinds = [...changes.patterns].map(p => EDIT_PATTERN_META[p]?.label ?? p)
 
-    // この行で実行可能な操作
     const availableOps = ALL_EDIT_OPERATIONS
       .filter(def => def.availableFor(row, codeLists))
       .map(def => def.label)
@@ -91,13 +185,13 @@ export function createReadMethods(service: HRApplicationService) {
       changeKinds,
       availableOps,
       keyFields: {
-        employmentType:       row.employmentType      as string | undefined,
-        band:                 row.band                as string | undefined,
-        payGrade:             row.payGrade            as string | undefined,
+        employmentType:       row.employmentType       as string | undefined,
+        band:                 row.band                 as string | undefined,
+        payGrade:             row.payGrade             as string | undefined,
         officialPositionCode: row.officialPositionCode as string | undefined,
-        leaveOfAbsenceSign:   row.leaveOfAbsenceSign  as string | undefined,
-        concurrentType:       row.concurrentType      as string | undefined,
-        positionCode:         row.positionCode        as string | undefined,
+        leaveOfAbsenceSign:   row.leaveOfAbsenceSign   as string | undefined,
+        concurrentType:       row.concurrentType       as string | undefined,
+        positionCode:         row.positionCode         as string | undefined,
       },
     }
   }
@@ -113,11 +207,23 @@ export function createReadMethods(service: HRApplicationService) {
     return getFieldOptionsFromDomain(field, row, snap.codeLists, row.jobFamily as string | undefined)
   }
 
-  function findVacantPositions(query: { orgCode?: string } = {}): VacantPositionResult[] {
+  function findVacantPositions(query: { orgCode?: string; subtreeOrgCode?: string } = {}): VacantPositionResult[] {
     const { allocationList, afterOrganizations } = service.getSnapshot()
+
+    let subtreeCodes: Set<string> | null = null
+    if (query.subtreeOrgCode) {
+      const view = buildFlatOrgView(afterOrganizations)
+      const root = view.find(e => e.orgCode === query.subtreeOrgCode)
+      if (root) subtreeCodes = new Set([root.orgCode, ...root.descendantCodes])
+    }
+
     return allocationList
       .filter(r => !r.userId && !!r.positionCode)
-      .filter(r => !query.orgCode || r.departmentCode === query.orgCode)
+      .filter(r => {
+        if (subtreeCodes)         return subtreeCodes.has(r.departmentCode ?? '')
+        if (query.orgCode)        return r.departmentCode === query.orgCode
+        return true
+      })
       .map(r => {
         const org = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)
         return {
@@ -130,264 +236,88 @@ export function createReadMethods(service: HRApplicationService) {
       })
   }
 
-  function getPersonDetail(userId: string): Array<{
-    rowId:          number
-    name:           string
-    concurrentType?: string
-    // Organization
-    departmentCode?:     string
-    orgName?:            string
-    prevDepartmentCode?: string
-    prevOrgName?:        string
-    // Person fields
-    employmentType?:        string
-    prevEmploymentType?:    string
-    band?:                  string
-    prevBand?:              string
-    payGrade?:              string
-    prevPayGrade?:          string
-    leaveOfAbsenceSign?:    string
-    // Position fields
-    positionCode?:              string
-    officialPositionCode?:      string
-    prevOfficialPositionCode?:  string
-    localJobTitle?:             string
-    positionBand?:              string
-    managerPositionCode?:       string
-    managerName?:               string
-    location?:                  string
-    costCenter?:                string
-    jobFamily?:                 string
-    jobType?:                   string
-    businessUnit?:              string
-    division?:                  string
-    subDivision?:               string
-    group?:                     string
-    team?:                      string
-    // Allocation（出向・兼務）
-    concurrentReason?:             string
-    secondmentFromCompany?:        string
-    prevSecondmentFromCompany?:    string
-    secondmentToCompany?:          string
-    prevSecondmentToCompany?:      string
-    secondmentFromEmployeeNumber?: string
-    // Transaction meta
-    transferReason?:    string
-    promotionSign?:     string
-    demotionReason?:    string
-    payGradeChangeSign?: string
-    memo?:              string
-  }> {
-    const { allocationList, afterOrganizations } = service.getSnapshot()
-    const rows = allocationList.filter(r => r.userId === userId)
-    return rows.map(r => {
-      const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)?.name
-      const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.prevDepartmentCode)?.name
-      return {
-        rowId:          r.rowId,
-        name:           [r.lastName, r.firstName].filter(Boolean).join(' '),
-        concurrentType: r.concurrentType ?? r.prevConcurrentType,
-        // Organization
-        departmentCode:     r.departmentCode,
-        orgName:            orgName ?? r.departmentCode,
-        prevDepartmentCode: r.prevDepartmentCode,
-        prevOrgName:        prevOrgName ?? r.prevDepartmentCode,
-        // Person
-        employmentType:     r.employmentType     || r.prevEmploymentType,
-        prevEmploymentType: r.prevEmploymentType,
-        band:               r.band               || r.prevBand,
-        prevBand:           r.prevBand,
-        payGrade:           r.payGrade           || r.prevPayGrade,
-        prevPayGrade:       r.prevPayGrade,
-        leaveOfAbsenceSign: r.leaveOfAbsenceSign,
-        // Position
-        positionCode:             r.positionCode              || undefined,
-        officialPositionCode:     r.officialPositionCode      || r.prevOfficialPositionCode,
-        prevOfficialPositionCode: r.prevOfficialPositionCode,
-        localJobTitle:            r.localJobTitle             || r.prevLocalJobTitle,
-        positionBand:             r.positionBand              || r.prevPositionBand,
-        managerPositionCode:      r.managerPositionCode       || undefined,
-        managerName:              r.managerName               || undefined,
-        location:                 r.location                  || r.prevLocation,
-        costCenter:               r.costCenter                || r.prevCostCenter,
-        jobFamily:                r.jobFamily                 || r.prevJobFamily,
-        jobType:                  r.jobType                   || r.prevJobType,
-        businessUnit:             r.businessUnit              || r.prevBusinessUnit,
-        division:                 r.division                  || r.prevDivision,
-        subDivision:              r.subDivision               || r.prevSubDivision,
-        group:                    r.group                     || r.prevGroup,
-        team:                     r.team                      || r.prevTeam,
-        // Allocation
-        concurrentReason:             r.concurrentReason,
-        secondmentFromCompany:        r.secondmentFromCompany,
-        prevSecondmentFromCompany:    r.prevSecondmentFromCompany,
-        secondmentToCompany:          r.secondmentToCompany,
-        prevSecondmentToCompany:      r.prevSecondmentToCompany,
-        secondmentFromEmployeeNumber: r.secondmentFromEmployeeNumber,
-        // Transaction meta
-        transferReason:    r.transferReason,
-        promotionSign:     r.promotionSign    || undefined,
-        demotionReason:    r.demotionReason,
-        payGradeChangeSign: r.payGradeChangeSign || undefined,
-        memo:              r.memo,
-      }
-    })
-  }
-
   /**
-   * 複数条件で従業員を一括検索し、全フィールドを返す。
-   * 1人につき1エントリ（本務行ベース）。
-   *
-   * @param query.name       氏名（部分一致）
-   * @param query.userId     userId（部分一致）
-   * @param query.orgCode    所属組織コード（完全一致）
-   * @param query.hasChanges true のとき変更ありの人のみ返す
-   * @param query.hasErrors  true のとき検証エラーありの人のみ返す
-   * @param query.where      フィールド名:値 の追加絞り込み条件（完全一致）
-   *                         例: { leaveOfAbsenceSign: '1' }
+   * 指定した rowId[] の詳細情報を全フィールド取得する。
+   * findPersons で取得した positions[].rowId を渡す。
+   * before（発令前）と after（発令後）を含む。
    */
-  function searchPersons(query: {
-    name?:       string
-    userId?:     string
-    orgCode?:    string
-    hasChanges?: boolean
-    hasErrors?:  boolean
-    where?:      Record<string, string>
-    limit?:      number
-    offset?:     number
-  }): { items: PersonDetail[]; totalCount: number; truncated: boolean } {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
-
-    // group by userId
-    const byUserId = new Map<string, AllocationRow[]>()
-    for (const row of allocationList) {
-      if (!row.userId) continue
-      const bucket = byUserId.get(row.userId) ?? []
-      bucket.push(row)
-      byUserId.set(row.userId, bucket)
-    }
-
-    const results: PersonDetail[] = []
-
-    for (const [uid, rows] of byUserId) {
-      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-      const name    = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
-
-      // ── basic filters ──────────────────────────────────────────────────
-      if (query.name    && !name.includes(query.name))              continue
-      if (query.userId  && !uid.includes(query.userId))             continue
-      if (query.orgCode && primary.departmentCode !== query.orgCode) continue
-
-      // ── where: field-level exact match ────────────────────────────────
-      if (query.where) {
-        const skip = Object.entries(query.where).some(
-          ([field, val]) => (primary as Record<string, unknown>)[field] !== val
-        )
-        if (skip) continue
-      }
-
-      // ── hasChanges ────────────────────────────────────────────────────
-      if (query.hasChanges) {
-        const changed = rows.some(r => detectPatterns(r, ctx).diffCount > 0)
-        if (!changed) continue
-      }
-
-      // ── hasErrors / collect validation ────────────────────────────────
-      let errorCount   = 0
-      let warningCount = 0
-      for (const r of rows) {
-        const issues = validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectPatterns(r, ctx) })
-        errorCount   += issues.filter(i => i.level === 'error').length
-        warningCount += issues.filter(i => i.level === 'warning').length
-      }
-      if (query.hasErrors && errorCount === 0) continue
-
-      // ── derive changeKinds from all rows ──────────────────────────────
-      const allKinds = new Set<string>()
-      for (const r of rows) {
-        const { patterns } = detectPatterns(r, ctx)
-        patterns.forEach(p => allKinds.add(EDIT_PATTERN_META[p]?.label ?? p))
-      }
-
-      const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.departmentCode)?.name
-      const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.prevDepartmentCode)?.name
-
-      results.push({
-        userId:          uid,
-        name,
-        primaryRowId:    primary.rowId,
-        concurrentRowIds: rows.filter(r => r !== primary).map(r => r.rowId),
-        // Organization
-        departmentCode:      primary.departmentCode,
-        orgName:             orgName ?? primary.departmentCode,
-        prevDepartmentCode:  primary.prevDepartmentCode,
-        prevOrgName:         prevOrgName ?? primary.prevDepartmentCode,
-        businessUnit:        primary.businessUnit  || primary.prevBusinessUnit,
-        division:            primary.division      || primary.prevDivision,
-        subDivision:         primary.subDivision   || primary.prevSubDivision,
-        group:               primary.group         || primary.prevGroup,
-        team:                primary.team          || primary.prevTeam,
-        // Person
-        employmentType:      primary.employmentType     || primary.prevEmploymentType,
-        prevEmploymentType:  primary.prevEmploymentType,
-        band:                primary.band               || primary.prevBand,
-        prevBand:            primary.prevBand,
-        payGrade:            primary.payGrade           || primary.prevPayGrade,
-        prevPayGrade:        primary.prevPayGrade,
-        leaveOfAbsenceSign:  primary.leaveOfAbsenceSign,
-        prevLeaveOfAbsenceSign: primary.prevLeaveOfAbsenceSign,
-        // Position
-        positionCode:             primary.positionCode             || undefined,
-        prevPositionCode:         primary.prevPositionCode         || undefined,
-        officialPositionCode:     primary.officialPositionCode     || primary.prevOfficialPositionCode,
-        prevOfficialPositionCode: primary.prevOfficialPositionCode,
-        localJobTitle:            primary.localJobTitle            || primary.prevLocalJobTitle,
-        prevLocalJobTitle:        primary.prevLocalJobTitle,
-        positionBand:             primary.positionBand             || primary.prevPositionBand,
-        managerPositionCode:      primary.managerPositionCode      || undefined,
-        managerName:              primary.managerName              || undefined,
-        location:                 primary.location                 || primary.prevLocation,
-        costCenter:               primary.costCenter               || primary.prevCostCenter,
-        jobFamily:                primary.jobFamily                || primary.prevJobFamily,
-        jobType:                  primary.jobType                  || primary.prevJobType,
-        // Allocation
-        concurrentType:               primary.concurrentType,
-        concurrentReason:             primary.concurrentReason,
-        secondmentFromCompany:        primary.secondmentFromCompany,
-        prevSecondmentFromCompany:    primary.prevSecondmentFromCompany,
-        secondmentToCompany:          primary.secondmentToCompany,
-        prevSecondmentToCompany:      primary.prevSecondmentToCompany,
-        secondmentFromEmployeeNumber: primary.secondmentFromEmployeeNumber,
-        // Transaction meta
-        transferReason:    primary.transferReason,
-        promotionSign:     primary.promotionSign     || undefined,
-        demotionReason:    primary.demotionReason,
-        payGradeChangeSign: primary.payGradeChangeSign || undefined,
-        memo:              primary.memo,
-        // Derived
-        hasChanges:   rows.some(r => detectPatterns(r, ctx).diffCount > 0),
-        changeKinds:  [...allKinds],
-        errorCount,
-        warningCount,
+  function getPersonsDetail(rowIds: number[]): PersonRowDetail[] {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+    return rowIds
+      .map(rowId => allocationList.find(r => r.rowId === rowId))
+      .filter((r): r is AllocationRow => r !== undefined)
+      .map(r => {
+        const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)?.name
+        const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.prevDepartmentCode)?.name
+        return {
+          rowId:          r.rowId,
+          name:           [r.lastName, r.firstName].filter(Boolean).join(' '),
+          userId:         r.userId,
+          groupEmployeeId: r.groupEmployeeId,
+          employeeNumber: r.employeeNumber,
+          concurrentType: r.concurrentType ?? r.prevConcurrentType,
+          // Organization
+          departmentCode:     r.departmentCode,
+          orgName:            orgName ?? r.departmentCode,
+          prevDepartmentCode: r.prevDepartmentCode,
+          prevOrgName:        prevOrgName ?? r.prevDepartmentCode,
+          // Person
+          employmentType:     r.employmentType     || r.prevEmploymentType,
+          prevEmploymentType: r.prevEmploymentType,
+          band:               r.band               || r.prevBand,
+          prevBand:           r.prevBand,
+          payGrade:           r.payGrade           || r.prevPayGrade,
+          prevPayGrade:       r.prevPayGrade,
+          leaveOfAbsenceSign: r.leaveOfAbsenceSign,
+          // Position
+          positionCode:             r.positionCode              || undefined,
+          prevPositionCode:         r.prevPositionCode          || undefined,
+          officialPositionCode:     r.officialPositionCode      || r.prevOfficialPositionCode,
+          prevOfficialPositionCode: r.prevOfficialPositionCode,
+          localJobTitle:            r.localJobTitle             || r.prevLocalJobTitle,
+          prevLocalJobTitle:        r.prevLocalJobTitle,
+          positionBand:             r.positionBand              || r.prevPositionBand,
+          managerPositionCode:      r.managerPositionCode       || undefined,
+          managerName:              r.managerName               || undefined,
+          location:                 r.location                  || r.prevLocation,
+          costCenter:               r.costCenter                || r.prevCostCenter,
+          jobFamily:                r.jobFamily                 || r.prevJobFamily,
+          jobType:                  r.jobType                   || r.prevJobType,
+          businessUnit:             r.businessUnit              || r.prevBusinessUnit,
+          division:                 r.division                  || r.prevDivision,
+          subDivision:              r.subDivision               || r.prevSubDivision,
+          group:                    r.group                     || r.prevGroup,
+          team:                     r.team                      || r.prevTeam,
+          // Allocation
+          concurrentReason:             r.concurrentReason,
+          secondmentFromCompany:        r.secondmentFromCompany,
+          prevSecondmentFromCompany:    r.prevSecondmentFromCompany,
+          secondmentToCompany:          r.secondmentToCompany,
+          prevSecondmentToCompany:      r.prevSecondmentToCompany,
+          secondmentFromEmployeeNumber: r.secondmentFromEmployeeNumber,
+          // Transaction meta
+          transferReason:     r.transferReason,
+          promotionSign:      r.promotionSign      || undefined,
+          demotionReason:     r.demotionReason,
+          payGradeChangeSign: r.payGradeChangeSign || undefined,
+          memo:               r.memo,
+        }
       })
-    }
-
-    const limit  = query.limit  ?? 200
-    const offset = query.offset ?? 0
-    const page   = results.slice(offset, offset + limit)
-    return { items: page, totalCount: results.length, truncated: results.length > offset + limit }
   }
 
   const CHANGED_ROWS_LIMIT = 100
 
   function listChangedRows(options: { limit?: number; offset?: number } = {}): {
     items: Array<{
-      rowId:    number
-      userId:   string | undefined
-      name:     string
-      orgName:  string
-      kinds:    string[]
+      rowId:            number
+      userId?:          string
+      groupEmployeeId?: string
+      employeeNumber?:  string
+      lastName?:        string
+      firstName?:       string
+      name:             string
+      orgName:          string
+      kinds:            Array<{ code: string; label: string }>
       grade:    { before: string | undefined; after: string | undefined } | null
       position: { before: string | undefined; after: string | undefined } | null
     }>
@@ -411,11 +341,15 @@ export function createReadMethods(service: HRApplicationService) {
         o => (o.externalCode ?? o.id) === r.departmentCode
       )?.name ?? r.departmentCode ?? ''
       return {
-        rowId:    r.rowId,
-        userId:   r.userId,
-        name:     [r.lastName, r.firstName].filter(Boolean).join(' '),
+        rowId:           r.rowId,
+        userId:          r.userId,
+        groupEmployeeId: r.groupEmployeeId,
+        employeeNumber:  r.employeeNumber,
+        lastName:        r.lastName  || undefined,
+        firstName:       r.firstName || undefined,
+        name:            [r.lastName, r.firstName].filter(Boolean).join(' '),
         orgName,
-        kinds:    [...patterns],
+        kinds:           [...patterns].map(p => ({ code: p, label: EDIT_PATTERN_META[p]?.label ?? p })),
         grade:    r.prevPayGrade !== r.payGrade
           ? { before: r.prevPayGrade, after: r.payGrade } : null,
         position: r.prevOfficialPositionCode !== r.officialPositionCode
@@ -434,8 +368,23 @@ export function createReadMethods(service: HRApplicationService) {
   function getOrgTreeData(rootOrgCode?: string): {
     ok: true; orgName: string; tree: OrgTreeNode; totalMembers: number
   } | { ok: false; error: string } {
-    const { afterOrganizations } = service.getSnapshot()
-    const allPersons = findPersons({})
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+
+    // Build a minimal person list (userId ありのみ) for buildOrgTree
+    const byUserId = new Map<string, AllocationRow[]>()
+    for (const row of allocationList) {
+      if (!row.userId) continue
+      const bucket = byUserId.get(row.userId) ?? []
+      bucket.push(row)
+      byUserId.set(row.userId, bucket)
+    }
+    const allPersons: PersonSearchResult[] = []
+    for (const [userId, rows] of byUserId) {
+      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
+      const name    = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
+      const org     = afterOrganizations.find(o => (o.externalCode ?? o.id) === primary.departmentCode)
+      allPersons.push({ userId, name, orgCode: primary.departmentCode ?? '', orgName: org?.name, rowIds: rows.map(r => r.rowId) })
+    }
 
     const rootOrg = rootOrgCode
       ? afterOrganizations.find(o => o.externalCode === rootOrgCode || o.id === rootOrgCode)
@@ -455,9 +404,45 @@ export function createReadMethods(service: HRApplicationService) {
     return { ok: true, orgName: rootOrg.name, tree, totalMembers: countTotal(tree) }
   }
 
+  /**
+   * 指定行のポジションバンドを基準に、昇格/降格の候補バンドと現在のステップ差を返す。
+   * AI が「1段上を提案する」「2段以上は確認する」判断に使う。
+   */
+  function getPromotionBandInfo(rowId: number): {
+    currentPositionBand: string | undefined
+    oneLevelUp:   string[]
+    twoLevelsUp:  string[]
+    oneLevelDown: string[]
+    stepDiffFn: undefined
+  } | { ok: false; error: string } {
+    const { allocationList, codeLists } = service.getSnapshot()
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, error: '行が見つかりません' }
+    const currentPositionBand = row.positionBand as string | undefined
+    return {
+      currentPositionBand,
+      oneLevelUp:   getBandsByStep(currentPositionBand, 1, 'up',   codeLists),
+      twoLevelsUp:  getBandsByStep(currentPositionBand, 2, 'up',   codeLists).filter(b => !getBandsByStep(currentPositionBand, 1, 'up', codeLists).includes(b)),
+      oneLevelDown: getBandsByStep(currentPositionBand, 1, 'down', codeLists),
+      stepDiffFn:   undefined,
+    }
+  }
+
+  /**
+   * 指定行の現在バンドと新バンド間のステップ差を返す。
+   * propose_promotion 前の確認に使う（2以上なら大きな昇格）。
+   */
+  function computePromotionStepDiff(rowId: number, newPositionBand: string): number | undefined | { ok: false; error: string } {
+    const { allocationList, codeLists } = service.getSnapshot()
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, error: '行が見つかりません' }
+    return computeBandStepDiff(row.positionBand as string | undefined, newPositionBand, codeLists)
+  }
+
   return {
     findPersons, findOrgs, getPersonRows, getRow, getOrgs, getPersons,
     getRowContext, getFieldOptions, findVacantPositions,
-    getPersonDetail, searchPersons, listChangedRows, getOrgTreeData,
+    getPersonsDetail, listChangedRows, getOrgTreeData,
+    getPromotionBandInfo, computePromotionStepDiff,
   }
 }

@@ -9,14 +9,14 @@ export interface ToolAdminMeta {
 }
 
 export const TOOL_ADMIN_META: Record<string, ToolAdminMeta> = {
-  findPersons:                     { basis: '氏名・userId・組織コード（部分一致）',          action: '条件に合う従業員一覧を返す（副作用なし）' },
-  findOrgs:                        { basis: '組織名・組織コード（部分一致）',                 action: '組織一覧を返す（副作用なし）' },
-  getPersonDetail:                 { basis: 'userId',                                        action: '従業員の全フィールド詳細を返す（副作用なし）' },
-  searchPersons:                   { basis: '複数条件（氏名・組織・属性など）',               action: '条件に合う従業員を全フィールドで一覧返す（副作用なし）' },
+  findPersons:                     { basis: '氏名・各種ID・subtreeOrgCode・filter',          action: '条件に合う従業員一覧を返す。subtreeOrgCode で組織配下を一括取得可（副作用なし）' },
+  findOrgs:                        { basis: '組織名・コード・階層レベル（任意）',              action: '組織一覧を返す。descendantOrgCodes[] に配下の全 orgCode が含まれる（副作用なし）' },
+  getPersonsDetail:                { basis: 'rowIds[]（findPersons の positions[].rowId）',   action: '指定行の全フィールド詳細を返す（副作用なし）' },
   getReviewSummary:                { basis: '現在の状態（引数なし）',                         action: '変更件数・エラー件数のサマリーを返す（副作用なし）' },
-  listChangedRows:                 { basis: 'limit / offset',                                action: '変更のある行一覧を返す（副作用なし）' },
-  getOrgMembers:                   { basis: '組織コード',                                    action: 'その組織の直属メンバー一覧を返す（副作用なし）' },
   getOrgTree:                      { basis: '起点組織コード（省略可）',                       action: '組織ツリーをウィジェット表示（副作用: UI表示）' },
+  getChangedRows:                  { basis: 'kinds・氏名・ID・組織・limit/offset（全任意）', action: '変更のある行を種別・前後情報付きで絞り込み返す。ページング対応（副作用なし）' },
+  getValidationIssues:             { basis: 'level（error/warning・任意）',                  action: 'バリデーション問題を1件ずつ一覧返す（副作用なし）' },
+  findVacantPositions:             { basis: '組織コード（任意）',                             action: '空席ポジション一覧を返す（副作用なし）' },
   getValidationDiagnosis:          { basis: '現在の状態（引数なし）',                         action: 'バリデーション問題をフィールド別に集計し修正方法を返す（副作用なし）' },
   getFieldOptions:                 { basis: 'rowId・フィールド名',                            action: 'そのフィールドの有効選択肢を返す（副作用なし）' },
   undo:                            { basis: '（引数なし）',                                   action: '直前の操作を取り消す（副作用: 状態変更）' },
