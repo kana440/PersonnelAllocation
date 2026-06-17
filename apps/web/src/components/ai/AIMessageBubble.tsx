@@ -1,13 +1,18 @@
 import type { ChatMessage, WidgetCallbacks } from '../../application/aiTypes'
-import { FilePickerWidget }           from './widgets/FilePickerWidget'
-import { ExcelHelpWidget }            from './widgets/ExcelHelpWidget'
-import { OrgMembersWidget }           from './widgets/OrgMembersWidget'
-import { OrgTreeWidget }              from './widgets/OrgTreeWidget'
-import { DiffPreviewWidget }          from './widgets/DiffPreviewWidget'
-import { ExportConfirmWidget }        from './widgets/ExportConfirmWidget'
-import { WizardStepsWidget }          from './widgets/WizardStepsWidget'
-import { TeachAIInputWidget }         from './widgets/TeachAIInputWidget'
-import { ClassificationResultWidget } from './widgets/ClassificationResultWidget'
+import { FilePickerWidget }                from './widgets/FilePickerWidget'
+import { ExcelHelpWidget }                 from './widgets/ExcelHelpWidget'
+import { OrgMembersWidget }               from './widgets/OrgMembersWidget'
+import { OrgTreeWidget }                  from './widgets/OrgTreeWidget'
+import { DiffPreviewWidget }              from './widgets/DiffPreviewWidget'
+import { ExportConfirmWidget }            from './widgets/ExportConfirmWidget'
+import { WizardStepsWidget }              from './widgets/WizardStepsWidget'
+import { TeachAIInputWidget }             from './widgets/TeachAIInputWidget'
+import { ClassificationResultWidget }     from './widgets/ClassificationResultWidget'
+import { PromotionWidget }                from './widgets/PromotionWidget'
+import { DemotionWidget }                 from './widgets/DemotionWidget'
+import { OrgTransferWidget }              from './widgets/OrgTransferWidget'
+import { SecondmentInWidget }             from './widgets/SecondmentInWidget'
+import { ConcurrentSecondmentInWidget }   from './widgets/ConcurrentSecondmentInWidget'
 
 interface Props {
   message: ChatMessage
@@ -116,6 +121,62 @@ export function AIMessageBubble({ message, isActiveWidget, callbacks }: Props) {
                 classified={message.widget.classified}
                 onApply={callbacks.onClassificationApply}
                 onReject={callbacks.onClassificationReject}
+              />
+            )}
+            {message.widget.type === 'promotion-confirm' && (
+              <PromotionWidget
+                rowId={message.widget.rowId}
+                proposedPositionBand={message.widget.proposedPositionBand}
+                proposedOfficialPositionCode={message.widget.proposedOfficialPositionCode}
+                proposedLocalJobTitle={message.widget.proposedLocalJobTitle}
+                label={message.widget.label}
+                isActive={isActiveWidget || !!message.llmConfirm}
+                onConfirm={message.llmConfirm ?? (() => {})}
+                onCancel={message.llmCancel  ?? (() => {})}
+              />
+            )}
+            {message.widget.type === 'demotion-confirm' && (
+              <DemotionWidget
+                rowId={message.widget.rowId}
+                proposedPositionBand={message.widget.proposedPositionBand}
+                proposedOfficialPositionCode={message.widget.proposedOfficialPositionCode}
+                proposedLocalJobTitle={message.widget.proposedLocalJobTitle}
+                demotionReason={message.widget.demotionReason}
+                label={message.widget.label}
+                isActive={isActiveWidget || !!message.llmConfirm}
+                onConfirm={message.llmConfirm ?? (() => {})}
+                onCancel={message.llmCancel  ?? (() => {})}
+              />
+            )}
+            {message.widget.type === 'org-transfer-confirm' && (
+              <OrgTransferWidget
+                persons={message.widget.persons}
+                targetOrgName={message.widget.targetOrgName}
+                transferReason={message.widget.transferReason}
+                label={message.widget.label}
+                isActive={isActiveWidget || !!message.llmConfirm}
+                onConfirm={message.llmConfirm ?? (() => {})}
+                onCancel={message.llmCancel  ?? (() => {})}
+              />
+            )}
+            {message.widget.type === 'secondment-in-confirm' && (
+              <SecondmentInWidget
+                rowId={message.widget.rowId}
+                sfIntegrated={message.widget.sfIntegrated}
+                label={message.widget.label}
+                isActive={isActiveWidget || !!message.llmConfirm}
+                onConfirm={message.llmConfirm ?? (() => {})}
+                onCancel={message.llmCancel  ?? (() => {})}
+              />
+            )}
+            {message.widget.type === 'concurrent-secondment-in-confirm' && (
+              <ConcurrentSecondmentInWidget
+                rowId={message.widget.rowId}
+                sfIntegrated={message.widget.sfIntegrated}
+                label={message.widget.label}
+                isActive={isActiveWidget || !!message.llmConfirm}
+                onConfirm={message.llmConfirm ?? (() => {})}
+                onCancel={message.llmCancel  ?? (() => {})}
               />
             )}
           </div>

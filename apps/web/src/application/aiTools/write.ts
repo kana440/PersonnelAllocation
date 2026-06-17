@@ -11,6 +11,8 @@ import {
   leaveOfAbsenceDef, returnFromLeaveDef,
   concurrentAddDef, concurrentReleaseDef,
   demotionDef,
+  secondmentInSFDef, secondmentInNonSFDef,
+  concurrentSecondmentInSFDef, concurrentSecondmentInNonSFDef,
 } from '@personnel/domain/commands/defs'
 import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
 import { deriveFieldUpdates } from '@personnel/domain/derivation'
@@ -482,7 +484,7 @@ export function createWriteMethods(service: HRApplicationService) {
 
   function executeDemotionForUser(
     rowId:  number,
-    fields: { officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
+    fields: { positionBand?: string; officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
   ): AIOperationResult {
     const { allocationList } = service.getSnapshot()
     const row = allocationList.find(r => r.rowId === rowId)
@@ -499,6 +501,43 @@ export function createWriteMethods(service: HRApplicationService) {
     const beforeList = service.getSnapshot().allocationList
     const result = service.executeScenario(scenario)
     if (!result.ok) return { ok: false, errors: result.errors }
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  // ── 出向受入 ──────────────────────────────────────────────────────────────
+
+  function executeSecondmentIn(
+    rowId:        number,
+    sfIntegrated: boolean,
+    fields: {
+      secondmentFromCompany:         string
+      secondmentFromEmployeeNumber?: string
+      departmentCode:                string
+      employmentType:                string
+    },
+  ): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const def = sfIntegrated ? secondmentInSFDef : secondmentInNonSFDef
+    const result = service.executeOperation(bindOperation(def, rowId, fields))
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
+  function executeConcurrentSecondmentIn(
+    rowId:        number,
+    sfIntegrated: boolean,
+    fields: {
+      secondmentFromCompany:         string
+      secondmentFromEmployeeNumber?: string
+      departmentCode:                string
+      employmentType:                string
+      concurrentReason?:             string
+    },
+  ): AIOperationResult {
+    const beforeList = service.getSnapshot().allocationList
+    const def = sfIntegrated ? concurrentSecondmentInSFDef : concurrentSecondmentInNonSFDef
+    const result = service.executeOperation(bindOperation(def, rowId, fields))
+    if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
@@ -521,6 +560,7 @@ export function createWriteMethods(service: HRApplicationService) {
     executeResignation, executeVacantPositionMove, executeSecondmentRelease,
     executeLeaveOfAbsence, executeReturnFromLeave,
     executeConcurrentAdd, executeConcurrentRelease, executeDemotionForUser,
+    executeSecondmentIn, executeConcurrentSecondmentIn,
     executeScenario,
     formatErrors,
   }

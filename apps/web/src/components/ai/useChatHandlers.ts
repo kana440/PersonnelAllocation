@@ -146,17 +146,13 @@ export function useChatHandlers({
           isLoading:  false,
           text:       '以下の内容を確認してください。',
           widget:     proposal.widget,
-          llmConfirm: () => {
-            updateMessage(id, { isLoading: true, text: '適用中...', widget: undefined, llmConfirm: undefined, llmCancel: undefined })
-            // formInputs の現在値を userInputs として収集（初期値をそのまま使用）
-            const userInputs = proposal.formInputs?.reduce<Record<string, string>>((acc, f) => {
-              if (f.value != null) acc[f.field] = f.value
-              return acc
-            }, {})
+          formInputs: proposal.formInputs,
+          llmConfirm: (userInputs?: Record<string, string>) => {
+            updateMessage(id, { isLoading: true, text: '適用中...', widget: undefined, formInputs: undefined, llmConfirm: undefined, llmCancel: undefined })
             resolve({ approved: true, userInputs })
           },
           llmCancel: () => {
-            updateMessage(id, { isLoading: true, text: 'キャンセル処理中...', widget: undefined, llmConfirm: undefined, llmCancel: undefined })
+            updateMessage(id, { isLoading: true, text: 'キャンセル処理中...', widget: undefined, formInputs: undefined, llmConfirm: undefined, llmCancel: undefined })
             resolve({ approved: false })
           },
         })

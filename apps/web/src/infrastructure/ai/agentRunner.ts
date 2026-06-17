@@ -322,7 +322,7 @@ export class AgentRunner {
           if ('error' in proposal) {
             content = JSON.stringify({ ok: false, error: proposal.error })
           } else if (onConfirm) {
-            const confirmResult = await onConfirm({ widget: proposal.widget, formInputs: proposal.formInputs })
+            const confirmResult = await onConfirm({ widget: proposal.widget })
             if (confirmResult.approved) {
               const applyResult = entry.executeOnApprove(args, confirmResult.userInputs)
               content = JSON.stringify({ ok: true, result: applyResult })

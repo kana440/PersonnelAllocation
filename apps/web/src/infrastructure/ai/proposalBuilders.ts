@@ -7,14 +7,14 @@
 //       読み取り専用（副作用なし）。書き込みは toolRegistry の executeOnApprove
 //       が aiTools メソッドを呼ぶことで行う。
 
-import type { ChatWidget, PersonDiff, WizardStep, FormInput } from '../../application/aiTypes'
+import type { ChatWidget, PersonDiff, WizardStep } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '@personnel/domain/commands/orgHelpers'
 import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
-import { deriveFieldUpdates, computeBandStepDiff } from '@personnel/domain/derivation'
+import { computeBandStepDiff } from '@personnel/domain/derivation'
 
-type ProposalResult = { widget: ChatWidget; formInputs?: FormInput[] } | { error: string }
+type ProposalResult = { widget: ChatWidget } | { error: string }
 
 // ── 一括異動 ─────────────────────────────────────────────────────────────────
 
@@ -159,17 +159,15 @@ export function buildTransferProposal(opts: {
     }]
   })
 
-  const formInputs: FormInput[] = [
-    {
-      field:    'transferReason',
-      label:    '異動事由',
-      value:    transferReason,
-      required: true,
-      options:  ['分掌異動（改組）', '分掌異動'],
+  return {
+    widget: {
+      type: 'org-transfer-confirm',
+      persons,
+      targetOrgName: targetOrg?.name ?? targetOrgCode,
+      transferReason,
+      label: '組織異動の確認',
     },
-  ]
-
-  return { widget: { type: 'diff-preview', persons, label: '異動の確認' }, formInputs }
+  }
 }
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
@@ -180,57 +178,25 @@ export function buildPromotionProposal(opts: {
   newOfficialPositionCode?: string
   newLocalJobTitle?:        string
 }): ProposalResult {
-  const { allocationList, afterOrganizations, codeLists } = appService.getSnapshot()
+  const { allocationList, codeLists } = appService.getSnapshot()
   const row = allocationList.find(r => r.rowId === opts.rowId)
   if (!row) return { error: '対象行が見つかりません' }
 
-  const org  = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
-  const name = [row.lastName, row.firstName].filter(Boolean).join(' ')
-
-  // DryRun: positionBand → band（社員なら連動）→ payGrade を deriveFieldUpdates が一括処理
-  const changes: Record<string, string | undefined> = { positionBand: opts.newPositionBand }
-  const derived = deriveFieldUpdates(changes as Parameters<typeof deriveFieldUpdates>[0], row, codeLists, allocationList)
-  Object.assign(changes, derived)
-  if (opts.newOfficialPositionCode !== undefined) changes['officialPositionCode'] = opts.newOfficialPositionCode
-  if (opts.newLocalJobTitle        !== undefined) changes['localJobTitle']        = opts.newLocalJobTitle
-
-  const after: Record<string, string | undefined> = {}
-  for (const [k, v] of Object.entries(changes)) {
-    const cur = (row as Record<string, unknown>)[k] as string | undefined
-    if (String(cur ?? '') !== String(v ?? '')) after[k] = v as string | undefined
-  }
-
-  // ステップ差を計算（2段階以上の昇格は注意喚起）
   const stepDiff = computeBandStepDiff(row.positionBand as string | undefined, opts.newPositionBand, codeLists)
-  const stepNote = stepDiff !== undefined && stepDiff >= 2
-    ? `⚠️ ${stepDiff}段階昇格`
-    : stepDiff !== undefined && stepDiff <= -1
-      ? `⚠️ ${Math.abs(stepDiff)}段階降格`
-      : undefined
+  const label = stepDiff !== undefined && stepDiff >= 2
+    ? `昇格の確認（${stepDiff}段階変更）`
+    : '昇格の確認'
 
-  const person: PersonDiff = {
-    userId:  row.userId ?? '',
-    name,
-    orgName: org?.name ?? row.departmentCode ?? '',
-    rowId:   opts.rowId,
-    before: {
-      grade:    row.payGrade,
-      position: row.positionBand,
-      note:     row.officialPositionCode,
-    },
-    after: {
-      grade:    after['payGrade']             ?? row.payGrade,
-      position: after['positionBand']         ?? row.positionBand,
-      note:     after['officialPositionCode'] ?? row.officialPositionCode,
-      orgName:  stepNote,
+  return {
+    widget: {
+      type: 'promotion-confirm',
+      rowId: opts.rowId,
+      proposedPositionBand: opts.newPositionBand,
+      proposedOfficialPositionCode: opts.newOfficialPositionCode,
+      proposedLocalJobTitle: opts.newLocalJobTitle,
+      label,
     },
   }
-
-  const label = stepDiff !== undefined && Math.abs(stepDiff) >= 2
-    ? `昇格の確認（DryRun）— ${Math.abs(stepDiff)}段階変更`
-    : '昇格の確認（DryRun）'
-
-  return { widget: { type: 'diff-preview', persons: [person], label } }
 }
 
 // ── 空席ポジション作成 ────────────────────────────────────────────────────────
@@ -462,24 +428,19 @@ export function buildDemotionProposal(
   rowId:  number,
   fields: { officialPositionCode?: string; localJobTitle?: string; band?: string; payGrade?: string; demotionReason?: string },
 ): ProposalResult {
-  const { allocationList, afterOrganizations } = appService.getSnapshot()
+  const { allocationList } = appService.getSnapshot()
   const row = allocationList.find(r => r.rowId === rowId)
-  const org = afterOrganizations.find(o => o.externalCode === row?.departmentCode || o.id === row?.departmentCode)
-  const person: PersonDiff = {
-    userId: row?.userId ?? '', rowId,
-    name:    row ? [row.lastName, row.firstName].filter(Boolean).join(' ') : String(rowId),
-    orgName: org?.name ?? row?.departmentCode ?? '',
-    before:  {
-      grade:    row?.band ?? row?.payGrade,
-      position: row?.officialPositionCode ?? row?.localJobTitle,
-    },
-    after:   {
-      grade:    fields.band ?? fields.payGrade,
-      position: fields.officialPositionCode ?? fields.localJobTitle,
-      note:     fields.demotionReason ?? '降格',
+  return {
+    widget: {
+      type: 'demotion-confirm',
+      rowId,
+      proposedPositionBand: fields.band ?? (row?.positionBand as string | undefined) ?? '',
+      proposedOfficialPositionCode: fields.officialPositionCode,
+      proposedLocalJobTitle: fields.localJobTitle,
+      demotionReason: fields.demotionReason,
+      label: '降格の確認',
     },
   }
-  return { widget: { type: 'diff-preview', persons: [person], label: '降格の確認' } }
 }
 
 // ── 本務出向 → 兼務出向変換（Wizard 2ステップ） ───────────────────────────────
@@ -572,4 +533,46 @@ export function buildSecondmentTransferProposal(
   ]
 
   return { widget: { type: 'wizard-steps', title: `出向先への転籍: ${name} → ${secondmentCo}`, steps } }
+}
+
+// ── 本務出向受入 ──────────────────────────────────────────────────────────────
+
+export function buildSecondmentInProposal(
+  rowId:        number,
+  sfIntegrated: boolean,
+): ProposalResult {
+  const { allocationList } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  if (!row) return { error: `行が見つかりません (rowId: ${rowId})` }
+  if (!row.userId) return { error: 'この行に人が配属されていません' }
+  const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${rowId}`
+  return {
+    widget: {
+      type: 'secondment-in-confirm',
+      rowId,
+      sfIntegrated,
+      label: `本務出向受入: ${name}`,
+    },
+  }
+}
+
+// ── 兼務出向受入 ──────────────────────────────────────────────────────────────
+
+export function buildConcurrentSecondmentInProposal(
+  rowId:        number,
+  sfIntegrated: boolean,
+): ProposalResult {
+  const { allocationList } = appService.getSnapshot()
+  const row = allocationList.find(r => r.rowId === rowId)
+  if (!row) return { error: `行が見つかりません (rowId: ${rowId})` }
+  if (!row.userId) return { error: 'この行に人が配属されていません' }
+  const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${rowId}`
+  return {
+    widget: {
+      type: 'concurrent-secondment-in-confirm',
+      rowId,
+      sfIntegrated,
+      label: `兼務出向受入: ${name}`,
+    },
+  }
 }

@@ -13,7 +13,7 @@
 // ビジネスロジックは aiTools/ に、確認ウィジェット組み立ては proposalBuilders.ts に置く。
 // 設計思想: specs/G4-ai/00-design-philosophy.md
 
-import type { ChatWidget, PersonInfo, FormInput } from '../../application/aiTypes'
+import type { ChatWidget, PersonInfo } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import * as P from './proposalBuilders'
@@ -54,7 +54,7 @@ export interface ConfirmEntry {
    * formInputs が含まれる場合、確認UIに入力フォームを追加表示する。
    * AgentRunner はエラーをツール結果として LLM に返し、widget は表示しない。
    */
-  buildProposal(args: Record<string, unknown>): { widget: ChatWidget; formInputs?: FormInput[] } | { error: string }
+  buildProposal(args: Record<string, unknown>): { widget: ChatWidget } | { error: string }
   /** ユーザーが承認した後に呼ばれる。userInputs は formInputs をユーザーが確認/上書きした値。 */
   executeOnApprove(args: Record<string, unknown>, userInputs?: Record<string, string>): unknown
 }
@@ -623,11 +623,11 @@ const TOOL_ENTRIES: ToolEntry[] = [
       newOfficialPositionCode:  args.newOfficialPositionCode  as string | undefined,
       newLocalJobTitle:         args.newLocalJobTitle         as string | undefined,
     }),
-    executeOnApprove: args => aiTools.executePromotion({
-      rowId:                    args.rowId                    as number,
-      newPositionBand:          args.newPositionBand          as string,
-      newOfficialPositionCode:  args.newOfficialPositionCode  as string | undefined,
-      newLocalJobTitle:         args.newLocalJobTitle         as string | undefined,
+    executeOnApprove: (args, userInputs) => aiTools.executePromotion({
+      rowId:                   args.rowId as number,
+      newPositionBand:         userInputs?.positionBand          ?? args.newPositionBand          as string,
+      newOfficialPositionCode: userInputs?.officialPositionCode  ?? args.newOfficialPositionCode  as string | undefined,
+      newLocalJobTitle:        userInputs?.localJobTitle         ?? args.newLocalJobTitle         as string | undefined,
     }),
   },
 
@@ -1022,13 +1022,91 @@ const TOOL_ENTRIES: ToolEntry[] = [
       payGrade:             args.payGrade              as string | undefined,
       demotionReason:       args.demotionReason        as string | undefined,
     }),
-    executeOnApprove: args => aiTools.executeDemotionForUser(args.rowId as number, {
-      officialPositionCode: args.officialPositionCode as string | undefined,
-      localJobTitle:        args.localJobTitle        as string | undefined,
-      band:                 args.band                 as string | undefined,
-      payGrade:             args.payGrade              as string | undefined,
-      demotionReason:       args.demotionReason        as string | undefined,
+    executeOnApprove: (args, userInputs) => aiTools.executeDemotionForUser(args.rowId as number, {
+      positionBand:         userInputs?.positionBand         ?? undefined,
+      officialPositionCode: userInputs?.officialPositionCode ?? args.officialPositionCode as string | undefined,
+      localJobTitle:        userInputs?.localJobTitle        ?? args.localJobTitle        as string | undefined,
+      band:                 userInputs?.band                 ?? args.band                 as string | undefined,
+      payGrade:             userInputs?.payGrade             ?? args.payGrade              as string | undefined,
+      demotionReason:       userInputs?.demotionReason       ?? args.demotionReason        as string | undefined,
     }),
+  },
+
+  // ── Confirm: propose_secondment_in ────────────────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_secondment_in',
+        description: '指定した行に本務出向受入を設定することをユーザーに提案し、確認を得てから実行する。出向元会社・社員番号・受入先組織・雇用タイプを確認UIで入力させる。sfIntegrated=true の場合は社員番号が必須（SF統合先）。実行前に findPersons で rowId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['rowId'],
+          properties: {
+            rowId:        { type: 'number',  description: '本務出向受入対象の rowId（findPersons の positions[].rowId）' },
+            sfIntegrated: { type: 'boolean', description: 'SF統合先かどうか（デフォルト false）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildSecondmentInProposal(
+      args.rowId as number,
+      (args.sfIntegrated as boolean | undefined) ?? false,
+    ),
+    executeOnApprove: (args, userInputs) => {
+      if (!userInputs?.secondmentFromCompany || !userInputs?.departmentCode || !userInputs?.employmentType)
+        return { ok: false, errors: [{ message: '出向元会社・受入先組織・雇用タイプは必須です' }] }
+      return aiTools.executeSecondmentIn(
+        args.rowId as number,
+        (args.sfIntegrated as boolean | undefined) ?? false,
+        {
+          secondmentFromCompany:        userInputs.secondmentFromCompany,
+          secondmentFromEmployeeNumber: userInputs.secondmentFromEmployeeNumber,
+          departmentCode:               userInputs.departmentCode,
+          employmentType:               userInputs.employmentType,
+        },
+      )
+    },
+  },
+
+  // ── Confirm: propose_concurrent_secondment_in ───────────────────────────────
+  {
+    kind: 'confirm',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_concurrent_secondment_in',
+        description: '指定した行に兼務出向受入を設定することをユーザーに提案し、確認を得てから実行する。新規兼務行を作成する。出向元会社・社員番号・出向先組織・雇用タイプを確認UIで入力させる。実行前に findPersons で rowId を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['rowId'],
+          properties: {
+            rowId:        { type: 'number',  description: '兼務出向受入対象の rowId（本務行）（findPersons の positions[].rowId）' },
+            sfIntegrated: { type: 'boolean', description: 'SF統合先かどうか（デフォルト false）' },
+          },
+        },
+      },
+    },
+    buildProposal: args => P.buildConcurrentSecondmentInProposal(
+      args.rowId as number,
+      (args.sfIntegrated as boolean | undefined) ?? false,
+    ),
+    executeOnApprove: (args, userInputs) => {
+      if (!userInputs?.secondmentFromCompany || !userInputs?.departmentCode || !userInputs?.employmentType)
+        return { ok: false, errors: [{ message: '出向元会社・出向先組織・雇用タイプは必須です' }] }
+      return aiTools.executeConcurrentSecondmentIn(
+        args.rowId as number,
+        (args.sfIntegrated as boolean | undefined) ?? false,
+        {
+          secondmentFromCompany:        userInputs.secondmentFromCompany,
+          secondmentFromEmployeeNumber: userInputs.secondmentFromEmployeeNumber,
+          departmentCode:               userInputs.departmentCode,
+          employmentType:               userInputs.employmentType,
+          concurrentReason:             userInputs.concurrentReason,
+        },
+      )
+    },
   },
 ]
 

@@ -62,6 +62,37 @@ export type ChatWidget =
   | { type: 'wizard-steps'; title: string; steps: WizardStep[] }
   | { type: 'teach-ai-input'; conversationWindow: ConversationItem[] }
   | { type: 'classification-result'; classified: ClassificationWidgetData }
+  /** 昇格確認 — 対話型バンド選択・連鎖導出・DryRun表示 */
+  | { type: 'promotion-confirm'
+      rowId: number
+      proposedPositionBand: string
+      proposedOfficialPositionCode?: string
+      proposedLocalJobTitle?: string
+      label?: string }
+  /** 降格確認 — 昇格と同じ構成＋降格理由必須 */
+  | { type: 'demotion-confirm'
+      rowId: number
+      proposedPositionBand: string
+      proposedOfficialPositionCode?: string
+      proposedLocalJobTitle?: string
+      demotionReason?: string
+      label?: string }
+  /** 組織異動確認 — 対象者一覧 + 異動事由入力 */
+  | { type: 'org-transfer-confirm'
+      persons: PersonDiff[]
+      targetOrgName: string
+      transferReason?: string
+      label?: string }
+  /** 出向受入確認（本務）— SF統合先 / SF非統合先 variant */
+  | { type: 'secondment-in-confirm'
+      rowId: number
+      sfIntegrated: boolean
+      label?: string }
+  /** 兼務出向受入確認 — SF統合先 / SF非統合先 variant */
+  | { type: 'concurrent-secondment-in-confirm'
+      rowId: number
+      sfIntegrated: boolean
+      label?: string }
 
 /** 選択中の行のコンテキスト情報。AI のシステムプロンプトに注入する */
 export interface SelectedRowContext {
@@ -86,11 +117,13 @@ export interface SelectedRowContext {
 
 /** confirm ツールの確認UIに表示する入力フォームの1フィールド */
 export interface FormInput {
-  field:    string      // フィールドキー（usedValues のキーになる）
-  label:    string      // 表示名
-  value?:   string      // AI が提案した初期値（空なら未入力）
-  required: boolean
-  options?: string[]    // 選択肢がある場合
+  field:      string      // フィールドキー（usedValues のキーになる）
+  label:      string      // 表示名
+  value?:     string      // AI が提案した初期値（空なら未入力）
+  required:   boolean
+  options?:   string[]    // 選択肢がある場合
+  readOnly?:  boolean     // 表示のみ（変更不可）
+  prevValue?: string      // Excel インポート時の before 値。存在する場合「変更前: xxx」警告を表示
 }
 
 /** confirm ツールの承認/却下結果。ユーザーが formInputs に入力した値も含む */
@@ -105,8 +138,10 @@ export interface ChatMessage {
   text: string
   widget?: ChatWidget
   isLoading?: boolean
-  /** LLM が提案した確認ウィジェットの確定コールバック。設定時は WidgetCallbacks より優先される。 */
-  llmConfirm?: () => void
+  /** confirm ツールが buildProposal で返した入力フォーム定義。専用 Widget が使わないシンプルな操作のみ使用。 */
+  formInputs?: FormInput[]
+  /** LLM が提案した確認ウィジェットの確定コールバック。userInputs はユーザーが編集した値。設定時は WidgetCallbacks より優先される。 */
+  llmConfirm?: (userInputs?: Record<string, string>) => void
   /** LLM が提案した確認ウィジェットのキャンセルコールバック。設定時は WidgetCallbacks より優先される。 */
   llmCancel?: () => void
 }
