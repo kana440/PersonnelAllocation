@@ -340,11 +340,26 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               ? { valid: resolvedOptions, invalid: [] as string[] }
               : getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
             if (fieldKey === 'payGrade') {
-              console.log('[payGrade options]', {
+              const empType = codeLists.employmentTypes.find(e => e.label === draftRow.employmentType || e.code === draftRow.employmentType)
+              const jlEntry = codeLists.jobLevels.find(e => e.label === (draftRow.band as string))
+              const jtEntry = codeLists.jobTypes.find(e => e.label === (draftRow.jobType as string))
+              const samplePg = codeLists.payGrades.slice(0, 3).map(e => ({ label: e.label, band: e.band, compensationCategory: e.compensationCategory, isRegularEmployee: e.isRegularEmployee }))
+              console.log('[payGrade debug]', {
+                // 行の値
                 band: draftRow.band, positionBand: draftRow.positionBand,
+                jobType: draftRow.jobType,
                 userId: draftRow.userId, groupEmployeeId: draftRow.groupEmployeeId,
-                employmentType: draftRow.employmentType,
-                validCount: valid.length, valid: valid.slice(0, 5),
+                // 雇用タイプマスタ
+                empType_isRegularEmployee: empType?.isRegularEmployee,
+                // jobLevel マスタ（band から）
+                jl_promotionDemotionBand: jlEntry?.promotionDemotionBand,
+                jl_isRegularEmployee: (jlEntry as Record<string, unknown>)?.isRegularEmployee,
+                // jobType マスタ
+                jt_compensationCategory: jtEntry?.compensationCategory,
+                // payGrade サンプル
+                payGrade_sample: samplePg,
+                // 結果
+                validCount: valid.length,
               })
             }
             const fieldBaseBand = (row[field] as string | undefined)
