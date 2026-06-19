@@ -33,10 +33,6 @@ function isRegularEmp(row: AllocationRow, codeLists: AllCodeLists): boolean {
   return !!entry?.isRegularEmployee
 }
 
-/** F2 条件: 雇用タイプが社員 かつ userId === groupEmployeeId（本籍行）*/
-function isF2Primary(row: AllocationRow, codeLists: AllCodeLists): boolean {
-  return isRegularEmp(row, codeLists) && !!row.userId && row.userId === row.groupEmployeeId
-}
 
 /**
  * フィールド変更から連動する自動導出フィールドを計算する。
@@ -62,6 +58,7 @@ export function deriveFieldUpdates(
   const effectiveChanges: DerivedUpdates = { ...changes }
   if ('positionBand' in changes && !('band' in changes) && isRegularEmp(draft, codeLists)) {
     effectiveChanges.band = changes.positionBand
+    result.band = changes.positionBand  // positionBand → band を呼び出し側にも返す
   }
 
   // departmentCode → 組織サブフィールド群
@@ -74,13 +71,10 @@ export function deriveFieldUpdates(
     result.managerName = deriveManagerName(effectiveChanges.managerPositionCode, allocationList)
   }
 
-  // band → promotionSign（warningLevel 比較）+ F2条件: positionBand を band と同期
+  // band → promotionSign（warningLevel 比較）
   if ('band' in effectiveChanges) {
     const prevBand = draft.prevBand as string | undefined
     Object.assign(result, derivePromotionSign(effectiveChanges.band, prevBand, codeLists))
-    if (isF2Primary(draft, codeLists)) {
-      result.positionBand = effectiveChanges.band
-    }
   }
 
   // jobFamily → jobType / payGrade リセット

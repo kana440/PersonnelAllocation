@@ -43,7 +43,6 @@ export const promotionDef: EditOperation = {
     // ── 最上部: 異動事由 ──────────────────────────────────────────────────
     { field: 'transferReason',  required: false,
       options: ['分掌移動（改組）', '分掌移動'] },
-    { field: 'memo',               required: false },
     // ── バンドセクション ──────────────────────────────────────────────────
     { kind: 'section', label: 'バンド' },
     { field: 'positionBand',       required: true,  stepFilter: 'up' },
