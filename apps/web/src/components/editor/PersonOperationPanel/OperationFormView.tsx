@@ -340,24 +340,20 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               ? { valid: resolvedOptions, invalid: [] as string[] }
               : getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
             if (fieldKey === 'payGrade') {
-              const empType = codeLists.employmentTypes.find(e => e.label === draftRow.employmentType || e.code === draftRow.employmentType)
-              const jlEntry = codeLists.jobLevels.find(e => e.label === (draftRow.band as string))
-              const jtEntry = codeLists.jobTypes.find(e => e.label === (draftRow.jobType as string))
-              const samplePg = codeLists.payGrades.slice(0, 3).map(e => ({ label: e.label, band: e.band, compensationCategory: e.compensationCategory, isRegularEmployee: e.isRegularEmployee }))
+              const bandVal = draftRow.band as string | undefined
+              const etVal   = draftRow.employmentType as string | undefined
+              const empType = codeLists.employmentTypes.find(e => e.label === etVal || e.code === etVal)
+              const jlEntry = codeLists.jobLevels.find(e => e.label === bandVal)
               console.log('[payGrade debug]', {
-                // 行の値
-                band: draftRow.band, positionBand: draftRow.positionBand,
-                jobType: draftRow.jobType,
+                // 行の生値
+                band: bandVal, employmentType: etVal,
                 userId: draftRow.userId, groupEmployeeId: draftRow.groupEmployeeId,
-                // 雇用タイプマスタ
-                empType_isRegularEmployee: empType?.isRegularEmployee,
-                // jobLevel マスタ（band から）
-                jl_promotionDemotionBand: jlEntry?.promotionDemotionBand,
-                jl_isRegularEmployee: (jlEntry as Record<string, unknown>)?.isRegularEmployee,
-                // jobType マスタ
-                jt_compensationCategory: jtEntry?.compensationCategory,
-                // payGrade サンプル
-                payGrade_sample: samplePg,
+                // マスタ照合結果
+                empType_found: !!empType, empType_isRegularEmployee: empType?.isRegularEmployee,
+                jl_found: !!jlEntry, jl_promotionDemotionBand: jlEntry?.promotionDemotionBand,
+                // マスタのラベル一覧（先頭5件）
+                employmentTypes_labels: codeLists.employmentTypes.slice(0, 5).map(e => e.label),
+                jobLevels_labels: codeLists.jobLevels.slice(0, 5).map(e => e.label),
                 // 結果
                 validCount: valid.length,
               })
