@@ -342,20 +342,46 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
             if (fieldKey === 'payGrade') {
               const bandVal = draftRow.band as string | undefined
               const etVal   = draftRow.employmentType as string | undefined
-              const empType = codeLists.employmentTypes.find(e => e.label === etVal || e.code === etVal)
-              const jlEntry = codeLists.jobLevels.find(e => e.label === bandVal)
-              console.log('[payGrade debug]', {
-                // 行の生値
-                band: bandVal, employmentType: etVal,
-                userId: draftRow.userId, groupEmployeeId: draftRow.groupEmployeeId,
-                // マスタ照合結果
-                empType_found: !!empType, empType_isRegularEmployee: empType?.isRegularEmployee,
-                jl_found: !!jlEntry, jl_promotionDemotionBand: jlEntry?.promotionDemotionBand,
-                // マスタのラベル一覧（先頭5件）
-                employmentTypes_labels: codeLists.employmentTypes.slice(0, 5).map(e => e.label),
-                jobLevels_labels: codeLists.jobLevels.slice(0, 5).map(e => e.label),
-                // 結果
-                validCount: valid.length,
+              const jtVal   = draftRow.jobType as string | undefined
+
+              // ── STEP 1: when 条件の各サブ条件 ──
+              const empEntry  = codeLists.employmentTypes.find(e => e.label === etVal || e.code === etVal)
+              const isRegular = !!empEntry?.isRegularEmployee
+              const hasUser   = !!draftRow.userId
+              const isHome    = draftRow.userId === draftRow.groupEmployeeId
+              const whenOK    = isRegular && hasUser && isHome
+
+              // ── STEP 2: source 内の中間値 ──
+              const jlEntry      = codeLists.jobLevels.find(e => e.label === bandVal)
+              const promoBand    = (bandVal && jlEntry) ? jlEntry.promotionDemotionBand : undefined
+              const jtEntry      = codeLists.jobTypes.find(e => e.label === jtVal)
+              const compCat      = (jtVal && jtEntry) ? jtEntry.compensationCategory : undefined
+
+              // ── STEP 3: payGrade 各行がどのフィルタで落ちるか（先頭10件） ──
+              const pgTrace = codeLists.payGrades.slice(0, 10).map(e => {
+                const r1 = e.isRegularEmployee
+                const r2 = !(promoBand && e.band && e.band !== promoBand)
+                const r3 = !(compCat   && e.compensationCategory && e.compensationCategory !== compCat)
+                return { label: e.label, isRegular: e.isRegularEmployee, band: e.band, compCat: e.compensationCategory, r1, r2, r3, pass: r1&&r2&&r3 }
+              })
+
+              console.log('[payGrade TRACE]', {
+                'S1_employmentType_row': etVal,
+                'S1_empEntry_found': !!empEntry,
+                'S1_isRegularEmployee': isRegular,
+                'S1_hasUserId': hasUser,
+                'S1_isHomeRow(userId===groupEmpId)': isHome,
+                'S1_whenOK': whenOK,
+                '---': '---',
+                'S2_band_row': bandVal,
+                'S2_jlEntry_found': !!jlEntry,
+                'S2_promotionDemotionBand': promoBand,
+                'S2_jobType_row': jtVal,
+                'S2_jtEntry_found': !!jtEntry,
+                'S2_compensationCategory': compCat,
+                '----': '----',
+                'S3_payGrade_trace(先頭10)': pgTrace,
+                'RESULT_validCount': valid.length,
               })
             }
             const fieldBaseBand = (row[field] as string | undefined)
