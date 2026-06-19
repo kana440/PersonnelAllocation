@@ -1,48 +1,55 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useOrgView }            from '../OrgViewContext'
 import { subtreeRowCount, hasAnyRows } from '../panel/helpers'
 import { useCanvasLayoutStore }  from '../../../store/canvasLayoutStore'
-import type { PanelDef, ChildrenMode } from '../../../store/canvasLayoutStore'
+import type { PanelDef }        from '../../../store/canvasLayoutStore'
 import { TreeNode }              from './TreeNode'
+import { AddRowDropdown }        from '../AddRowDropdown'
 import { useStore }              from '../../../store/useStore'
 import { isSecondmentOrg }      from '@personnel/domain/derivation'
 import { parseOrgMappingDrag }  from '../comparison/BeforeOrgWindow'
+import type { Organization }     from '@personnel/domain/schemas'
+import type { PositionEntry }    from '../OrgViewContext'
 
-const MAX_BODY_H = 1600  // 約30人分 (1カード≈52px)
+function getDescendantOrgIds(
+  rootId:    string,
+  orgs:      Organization[],
+  posTree:   Map<string, PositionEntry[]>,
+  directOnly = false,
+): string[] {
+  const direct = orgs.filter(
+    o => o.parentId === rootId && hasAnyRows(o.id, orgs, posTree),
+  )
+  if (directOnly) return direct.map(o => o.id)
+  const result: string[] = []
+  for (const child of direct) {
+    result.push(child.id)
+    result.push(...getDescendantOrgIds(child.id, orgs, posTree))
+  }
+  return result
+}
+
+const MAX_BODY_H = 1600
 
 interface TreeWindowProps {
   panel: PanelDef
 }
 
-// ── アイコン ──────────────────────────────────────────────────────
-function TreeStructureIcon() {
+// ── iOS風トグルスイッチ（視覚のみ・クリックは親要素が担当）─────────
+function ToggleTrack({ on }: { on: boolean }) {
   return (
-    <svg width="12" height="10" viewBox="0 0 12 10" fill="currentColor">
-      <rect x="0" y="0" width="4.5" height="3" rx="0.5"/>
-      <line x1="2.2" y1="3" x2="2.2" y2="9" stroke="currentColor" strokeWidth="0.8" fill="none"/>
-      <line x1="2.2" y1="4.5" x2="5" y2="4.5" stroke="currentColor" strokeWidth="0.8" fill="none"/>
-      <line x1="2.2" y1="7.5" x2="5" y2="7.5" stroke="currentColor" strokeWidth="0.8" fill="none"/>
-      <rect x="5" y="3" width="4" height="3" rx="0.5"/>
-      <rect x="5" y="6" width="4" height="3" rx="0.5"/>
-    </svg>
+    <span
+      aria-hidden
+      className="relative inline-flex h-4 w-7 flex-shrink-0 rounded-full transition-colors"
+      style={{ background: on ? '#3b82f6' : '#d1d5db' }}
+    >
+      <span
+        className="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform"
+        style={{ left: 2, transform: on ? 'translateX(12px)' : 'translateX(0px)' }}
+      />
+    </span>
   )
 }
-
-// ── モードセレクター（windowed / inline の2択）────────────────────
-const MODES: { key: ChildrenMode; icon: React.ReactNode; label: string; title: string }[] = [
-  {
-    key:   'windowed',
-    icon:  <TreeStructureIcon />,
-    label: '展開',
-    title: '子組織をそれぞれ別ウィンドウで開く',
-  },
-  {
-    key:   'inline',
-    icon:  <span className="text-[11px] leading-none">☰</span>,
-    label: 'リスト',
-    title: '子組織をこのウィンドウ内にリスト表示',
-  },
-]
 
 export function TreeWindow({ panel }: TreeWindowProps) {
   const {
@@ -51,23 +58,23 @@ export function TreeWindow({ panel }: TreeWindowProps) {
   } = useOrgView()
 
   const {
+    panels,
     setPosition, toggleOpen, setChildrenMode,
+    addPanel, setOrgOpen, setCollapsedOrgIds,
     comparisonMode, comparisonOrgMapping, setComparisonOrgMap, clearComparisonOrgMap,
   } = useCanvasLayoutStore()
-  const codeLists         = useStore(s => s.codeLists)
+  const codeLists           = useStore(s => s.codeLists)
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
 
   // ── ヘッダー色 ─────────────────────────────────────────────────
   const org = organizations.find(o => o.id === panel.orgId)
-  const hasRows   = subtreeRowCount(panel.orgId, organizations, positionTreeByOrgId) > 0
+  const hasRows      = subtreeRowCount(panel.orgId, organizations, positionTreeByOrgId) > 0
   const isSecondment = org?.externalCode
     ? isSecondmentOrg(org.externalCode, codeLists)
     : false
-  // 出向者用組織: forest green / 空の組織: brick red / 通常: Windows-blue
   const headerBg = isSecondment ? '#2e7d52' : !hasRows ? '#b54520' : '#3c7abf'
 
   // ── 比較マッピング ─────────────────────────────────────────────
-  // このウィンドウ (panel.orgId) にマッピングされている旧組織を逆引き
   const mappedBeforeOrgId = useMemo(
     () => Object.entries(comparisonOrgMapping).find(([, afterId]) => afterId === panel.orgId)?.[0],
     [comparisonOrgMapping, panel.orgId],
@@ -114,9 +121,7 @@ export function TreeWindow({ panel }: TreeWindowProps) {
     setMappingDragOver(true)
   }, [comparisonMode])
 
-  const onTitleDragLeave = useCallback(() => {
-    setMappingDragOver(false)
-  }, [])
+  const onTitleDragLeave = useCallback(() => { setMappingDragOver(false) }, [])
 
   const onTitleDrop = useCallback((e: React.DragEvent) => {
     setMappingDragOver(false)
@@ -132,12 +137,116 @@ export function TreeWindow({ panel }: TreeWindowProps) {
   const [rootPath, setRootPath] = useState<string[]>([panel.orgId])
   useEffect(() => { setRootPath([panel.orgId]) }, [panel.orgId])
   const currentRootId = rootPath[rootPath.length - 1]
-  const currentOrg    = organizations.find(o => o.id === currentRootId)
-  const totalCount    = subtreeRowCount(currentRootId, organizations, positionTreeByOrgId)
-  const isDragOver    = dragOverOrgId === currentRootId
 
-  const navigateTo    = (childOrgId: string) => setRootPath(prev => [...prev, childOrgId])
-  const navigateToIdx = (idx: number)        => setRootPath(prev => prev.slice(0, idx + 1))
+  const navigateTo = useCallback((childOrgId: string) => {
+    setRootPath(prev => [...prev, childOrgId])
+    setCollapsedOrgIds(panel.id, [])  // ナビ先では全展開
+  }, [panel.id, setCollapsedOrgIds])
+
+  const navigateToIdx = useCallback((idx: number) => {
+    setRootPath(prev => prev.slice(0, idx + 1))
+    setCollapsedOrgIds(panel.id, [])
+  }, [panel.id, setCollapsedOrgIds])
+
+  // ── リストモード: 折りたたみ状態はストアで管理 ────────────────
+  const collapsedOrgs = useMemo(
+    () => new Set(panel.collapsedOrgIds),
+    [panel.collapsedOrgIds],
+  )
+
+  const onOrgCollapse = useCallback((id: string) => {
+    setCollapsedOrgIds(panel.id, [...panel.collapsedOrgIds, id])
+  }, [panel.id, panel.collapsedOrgIds, setCollapsedOrgIds])
+
+  const onOrgExpand = useCallback((id: string) => {
+    setCollapsedOrgIds(panel.id, panel.collapsedOrgIds.filter(x => x !== id))
+  }, [panel.id, panel.collapsedOrgIds, setCollapsedOrgIds])
+
+  // ── 深さコントロール ──────────────────────────────────────────
+  const handleCollapseAll = useCallback(() => {
+    const ids = getDescendantOrgIds(currentRootId, organizations, positionTreeByOrgId)
+    if (panel.childrenMode === 'windowed') {
+      ids.forEach(id => setOrgOpen(id, false))
+    } else {
+      setCollapsedOrgIds(panel.id, ids)
+    }
+  }, [currentRootId, organizations, positionTreeByOrgId, panel, setOrgOpen, setCollapsedOrgIds])
+
+  const handleExpandChildren = useCallback(() => {
+    const directChildIds = getDescendantOrgIds(currentRootId, organizations, positionTreeByOrgId, true)
+    if (panel.childrenMode === 'windowed') {
+      // 直接の子だけウィンドウを開く。子の中身はリスト・全たたみ
+      directChildIds.forEach(id => {
+        const allDesc = getDescendantOrgIds(id, organizations, positionTreeByOrgId)
+        const existing = panels.find(p => p.orgId === id)
+        if (existing) {
+          setOrgOpen(id, true)
+          setChildrenMode(existing.id, 'inline')
+          setCollapsedOrgIds(existing.id, allDesc)
+        } else {
+          addPanel(id, { childrenMode: 'inline', collapsedOrgIds: allDesc })
+        }
+      })
+    } else {
+      // 直接の子だけ展開・孫以降はたたむ
+      const direct = new Set(directChildIds)
+      const all    = getDescendantOrgIds(currentRootId, organizations, positionTreeByOrgId)
+      setCollapsedOrgIds(panel.id, all.filter(id => !direct.has(id)))
+    }
+  }, [currentRootId, organizations, positionTreeByOrgId, panel, panels, addPanel, setOrgOpen, setChildrenMode, setCollapsedOrgIds])
+
+  const handleExpandAll = useCallback(() => {
+    const ids = getDescendantOrgIds(currentRootId, organizations, positionTreeByOrgId)
+    if (panel.childrenMode === 'windowed') {
+      // 全子孫を個別ウィンドウで開く。個別モードを伝播
+      ids.forEach(id => {
+        const existing = panels.find(p => p.orgId === id)
+        if (existing) {
+          setOrgOpen(id, true)
+          setChildrenMode(existing.id, 'windowed')
+        } else {
+          addPanel(id, { childrenMode: 'windowed' })
+        }
+      })
+    } else {
+      setCollapsedOrgIds(panel.id, [])
+    }
+  }, [currentRootId, organizations, positionTreeByOrgId, panel, panels, addPanel, setOrgOpen, setChildrenMode, setCollapsedOrgIds])
+
+  // ── リスト↔個別 トグル ────────────────────────────────────────
+  // 切り替え時は常に「子のみ展開」状態にする（対称的な動作）
+  const handleToggleIndividualMode = useCallback(() => {
+    const directChildIds = getDescendantOrgIds(currentRootId, organizations, positionTreeByOrgId, true)
+    const allIds         = getDescendantOrgIds(currentRootId, organizations, positionTreeByOrgId)
+
+    if (panel.childrenMode === 'windowed') {
+      // 個別 → リスト: 子のみ展開・孫以降はたたむ
+      const direct = new Set(directChildIds)
+      setCollapsedOrgIds(panel.id, allIds.filter(id => !direct.has(id)))
+      allIds.forEach(id => setOrgOpen(id, false))
+      setChildrenMode(panel.id, 'inline')
+    } else {
+      // リスト → 個別: 直接の子だけウィンドウを開く。子の中身はリスト・全たたみ
+      directChildIds.forEach(id => {
+        const allDesc = getDescendantOrgIds(id, organizations, positionTreeByOrgId)
+        const existing = panels.find(p => p.orgId === id)
+        if (existing) {
+          setOrgOpen(id, true)
+          setChildrenMode(existing.id, 'inline')
+          setCollapsedOrgIds(existing.id, allDesc)
+        } else {
+          addPanel(id, { childrenMode: 'inline', collapsedOrgIds: allDesc })
+        }
+      })
+      setChildrenMode(panel.id, 'windowed')
+    }
+  }, [panel, panels, currentRootId, organizations, positionTreeByOrgId, setCollapsedOrgIds, setOrgOpen, setChildrenMode, addPanel])
+
+  // ──
+  const currentOrg  = organizations.find(o => o.id === currentRootId)
+  const totalCount  = subtreeRowCount(currentRootId, organizations, positionTreeByOrgId)
+  const isDragOver  = dragOverOrgId === currentRootId
+  const isContained = panel.childrenMode === 'inline'
 
   const hasChildren = organizations.some(
     o => o.parentId === currentRootId && hasAnyRows(o.id, organizations, positionTreeByOrgId),
@@ -167,9 +276,7 @@ export function TreeWindow({ panel }: TreeWindowProps) {
           outline: mappingDragOver ? '2px dashed #ffffff' : undefined,
         }}
       >
-        {/* メインタイトル行 */}
         <div className="flex items-center gap-1 px-2" style={{ height: 28 }}>
-          {/* 左: パンくず or 組織名 */}
           <div className="flex-1 flex items-center gap-0.5 min-w-0 overflow-hidden">
             {rootPath.length > 1 ? (
               rootPath.map((id, i) => {
@@ -191,9 +298,8 @@ export function TreeWindow({ panel }: TreeWindowProps) {
               <span className="text-xs font-semibold text-white truncate">{currentOrg?.name ?? currentRootId}</span>
             )}
             <span className="text-[10px] text-blue-200 flex-shrink-0 ml-0.5">({totalCount})</span>
+            <AddRowDropdown orgCode={currentOrg?.externalCode ?? ''} variant="header" />
           </div>
-
-          {/* 右: ナビ + 折りたたみボタン（閉じるボタンなし） */}
           <div className="flex items-center flex-shrink-0">
             {rootPath.length > 1 && (
               <button
@@ -210,12 +316,8 @@ export function TreeWindow({ panel }: TreeWindowProps) {
           </div>
         </div>
 
-        {/* 比較マッピングバッジ */}
         {comparisonMode && (
-          <div
-            className="flex items-center gap-1 px-2 pb-0.5"
-            style={{ minHeight: 16 }}
-          >
+          <div className="flex items-center gap-1 px-2 pb-0.5" style={{ minHeight: 16 }}>
             {mappedBeforeOrg ? (
               <>
                 <span className="text-[9px] text-white opacity-70">←</span>
@@ -238,27 +340,43 @@ export function TreeWindow({ panel }: TreeWindowProps) {
         )}
       </div>
 
-      {/* ── 子組織モードセレクター ────────────────────────────────── */}
+      {/* ── コントロールバー ─────────────────────────────────────── */}
       {panel.open && hasChildren && (
-        <div className="flex-shrink-0 flex bg-gray-100 border-b border-gray-200" style={{ height: 24 }}>
-          {MODES.map(({ key, icon, label, title }) => {
-            const active = panel.childrenMode === key
-            return (
-              <button
-                key={key}
-                onClick={() => setChildrenMode(panel.id, key)}
-                title={title}
-                className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-medium border-r last:border-r-0 border-gray-200 transition-colors ${
-                  active
-                    ? 'bg-white text-gray-800'
-                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {icon}
-                <span>{label}</span>
-              </button>
-            )
-          })}
+        <div className="flex-shrink-0 flex items-stretch bg-gray-50 border-b border-gray-200" style={{ height: 24 }}>
+          {/* 深さ制御 3ボタン */}
+          {([
+            { label: 'たたむ', onClick: handleCollapseAll,    title: 'すべての子組織を折りたたむ' },
+            { label: '子のみ', onClick: handleExpandChildren, title: '直接の子だけ展開（孫はたたむ）' },
+            { label: '全展開', onClick: handleExpandAll,      title: 'すべての子孫を展開' },
+          ] as const).map(({ label, onClick, title }) => (
+            <button
+              key={label}
+              onClick={onClick}
+              title={title}
+              className="flex-1 text-[9px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 border-r border-gray-200 transition-colors"
+            >
+              {label}
+            </button>
+          ))}
+
+          {/* セパレーター */}
+          <div className="w-px bg-gray-200 flex-shrink-0" />
+
+          {/* 包含モード トグル */}
+          <button
+            role="switch"
+            aria-checked={isContained}
+            onClick={handleToggleIndividualMode}
+            title={isContained
+              ? '包含モード: 子組織をこの中に表示（クリックで個別に切り替え）'
+              : '個別モード: 子組織を別ウィンドウで表示（クリックで包含に切り替え）'}
+            className="flex items-center gap-1.5 px-2.5 flex-shrink-0 h-full hover:bg-gray-100 transition-colors"
+          >
+            <span className={`text-[9px] font-medium transition-colors ${isContained ? 'text-blue-600' : 'text-gray-400'}`}>
+              包含
+            </span>
+            <ToggleTrack on={isContained} />
+          </button>
         </div>
       )}
 
@@ -272,6 +390,9 @@ export function TreeWindow({ panel }: TreeWindowProps) {
               panelId={panel.id}
               onNavigate={navigateTo}
               isRoot
+              collapsedOrgs={collapsedOrgs}
+              onOrgCollapse={onOrgCollapse}
+              onOrgExpand={onOrgExpand}
             />
           ) : (
             <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>

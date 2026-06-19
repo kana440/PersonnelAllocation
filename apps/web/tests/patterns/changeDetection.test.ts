@@ -107,13 +107,13 @@ describe('detectChanges: その他の変更種別', () => {
     expect(detectChanges(row).patterns.has('vacantPositionMove')).toBe(true)
   })
 
-  test('prevDepartmentCode なし + userId あり → newHire', () => {
-    const row = makeRow({ prevDepartmentCode: undefined, userId: 'u1' })
-    expect(detectChanges(row).patterns.has('newHire')).toBe(true)
+  test('transferReason「4/1付移籍」→ employmentTransfer', () => {
+    const row = makeRow({ transferReason: '【個別】4/1付移籍' } as never)
+    expect(detectChanges(row).patterns.has('employmentTransfer')).toBe(true)
   })
 
-  test('prevDepartmentCode あり + userId なし + departmentCode なし → termination', () => {
-    const row = makeRow({ prevDepartmentCode: 'ORG001', userId: undefined, departmentCode: undefined })
+  test('transferReason「退職／解任済み」→ termination', () => {
+    const row = makeRow({ transferReason: '【対応なし】3月末までに退職／解任済み' } as never)
     expect(detectChanges(row).patterns.has('termination')).toBe(true)
   })
 

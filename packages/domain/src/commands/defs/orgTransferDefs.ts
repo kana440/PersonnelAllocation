@@ -21,11 +21,15 @@ export const orgTransferDef: EditOperation = {
   availableFor: (row) => !!row.userId && isMainAssignment(row),
 
   inputs: [
-    { field: 'departmentCode', required: true, label: '異動先組織', picker: 'org' },
-    { field: 'businessUnit', required: false, readOnly: true },
-    { field: 'division',     required: false, readOnly: true },
-    { field: 'subDivision',  required: false, readOnly: true },
-    { field: 'group',        required: false, readOnly: true },
+    { field: 'transferReason',  required: false,
+      options: ['分掌移動（改組）', '分掌移動'] },
+    { field: 'departmentCode',  required: true, label: '異動先組織', picker: 'org' },
+    { field: 'businessUnit',    required: false, readOnly: true },
+    { field: 'division',        required: false, readOnly: true },
+    { field: 'subDivision',     required: false, readOnly: true },
+    { field: 'group',           required: false, readOnly: true },
+    { field: 'location',        required: false, readOnly: true },
+    { field: 'costCenter',      required: false, readOnly: true },
     {
       field:    'managerPositionCode',
       required: false,
@@ -33,14 +37,24 @@ export const orgTransferDef: EditOperation = {
       picker:   'position',
     },
     { field: 'managerName', required: false, readOnly: true },
+    { field: 'memo',        required: false },
   ],
 
   deriveInitial: (row, ctx) => {
-    const mpc = row.managerPositionCode as string | undefined
+    const mpc      = row.managerPositionCode as string | undefined
+    const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.codeLists)
     return {
+      transferReason:      row.transferReason as string | undefined,
       departmentCode:      row.departmentCode as string | undefined,
+      businessUnit:        subFields.businessUnit,
+      division:            subFields.division,
+      subDivision:         subFields.subDivision,
+      group:               subFields.group,
+      location:            subFields.location,
+      costCenter:          subFields.costCenter,
       managerPositionCode: mpc,
       managerName:         deriveManagerName(mpc, ctx.allocationList),
+      memo:                row.memo           as string | undefined,
     }
   },
 
@@ -63,7 +77,7 @@ export const orgTransferDef: EditOperation = {
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
-          ? { ...r, departmentCode: deptCode, ...subFields, ...managerFields }
+          ? { ...r, departmentCode: deptCode, ...subFields, ...managerFields, memo: values.memo as string | undefined }
           : r
       ),
       label: `組織異動: ${personName(row)} → ${orgName}`,
@@ -82,12 +96,34 @@ export const orgRestructureDef: EditOperation = {
   availableFor: () => true,
 
   inputs: [
-    { field: 'departmentCode', required: true, label: '継承先組織コード', picker: 'org' },
+    { field: 'transferReason',  required: false,
+      options: (ctx) => ctx.codeLists.transferReasons
+        .map(r => r.label)
+        .filter(l => l.includes('改組') || l === '分掌移動') },
+    { field: 'departmentCode',  required: true, label: '継承先組織コード', picker: 'org' },
+    { field: 'businessUnit',    required: false, readOnly: true },
+    { field: 'division',        required: false, readOnly: true },
+    { field: 'subDivision',     required: false, readOnly: true },
+    { field: 'group',           required: false, readOnly: true },
+    { field: 'location',        required: false, readOnly: true },
+    { field: 'costCenter',      required: false, readOnly: true },
+    { field: 'memo',            required: false },
   ],
 
-  deriveInitial: (row) => ({
-    departmentCode: row.departmentCode as string | undefined,
-  }),
+  deriveInitial: (row, ctx) => {
+    const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.codeLists)
+    return {
+      transferReason: row.transferReason as string | undefined,
+      departmentCode: row.departmentCode as string | undefined,
+      businessUnit:   subFields.businessUnit,
+      division:       subFields.division,
+      subDivision:    subFields.subDivision,
+      group:          subFields.group,
+      location:       subFields.location,
+      costCenter:     subFields.costCenter,
+      memo:           row.memo           as string | undefined,
+    }
+  },
 
   validate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
@@ -105,7 +141,7 @@ export const orgRestructureDef: EditOperation = {
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
-          ? { ...r, departmentCode: deptCode, ...subFields }
+          ? { ...r, departmentCode: deptCode, ...subFields, memo: values.memo as string | undefined }
           : r
       ),
       label: `組織改変: ${personName(row)} → ${orgName}`,
@@ -124,6 +160,7 @@ export const managerChangeDef: EditOperation = {
   availableFor: (row) => !!row.positionCode,
 
   inputs: [
+    { field: 'transferReason', required: false },
     {
       field:          'managerPositionCode',
       required:       true,
@@ -138,13 +175,16 @@ export const managerChangeDef: EditOperation = {
           !descendants.has(candidate.positionCode as string)
       },
     },
+    { field: 'memo', required: false },
   ],
 
   deriveInitial: (row, ctx) => {
     const mpc = row.managerPositionCode as string | undefined
     return {
+      transferReason:      row.transferReason as string | undefined,
       managerPositionCode: mpc,
-      managerName: deriveManagerName(mpc, ctx.allocationList),
+      managerName:         deriveManagerName(mpc, ctx.allocationList),
+      memo:                row.memo           as string | undefined,
     }
   },
 
@@ -159,7 +199,7 @@ export const managerChangeDef: EditOperation = {
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
-          ? { ...r, managerPositionCode: values.managerPositionCode, managerName: values.managerName }
+          ? { ...r, managerPositionCode: values.managerPositionCode, managerName: values.managerName, memo: values.memo as string | undefined }
           : r
       ),
       label: `上司変更: ${personName(row)}`,

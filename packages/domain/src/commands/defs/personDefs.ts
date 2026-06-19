@@ -2,8 +2,8 @@
 import type { EditOperation } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { FIELD_METADATA, nextRowId } from '../../allocationRow'
-import { deriveOrgSubFields } from '../orgHelpers'
+import { FIELD_METADATA } from '../../allocationRow'
+import { TR } from '../../transferReasonLabels'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -29,7 +29,7 @@ export const leaveOfAbsenceDef: EditOperation = {
   ],
 
   deriveInitial: (row) => ({
-    transferReason:     '【個別対応】4/1付休職・復職',
+    transferReason:     TR.LEAVE_AND_RETURN,
     leaveOfAbsenceSign: '1',
     memo:               row.memo as string | undefined,
   }),
@@ -157,103 +157,73 @@ export const returnFromLeaveDef: EditOperation = {
   },
 }
 
-// ── 移籍（出る）──────────────────────────────────────────────────────────────
+// ── 移籍 ─────────────────────────────────────────────────────────────────────
 
-export const employmentTransferOutDef: EditOperation = {
-  id:         'EmploymentTransferOut',
-  label:      '移籍（出る）',
+export const employmentTransferDef: EditOperation = {
+  id:         'EmploymentTransfer',
+  label:      '移籍',
   group:      'person',
   badgeColor: 'bg-rose-100 text-rose-700',
 
-  availableFor: (row) => !!row.userId,
+  availableFor: () => true,
 
   inputs: [
-    { field: 'transferReason', required: true, label: '移籍事由' },
+    { field: 'transferReason',       required: true,  readOnly: true },
+    { field: 'lastName',             required: false },
+    { field: 'firstName',            required: false },
+    { field: 'employeeNumber',       required: false },
+    { field: 'departmentCode',       required: false },
+    { field: 'employmentType',       required: false },
+    { field: 'band',                 required: false },
+    { field: 'payGrade',             required: false },
+    { field: 'officialPositionCode', required: false },
+    { field: 'localJobTitle',        required: false },
+    { field: 'memo',                 required: false },
   ],
 
-  deriveInitial: () => ({}),
+  deriveInitial: (row) => ({
+    transferReason:       TR.TRANSFER,
+    lastName:             row.lastName             as string | undefined,
+    firstName:            row.firstName            as string | undefined,
+    employeeNumber:       row.employeeNumber       as string | undefined,
+    departmentCode:       row.departmentCode       as string | undefined,
+    employmentType:       row.employmentType       as string | undefined,
+    band:                 row.band                 as string | undefined,
+    payGrade:             row.payGrade             as string | undefined,
+    officialPositionCode: row.officialPositionCode as string | undefined,
+    localJobTitle:        row.localJobTitle        as string | undefined,
+    memo:                 row.memo                 as string | undefined,
+  }),
 
   validate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)          return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId)   return fail('人が配属されていない行に移籍（出る）を設定できません')
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.transferReason) return fail('異動事由は必須です')
     return ok()
   },
 
   apply(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-
-    // After state を全てブランクにして transferReason のみセット
-    const reset: Partial<AllocationRow> = {}
-    for (const { after } of FIELD_METADATA) {
-      ;(reset as Record<string, unknown>)[after] = undefined
-    }
-
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
-          ? { ...r, ...reset, transferReason: values.transferReason }
+          ? {
+              ...r,
+              transferReason:       values.transferReason,
+              lastName:             values.lastName             as string | undefined,
+              firstName:            values.firstName            as string | undefined,
+              employeeNumber:       values.employeeNumber       as string | undefined,
+              departmentCode:       values.departmentCode       as string | undefined,
+              employmentType:       values.employmentType       as string | undefined,
+              band:                 values.band                 as string | undefined,
+              payGrade:             values.payGrade             as string | undefined,
+              officialPositionCode: values.officialPositionCode as string | undefined,
+              localJobTitle:        values.localJobTitle        as string | undefined,
+              memo:                 values.memo                 as string | undefined,
+            }
           : r
       ),
-      label: `移籍（出る）: ${personName(row)}`,
-    }
-  },
-}
-
-// ── 移籍（入る）──────────────────────────────────────────────────────────────
-// createCommand の rowId 引数は無視され、nextRowId が内部で計算される。
-
-export const employmentTransferInDef: EditOperation = {
-  id:         'EmploymentTransferIn',
-  label:      '移籍（入る）',
-  group:      'person',
-  badgeColor: 'bg-rose-100 text-rose-700',
-
-  // 未アサイン行（userId なし）または新規行追加モードで使用
-  availableFor: (row) => !row.prevDepartmentCode,
-
-  inputs: [
-    { field: 'lastName',        required: false },
-    { field: 'firstName',       required: false },
-    { field: 'employeeNumber',  required: false },
-    { field: 'departmentCode',  required: true,  label: '移籍先組織コード' },
-    { field: 'employmentType',  required: true,  label: '雇用タイプ' },
-    { field: 'band',            required: false },
-    { field: 'payGrade',        required: false },
-    { field: 'officialPositionCode', required: false },
-    { field: 'localJobTitle',   required: false },
-    { field: 'transferReason',  required: true,  label: '移籍事由' },
-  ],
-
-  deriveInitial: (row) => ({
-    departmentCode: row.departmentCode as string | undefined,
-    transferReason: row.transferReason as string | undefined,
-  }),
-
-  validate(_ctx, _rowId, values) {
-    if (!values.departmentCode) return fail('組織コードは必須です')
-    if (!values.transferReason) return fail('異動事由は必須です')
-    return ok()
-  },
-
-  apply(ctx, _rowId, values) {
-    const newRowId = nextRowId(ctx.allocationList)
-    const orgSub = values.departmentCode
-      ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
-      : {}
-
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-    const newRow: AllocationRow = {
-      ...fields,
-      ...orgSub,
-      rowId: newRowId,
-      positionCode: `_pos_${newRowId}`,
-    } as AllocationRow
-
-    return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `移籍（入る）: ${[values.lastName, values.firstName].filter(Boolean).join(' ') || '新規'}`,
+      label: `移籍: ${personName(row)}`,
     }
   },
 }
@@ -276,7 +246,7 @@ export const noChangeDef: EditOperation = {
   ],
 
   deriveInitial: (row) => ({
-    transferReason: '【対応なし】変更なし',
+    transferReason: TR.NO_CHANGE,
     memo:           row.memo as string | undefined,
   }),
 
@@ -317,6 +287,6 @@ export const noChangeDef: EditOperation = {
 
 export const DEFS: EditOperation[] = [
   leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef,
-  employmentTransferOutDef, employmentTransferInDef,
+  employmentTransferDef,
   noChangeDef,
 ]

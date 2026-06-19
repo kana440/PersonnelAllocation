@@ -1,8 +1,30 @@
-import { detectPatterns }                              from '@personnel/domain/patterns/detection'
-import { EDIT_PATTERN_META }                           from '@personnel/domain/patterns/editPattern'
-import type { EditPattern }                            from '@personnel/domain/patterns/editPattern'
-import type { AllocationRow }                          from '@personnel/domain/allocationRow'
-import { useStore }                                    from '../../store/useStore'
+import { detectPatterns }       from '@personnel/domain/patterns/detection'
+import { EDIT_PATTERN_META }    from '@personnel/domain/patterns/editPattern'
+import type { EditPattern }     from '@personnel/domain/patterns/editPattern'
+import type { AllocationRow }   from '@personnel/domain/allocationRow'
+import { ALL_EDIT_OPERATIONS }  from '@personnel/domain/commands/defs/index'
+import { useStore }             from '../../store/useStore'
+
+// EditPattern (camelCase) → EditOperation の availableFor を使うための静的マップ
+// 出向系パターンは EditOperation と 1:1 対応しないためマップ外（常時表示）
+const PATTERN_OP_ID: Partial<Record<EditPattern, string>> = {
+  promotion:              'Promotion',
+  demotion:               'Demotion',
+  titleChange:            'TitleChange',
+  jobTypeChange:          'JobTypeChange',
+  employmentExtension:    'EmploymentExtension',
+  employmentTypeChange:   'EmploymentTypeChange',
+  orgTransfer:            'OrgTransfer',
+  orgRestructure:         'OrgRestructure',
+  managerChange:          'ManagerChange',
+  concurrentAdd:          'ConcurrentAdd',
+  concurrentRelease:      'ConcurrentRelease',
+  leaveOfAbsence:       'LeaveOfAbsence',
+  returnFromLeave:      'ReturnFromLeave',
+  employmentTransfer:   'EmploymentTransfer',
+  noChange:             'NoChange',
+}
+const OP_BY_ID = new Map(ALL_EDIT_OPERATIONS.map(d => [d.id, d]))
 
 // ── メニューセクション定義 ─────────────────────────────────────────────────────
 // 業務上の文脈に沿った分類。availableFor() を通過した操作のみ各セクションに表示される。
@@ -27,9 +49,9 @@ const SECTIONS: { label: string; patterns: EditPattern[] }[] = [
   {
     label: '出向',
     patterns: [
-      'secondmentOut',    'secondmentIn',
+      'secondmentOut', 'secondmentIn',
       'secondmentOutRelease', 'secondmentInRelease',
-      'concurrentSecondmentOut',    'concurrentSecondmentIn',
+      'concurrentSecondmentOutNonSF', 'concurrentSecondmentIn',
       'concurrentSecondmentOutRelease', 'concurrentSecondmentInRelease',
     ],
   },
@@ -37,7 +59,7 @@ const SECTIONS: { label: string; patterns: EditPattern[] }[] = [
     label: '在籍・退職',
     patterns: [
       'leaveOfAbsence', 'returnFromLeave',
-      'employmentTransferOut', 'employmentTransferIn',
+      'employmentTransfer', 'termination',
       'resignation', 'noChange',
     ],
   },
@@ -74,10 +96,12 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
   // 設定済みパターン（ヘッダー表示用）
   const active = detectPatterns(row).patterns
 
-  // availableFor を通過した操作セット
+  // EditOperation.availableFor で操作の適用可否を判定（出向系など対応なしは常時表示）
   const passesFilter = (p: EditPattern) => {
-    const cond = EDIT_PATTERN_META[p].availableFor
-    return cond === undefined || cond(row, codeLists)
+    const opId = PATTERN_OP_ID[p]
+    if (!opId) return true
+    const def = OP_BY_ID.get(opId)
+    return def ? def.availableFor(row, codeLists) : true
   }
 
   const name         = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'

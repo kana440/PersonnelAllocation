@@ -18,8 +18,8 @@ const ALL_FILTER_CHIPS: { key: EditPattern; label: string; color: string }[] = [
   { key: 'returnFromLeave',       label: '復職',               color: 'bg-gray-100 text-gray-600 border-gray-200' },
   { key: 'concurrentAdd',         label: '兼務追加',           color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
   { key: 'vacantPositionMove',    label: 'ポジション異動',     color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { key: 'employmentTransfer',    label: '移籍',               color: 'bg-red-50 text-red-600 border-red-100' },
   { key: 'noChange',              label: '変更なし',           color: 'bg-neutral-100 text-neutral-500 border-neutral-200' },
-  { key: 'newHire',               label: '新規採用',           color: 'bg-teal-100 text-teal-700 border-teal-200' },
   { key: 'termination',           label: '退職',               color: 'bg-red-100 text-red-700 border-red-200' },
 ]
 

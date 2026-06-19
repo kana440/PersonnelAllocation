@@ -1,8 +1,9 @@
-// Tool registry — classifies tools into three kinds and exposes them to AgentRunner.
+// Tool registry — classifies tools into four kinds and exposes them to AgentRunner.
 //
 // read    : 即時実行し結果をLLMに返す（副作用なし）
 // render  : ウィジェットをUIに表示しつつ要約をLLMに返す（副作用：Widget表示）
-// confirm : ユーザーの確認を待ってから操作を適用する（副作用：ドメイン変更）
+// execute : ユーザー確認なしで即時実行する（副作用：ドメイン変更）。LLMが変更内容を自然言語で報告。
+// confirm : ユーザーの確認を待ってから操作を適用する（副作用：ドメイン変更）。複数入力が必要な操作に使う。
 //
 // confirm ツールの実際の実行は AgentRunner の onConfirm コールバック経由で行われ、
 // ユーザーが承認した場合のみ executeOnApprove が呼ばれる。
@@ -13,7 +14,7 @@
 // ビジネスロジックは aiTools/ に、確認ウィジェット組み立ては proposalBuilders.ts に置く。
 // 設計思想: specs/G4-ai/00-design-philosophy.md
 
-import type { ChatWidget, PersonInfo } from '../../application/aiTypes'
+import type { ChatWidget, PersonDiff, PersonInfo } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
 import * as P from './proposalBuilders'
@@ -21,9 +22,64 @@ import {
   bindOperation,
   secondmentOutReleaseSFDef,
   concurrentSecondmentOutSFDef,
-  employmentTransferOutDef,
+  employmentTransferDef,
 } from '@personnel/domain/commands/defs'
+import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { ToolDefinition, ToolCall } from '../../ports'
+
+// ── 連動変更ウィジェット構築ヘルパー ─────────────────────────────────────────
+// execute 操作後に監視対象フィールドが意図せず変わっていた場合に diff-preview を返す。
+// primaryField: 直接編集したフィールド（連動検出の対象外）
+
+const CASCADE_LABELS: Partial<Record<keyof AllocationRow, string>> = {
+  positionBand:         'ポジションバンド',
+  band:                 'バンド',
+  payGrade:             '給与等級',
+  officialPositionCode: '役職コード',
+  localJobTitle:        '役職名',
+  businessUnit:         'BU',
+  division:             '部門',
+  subDivision:          '統括部',
+  group:                'グループ',
+  team:                 'チーム',
+  managerName:          '上司姓名',
+  managerPositionCode:  '上司ポジションコード',
+  employmentType:       '雇用タイプ',
+}
+
+function detectCascadeWidget(
+  beforeRow: AllocationRow,
+  primaryField: string,
+): ChatWidget | undefined {
+  const snapshot = appService.getSnapshot()
+  const afterRow  = snapshot.allocationList.find(r => r.rowId === beforeRow.rowId)
+  if (!afterRow) return undefined
+
+  const changed = (Object.entries(CASCADE_LABELS) as [keyof AllocationRow, string][])
+    .filter(([k]) => k !== primaryField)
+    .flatMap(([k, label]) => {
+      const b = String(beforeRow[k] ?? '')
+      const a = String(afterRow[k] ?? '')
+      return b !== a ? [{ label, before: b || undefined, after: a || undefined }] : []
+    })
+
+  if (changed.length === 0) return undefined
+
+  const name = [afterRow.lastName, afterRow.firstName].filter(Boolean).join(' ')
+  const org  = snapshot.afterOrganizations.find(
+    o => o.externalCode === afterRow.departmentCode || o.id === afterRow.departmentCode
+  )
+  const diff: PersonDiff = {
+    userId:  afterRow.userId ?? '',
+    name,
+    orgName: org?.name ?? afterRow.departmentCode ?? '',
+    rowId:   afterRow.rowId,
+    before:  {},
+    after:   {},
+    fields:  changed,
+  }
+  return { type: 'diff-preview', persons: [diff], label: '変更結果（連動変更あり）' }
+}
 
 export interface ToolResult {
   toolCallId: string
@@ -59,7 +115,18 @@ export interface ConfirmEntry {
   executeOnApprove(args: Record<string, unknown>, userInputs?: Record<string, string>): unknown
 }
 
-export type ToolEntry = ReadEntry | RenderEntry | ConfirmEntry
+/**
+ * execute kind: ユーザー確認なしで即時実行する。
+ * read と違い副作用あり。execute() の戻り値が LLM へのツール結果になる。
+ * LLM が戻り値（変更前後など）を見て自然言語で報告する。
+ */
+export interface ExecuteEntry {
+  kind: 'execute'
+  definition: ToolDefinition
+  execute(args: Record<string, unknown>): unknown
+}
+
+export type ToolEntry = ReadEntry | RenderEntry | ConfirmEntry | ExecuteEntry
 
 // ── Tool entries ──────────────────────────────────────────────────────────────
 
@@ -353,29 +420,18 @@ const TOOL_ENTRIES: ToolEntry[] = [
     }),
   },
 
-  // ── Confirm: undo ────────────────────────────────────────────────────────
+  // ── Execute: undo ────────────────────────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'undo',
-        description: '直前の操作を取り消す。ユーザーが「元に戻して」「undo して」と言った場合に使う。取り消せる操作がない場合はエラーを返す。',
+        description: '直前の操作を取り消す（即時実行）。ユーザーが「元に戻して」「undo して」と言った場合に使う。取り消せる操作がない場合はエラーを返す。',
         parameters: { type: 'object', properties: {} },
       },
     },
-    buildProposal: () => {
-      if (!appService.getSnapshot().canUndo)
-        return { error: '取り消せる操作がありません' }
-      return {
-        widget: {
-          type:    'diff-preview',
-          persons: [],
-          label:   '直前の操作を取り消す',
-        } as ChatWidget,
-      }
-    },
-    executeOnApprove: () => {
+    execute: () => {
       if (!appService.getSnapshot().canUndo)
         return { ok: false, message: '取り消せる操作がありません' }
       aiTools.undo()
@@ -454,14 +510,14 @@ const TOOL_ENTRIES: ToolEntry[] = [
     },
   },
 
-  // ── Confirm: propose_field_edit ───────────────────────────────────────────
+  // ── Execute: propose_field_edit ───────────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_field_edit',
-        description: '指定した行の特定フィールドを変更することをユーザーに提案し、確認を得てから実行する。値を変更する前に getFieldOptions で有効な選択肢を確認すること。実行前に findPersons で rowId を確認すること。',
+        description: '指定した行の特定フィールドを変更する（即時実行）。値を変更する前に getFieldOptions で有効な選択肢を確認すること。実行前に findPersons で rowId を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId', 'field', 'value'],
@@ -482,8 +538,13 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildFieldEditProposal(args.rowId as number, args.field as string, args.value as string),
-    executeOnApprove: args => aiTools.executeFieldEdit(args.rowId as number, args.field as string, args.value as string),
+    execute: args => {
+      const beforeRow = appService.getSnapshot().allocationList.find(r => r.rowId === (args.rowId as number))
+      const result    = aiTools.executeFieldEdit(args.rowId as number, args.field as string, args.value as string)
+      if (!('applied' in result) || !beforeRow) return result
+      const _widget = detectCascadeWidget(beforeRow, args.field as string)
+      return _widget ? { ...result, _widget } : result
+    },
   },
 
   // ── Confirm: propose_bulk_set_field ─────────────────────────────────────
@@ -631,14 +692,14 @@ const TOOL_ENTRIES: ToolEntry[] = [
     }),
   },
 
-  // ── Confirm: propose_create_position ─────────────────────────────────────
+  // ── Execute: propose_create_position ─────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_create_position',
-        description: '空席ポジションの新規作成をユーザーに提案し、確認を得てから実行する。実行前に findOrgs で orgCode を確認すること。',
+        description: '空席ポジションを新規作成する（即時実行）。実行前に findOrgs で orgCode を確認すること。',
         parameters: {
           type: 'object',
           required: ['orgCode', 'localJobTitle'],
@@ -649,21 +710,20 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildCreatePositionProposal(args.orgCode as string, args.localJobTitle as string),
-    executeOnApprove: args => {
+    execute: args => {
       const newRowId = aiTools.createVacantPosition(args.orgCode as string, args.localJobTitle as string)
       return { applied: true, localJobTitle: args.localJobTitle, orgCode: args.orgCode, newPositionRowId: newRowId }
     },
   },
 
-  // ── Confirm: propose_assign_person ────────────────────────────────────────
+  // ── Execute: propose_assign_person ────────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_assign_person',
-        description: '空席ポジションに従業員を配属することをユーザーに提案し、確認を得てから実行する。実行前に findVacantPositions で vacantRowId を、findPersons で userId を確認すること。',
+        description: '空席ポジションに従業員を配属する（即時実行）。実行前に findVacantPositions で vacantRowId を、findPersons で userId を確認すること。',
         parameters: {
           type: 'object',
           required: ['vacantRowId', 'userId'],
@@ -674,23 +734,22 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildAssignPersonProposal(args.vacantRowId as number, args.userId as string),
-    executeOnApprove: args => {
+    execute: args => {
       aiTools.assignPersonToVacantPosition(args.vacantRowId as number, args.userId as string)
       return { applied: true, vacantRowId: args.vacantRowId, userId: args.userId }
     },
   },
 
-  // ── Confirm: propose_change_position ─────────────────────────────────────
+  // ── Execute: propose_change_position ─────────────────────────────────────
   // 同一組織内でポジションを作り直す（役職変更）。旧ポジションは削除。
   // TransferPersonOperation を同一組織・retireOriginal=true で呼ぶことで1回のUndoに収める。
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_change_position',
-        description: '行のポジション（役職名）を変更する。新しいポジションを作成し、元のポジションを削除して1回のUndoで戻せる。「課長にして」「部長から課長へ」のような役職変更に使う。実行前に findPersons で rowId を確認すること。',
+        description: '行のポジション（役職名）を変更する（即時実行）。新しいポジションを作成し、元のポジションを削除して1回のUndoで戻せる。「課長にして」「部長から課長へ」のような役職変更に使う。実行前に findPersons で rowId を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId', 'newJobTitle'],
@@ -701,17 +760,23 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildChangePositionProposal(args.rowId as number, args.newJobTitle as string),
-    executeOnApprove: args => aiTools.executeChangePosition(args.rowId as number, args.newJobTitle as string),
+    execute: args => {
+      const beforeRow = appService.getSnapshot().allocationList.find(r => r.rowId === (args.rowId as number))
+      const result    = aiTools.executeChangePosition(args.rowId as number, args.newJobTitle as string)
+      if (!('applied' in result) || !beforeRow) return result
+      const _widget = detectCascadeWidget(beforeRow, 'localJobTitle')
+      return _widget ? { ...result, _widget } : result
+    },
   },
-  // ── Confirm: propose_set_manager_position ────────────────────────────────
+
+  // ── Execute: propose_set_manager_position ────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_set_manager_position',
-        description: '上司ポジションコードをユーザーに提案し確認を得てから設定する。managerName も在席者の姓名から自動入力する。実行前に findPersons で対象者の rowId を、findPersons で上司の positionCode を確認すること。',
+        description: '上司ポジションコードを設定する（即時実行）。managerName も在席者の姓名から自動入力する。実行前に findPersons で対象者の rowId を、findPersons で上司の positionCode を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId', 'managerPositionCode'],
@@ -722,8 +787,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildSetManagerPositionProposal(args.rowId as number, args.managerPositionCode as string),
-    executeOnApprove: args => {
+    execute: args => {
       const rowId               = args.rowId as number
       const managerPositionCode = args.managerPositionCode as string
       const result = aiTools.setManagerPosition(rowId, managerPositionCode)
@@ -765,14 +829,14 @@ const TOOL_ENTRIES: ToolEntry[] = [
     execute: () => aiTools.getUnassignedPositions(),
   },
 
-  // ── Confirm: propose_assign_position_codes ────────────────────────────────
+  // ── Execute: propose_assign_position_codes ────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_assign_position_codes',
-        description: '内部採番コード（_pos_…）のポジションに外部コード（P + 8桁数字）を割り当てることをユーザーに提案し、確認を得てから実行する。managerPositionCode として参照している行も連動して更新される。実行前に getUnassignedPositions で rowId を確認すること。',
+        description: '内部採番コード（_pos_…）のポジションに外部コード（P + 8桁数字）を割り当てる（即時実行）。managerPositionCode として参照している行も連動して更新される。実行前に getUnassignedPositions で rowId を確認すること。',
         parameters: {
           type: 'object',
           required: ['assignments'],
@@ -793,8 +857,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildAssignPositionCodesProposal(args.assignments as Array<{ rowId: number; newPositionCode: string }>),
-    executeOnApprove: args => {
+    execute: args => {
       const assignments = args.assignments as Array<{ rowId: number; newPositionCode: string }>
       const result = aiTools.assignPositionCodes(assignments)
       return result.ok
@@ -821,14 +884,14 @@ const TOOL_ENTRIES: ToolEntry[] = [
     },
   },
 
-  // ── Confirm: propose_leave_of_absence ─────────────────────────────────────
+  // ── Execute: propose_leave_of_absence ─────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_leave_of_absence',
-        description: '指定した行を休職させることをユーザーに提案し、確認を得てから leaveOfAbsenceSign を "1" に設定する。実行前に findPersons で rowId を確認すること。',
+        description: '指定した行を休職させる（即時実行）。leaveOfAbsenceSign を "1" に設定する。実行前に findPersons で rowId を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId'],
@@ -839,18 +902,17 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildLeaveOfAbsenceProposal(args.rowId as number, args.memo as string | undefined),
-    executeOnApprove: args => aiTools.executeLeaveOfAbsence(args.rowId as number, args.memo as string | undefined),
+    execute: args => aiTools.executeLeaveOfAbsence(args.rowId as number, args.memo as string | undefined),
   },
 
-  // ── Confirm: propose_return_from_leave ────────────────────────────────────
+  // ── Execute: propose_return_from_leave ────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_return_from_leave',
-        description: '指定した行を復職させることをユーザーに提案し、確認を得てから leaveOfAbsenceSign をクリアする。実行前に findPersons で rowId を確認すること。',
+        description: '指定した行を復職させる（即時実行）。leaveOfAbsenceSign をクリアする。実行前に findPersons で rowId を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId'],
@@ -860,18 +922,17 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildReturnFromLeaveProposal(args.rowId as number),
-    executeOnApprove: args => aiTools.executeReturnFromLeave(args.rowId as number),
+    execute: args => aiTools.executeReturnFromLeave(args.rowId as number),
   },
 
-  // ── Confirm: propose_concurrent_add ──────────────────────────────────────
+  // ── Execute: propose_concurrent_add ──────────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_concurrent_add',
-        description: '指定した行（本務行）に社内兼務を追加することをユーザーに提案し、確認を得てから兼務行を新規作成する。実行前に findPersons で rowId（本務行）を、findOrgs で targetOrgCode を確認すること。',
+        description: '指定した行（本務行）に社内兼務を追加する（即時実行）。兼務行を新規作成する。実行前に findPersons で rowId（本務行）を、findOrgs で targetOrgCode を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId', 'targetOrgCode'],
@@ -883,18 +944,17 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildConcurrentAddProposal(args.rowId as number, args.targetOrgCode as string, args.concurrentReason as string | undefined),
-    executeOnApprove: args => aiTools.executeConcurrentAdd(args.rowId as number, args.targetOrgCode as string, args.concurrentReason as string | undefined),
+    execute: args => aiTools.executeConcurrentAdd(args.rowId as number, args.targetOrgCode as string, args.concurrentReason as string | undefined),
   },
 
-  // ── Confirm: propose_concurrent_release ──────────────────────────────────
+  // ── Execute: propose_concurrent_release ──────────────────────────────────
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
         name:        'propose_concurrent_release',
-        description: '指定した兼務行を解除することをユーザーに提案し、確認を得てから兼務行を削除する。出向兼務は対象外（出向解除を使うこと）。実行前に findPersons の positions[] から兼務行（concurrentType="兼務"）の rowId を確認すること。',
+        description: '指定した兼務行を解除する（即時実行）。兼務行を削除する。出向兼務は対象外（出向解除を使うこと）。実行前に findPersons の positions[] から兼務行（concurrentType="兼務"）の rowId を確認すること。',
         parameters: {
           type: 'object',
           required: ['rowId'],
@@ -904,8 +964,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    buildProposal: args => P.buildConcurrentReleaseProposal(args.rowId as number),
-    executeOnApprove: args => aiTools.executeConcurrentRelease(args.rowId as number),
+    execute: args => aiTools.executeConcurrentRelease(args.rowId as number),
   },
 
   // ── Confirm: propose_secondment_to_concurrent ─────────────────────────────
@@ -987,7 +1046,7 @@ const TOOL_ENTRIES: ToolEntry[] = [
         label: `出向先転籍: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
         commands: [
           bindOperation(secondmentOutReleaseSFDef, rowId, { departmentCode: homeDeptCode }),
-          bindOperation(employmentTransferOutDef, rowId, { transferReason }),
+          bindOperation(employmentTransferDef, rowId, { transferReason }),
         ],
       })
     },
@@ -1155,16 +1214,16 @@ export const toolRegistry = {
     }
   },
 
-  /** read ツール用の便利メソッド（AgentRunner が内部で使う）。 */
+  /** read / execute ツール用の便利メソッド（AgentRunner が内部で使う）。 */
   execute(call: ToolCall): ToolResult {
     const entry = entryMap.get(call.function.name)
     const args  = parseArgs(call.function.arguments)
     let result: unknown
     try {
-      if (entry?.kind === 'read') {
+      if (entry?.kind === 'read' || entry?.kind === 'execute') {
         result = entry.execute(args)
       } else {
-        result = { error: `'${call.function.name}' は read ツールではありません` }
+        result = { error: `'${call.function.name}' は read/execute ツールではありません` }
       }
     } catch (e) {
       result = { error: String(e) }

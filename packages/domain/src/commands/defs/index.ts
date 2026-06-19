@@ -12,7 +12,8 @@
  *   2. ここの再エクスポートに追加
  */
 
-export type { EditOperation, OperationDef, OperationGroup, OperationInput } from './types'
+export type { EditOperation, OperationDef, OperationGroup, OperationInput, SectionDivider } from './types'
+export { isSectionDivider } from './types'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
 
 // ── 昇降格・役職変更 ──────────────────────────────────────────────────────────
@@ -25,14 +26,16 @@ export { jobTypeChangeDef, employmentExtensionDef } from './employmentTypeDefs'
 export { orgTransferDef, orgRestructureDef, managerChangeDef } from './orgTransferDefs'
 
 // ── 兼務 ─────────────────────────────────────────────────────────────────────
-export { concurrentAddDef, concurrentReleaseDef } from './concurrentDefs'
+export { concurrentAddDef, concurrentAddNewDef, concurrentAddCancelDef, concurrentReleaseDef } from './concurrentDefs'
 
 // ── 出向 ─────────────────────────────────────────────────────────────────────
 export {
   secondmentOutSFDef, secondmentOutNonSFDef,
   secondmentInSFDef,  secondmentInNonSFDef,
+  secondmentInNewSFDef, secondmentInNewNonSFDef,
   concurrentSecondmentOutSFDef,    concurrentSecondmentOutNonSFDef,
   concurrentSecondmentInSFDef,     concurrentSecondmentInNonSFDef,
+  concurrentSecondmentInNewSFDef,  concurrentSecondmentInNewNonSFDef,
   secondmentOutReleaseSFDef,       secondmentOutReleaseNonSFDef,
   secondmentInReleaseSFDef,        secondmentInReleaseNonSFDef,
   concurrentSecondmentOutReleaseSFDef, concurrentSecondmentOutReleaseNonSFDef,
@@ -40,7 +43,10 @@ export {
 } from './secondmentDefs'
 
 // ── 在籍・退職 ────────────────────────────────────────────────────────────────
-export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employmentTransferOutDef, employmentTransferInDef, noChangeDef } from './personDefs'
+export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employmentTransferDef, noChangeDef } from './personDefs'
+
+// ── ポジション追加 ────────────────────────────────────────────────────────────
+export { addEmptyPositionDef } from './positionAddDef'
 
 import type { EditOperation } from './types'
 import type { EditCommand, DomainContext } from '../types'
@@ -51,6 +57,7 @@ import { DEFS as orgTransfer }     from './orgTransferDefs'
 import { DEFS as concurrent }      from './concurrentDefs'
 import { DEFS as secondment }      from './secondmentDefs'
 import { DEFS as person }          from './personDefs'
+import { DEFS as positionAdd }     from './positionAddDef'
 
 export const ALL_EDIT_OPERATIONS: EditOperation[] = [
   ...promotion,
@@ -59,6 +66,7 @@ export const ALL_EDIT_OPERATIONS: EditOperation[] = [
   ...concurrent,
   ...secondment,
   ...person,
+  ...positionAdd,
 ]
 
 /** 後方互換エイリアス */

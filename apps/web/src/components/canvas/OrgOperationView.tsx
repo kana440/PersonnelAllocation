@@ -22,7 +22,7 @@ import { DisplayFieldCombobox }   from './components/DisplayFieldCombobox'
 import { OrgViewContext }   from './OrgViewContext'
 import type { OrgViewContextValue } from './OrgViewContext'
 import { useOrgDrag }       from './hooks/useOrgDrag'
-import { usePersonMove }    from './hooks/usePersonMove'
+import { useDropIntent }    from './hooks/useDropIntent'
 import { useBulkMove }      from './hooks/useBulkMove'
 import { useOrgViewData }   from './hooks/useOrgViewData'
 
@@ -86,9 +86,11 @@ export function OrgOperationView() {
     }
   }, [selectPerson, persons, allocationList])
 
-  const { personMoveDialog, setPersonMoveDialog, handlePersonMoveConfirm } = usePersonMove({
-    persons, allocationList,
-  })
+  const {
+    dropIntentState, setDropIntentState,
+    dropOpState, setDropOpState,
+    handleIntentPick,
+  } = useDropIntent()
 
   const {
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
@@ -96,7 +98,7 @@ export function OrgOperationView() {
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
   } = useOrgDrag({
     organizations, persons, saveRow, assignPersonToVacantPosition,
-    openPersonMoveDialog: (fromRowId, personId, toOrgId) => setPersonMoveDialog({ fromRowId, personId, toOrgId }),
+    openPersonMoveDialog: (fromRowId, personId, toOrgId) => setDropIntentState({ fromRowId, personId, toOrgId }),
   })
 
   const { bulkMoveSourceId, setBulkMoveSourceId, handleBulkMoveConfirm } = useBulkMove({
@@ -378,8 +380,10 @@ export function OrgOperationView() {
           setBulkActionModal={setBulkActionModal}
           bulkMoveSourceId={bulkMoveSourceId}
           setBulkMoveSourceId={setBulkMoveSourceId}
-          personMoveDialog={personMoveDialog}
-          setPersonMoveDialog={setPersonMoveDialog}
+          dropIntentState={dropIntentState}
+          setDropIntentState={setDropIntentState}
+          dropOpState={dropOpState}
+          setDropOpState={setDropOpState}
           confirmDialog={confirmDialog}
           setConfirmDialog={setConfirmDialog}
           fieldPickerOpen={fieldPickerOpen}
@@ -392,7 +396,7 @@ export function OrgOperationView() {
           positionTreeByOrgId={positionTreeByOrgId}
           afterMembersByOrgId={afterMembersByOrgId}
           handleBulkMoveConfirm={handleBulkMoveConfirm}
-          handlePersonMoveConfirm={handlePersonMoveConfirm}
+          handleIntentPick={handleIntentPick}
         />
 
       </div>

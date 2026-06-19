@@ -20,16 +20,14 @@ export type EditPattern =
   | 'secondmentOutRelease'
   | 'secondmentInRelease'
   // 出向系（兼務）
-  | 'concurrentSecondmentOut'
+  | 'concurrentSecondmentOutNonSF'
   | 'concurrentSecondmentIn'
   | 'concurrentSecondmentOutRelease'
   | 'concurrentSecondmentInRelease'
   // 人操作系
   | 'leaveOfAbsence'
   | 'returnFromLeave'
-  | 'employmentTransferOut'
-  | 'employmentTransferIn'
-  | 'newHire'
+  | 'employmentTransfer'
   | 'termination'
   | 'noChange'
   // 既存（後方互換）
@@ -40,11 +38,10 @@ export const ALL_EDIT_PATTERNS: EditPattern[] = [
   'promotion', 'demotion', 'titleChange', 'jobTypeChange', 'employmentExtension', 'employmentTypeChange',
   'orgTransfer', 'orgRestructure', 'managerChange', 'concurrentAdd', 'concurrentRelease',
   'secondmentOut', 'secondmentIn', 'secondmentOutRelease', 'secondmentInRelease',
-  'concurrentSecondmentOut', 'concurrentSecondmentIn',
+  'concurrentSecondmentOutNonSF', 'concurrentSecondmentIn',
   'concurrentSecondmentOutRelease', 'concurrentSecondmentInRelease',
   'leaveOfAbsence', 'returnFromLeave',
-  'employmentTransferOut', 'employmentTransferIn',
-  'newHire', 'termination', 'noChange',
+  'employmentTransfer', 'termination', 'noChange',
   'resignation', 'vacantPositionMove',
 ]
 

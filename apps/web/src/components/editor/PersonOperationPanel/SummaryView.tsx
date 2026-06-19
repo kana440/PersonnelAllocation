@@ -38,8 +38,9 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string; cancel?:
   {
     label: '兼務',
     ops: [
-      { id: 'ConcurrentAdd',     shortLabel: '兼務追加' },
-      { id: 'ConcurrentRelease', shortLabel: '兼務解除' },
+      { id: 'ConcurrentAdd',       shortLabel: '兼務追加' },
+      { id: 'ConcurrentAddCancel', shortLabel: '兼務追加取消', cancel: true },
+      { id: 'ConcurrentRelease',   shortLabel: '兼務解除' },
     ],
   },
   {
@@ -74,8 +75,7 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string; cancel?:
       { id: 'LeaveOfAbsence',       shortLabel: '休職' },
       { id: 'LeaveOfAbsenceCancel', shortLabel: '休職取消', cancel: true },
       { id: 'ReturnFromLeave',      shortLabel: '復職' },
-      { id: 'EmploymentTransferOut', shortLabel: '移籍（出）' },
-      { id: 'EmploymentTransferIn',  shortLabel: '移籍（入）' },
+      { id: 'EmploymentTransfer', shortLabel: '移籍' },
       { id: 'NoChange',              shortLabel: '変更なし' },
     ],
   },

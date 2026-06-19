@@ -35,6 +35,8 @@ export interface PersonDiff {
   rowId: number
   before: { grade?: string; position?: string; orgName?: string; note?: string }
   after:  { grade?: string; position?: string; orgName?: string; note?: string }
+  /** 連動変更フィールド一覧。execute 後の副次変更の可視化に使う。 */
+  fields?: Array<{ label: string; before?: string; after?: string }>
 }
 
 export interface OrgTreeNode {

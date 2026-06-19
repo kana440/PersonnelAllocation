@@ -2,15 +2,15 @@
 import type { EditOperation } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { afterKeysByBinding, nextRowId } from '../../allocationRow'
+import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { isMainAssignment } from '../helpers'
 
-function personName(row: AllocationRow): string {
-  return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
+function inputName(values: Partial<AllocationRow>): string {
+  return [values.lastName, values.firstName].filter(Boolean).join(' ') || '（氏名未入力）'
 }
 
-// ── 社内兼務追加 ──────────────────────────────────────────────────────────────
+// ── 社内兼務追加（本務行コピー） ──────────────────────────────────────────────
 
 export const concurrentAddDef: EditOperation = {
   id:         'ConcurrentAdd',
@@ -21,51 +21,193 @@ export const concurrentAddDef: EditOperation = {
   availableFor: (row) => !!row.userId && isMainAssignment(row),
 
   inputs: [
-    { field: 'departmentCode',   required: true,  label: '兼務先組織' },
+    { field: 'transferReason',   required: false },
+    { field: 'lastName',         required: true  },
+    { field: 'firstName',        required: true  },
+    { field: 'groupEmployeeId',  required: false, readOnly: true },
+    { field: 'employeeNumber',   required: false, readOnly: true },
+    { field: 'employmentType',   required: false, readOnly: true },
+    { field: 'departmentCode',   required: true,  label: '兼務先組織', picker: 'org' },
+    { field: 'jobFamily',        required: false },
+    { field: 'jobType',          required: false },
+    { field: 'positionBand',     required: false },
+    { field: 'band',             required: false },
+    { field: 'payGrade',         required: false },
     { field: 'concurrentReason', required: false },
+    { field: 'memo',             required: false },
   ],
 
-  deriveInitial: () => ({}),
+  deriveInitial: (row) => ({
+    transferReason:  row.transferReason,
+    lastName:        row.lastName,
+    firstName:       row.firstName,
+    groupEmployeeId: row.groupEmployeeId,
+    employeeNumber:  row.employeeNumber,
+    employmentType:  row.employmentType,
+    jobFamily:       row.jobFamily,
+    jobType:         row.jobType,
+    memo:            row.memo as string | undefined,
+  }),
 
   validate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)          return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId)   return fail('人が配属されていない行には兼務を追加できません')
+    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType === '兼務') return fail('兼務行には兼務を追加できません（本務行を指定してください）')
+    if (!values.lastName)       return fail('姓は必須です')
+    if (!values.firstName)      return fail('名は必須です')
     if (!values.departmentCode) return fail('兼務先組織コードは必須です')
     return ok()
   },
 
   apply(ctx, rowId, values) {
-    const src = ctx.allocationList.find(r => r.rowId === rowId)!
+    const src      = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
-    const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
-    const orgSubFields = deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
+    const orgSub   = deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
+    const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
 
     const newRow: AllocationRow = {
-      ...src,
-      ...posClears,
-      ...allocClears,
-      ...orgSubFields,
-      rowId:              newRowId,
-      departmentCode:     values.departmentCode as string,
-      positionCode:       `_pos_${newRowId}`,
-      concurrentType:     '兼務',
-      concurrentReason:   values.concurrentReason as string | undefined,
-      prevDepartmentCode: undefined,
-      prevPositionCode:   undefined,
-      prevConcurrentType: undefined,
+      // src から引き継ぐのは担当者（assignee）のみ。prevXxx は一切引き継がない
+      assignee:             src.assignee,
+      ...orgSub,
+      ...formVals,
+      rowId:                newRowId,
+      positionCode:         `_pos_${newRowId}`,
+      departmentCode:       values.departmentCode as string,
+      concurrentType:       '兼務',
+      trainingPositionFlag: (values.trainingPositionFlag as string | undefined) ?? '0',
+      userId:               (values.userId as string | undefined) || undefined,
     } as AllocationRow
 
     return {
       updatedList: [...ctx.allocationList, newRow],
-      label: `社内兼務追加: ${personName(src)}`,
+      label: `社内兼務追加: ${inputName(values)}`,
     }
   },
 }
 
-// ── 社内兼務解除 ──────────────────────────────────────────────────────────────
+// ── 社内兼務追加（新規：組織パネルボタンから） ────────────────────────────────
+
+export const concurrentAddNewDef: EditOperation = {
+  id:         'ConcurrentAddNew',
+  label:      '社内兼務追加（新規）',
+  group:      'position',
+  badgeColor: 'bg-cyan-100 text-cyan-700',
+
+  // 組織パネルボタンからのみ起動。行メニューには表示しない
+  availableFor: () => false,
+
+  inputs: [
+    { field: 'transferReason',   required: false },
+    { field: 'lastName',         required: true  },
+    { field: 'firstName',        required: true  },
+    { field: 'groupEmployeeId',  required: false },
+    { field: 'employeeNumber',   required: false },
+    { field: 'userId',           required: false },
+    { field: 'employmentType',   required: false },
+    { field: 'departmentCode',   required: true,  label: '兼務先組織', picker: 'org' },
+    { field: 'jobFamily',        required: false },
+    { field: 'jobType',          required: false },
+    { field: 'positionBand',     required: false },
+    { field: 'band',             required: false },
+    { field: 'payGrade',         required: false },
+    { field: 'concurrentReason', required: false },
+    { field: 'memo',             required: false },
+  ],
+
+  // 組織ボタン起動時: row.departmentCode に初期組織コードが入ってくる
+  deriveInitial: (row) => ({
+    departmentCode: row.departmentCode,
+  }),
+
+  validate(_ctx, _rowId, values) {
+    if (!values.lastName)       return fail('姓は必須です')
+    if (!values.firstName)      return fail('名は必須です')
+    if (!values.departmentCode) return fail('兼務先組織コードは必須です')
+    return ok()
+  },
+
+  apply(ctx, _rowId, values) {
+    const newRowId = nextRowId(ctx.allocationList)
+    const orgSub   = values.departmentCode
+      ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
+      : {}
+    const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
+
+    const newRow: AllocationRow = {
+      ...orgSub,
+      ...formVals,
+      rowId:                newRowId,
+      positionCode:         `_pos_${newRowId}`,
+      departmentCode:       (values.departmentCode as string) || '',
+      concurrentType:       '兼務',
+      trainingPositionFlag: (values.trainingPositionFlag as string | undefined) ?? '0',
+      userId:               (values.userId as string | undefined) || undefined,
+    } as AllocationRow
+
+    return {
+      updatedList: [...ctx.allocationList, newRow],
+      label: `社内兼務追加（新規）: ${inputName(values)}`,
+    }
+  },
+}
+
+// ── 社内兼務追加取消（セッション内追加分） ────────────────────────────────────
+
+export const concurrentAddCancelDef: EditOperation = {
+  id:         'ConcurrentAddCancel',
+  label:      '社内兼務追加取消',
+  group:      'position',
+  badgeColor: 'bg-red-100 text-red-600',
+
+  description: 'このセッションで追加した社内兼務を取消します。下記の情報が削除されます。',
+  suppressSideEffectWarning: true,
+
+  // prevConcurrentType が空 = このセッションで追加した行
+  availableFor: (row) =>
+    row.concurrentType === '兼務' &&
+    !row.prevConcurrentType &&
+    !row.secondmentToCompany &&
+    !row.secondmentFromCompany,
+
+  inputs: [
+    { field: 'lastName',         required: false, readOnly: true },
+    { field: 'firstName',        required: false, readOnly: true },
+    { field: 'employmentType',   required: false, readOnly: true },
+    { field: 'departmentCode',   required: false, readOnly: true, label: '兼務先組織コード' },
+    { field: 'band',             required: false, readOnly: true },
+    { field: 'payGrade',         required: false, readOnly: true },
+    { field: 'concurrentReason', required: false, readOnly: true },
+  ],
+
+  deriveInitial: (row) => ({
+    lastName:         row.lastName,
+    firstName:        row.firstName,
+    employmentType:   row.employmentType,
+    departmentCode:   row.departmentCode,
+    band:             row.band,
+    payGrade:         row.payGrade,
+    concurrentReason: row.concurrentReason,
+  }),
+
+  validate(ctx, rowId, _values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)
+    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (row.concurrentType !== '兼務' || row.prevConcurrentType)
+      return fail('このセッションで追加した社内兼務行ではありません')
+    return ok()
+  },
+
+  apply(ctx, rowId, _values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
+    return {
+      updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
+      label: `社内兼務追加取消: ${name}`,
+    }
+  },
+}
+
+// ── 社内兼務解除（既存の兼務行を業務的に解除） ────────────────────────────────
 
 export const concurrentReleaseDef: EditOperation = {
   id:         'ConcurrentRelease',
@@ -73,14 +215,22 @@ export const concurrentReleaseDef: EditOperation = {
   group:      'position',
   badgeColor: 'bg-cyan-50 text-cyan-600',
 
+  // prevConcurrentType = '兼務' → インポート時から兼務として存在していた行のみ対象
+  // セッション内追加分は ConcurrentAddCancel で対処する
   availableFor: (row) =>
     row.concurrentType === '兼務' &&
+    !!row.prevConcurrentType &&
     !row.secondmentToCompany &&
     !row.secondmentFromCompany,
 
-  inputs: [],
+  inputs: [
+    { field: 'transferReason', required: true, readOnly: true },
+    { field: 'memo',           required: false },
+  ],
 
-  deriveInitial: () => ({}),
+  deriveInitial: () => ({
+    transferReason: '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+  }),
 
   validate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
@@ -94,11 +244,12 @@ export const concurrentReleaseDef: EditOperation = {
 
   apply(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
     return {
       updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
-      label: `社内兼務解除: ${personName(row)}`,
+      label: `社内兼務解除: ${name}`,
     }
   },
 }
 
-export const DEFS: EditOperation[] = [concurrentAddDef, concurrentReleaseDef]
+export const DEFS: EditOperation[] = [concurrentAddDef, concurrentAddNewDef, concurrentAddCancelDef, concurrentReleaseDef]

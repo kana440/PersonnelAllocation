@@ -35,7 +35,7 @@ function PreviewMemberRow({ row }: { row: AllocationRow }) {
         {patterns.has('promotion')    && <span className="px-1 py-0.5 rounded text-[10px] bg-green-50 text-green-700 font-semibold">↑昇格</span>}
         {patterns.has('demotion')     && <span className="px-1 py-0.5 rounded text-[10px] bg-orange-50 text-orange-700 font-semibold">↓降格</span>}
         {patterns.has('titleChange')  && <span className="px-1 py-0.5 rounded text-[10px] bg-purple-50 text-purple-600">職位変更</span>}
-        {patterns.has('newHire')      && <span className="px-1 py-0.5 rounded text-[10px] bg-teal-50 text-teal-700">新規</span>}
+        {patterns.has('employmentTransfer') && <span className="px-1 py-0.5 rounded text-[10px] bg-red-50 text-red-600">移籍</span>}
         {patterns.has('termination')  && <span className="px-1 py-0.5 rounded text-[10px] bg-red-50 text-red-600">退職</span>}
         {row.concurrentType === '兼務' && <span className="px-1 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600">兼務</span>}
         {bandMismatch             && <span className="px-1 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600">⚠Band</span>}

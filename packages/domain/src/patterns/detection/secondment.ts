@@ -13,7 +13,7 @@ export function detectSecondment(row: AllocationRow): Set<EditPattern> {
   const wasConcurrent = row.prevConcurrentType === '兼務'
 
   // 出向追加
-  if (!prevOut && afterOut) out.add(isConcurrent ? 'concurrentSecondmentOut' : 'secondmentOut')
+  if (!prevOut && afterOut) out.add(isConcurrent ? 'concurrentSecondmentOutNonSF' : 'secondmentOut')
   if (!prevIn  && afterIn)  out.add(isConcurrent ? 'concurrentSecondmentIn'  : 'secondmentIn')
 
   // 出向解除（本務）

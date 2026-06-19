@@ -1,7 +1,7 @@
-import type { EditOperation } from '@personnel/domain/commands/defs/types'
+import type { EditOperation, OperationInput } from '@personnel/domain/commands/defs/types'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { DomainContext } from '@personnel/domain/commands/types'
-import { bindOperation } from '@personnel/domain/commands/defs'
+import { bindOperation, isSectionDivider } from '@personnel/domain/commands/defs'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 
 export interface SideEffectSummary {
@@ -29,7 +29,7 @@ export function computeSideEffects(
     const afterRow = result.updatedList.find(r => r.rowId === row.rowId)
     if (!afterRow) return { cleared: [], changed: [] }
 
-    const inputFields = new Set(def.inputs.map(i => i.field as string))
+    const inputFields = new Set(def.inputs.filter((i): i is OperationInput => !isSectionDivider(i)).map(i => i.field as string))
     const cleared: string[] = []
     const changed: string[] = []
 

@@ -487,7 +487,7 @@ codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>
 |---|---|---|
 | `specs/00-cross-cutting.md` | **変更種別ごとの横断的影響チェックリスト（実装時に必ず確認）** | — |
 | `specs/G1-fields/` | フィールド定義・入力種別・codeList対応 | `01-field-definitions.md` |
-| `specs/G2-domain/` | 業務ルール・バリデーション規則 | `01-business-rules.md`, `02-validation-rules.md` |
+| `specs/G2-domain/` | 業務ルール・バリデーション規則 | `01-business-rules.md`, `02-validation-rules.md`, `04-new-row-operations.md`, `05-operations-catalog.md` |
 | `specs/G3-ui/` | UI入力補助・レビュー表示仕様 | `01-row-editor-input-spec.md`, `02-review-display-spec.md` |
 | `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
 | `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |

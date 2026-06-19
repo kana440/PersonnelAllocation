@@ -11,14 +11,33 @@ import type { DomainContext, ValidationResult, OperationResult } from '../types'
 export type OperationGroup = 'position' | 'jobClassification' | 'person'
 
 /**
+ * inputs 配列内でセクション区切りを表す。フィールド定義と判別できる（kind プロパティで区別）。
+ * 直前のフィールドと次のフィールドの間に見出し＋横線を描画する。
+ */
+export interface SectionDivider {
+  readonly kind:  'section'
+  readonly label: string
+}
+
+/** フィールド入力かセクション区切りかを判定するタイプガード */
+export function isSectionDivider(i: OperationInput | SectionDivider): i is SectionDivider {
+  return (i as SectionDivider).kind === 'section'
+}
+
+/**
  * 操作の入力フィールド定義。
  * UI フォームでユーザーが入力する必要があるフィールドを宣言する。
  */
 export interface OperationInput {
   readonly field:    keyof AllocationRow
   readonly required: boolean
-  /** ラベル上書き。省略時は ALLOCATION_LIST_LABEL_MAP から取得 */
+  /** ラベル上書き。省略時は ALLOCATION_LIST_LABEL_MAP から取得（_新 サフィックスは自動除去）*/
   readonly label?:   string
+  /**
+   * true のとき、フォーム本体ではなくヘッダー右側のインジケーターエリアに表示される。
+   * 自動導出されるサインフラグ（readOnly + inputType: 'checkbox'）に使用する。
+   */
+  readonly indicator?: boolean
   /**
    * バンド選択肢を方向でフィルタリングする。
    * 'up' = 現在より上のバンドのみ（昇格用）、'down' = 下のみ（降格用）。
@@ -40,6 +59,15 @@ export interface OperationInput {
    * カリー化により外側でコスト高な計算（配下列挙など）を1回だけ行い、内側を高速にする。
    */
   readonly positionFilter?: (row: AllocationRow, ctx: DomainContext) => (candidate: AllocationRow) => boolean
+  /**
+   * この操作でのみ有効な選択肢リスト。
+   * - 静的配列: コンパイル時確定の固定リスト。AI エクスポートにそのまま含まれる。
+   * - 関数: DomainContext から動的に導出（コードリスト依存など）。
+   * 省略時は FIELD_CONSTRAINTS から自動導出（全操作共通のデフォルト）。
+   * 指定された場合は ComboInput を strict モードで表示し、リスト外の入力を抑止する。
+   */
+  readonly options?: readonly string[] | ((ctx: DomainContext) => readonly string[])
+
   /**
    * このフィールドの値が変更されたとき、操作固有のサイドエフェクトを返す。
    * - setValues          : 追加でセットするフィールド値（undefined = 空欄化）
@@ -95,8 +123,8 @@ export interface EditOperation {
    */
   deriveInitial(row: AllocationRow, ctx: DomainContext): Partial<AllocationRow>
 
-  /** ユーザーが入力する必要があるフィールド（順序付き） */
-  readonly inputs: OperationInput[]
+  /** ユーザーが入力する必要があるフィールド（順序付き）。SectionDivider を挟むことでセクション区切りを定義できる */
+  readonly inputs: (OperationInput | SectionDivider)[]
 
   /**
    * 現在の状態と入力値に対してバリデーションを実行する。

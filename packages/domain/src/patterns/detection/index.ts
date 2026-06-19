@@ -25,22 +25,9 @@ export function detectPatterns(row: AllocationRow, ctx?: DetectContext): RowChan
 
   const patterns = new Set<EditPattern>()
   for (const p of ALL_EDIT_PATTERNS) {
-    if (p === 'noChange') continue  // 後処理で制御
     if (EDIT_PATTERN_META[p].detect(row, effectiveCtx)) {
       patterns.add(p)
     }
-  }
-
-  // 変更なし: transferReason あり・主要フィールド差分なし・他パターンなし
-  const tr = (row.transferReason as string | undefined) ?? ''
-  const hasNoFieldDiff =
-    (row.departmentCode ?? '') === (row.prevDepartmentCode ?? '') &&
-    (row.band           ?? '') === (row.prevBand           ?? '') &&
-    (row.positionCode   ?? '') === (row.prevPositionCode   ?? '') &&
-    (row.employmentType ?? '') === (row.prevEmploymentType ?? '') &&
-    (row.concurrentType ?? '') === (row.prevConcurrentType ?? '')
-  if (tr && hasNoFieldDiff && patterns.size === 0) {
-    patterns.add('noChange')
   }
 
   // bandMismatch: band が positionBand 範囲外かチェック

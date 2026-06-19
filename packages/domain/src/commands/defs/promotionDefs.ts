@@ -1,7 +1,6 @@
 // 昇降格・役職変更 — 昇格・降格・役職変更
 import type { EditOperation } from './types'
 import { ok, fail } from '../types'
-import { isRegularEmployee, isSecondmentAcceptance } from '../helpers'
 import type { AllocationRow } from '../../allocationRow'
 
 function personName(row: AllocationRow): string {
@@ -35,24 +34,50 @@ export const promotionDef: EditOperation = {
   badgeColor: 'bg-green-100 text-green-700',
   suppressSideEffectWarning: true,
 
-  availableFor: (row, cl) =>
-    isRegularEmployee(row, cl) && !isSecondmentAcceptance(row, cl),
+  availableFor: () => true,
 
   inputs: [
-    { field: 'positionBand',         required: true,  stepFilter: 'up' },
-    { field: 'band',                 required: false },
-    { field: 'payGrade',             required: false },
+    // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
+    { field: 'promotionSign',      required: false, readOnly: true, inputType: 'checkbox', indicator: true },
+    { field: 'payGradeChangeSign', required: false, readOnly: true, inputType: 'checkbox', indicator: true },
+    // ── 最上部: 異動事由 ──────────────────────────────────────────────────
+    { field: 'transferReason',  required: false,
+      options: ['分掌移動（改組）', '分掌移動'] },
+    { field: 'memo',               required: false },
+    // ── バンドセクション ──────────────────────────────────────────────────
+    { kind: 'section', label: 'バンド' },
+    { field: 'positionBand',       required: true,  stepFilter: 'up' },
+    { field: 'band',               required: false },
+    { field: 'payGrade',           required: false },
+    { field: 'positionCode',       required: false },
+    // ── 役職セクション ────────────────────────────────────────────────────
+    { kind: 'section', label: '役職' },
     { field: 'officialPositionCode', required: false,
       afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
-    { field: 'localJobTitle',        required: false },
+    { field: 'localJobTitle',      required: false },
+    // ── 労働組合員・裁量労働セクション ────────────────────────────────────
+    { kind: 'section', label: '労働組合員・裁量労働' },
+    { field: 'positionUnionFlag',             required: false },
+    { field: 'unionFlag',                     required: false },
+    { field: 'positionDiscretionaryWorkFlag', required: false },
+    { field: 'discretionaryWorkFlag',         required: false },
+    { field: 'memo',                          required: false },
   ],
 
   deriveInitial: (row) => ({
-    positionBand:         row.positionBand         as string | undefined,
-    band:                 row.band                 as string | undefined,
-    payGrade:             row.payGrade             as string | undefined,
-    officialPositionCode: row.officialPositionCode as string | undefined,
-    localJobTitle:        row.localJobTitle        as string | undefined,
+    promotionSign:                row.promotionSign                as string | undefined,
+    payGradeChangeSign:           row.payGradeChangeSign           as string | undefined,
+    transferReason:               row.transferReason               as string | undefined,
+    positionBand:                 row.positionBand                 as string | undefined,
+    band:                         row.band                         as string | undefined,
+    payGrade:                     row.payGrade                     as string | undefined,
+    positionCode:                 row.positionCode                 as string | undefined,
+    officialPositionCode:         row.officialPositionCode         as string | undefined,
+    localJobTitle:                row.localJobTitle                as string | undefined,
+    positionUnionFlag:            row.positionUnionFlag            as string | undefined,
+    unionFlag:                    row.unionFlag                    as string | undefined,
+    positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
+    discretionaryWorkFlag:        row.discretionaryWorkFlag        as string | undefined,
   }),
 
   validate(ctx, rowId, values) {
@@ -80,25 +105,50 @@ export const demotionDef: EditOperation = {
   badgeColor: 'bg-orange-100 text-orange-700',
   suppressSideEffectWarning: true,
 
-  availableFor: (row, cl) =>
-    isRegularEmployee(row, cl) && !isSecondmentAcceptance(row, cl),
+  availableFor: () => true,
 
   inputs: [
-    { field: 'positionBand',         required: true,  stepFilter: 'down' },
-    { field: 'band',                 required: false },
-    { field: 'payGrade',             required: false },
-    { field: 'demotionReason',       required: true },
+    // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
+    { field: 'promotionSign',      required: false, readOnly: true, inputType: 'checkbox', indicator: true },
+    { field: 'payGradeChangeSign', required: false, readOnly: true, inputType: 'checkbox', indicator: true },
+    // ── 最上部 ────────────────────────────────────────────────────────────
+    { field: 'transferReason',  required: false,
+      options: ['分掌移動（改組）', '分掌移動'] },    { field: 'demotionReason',     required: true },
+    { field: 'memo',                          required: false },
+    // ── バンドセクション ──────────────────────────────────────────────────
+    { kind: 'section', label: 'バンド' },
+    { field: 'positionBand',       required: true,  stepFilter: 'down' },
+    { field: 'band',               required: false },
+    { field: 'payGrade',           required: false },
+    { field: 'positionCode',       required: false },
+    // ── 役職セクション ────────────────────────────────────────────────────
+    { kind: 'section', label: '役職' },
     { field: 'officialPositionCode', required: false,
       afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
-    { field: 'localJobTitle',        required: false },
+    { field: 'localJobTitle',      required: false },
+    // ── 労働組合員・裁量労働セクション ────────────────────────────────────
+    { kind: 'section', label: '労働組合員・裁量労働' },
+    { field: 'positionUnionFlag',             required: false },
+    { field: 'unionFlag',                     required: false },
+    { field: 'positionDiscretionaryWorkFlag', required: false },
+    { field: 'discretionaryWorkFlag',         required: false },
   ],
 
   deriveInitial: (row) => ({
-    positionBand:         row.positionBand         as string | undefined,
-    band:                 row.band                 as string | undefined,
-    payGrade:             row.payGrade             as string | undefined,
-    officialPositionCode: row.officialPositionCode as string | undefined,
-    localJobTitle:        row.localJobTitle        as string | undefined,
+    promotionSign:                row.promotionSign                as string | undefined,
+    payGradeChangeSign:           row.payGradeChangeSign           as string | undefined,
+    transferReason:               row.transferReason               as string | undefined,
+    positionBand:                 row.positionBand                 as string | undefined,
+    band:                         row.band                         as string | undefined,
+    payGrade:                     row.payGrade                     as string | undefined,
+    positionCode:                 row.positionCode                 as string | undefined,
+    officialPositionCode:         row.officialPositionCode         as string | undefined,
+    localJobTitle:                row.localJobTitle                as string | undefined,
+    positionUnionFlag:            row.positionUnionFlag            as string | undefined,
+    unionFlag:                    row.unionFlag                    as string | undefined,
+    positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
+    discretionaryWorkFlag:        row.discretionaryWorkFlag        as string | undefined,
+    memo:                         row.memo                         as string | undefined,
   }),
 
   validate(ctx, rowId, values) {
@@ -128,12 +178,17 @@ export const titleChangeDef: EditOperation = {
   availableFor: () => true,
 
   inputs: [
+    { field: 'transferReason',       required: false },
+    { field: 'memo',                 required: false },
+    { kind: 'section', label: '役職情報' },
     { field: 'officialPositionCode', required: true,
       afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
     { field: 'localJobTitle',        required: false },
   ],
 
   deriveInitial: (row) => ({
+    transferReason:       row.transferReason       as string | undefined,
+    memo:                 row.memo                 as string | undefined,
     officialPositionCode: row.officialPositionCode as string | undefined,
     localJobTitle:        row.localJobTitle        as string | undefined,
   }),

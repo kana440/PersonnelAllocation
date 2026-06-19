@@ -30,20 +30,31 @@ const computeEmploymentExtensionAfter = (): Partial<AllocationRow> => ({
 
 export const jobTypeChangeDef: EditOperation = {
   id:         'JobTypeChange',
-  label:      'ジョブタイプ変更',
+  label:      '職種変更',
   group:      'jobClassification',
   badgeColor: 'bg-purple-100 text-purple-700',
+
+  description: 'ジョブファミリー・ジョブタイプを変更します。給与等級の変更が発生する場合は、適切な給与等級を選択してください。',
 
   availableFor: (row, cl) => !isSecondmentAcceptance(row, cl),
 
   inputs: [
-    { field: 'jobFamily', required: false },
-    { field: 'jobType',   required: true  },
+    { field: 'transferReason', required: false,
+      options: ['分掌移動'] },
+
+    { field: 'memo',           required: false },
+    { kind: 'section', label: 'ジョブタイプ情報' },
+    { field: 'jobFamily',      required: false },
+    { field: 'jobType',        required: true  },
+    { field: 'payGrade',       required: false },
   ],
 
   deriveInitial: (row) => ({
-    jobFamily: row.jobFamily as string | undefined,
-    jobType:   row.jobType   as string | undefined,
+    transferReason: row.transferReason as string | undefined,
+    jobFamily:      row.jobFamily      as string | undefined,
+    jobType:        row.jobType        as string | undefined,
+    payGrade:       row.payGrade       as string | undefined,
+    memo:           row.memo           as string | undefined,
   }),
 
   validate(ctx, rowId, _values) {
@@ -120,14 +131,15 @@ export const employmentTypeChangeDef: EditOperation = {
 
   inputs: [
     { field: 'transferReason', required: true, readOnly: true },
-    { field: 'employmentType', required: true },
     { field: 'memo',           required: false },
+    { kind: 'section', label: '雇用タイプ情報' },
+    { field: 'employmentType', required: true },
   ],
 
   deriveInitial: (row) => ({
     transferReason: '【個別対応】従業員区分変更（社員⇔社員B・嘱託など）' as string | undefined,
-    employmentType: row.employmentType as string | undefined,
     memo:           row.memo           as string | undefined,
+    employmentType: row.employmentType as string | undefined,
   }),
 
   validate(ctx, rowId, values) {

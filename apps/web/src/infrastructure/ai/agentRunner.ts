@@ -317,6 +317,22 @@ export class AgentRunner {
           latestWidget = widget
           content = JSON.stringify(summary)
 
+        } else if (entry?.kind === 'execute') {
+          // 即時実行（ユーザー確認不要）。戻り値を LLM に返す。
+          // _widget が含まれる場合はウィジェットとして表示し、LLM には残りを返す。
+          try {
+            const raw = entry.execute(args)
+            if (raw !== null && typeof raw === 'object' && '_widget' in raw) {
+              const { _widget, ...rest } = raw as Record<string, unknown>
+              if (_widget) latestWidget = _widget as ChatWidget
+              content = JSON.stringify(rest)
+            } else {
+              content = JSON.stringify(raw)
+            }
+          } catch (e) {
+            content = JSON.stringify({ ok: false, error: String(e) })
+          }
+
         } else if (entry?.kind === 'confirm') {
           const proposal = entry.buildProposal(args)
           if ('error' in proposal) {

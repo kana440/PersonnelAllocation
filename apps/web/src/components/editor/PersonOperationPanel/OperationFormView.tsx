@@ -13,27 +13,33 @@ import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
 import { ClearFieldsConfirmModal }  from '../../common/ClearFieldsConfirmModal'
 import { PositionPickerModal }      from '../../common/PositionPickerModal'
 import { computeSideEffects, hasSideEffects, type SideEffectSummary } from './operationPreview'
-import type { EditOperation } from '@personnel/domain/commands/defs/index'
-import { bindOperation } from '@personnel/domain/commands/defs/index'
+import type { EditOperation, OperationInput } from '@personnel/domain/commands/defs/index'
+import { bindOperation, isSectionDivider } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import { FIELD_METADATA } from '@personnel/domain/allocationRow'
 import { OrgSearchDialog } from '../OrgSearchDialog'
 import { BandStepFilter, filterBandsByStep } from './BandStepFilter'
 import type { StepMode } from './BandStepFilter'
 
 interface Props {
-  def:    EditOperation
-  row:    AllocationRow
-  onBack: () => void
+  def:              EditOperation
+  row:              AllocationRow
+  onBack:           () => void
+  overrideInitial?: Partial<AllocationRow>
 }
 
-export function OperationFormView({ def, row, onBack }: Props) {
+export function OperationFormView({ def, row, onBack, overrideInitial }: Props) {
   const { allocationList, codeLists, afterOrganizations } = useStore()
 
   const ctx = useMemo(
     () => ({ allocationList, afterOrganizations, codeLists }),
     [allocationList, afterOrganizations, codeLists]
   )
-  const initialValues = useMemo(() => def.deriveInitial(row, ctx), [def, row, ctx])
+  const initialValues = useMemo(
+    () => ({ ...def.deriveInitial(row, ctx), ...(overrideInitial ?? {}) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [def, row, ctx, overrideInitial],
+  )
 
   const [values,         setValues]         = useState<Partial<AllocationRow>>(() => ({ ...initialValues }))
   const [orgPickerField, setOrgPickerField] = useState<string | null>(null)
@@ -50,10 +56,15 @@ export function OperationFormView({ def, row, onBack }: Props) {
 
   const draftRow = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
 
+  const fieldInputs = useMemo(
+    () => def.inputs.filter((i): i is OperationInput => !isSectionDivider(i)),
+    [def.inputs]
+  )
+
   const handleChange = (field: keyof AllocationRow, value: string) => {
     const changes  = { [field]: value } as Partial<AllocationRow>
     const derived  = deriveFieldUpdates(changes, draftRow, codeLists, allocationList)
-    const inputDef = def.inputs.find(i => i.field === field)
+    const inputDef = fieldInputs.find(i => i.field === field)
     const effects  = inputDef?.afterChange?.(value, ctx)
 
     setValues(prev => ({
@@ -65,7 +76,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
 
     if (effects?.suggestFieldValue && !titleSuggest) {
       const { field: suggestField, value: suggestVal } = effects.suggestFieldValue
-      const targetInput = def.inputs.find(i => i.field === suggestField)
+      const targetInput = fieldInputs.find(i => i.field === suggestField)
       const currentTargetVal = (values[suggestField] as string | undefined) ?? ''
       if (targetInput && suggestVal !== currentTargetVal) {
         const fieldLabel = targetInput.label ?? ALLOCATION_LIST_LABEL_MAP[suggestField as string]?.ja ?? suggestField as string
@@ -74,7 +85,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
     }
 
     if (effects?.openPickerFor) {
-      const targetInput = def.inputs.find(i => i.field === effects.openPickerFor)
+      const targetInput = fieldInputs.find(i => i.field === effects.openPickerFor)
       if (targetInput?.picker === 'position') {
         const predicate = targetInput.positionFilter ? targetInput.positionFilter(row, ctx) : undefined
         setPosPickerFilter(() => predicate)
@@ -88,8 +99,8 @@ export function OperationFormView({ def, row, onBack }: Props) {
 
   const issues = useMemo(
     () => validateRow({ row: draftRow, afterOrganizations, codeLists, allocationList })
-      .filter(i => def.inputs.some(inp => inp.field === i.field && !inp.readOnly)),
-    [draftRow, afterOrganizations, codeLists, allocationList, def.inputs]
+      .filter(i => fieldInputs.some(inp => inp.field === i.field && !inp.readOnly)),
+    [draftRow, afterOrganizations, codeLists, allocationList, fieldInputs]
   )
 
   const needsNewPosition = (): boolean => {
@@ -113,7 +124,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
   }
 
   const handleSubmit = () => {
-    if (needsNewPosition()) {
+    if (row.rowId >= 0 && needsNewPosition()) {
       const newId = nextRowId(allocationList)
       const code  = `_pos_${newId}`
       setPendingPosCode(code)
@@ -129,10 +140,14 @@ export function OperationFormView({ def, row, onBack }: Props) {
     doExecute(values)
   }
 
-  const hasBlockingError   = issues.some(i => i.level === 'error') || !!submitError
-  const currentJobFamily   = (values.jobFamily ?? row.jobFamily) as string | undefined
-  const derivedPromSign    = (values.promotionSign ?? '') as string
-  const derivedPayGradeSign = (values.payGradeChangeSign ?? '') as string
+  const FIELDS_WITH_PREV = useMemo(
+    () => new Set(FIELD_METADATA.map(m => m.after as string)),
+    []
+  )
+
+  const hasBlockingError = issues.some(i => i.level === 'error') || !!submitError
+  const currentJobFamily = (values.jobFamily ?? row.jobFamily) as string | undefined
+  const indicatorDefs    = useMemo(() => fieldInputs.filter(i => i.indicator), [fieldInputs])
 
   return (
     <>
@@ -141,15 +156,20 @@ export function OperationFormView({ def, row, onBack }: Props) {
         <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-shrink-0">
           <button onClick={onBack} className="text-gray-400 hover:text-gray-700 text-sm leading-none px-1" title="戻る">←</button>
           <span className="text-xs font-semibold text-gray-700">{def.label}</span>
-          {derivedPromSign && (
-            <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-              derivedPromSign === '昇格' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-            }`}>{derivedPromSign === '昇格' ? '▲' : '▼'} {derivedPromSign}サイン</span>
-          )}
-          {derivedPayGradeSign && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-              給与等級変更サイン
-            </span>
+          {indicatorDefs.length > 0 && (
+            <div className="ml-auto flex items-center gap-3">
+              {indicatorDefs.map(({ field, label }) => {
+                const key     = field as string
+                const lbl     = (label ?? ALLOCATION_LIST_LABEL_MAP[key]?.ja ?? key).replace(/_新$/, '')
+                const checked = !!(values[field] as string | undefined)
+                return (
+                  <label key={key} className="flex items-center gap-1 text-[10px] text-gray-400 cursor-default select-none">
+                    <input type="checkbox" checked={checked} readOnly className="w-3 h-3 accent-blue-500 cursor-default" />
+                    {lbl}
+                  </label>
+                )
+              })}
+            </div>
           )}
         </div>
 
@@ -159,40 +179,119 @@ export function OperationFormView({ def, row, onBack }: Props) {
               {def.description}
             </div>
           )}
-          {def.inputs.map(({ field, required, label, stepFilter, readOnly, picker, positionFilter, inputType }) => {
-            const fieldKey    = field as string
-            const fieldLabel  = label ?? ALLOCATION_LIST_LABEL_MAP[fieldKey]?.ja ?? fieldKey
-            const currentVal  = (values[field] as string | undefined) ?? ''
-            const prevKey     = `prev${fieldKey.charAt(0).toUpperCase()}${fieldKey.slice(1)}`
-            const prevVal     = (row[prevKey as keyof AllocationRow] as string | undefined) ?? ''
-            const fieldIssues = issues.filter(i => i.field === fieldKey)
-            const hasIssue    = fieldIssues.some(i => i.level === 'error' || i.level === 'warning')
+          {def.inputs.map((item, idx) => {
+            // ── セクション区切り ───────────────────────────────────────────────
+            if (isSectionDivider(item)) {
+              return (
+                <div key={`section-${idx}`} className="flex items-center gap-2 pt-2 pb-0.5">
+                  <span className="text-[10px] font-semibold text-gray-500 tracking-wider">{item.label}</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              )
+            }
 
+            const { field, required, label, stepFilter, readOnly, picker, positionFilter, inputType, indicator, options: inputOptions } = item
+            if (indicator) return null
+
+            const fieldKey     = field as string
+            const rawLabel     = label ?? ALLOCATION_LIST_LABEL_MAP[fieldKey]?.ja ?? fieldKey
+            const fieldLabel   = rawLabel.replace(/_新$/, '')
+            const currentVal   = (values[field] as string | undefined) ?? ''
+            const committedVal = (row[field]  as string | undefined) ?? ''
+            const prevKey      = `prev${fieldKey.charAt(0).toUpperCase()}${fieldKey.slice(1)}`
+            const prevVal      = (row[prevKey as keyof AllocationRow] as string | undefined) ?? ''
+            const hasPrev      = FIELDS_WITH_PREV.has(fieldKey)
+            const fieldIssues  = issues.filter(i => i.field === fieldKey)
+            const hasIssue     = fieldIssues.some(i => i.level === 'error' || i.level === 'warning')
+            const isChanged    = currentVal !== committedVal
+
+            // 右列: 発令前の読み取り専用ボックス
+            const PREV_BOX_CLS = 'text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded px-2 py-[5px] min-h-[30px] break-all'
+            const prevBox = hasPrev ? (
+              <div className={PREV_BOX_CLS}>
+                {prevVal || <span className="text-gray-300">—</span>}
+              </div>
+            ) : null
+
+            // 変更時のみ表示する差分行
+            const diffLine = isChanged ? (
+              <p className="text-[10px] mt-1 flex items-center gap-1 flex-wrap">
+                <span className="text-gray-400 line-through">{committedVal || '（空）'}</span>
+                <span className="text-gray-400">→</span>
+                <span className="text-blue-600 font-medium">{currentVal || '（空）'}</span>
+              </p>
+            ) : null
+
+            const gridCls = hasPrev ? 'grid grid-cols-2 gap-2' : ''
+
+            // ── チェックボックス ───────────────────────────────────────────────
+            if (inputType === 'checkbox') {
+              const checked = !!currentVal && currentVal !== '0'
+              return (
+                <div key={fieldKey}>
+                  <div className={gridCls}>
+                    <label className={`flex items-center gap-2 min-h-[30px] ${readOnly ? 'cursor-default select-none' : 'cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={readOnly}
+                        readOnly={readOnly}
+                        className="w-4 h-4 accent-blue-600 disabled:opacity-60"
+                        onChange={readOnly ? undefined : (e) => handleChange(field, e.target.checked ? '1' : '')}
+                      />
+                      <span className="text-xs font-medium text-gray-600">{fieldLabel}</span>
+                    </label>
+                    {prevBox}
+                  </div>
+                  {diffLine}
+                </div>
+              )
+            }
+
+            // ── 読み取り専用フィールド ─────────────────────────────────────────
+            if (readOnly) {
+              return (
+                <div key={fieldKey}>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{fieldLabel}</label>
+                  <div className={gridCls}>
+                    <div className={`text-xs bg-gray-50 border rounded px-2 py-[5px] min-h-[30px] text-gray-500 select-none ${isChanged ? 'border-amber-400' : 'border-gray-200'}`}>
+                      {currentVal || <span className="text-gray-300">—</span>}
+                    </div>
+                    {prevBox}
+                  </div>
+                  {diffLine}
+                </div>
+              )
+            }
+
+            // ── ポジション picker ──────────────────────────────────────────────
             if (picker === 'position') {
               return (
                 <div key={fieldKey}>
                   <label className="text-xs font-medium text-gray-600 block mb-1">
                     {fieldLabel}{required && <span className="text-red-400 ml-0.5">*</span>}
                   </label>
-                  <div className="flex gap-1.5">
-                    <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} />
-                    <button
-                      onClick={() => {
-                        const predicate = positionFilter ? positionFilter(row, ctx) : undefined
-                        setPosPickerFilter(() => predicate)
-                        // 現在値のポジションが属する組織、なければ自行の組織を初期選択
-                        const currentCode = (values[field] as string | undefined) ?? (row[field] as string | undefined)
-                        const managerRow  = currentCode ? allocationList.find(r => r.positionCode === currentCode) : undefined
-                        const deptCode    = managerRow?.departmentCode ?? row.departmentCode
-                        const orgId       = afterOrganizations.find(o => o.externalCode === deptCode)?.id
-                        setPosPickerInitialOrg(orgId)
-                        setPosPickerField(field)
-                      }}
-                      className="px-2.5 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
-                      title="ポジションを検索"
-                    >🔍</button>
+                  <div className={gridCls}>
+                    <div className="flex gap-1">
+                      <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} modified={isChanged} />
+                      <button
+                        onClick={() => {
+                          const predicate = positionFilter ? positionFilter(row, ctx) : undefined
+                          setPosPickerFilter(() => predicate)
+                          const currentCode = (values[field] as string | undefined) ?? (row[field] as string | undefined)
+                          const managerRow  = currentCode ? allocationList.find(r => r.positionCode === currentCode) : undefined
+                          const deptCode    = managerRow?.departmentCode ?? row.departmentCode
+                          const orgId       = afterOrganizations.find(o => o.externalCode === deptCode)?.id
+                          setPosPickerInitialOrg(orgId)
+                          setPosPickerField(field)
+                        }}
+                        className="px-2 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
+                        title="ポジションを検索"
+                      >🔍</button>
+                    </div>
+                    {prevBox}
                   </div>
-                  {prevVal && <p className="text-xs text-gray-500 mt-1">変更前: <span className="font-medium">{prevVal}</span></p>}
+                  {diffLine}
                   {fieldIssues.map((issue, i) => (
                     <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
                       {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
@@ -202,6 +301,7 @@ export function OperationFormView({ def, row, onBack }: Props) {
               )
             }
 
+            // ── 組織 picker ───────────────────────────────────────────────────
             if (picker === 'org') {
               const orgName = afterOrganizations.find(
                 o => o.externalCode === currentVal || o.id === currentVal
@@ -211,14 +311,17 @@ export function OperationFormView({ def, row, onBack }: Props) {
                   <label className="text-xs font-medium text-gray-600 block mb-1">
                     {fieldLabel}{required && <span className="text-red-400 ml-0.5">*</span>}
                   </label>
-                  <div className="flex gap-1.5">
-                    <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} />
-                    <button onClick={() => setOrgPickerField(fieldKey)}
-                      className="px-2.5 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
-                      title="組織を検索">🔍</button>
+                  <div className={gridCls}>
+                    <div className="flex gap-1">
+                      <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} modified={isChanged} />
+                      <button onClick={() => setOrgPickerField(fieldKey)}
+                        className="px-2 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
+                        title="組織を検索">🔍</button>
+                    </div>
+                    {prevBox}
                   </div>
                   {orgName && <p className="text-[10px] text-blue-600 mt-0.5 truncate">{orgName}</p>}
-                  {prevVal && <p className="text-xs text-gray-500 mt-1">変更前: <span className="font-medium">{prevVal}</span></p>}
+                  {diffLine}
                   {fieldIssues.map((issue, i) => (
                     <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
                       {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
@@ -228,37 +331,14 @@ export function OperationFormView({ def, row, onBack }: Props) {
               )
             }
 
-            if (inputType === 'checkbox') {
-              const checked = !!currentVal && currentVal !== '0'
-              return (
-                <div key={fieldKey}>
-                  <label className="flex items-center gap-2 cursor-default select-none">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={readOnly}
-                      readOnly={readOnly}
-                      className="w-4 h-4 accent-blue-600 disabled:opacity-60"
-                      onChange={readOnly ? undefined : (e) => handleChange(field, e.target.checked ? '1' : '')}
-                    />
-                    <span className="text-xs font-medium text-gray-600">{fieldLabel}</span>
-                  </label>
-                </div>
-              )
-            }
-
-            if (readOnly) {
-              return (
-                <div key={fieldKey}>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">{fieldLabel}</label>
-                  <div className="text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-gray-500 select-none">
-                    {currentVal || '（空）'}
-                  </div>
-                </div>
-              )
-            }
-
-            const { valid, invalid } = getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
+            // ── 通常フィールド (ComboInput) ────────────────────────────────────
+            // inputOptions が指定されている場合は FIELD_CONSTRAINTS より優先
+            const resolvedOptions = inputOptions
+              ? (typeof inputOptions === 'function' ? inputOptions(ctx) : inputOptions) as string[]
+              : null
+            const { valid, invalid } = resolvedOptions
+              ? { valid: resolvedOptions, invalid: [] as string[] }
+              : getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
             const fieldBaseBand = (row[field] as string | undefined)
             const filteredValid = stepFilter
               ? filterBandsByStep(valid, fieldBaseBand, codeLists, stepMode, stepFilter)
@@ -272,15 +352,19 @@ export function OperationFormView({ def, row, onBack }: Props) {
                 {stepFilter && (
                   <BandStepFilter mode={stepMode} direction={stepFilter} onChange={setStepMode} />
                 )}
-                <ComboInput
-                  value={currentVal}
-                  onChange={v => handleChange(field, v)}
-                  options={filteredValid}
-                  invalidOptions={invalid}
-                  strictness={resolveFieldStrictness(fieldKey, {})}
-                  hasIssue={hasIssue}
-                />
-                {prevVal && <p className="text-xs text-gray-500 mt-1">変更前: <span className="font-medium">{prevVal}</span></p>}
+                <div className={gridCls}>
+                  <ComboInput
+                    value={currentVal}
+                    onChange={v => handleChange(field, v)}
+                    options={filteredValid}
+                    invalidOptions={invalid}
+                    strictness={resolvedOptions ? 'strict' : resolveFieldStrictness(fieldKey, {})}
+                    hasIssue={hasIssue}
+                    modified={isChanged}
+                  />
+                  {prevBox}
+                </div>
+                {diffLine}
                 {fieldIssues.map((issue, i) => (
                   <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
                     {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}

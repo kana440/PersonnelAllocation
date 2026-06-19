@@ -21,6 +21,10 @@ const AFFIRMATIONS = ['進めて', 'はい', 'yes', 'ok', 'やって', '適用',
 const isAffirmation = (text: string) =>
   AFFIRMATIONS.some(a => text.trim().toLowerCase().includes(a.toLowerCase()))
 
+const NEGATIONS = ['いいえ', 'やめて', 'キャンセル', 'cancel', 'やめる', 'no', 'やっぱりやめ']
+const isNegation = (text: string) =>
+  NEGATIONS.some(n => text.trim().toLowerCase().includes(n.toLowerCase()))
+
 export const WIDGET_PHASE_MAP: Partial<Record<ChatPhase, ChatWidget['type']>> = {
   'awaiting-file':           'file-picker',
   'awaiting-export-confirm': 'export-confirm',
@@ -586,6 +590,11 @@ export function useChatHandlers({
     if (pendingConfirmMsg?.llmConfirm && isAffirmation(text)) {
       addMessage({ role: 'user', text })
       pendingConfirmMsg.llmConfirm()
+      return
+    }
+    if (pendingConfirmMsg?.llmCancel && isNegation(text)) {
+      addMessage({ role: 'user', text })
+      pendingConfirmMsg.llmCancel()
       return
     }
     if (isBusy) return

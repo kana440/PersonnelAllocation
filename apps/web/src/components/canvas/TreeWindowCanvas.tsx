@@ -114,6 +114,24 @@ export function TreeWindowCanvas() {
   } = useCanvasLayoutStore()
   const { organizations, addPersonsToSelection, clearSelection } = useOrgView()
 
+  // ── Space キー保持状態（カーソル変更用）────────────────────────
+  const [spaceHeld, setSpaceHeld] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== ' ') return
+      const t = e.target as HTMLElement
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
+      if (e.type === 'keydown') { e.preventDefault(); setSpaceHeld(true) }
+      else { setSpaceHeld(false) }
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('keyup',   onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keyup',   onKey)
+    }
+  }, [])
+
   // スタンドアロンパネル（キャンバス上にウィンドウとして描画するもの）
   const standalonePanels = useMemo(
     () => panels.filter(p => isStandaloneWindow(p, panels, organizations)),
@@ -149,20 +167,57 @@ export function TreeWindowCanvas() {
     setPositions(posMap)
   }, [arrangeVersion, setPositions])
 
+  // ── Space+drag パン ───────────────────────────────────────────────
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const [panning, setPanning]  = useState(false)
+  const panningRef = useRef(false)
+  const panOrigin  = useRef({ mx: 0, my: 0, sl: 0, st: 0 })
+
+  useEffect(() => {
+    if (!panning) return
+    const onMove = (e: MouseEvent) => {
+      if (!scrollerRef.current) return
+      const dx = e.clientX - panOrigin.current.mx
+      const dy = e.clientY - panOrigin.current.my
+      scrollerRef.current.scrollLeft = panOrigin.current.sl - dx
+      scrollerRef.current.scrollTop  = panOrigin.current.st - dy
+    }
+    const onUp = () => { panningRef.current = false; setPanning(false) }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup',   onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup',   onUp)
+    }
+  }, [panning])
+
   // ── ラバーバンド選択 ──────────────────────────────────────────────
   type BandRect = { x1: number; y1: number; x2: number; y2: number }
   const [band,    setBand]    = useState<BandRect | null>(null)
   const bandRef               = useRef<BandRect | null>(null)
-  const isCtrlBand            = useRef(false)
 
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-window]')) return
     e.preventDefault()
-    isCtrlBand.current = e.ctrlKey || e.metaKey
+
+    if (spaceHeld) {
+      // Space+drag: キャンバスをパン
+      panningRef.current = true
+      setPanning(true)
+      panOrigin.current = {
+        mx: e.clientX,
+        my: e.clientY,
+        sl: scrollerRef.current?.scrollLeft ?? 0,
+        st: scrollerRef.current?.scrollTop  ?? 0,
+      }
+      return
+    }
+
+    // 通常drag: ラバーバンド選択
     const r = { x1: e.clientX, y1: e.clientY, x2: e.clientX, y2: e.clientY }
     bandRef.current = r
     setBand(r)
-  }, [])
+  }, [spaceHeld])
 
   useEffect(() => {
     if (!band) return
@@ -186,10 +241,10 @@ export function TreeWindowCanvas() {
             }
           })
           if (ids.size > 0) {
-            if (!isCtrlBand.current) clearSelection()
+            clearSelection()
             addPersonsToSelection(ids)
           }
-        } else if (!isCtrlBand.current) {
+        } else {
           clearSelection()
         }
       }
@@ -249,7 +304,9 @@ export function TreeWindowCanvas() {
       )}
 
       <div
+        ref={scrollerRef}
         className="h-full overflow-auto bg-[#e8ecf0]"
+        style={{ cursor: panning ? 'grabbing' : spaceHeld ? 'grab' : undefined }}
         onMouseDown={handleCanvasMouseDown}
         onContextMenu={e => { if (e.ctrlKey || e.metaKey) e.preventDefault() }}
       >

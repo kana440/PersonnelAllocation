@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useOrgView }           from '../OrgViewContext'
 import { subtreeRowCount, hasAnyRows } from '../panel/helpers'
 import { RowCard }              from '../panel/RowCard'
+import { AddRowDropdown }       from '../AddRowDropdown'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import type { Organization }    from '@personnel/domain/schemas'
 
@@ -10,11 +12,26 @@ interface TreeNodeProps {
   panelId:    string
   onNavigate: (orgId: string) => void
   isRoot?:    boolean
+  /**
+   * リストモード用: 明示的に折りたたまれた組織 ID のセット。
+   * TreeWindow から渡す。未提供時はローカル state にフォールバック。
+   * デフォルト展開なので、このセットに入っているものだけチップ表示になる。
+   */
+  collapsedOrgs?:   ReadonlySet<string>
+  onOrgCollapse?:   (id: string) => void   // ヘッダークリック → 折りたたむ
+  onOrgExpand?:     (id: string) => void   // チップクリック   → 展開
 }
 
-export function TreeNode({ orgId, panelId, onNavigate, isRoot }: TreeNodeProps) {
+export function TreeNode({
+  orgId, panelId, onNavigate, isRoot,
+  collapsedOrgs, onOrgCollapse, onOrgExpand,
+}: TreeNodeProps) {
   const { organizations, positionTreeByOrgId } = useOrgView()
   const { panels, setOrgOpen, addPanel } = useCanvasLayoutStore()
+
+  // TreeWindow から collapsedOrgs が渡されない場合のローカルフォールバック
+  // （空セット = 全部デフォルト展開）
+  const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(() => new Set())
 
   const panel        = panels.find(p => p.id === panelId)
   const childrenMode = panel?.childrenMode ?? 'inline'
@@ -38,8 +55,20 @@ export function TreeNode({ orgId, panelId, onNavigate, isRoot }: TreeNodeProps) 
           const childPanel = panels.find(p => p.orgId === child.id)
           const isOpen     = childPanel?.open ?? false
 
-          if (!isOpen) {
-            // 閉じている: グレーチップ（クリックで開く。パネルがない場合は新規作成）
+          // ── 展開（windowed）モード ──────────────────────────────
+          if (childrenMode === 'windowed') {
+            if (isOpen) {
+              const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
+              return (
+                <ChildChip
+                  key={child.id}
+                  child={child}
+                  count={count}
+                  variant="windowed"
+                  onClick={() => setOrgOpen(child.id, false)}
+                />
+              )
+            }
             const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
             return (
               <ChildChip
@@ -52,29 +81,43 @@ export function TreeNode({ orgId, panelId, onNavigate, isRoot }: TreeNodeProps) 
             )
           }
 
-          if (childrenMode === 'windowed') {
-            // 展開モード: 子は別ウィンドウ → 「外に展開中」インジケータ
-            const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
+          // ── リスト（inline）モード ──────────────────────────────
+          // デフォルト展開。collapsedOrgs に入っているものだけチップ。
+          const collapsed = collapsedOrgs
+            ? collapsedOrgs.has(child.id)
+            : localCollapsed.has(child.id)
+          const isInlineOpen = !collapsed
+          const childPanelId = childPanel?.id ?? panelId
+
+          if (isInlineOpen) {
             return (
-              <ChildChip
+              <InlineOrgSection
                 key={child.id}
                 child={child}
-                count={count}
-                variant="windowed"
-                onClick={() => setOrgOpen(child.id, false)}
+                childPanelId={childPanelId}
+                onNavigate={onNavigate}
+                onCollapse={() => {
+                  if (onOrgCollapse) onOrgCollapse(child.id)
+                  else setLocalCollapsed(prev => new Set([...prev, child.id]))
+                }}
+                collapsedOrgs={collapsedOrgs}
+                onOrgCollapse={onOrgCollapse}
+                onOrgExpand={onOrgExpand}
               />
             )
           }
 
-          // リストモード: 子をインラインセクションとして表示
-          const childPanelId = childPanel?.id ?? panelId
+          const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
           return (
-            <InlineOrgSection
+            <ChildChip
               key={child.id}
               child={child}
-              childPanelId={childPanelId}
-              onNavigate={onNavigate}
-              onCollapse={() => setOrgOpen(child.id, false)}
+              count={count}
+              variant="closed"
+              onClick={() => {
+                if (onOrgExpand) onOrgExpand(child.id)
+                else setLocalCollapsed(prev => { const s = new Set(prev); s.delete(child.id); return s })
+              }}
             />
           )
         })}
@@ -151,11 +194,15 @@ function ChildChip({
 // ── リストモード用: インライン展開セクション ─────────────────────────
 function InlineOrgSection({
   child, childPanelId, onNavigate, onCollapse,
+  collapsedOrgs, onOrgCollapse, onOrgExpand,
 }: {
-  child:       Organization
-  childPanelId: string
-  onNavigate:  (orgId: string) => void
-  onCollapse:  () => void
+  child:         Organization
+  childPanelId:  string
+  onNavigate:    (orgId: string) => void
+  onCollapse:    () => void
+  collapsedOrgs?: ReadonlySet<string>
+  onOrgCollapse?: (id: string) => void
+  onOrgExpand?:   (id: string) => void
 }) {
   const {
     organizations, positionTreeByOrgId,
@@ -178,9 +225,18 @@ function InlineOrgSection({
         <span className="text-[9px] text-gray-500 flex-shrink-0">▼</span>
         <span className="flex-1 text-[10px] font-medium text-gray-700 truncate min-w-0">{child.name}</span>
         <span className="text-[9px] text-gray-400 flex-shrink-0">{count}名</span>
+        <AddRowDropdown orgCode={child.externalCode ?? ''} variant="inline" />
       </div>
       <div className="px-1 pb-1">
-        <TreeNode orgId={child.id} panelId={childPanelId} onNavigate={onNavigate} isRoot />
+        <TreeNode
+          orgId={child.id}
+          panelId={childPanelId}
+          onNavigate={onNavigate}
+          isRoot
+          collapsedOrgs={collapsedOrgs}
+          onOrgCollapse={onOrgCollapse}
+          onOrgExpand={onOrgExpand}
+        />
       </div>
     </div>
   )

@@ -17,9 +17,10 @@ interface Props {
   disabled?:       boolean
   className?:      string
   hasIssue?:       boolean
+  modified?:       boolean
 }
 
-export function ComboInput({ value, onChange, options, invalidOptions = [], strictness = 'guide', placeholder, disabled, className, hasIssue }: Props) {
+export function ComboInput({ value, onChange, options, invalidOptions = [], strictness = 'guide', placeholder, disabled, className, hasIssue, modified }: Props) {
   const [open,  setOpen]  = useState(false)
   const [input, setInput] = useState(value)
   // true = ユーザーが文字入力した → options を絞り込む
@@ -71,7 +72,7 @@ export function ComboInput({ value, onChange, options, invalidOptions = [], stri
   const baseClass = `w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 ${
     disabled ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : 'bg-white'
   } ${
-    hasIssue ? 'border-orange-400 focus:ring-orange-300' : 'border-gray-300 focus:ring-blue-300'
+    hasIssue ? 'border-orange-400 focus:ring-orange-300' : modified ? 'border-amber-400 focus:ring-amber-200' : 'border-gray-300 focus:ring-blue-300'
   } ${className ?? ''}`
 
   return (

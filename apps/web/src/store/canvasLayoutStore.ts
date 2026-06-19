@@ -4,14 +4,16 @@ import { create } from 'zustand/react'
 export type ChildrenMode = 'windowed' | 'inline'
 
 export interface PanelDef {
-  id:           string
-  orgId:        string
-  x:            number
-  y:            number
+  id:              string
+  orgId:           string
+  x:               number
+  y:               number
   /** true = コンテンツを表示、false = タイトルバーのみ（root）またはグレーチップ（子） */
-  open:         boolean
+  open:            boolean
   /** 開いている子組織をどう表示するか（このパネル自身の設定） */
-  childrenMode: ChildrenMode
+  childrenMode:    ChildrenMode
+  /** リストモードで明示的に折りたたまれた組織 ID。空 = 全展開（デフォルト） */
+  collapsedOrgIds: string[]
 }
 
 const WINDOW_W   = 288
@@ -31,8 +33,9 @@ function makePanelDef(
   pos: { x: number; y: number },
   open = true,
   childrenMode: ChildrenMode = 'windowed',
+  collapsedOrgIds: string[] = [],
 ): PanelDef {
-  return { id: genId(), orgId, ...pos, open, childrenMode }
+  return { id: genId(), orgId, ...pos, open, childrenMode, collapsedOrgIds }
 }
 
 interface CanvasLayoutState {
@@ -40,7 +43,8 @@ interface CanvasLayoutState {
 
   /** Excel 読み込み時: メンバーがいる組織とその祖先のみパネルを作成。memberOrgIds 省略時は全組織 */
   initPanels:    (orgs: { id: string; parentId?: string | null }[], memberOrgIds?: Set<string>) => void
-  addPanel:      (orgId: string) => void
+  addPanel:           (orgId: string, options?: { childrenMode?: ChildrenMode; collapsedOrgIds?: string[] }) => void
+  setCollapsedOrgIds: (panelId: string, ids: string[]) => void
   removePanel:   (panelId: string) => void
   reorderPanels: (orderedIds: string[]) => void
   isInPanels:    (orgId: string) => boolean
@@ -124,15 +128,18 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     else set(s => ({ arrangeVersion: Math.max(s.arrangeVersion, 1) }))
   },
 
-  addPanel: (orgId) => {
+  addPanel: (orgId, options?) => {
     const existing = get().panels.find(p => p.orgId === orgId)
     if (existing) {
-      // すでにパネルがある場合は open にする
       set(s => ({ panels: s.panels.map(p => p.orgId === orgId ? { ...p, open: true } : p) }))
       return
     }
     const pos = defaultPosition(get().panels)
-    set(s => ({ panels: [...s.panels, makePanelDef(orgId, pos, true)] }))
+    set(s => ({ panels: [...s.panels, makePanelDef(orgId, pos, true, options?.childrenMode, options?.collapsedOrgIds)] }))
+  },
+
+  setCollapsedOrgIds: (panelId, ids) => {
+    set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, collapsedOrgIds: ids } : p) }))
   },
 
   removePanel: (panelId) =>

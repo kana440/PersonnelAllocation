@@ -3,10 +3,10 @@ import type { Organization } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { PositionEntry, MemberEntry } from './OrgViewContext'
 import type { BulkMoveConfirmParams } from './modals/BulkMoveModal'
+import type { DropIntentState, DropOpState } from './hooks/useDropIntent'
 import { appService }                from '../../application/HRApplicationService'
 import { MoveRowsToOrgOperation }    from '@personnel/domain/commands/handlers/moveRowsToOrg'
 import { ConfirmDialog }             from './modals/ConfirmDialog'
-import { PersonMoveModal }           from './modals/PersonMoveModal'
 import { SelectMoveModal }           from './modals/SelectMoveModal'
 import { BulkMoveModal }             from './modals/BulkMoveModal'
 import {
@@ -14,14 +14,11 @@ import {
   BulkManagerModal,
   BulkSecondmentModal,
 } from './modals/BulkActionModals'
-import { CanvasFieldPicker }  from './CanvasFieldPicker'
-import { ChangeTitleModal }  from './modals/ChangeTitleModal'
-
-interface PersonMoveDialogState {
-  fromRowId: number | null
-  personId:  string
-  toOrgId:   string
-}
+import { CanvasFieldPicker }   from './CanvasFieldPicker'
+import { ChangeTitleModal }    from './modals/ChangeTitleModal'
+import { DragIntentPicker }    from './DragIntentPicker'
+import { DropOperationModal }  from './DropOperationModal'
+import type { EditOperation }  from '@personnel/domain/commands/defs/index'
 
 export interface CanvasModalsProps {
   // selection bar
@@ -35,8 +32,10 @@ export interface CanvasModalsProps {
   setBulkActionModal: (v: 'transferReason' | 'manager' | 'secondment' | null) => void
   bulkMoveSourceId:   string | null
   setBulkMoveSourceId:(v: string | null) => void
-  personMoveDialog:   PersonMoveDialogState | null
-  setPersonMoveDialog:(v: PersonMoveDialogState | null) => void
+  dropIntentState:    DropIntentState | null
+  setDropIntentState: (v: DropIntentState | null) => void
+  dropOpState:        DropOpState | null
+  setDropOpState:     (v: DropOpState | null) => void
   confirmDialog:      { message: string; onConfirm: () => void } | null
   setConfirmDialog:   (v: { message: string; onConfirm: () => void } | null) => void
   fieldPickerOpen:      boolean
@@ -50,8 +49,8 @@ export interface CanvasModalsProps {
   positionTreeByOrgId: Map<string, PositionEntry[]>
   afterMembersByOrgId: Map<string, MemberEntry[]>
   // callbacks
-  handleBulkMoveConfirm:   (params: BulkMoveConfirmParams) => void
-  handlePersonMoveConfirm: (retireOriginal: boolean) => void
+  handleBulkMoveConfirm: (params: BulkMoveConfirmParams) => void
+  handleIntentPick:      (def: EditOperation, row: AllocationRow, overrideInitial: Partial<AllocationRow>) => void
 }
 
 export function CanvasModals({
@@ -59,13 +58,14 @@ export function CanvasModals({
   moveModalOpen, setMoveModalOpen,
   bulkActionModal, setBulkActionModal,
   bulkMoveSourceId, setBulkMoveSourceId,
-  personMoveDialog, setPersonMoveDialog,
+  dropIntentState, setDropIntentState,
+  dropOpState, setDropOpState,
   confirmDialog, setConfirmDialog,
   fieldPickerOpen, setFieldPickerOpen,
   changeTitleRowId, setChangeTitleRowId,
   persons, allocationList, allAfterOrgsUnscoped,
   positionTreeByOrgId, afterMembersByOrgId,
-  handleBulkMoveConfirm, handlePersonMoveConfirm,
+  handleBulkMoveConfirm, handleIntentPick,
 }: CanvasModalsProps) {
   const handleMoveConfirm = (targetOrgId: string) => {
     const rowIds: number[] = []
@@ -149,24 +149,25 @@ export function CanvasModals({
         />
       )}
 
-      {personMoveDialog && (() => {
-        const person  = persons.find(p => p.id === personMoveDialog.personId)
-        const fromRow = personMoveDialog.fromRowId
-          ? allocationList.find(r => r.rowId === personMoveDialog.fromRowId)
-          : (allocationList.find(r => r.userId === person?.sfPersonId && !r.concurrentType)
-            ?? allocationList.find(r => r.userId === person?.sfPersonId))
-        const toOrg = allAfterOrgsUnscoped.find(o => o.id === personMoveDialog.toOrgId)
-        return (
-          <PersonMoveModal
-            personName={person?.name ?? '—'}
-            toOrgName={toOrg?.name ?? '—'}
-            posTitle={fromRow?.localJobTitle || fromRow?.officialPositionCode || ''}
-            hasPosition={!!fromRow?.positionCode}
-            onConfirm={handlePersonMoveConfirm}
-            onCancel={() => setPersonMoveDialog(null)}
-          />
-        )
-      })()}
+      {dropIntentState && (
+        <DragIntentPicker
+          state={dropIntentState}
+          allocationList={allocationList}
+          persons={persons}
+          allOrgs={allAfterOrgsUnscoped}
+          onPick={handleIntentPick}
+          onCancel={() => setDropIntentState(null)}
+        />
+      )}
+
+      {dropOpState && (
+        <DropOperationModal
+          def={dropOpState.def}
+          row={dropOpState.row}
+          overrideInitial={dropOpState.overrideInitial}
+          onClose={() => setDropOpState(null)}
+        />
+      )}
 
       {confirmDialog && (
         <ConfirmDialog
