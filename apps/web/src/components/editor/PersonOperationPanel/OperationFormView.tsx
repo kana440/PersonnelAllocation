@@ -339,6 +339,14 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
             const { valid, invalid } = resolvedOptions
               ? { valid: resolvedOptions, invalid: [] as string[] }
               : getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
+            if (fieldKey === 'payGrade') {
+              console.log('[payGrade options]', {
+                band: draftRow.band, positionBand: draftRow.positionBand,
+                userId: draftRow.userId, groupEmployeeId: draftRow.groupEmployeeId,
+                employmentType: draftRow.employmentType,
+                validCount: valid.length, valid: valid.slice(0, 5),
+              })
+            }
             const fieldBaseBand = (row[field] as string | undefined)
             const filteredValid = stepFilter
               ? filterBandsByStep(valid, fieldBaseBand, codeLists, stepMode, stepFilter)
