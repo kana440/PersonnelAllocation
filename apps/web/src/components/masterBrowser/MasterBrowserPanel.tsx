@@ -10,13 +10,13 @@ interface Props {
 const GROUPS = [...new Set(TABLE_REGISTRY.map(t => t.group))]
 
 export function MasterBrowserPanel({ onClose }: Props) {
-  const { masters, beforeOrganizations, afterOrganizations, masterWarnings } = useStore()
-  const [selectedKey, setSelectedKey] = useState<TableKey>('beforeOrgs')
+  const { masters, masterWarnings } = useStore()
+  const [selectedKey, setSelectedKey] = useState<TableKey>('afterOrgs')
   const [warningsExpanded, setWarningsExpanded] = useState(true)
 
   const data = useMemo(
-    () => getTableData(selectedKey, masters, beforeOrganizations, afterOrganizations),
-    [selectedKey, masters, beforeOrganizations, afterOrganizations],
+    () => getTableData(selectedKey, masters),
+    [selectedKey, masters],
   )
 
   const selectedDef = TABLE_REGISTRY.find(t => t.key === selectedKey)!

@@ -1,5 +1,4 @@
 import type { AllMasters } from '@personnel/domain/masters/aggregate'
-import type { Organization }  from '@personnel/domain/schemas'
 import { MASTER_LABELS }   from '../../infrastructure/masters/parser'
 
 export type TableKey = keyof AllMasters | 'beforeOrgs' | 'afterOrgs'
@@ -11,8 +10,8 @@ export interface TableDef {
 }
 
 export const TABLE_REGISTRY: TableDef[] = [
+  { key: 'afterOrgs',               label: '組織CD一覧',   group: '組織' },
   { key: 'beforeOrgs',              label: '旧組織CD一覧', group: '組織' },
-  { key: 'afterOrgs',               label: '組織CD一覧（新）', group: '組織' },
   { key: 'companies',               label: MASTER_LABELS.companies,               group: '組織' },
   { key: 'companyFilters',          label: MASTER_LABELS.companyFilters,          group: '組織' },
   { key: 'employmentTypes',         label: MASTER_LABELS.employmentTypes,         group: '雇用・給与' },
@@ -37,14 +36,19 @@ export const FIELD_LABELS: Record<string, string> = {
   companyCode:                   '会社コード',
   parentCode:                    '上位組織コード',
   company:                       '会社名',
+  pathBusinessUnit:              '関係部門',
+  pathDivision:                  '部門',
+  pathDepartment:                '統括部',
+  pathGroup:                     'グループ',
+  pathTeam:                      'チーム',
   businessUnit:                  '関係部門',
   division:                      '部門',
   department:                    '統括部',
   group:                         'グループ',
   team:                          'チーム',
-  orgCategory:             '組織レベル',
+  orgCategory:                   '組織レベル',
   costCenter:                    'コストセンター',
-  workLocation:                  '勤務地',
+  workLocation:                  '勤務場所',
   note:                          '備考',
   band:                          'バンド',
   compensationCategory:          '報酬区分',
@@ -68,13 +72,20 @@ export const FIELD_LABELS: Record<string, string> = {
   errorType:                     'エラータイプ',
 }
 
+const ORG_FIELDS = [
+  'code', 'name', 'pathBusinessUnit', 'pathDivision', 'pathDepartment',
+  'pathGroup', 'pathTeam', 'orgCategory', 'costCenter', 'workLocation', 'parentCode',
+] as const
+
 export function getTableData(
   key: TableKey,
   masters: AllMasters,
-  beforeOrgs: Organization[],
-  afterOrgs:  Organization[],
 ): Record<string, unknown>[] {
-  if (key === 'beforeOrgs') return beforeOrgs as unknown as Record<string, unknown>[]
-  if (key === 'afterOrgs')  return afterOrgs  as unknown as Record<string, unknown>[]
+  if (key === 'beforeOrgs' || key === 'afterOrgs') {
+    const phase = key === 'afterOrgs' ? 'after' : 'before'
+    return (masters.orgMasterEntries ?? [])
+      .filter(e => e.phase === phase)
+      .map(e => Object.fromEntries(ORG_FIELDS.map(f => [f, (e as unknown as Record<string, unknown>)[f] ?? ''])))
+  }
   return (masters[key] as unknown as Record<string, unknown>[]) ?? []
 }

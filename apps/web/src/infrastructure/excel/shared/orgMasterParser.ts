@@ -99,6 +99,7 @@ export function orgMasterToEntities(
   function buildOrgList(subset: OrgMasterEntry[]): Organization[] {
     // buildOrgHierarchy が O(n) 2 パスで level / parentId を確定する
     const { hierarchy } = buildOrgHierarchy(subset)
+    const orgCodeSet = new Set(subset.map(e => e.code).filter(Boolean))
 
     const orgs: Organization[] = []
     for (const e of subset) {
@@ -107,7 +108,11 @@ export function orgMasterToEntities(
       const cid  = e.company || fallbackCompanyName
       const name = e.name
         ?? (e.pathTeam || e.pathGroup || e.pathDepartment || e.pathDivision || e.pathBusinessUnit || e.code)
-      orgs.push({ id: e.code, name, companyId: cid, parentId: h.parentId, level: h.level, externalCode: e.code })
+      // Excel に上位組織コード列があればそちらを優先し、なければパスベースの計算を使う
+      const parentId = (e.parentCode && orgCodeSet.has(e.parentCode))
+        ? e.parentCode
+        : h.parentId
+      orgs.push({ id: e.code, name, companyId: cid, parentId, level: h.level, externalCode: e.code })
     }
 
     for (const cid of companyIds) {
