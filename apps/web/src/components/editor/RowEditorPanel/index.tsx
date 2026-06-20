@@ -158,8 +158,8 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
         </div>
         <div className="grid grid-cols-[8rem_1fr_1fr] gap-x-2 px-3 py-0.5 bg-gray-100">
           <div className="text-xs font-medium text-gray-400">フィールド</div>
-          <div className="text-xs font-medium text-blue-600">新（発令後）</div>
-          <div className="text-xs font-medium text-gray-400">旧（発令前）</div>
+          <div className="text-xs font-medium text-blue-600">新</div>
+          <div className="text-xs font-medium text-gray-400">旧</div>
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import type { AllocationRow }     from '@personnel/domain/allocationRow'
 import type { Organization }      from '@personnel/domain/schemas'
 import type { OrgMasterEntry }    from '@personnel/domain/masters/orgMaster'
 import { setLastWorkbook }        from '../state'
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_COMPANY } from '../sheetNames'
+import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD, SHEET_COMPANY } from '../sheetNames'
 import type { ImportedWorkbookResult, ProgressCallback } from '../types'
 import { tick }                   from '../types'
 import { parseOrgMasterRaw, orgMasterToEntities } from '../shared/orgMasterParser'
@@ -53,20 +53,34 @@ export async function importWorkbook(
     const result = parseCodeListsFromSheet(worksheetToRaw(wb.getWorksheet(SHEET_CODE_LISTS)!))
     codeLists = { ...EMPTY_CODE_LISTS, ...result.lists }
     codeListCompatibilityWarnings = result.compatibilityWarnings
+    columnWarnings.push(...result.columnWarnings)
   } else { sheetsMissing.push(SHEET_CODE_LISTS) }
 
-  let orgEntries: OrgMasterEntry[] = [], beforeOrganizations: Organization[] = [], afterOrganizations: Organization[] = []
+  let orgEntries: OrgMasterEntry[] = [], oldOrgEntries: OrgMasterEntry[] = []
+  let beforeOrganizations: Organization[] = [], afterOrganizations: Organization[] = []
+
   if (wb.getWorksheet(SHEET_ORG_MASTER)) {
-    await report('組織マスタ（組織CD一覧）を解析中...')
+    await report('新組織マスタ（組織CD一覧）を解析中...')
     sheetsFound.push(SHEET_ORG_MASTER)
-    const orgResult = parseOrgMasterRaw(worksheetToRaw(wb.getWorksheet(SHEET_ORG_MASTER)!))
+    const orgResult = parseOrgMasterRaw(worksheetToRaw(wb.getWorksheet(SHEET_ORG_MASTER)!), SHEET_ORG_MASTER, 'after')
     orgEntries = orgResult.entries
     columnWarnings.push(...orgResult.columnWarnings)
-    const entities = orgMasterToEntities(orgEntries, fallbackCompanyName)
+  } else { sheetsMissing.push(SHEET_ORG_MASTER) }
+
+  if (wb.getWorksheet(SHEET_ORG_MASTER_OLD)) {
+    await report('旧組織マスタ（旧組織CD一覧）を解析中...')
+    sheetsFound.push(SHEET_ORG_MASTER_OLD)
+    const orgResult = parseOrgMasterRaw(worksheetToRaw(wb.getWorksheet(SHEET_ORG_MASTER_OLD)!), SHEET_ORG_MASTER_OLD, 'before')
+    oldOrgEntries = orgResult.entries
+    columnWarnings.push(...orgResult.columnWarnings)
+  }
+
+  if (orgEntries.length > 0 || oldOrgEntries.length > 0) {
+    const entities = orgMasterToEntities(orgEntries, oldOrgEntries, fallbackCompanyName)
     beforeOrganizations = entities.beforeOrganizations
     afterOrganizations  = entities.afterOrganizations
-    codeLists = { ...codeLists, orgMasterEntries: orgEntries }
-  } else { sheetsMissing.push(SHEET_ORG_MASTER) }
+    codeLists = { ...codeLists, orgMasterEntries: [...orgEntries, ...oldOrgEntries] }
+  }
 
   if (wb.getWorksheet(SHEET_COMPANY)) {
     await report('会社マスタ（会社CD一覧）を解析中...')
@@ -84,7 +98,7 @@ export async function importWorkbook(
     allocationList = allocResult.rows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
   } else { sheetsMissing.push(SHEET_ALLOCATION) }
 
-  return { codeLists, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, allocationRowCount: allocationList.length, codeListCompatibilityWarnings, columnWarnings }
+  return { codeLists, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, oldOrgEntries, allocationRowCount: allocationList.length, codeListCompatibilityWarnings, columnWarnings }
 }
 
 export function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {

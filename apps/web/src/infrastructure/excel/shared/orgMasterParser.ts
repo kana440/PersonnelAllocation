@@ -1,40 +1,40 @@
-// 組織CD一覧シートを unknown[][] から解析する純粋関数（ライブラリ非依存）
+// 組織CD一覧 / 旧組織CD一覧シートを unknown[][] から解析する純粋関数（ライブラリ非依存）
 
 import type { OrgMasterEntry } from '@personnel/domain/masters/orgMaster'
 import type { Organization }   from '@personnel/domain/schemas'
 import type { ColumnWarning }  from '../types'
-
-// A=0, B=1 …
-function colIdx(letter: string): number {
-  let n = 0
-  for (const ch of letter.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64)
-  return n - 1
-}
 
 // r, c は 0-indexed
 function cellStr(raw: unknown[][], r: number, c: number): string {
   return String(raw[r]?.[c] ?? '').trim()
 }
 
-function parsePhase(v: string): 'before' | 'after' {
-  return /^(前|旧|before|B)$/i.test(v.trim()) ? 'before' : 'after'
-}
 
 export interface ParseOrgMasterResult {
   entries:        OrgMasterEntry[]
   columnWarnings: ColumnWarning[]
 }
 
-export function parseOrgMasterRaw(raw: unknown[][]): ParseOrgMasterResult {
-  const SHEET = '組織CD一覧'
+/**
+ * 組織マスタシートを解析する。
+ * @param sheetName  警告メッセージに表示するシート名
+ * @param defaultPhase  全エントリに付与する新旧フラグ
+ *   'after'  = 組織CD一覧（新組織）
+ *   'before' = 旧組織CD一覧（旧組織）
+ */
+export function parseOrgMasterRaw(
+  raw:          unknown[][],
+  sheetName:    string             = '組織CD一覧',
+  defaultPhase: 'before' | 'after' = 'after',
+): ParseOrgMasterResult {
   const columnWarnings: ColumnWarning[] = []
   const rowCount = raw.length
   const entries: OrgMasterEntry[] = []
 
-  let cCode = colIdx('B'), cParent = -1, cName = -1
-  let cCompany = -1, cCompanyCode = -1, cPhase = -1, cOrgLevel = -1
-  let cBu = colIdx('C'), cDiv = colIdx('D'), cDept = colIdx('E')
-  let cGroup = colIdx('F'), cTeam = colIdx('G')
+  let cCode = 1, cParent = -1, cName = -1  // B列デフォルト (0-indexed: 1)
+  let cCompany = -1, cCompanyCode = -1, cOrgLevel = -1
+  let cBu = 2, cDiv = 3, cDept = 4   // C, D, E 列デフォルト
+  let cGroup = 5, cTeam = 6           // F, G 列デフォルト
   let cCostCenter = -1, cWorkLocation = -1
   let dataStartRow = 1
 
@@ -50,8 +50,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): ParseOrgMasterResult {
       else if (/組織名|名称/.test(h))                          { cName = c }
       else if (/^会社コード$/i.test(h))                        { cCompanyCode = c }
       else if (/会社名|^会社$/i.test(h))                       { cCompany = c }
-      else if (/発令区分|前後フラグ|フェーズ/i.test(h))        { cPhase = c }
-      else if (/ビジネスユニット|関係部門|^BU$/i.test(h))        { cBu = c }
+      else if (/ビジネスユニット|関係部門|^BU$/i.test(h))       { cBu = c }
       else if (/^部門$/.test(h))                               { cDiv = c }
       else if (/統括部/.test(h))                               { cDept = c }
       else if (/グループ/.test(h))                             { cGroup = c }
@@ -63,8 +62,8 @@ export function parseOrgMasterRaw(raw: unknown[][]): ParseOrgMasterResult {
     if (foundCode) { dataStartRow = r + 1; break }
   }
 
-  if (cParent < 0) columnWarnings.push({ sheet: SHEET, message: '「上位組織コード」列が見つかりません。組織の親子関係が読み込まれません。' })
-  if (cName   < 0) columnWarnings.push({ sheet: SHEET, message: '「組織名」列が見つかりません。組織コードを名称の代わりに使用します。' })
+  if (cParent < 0) columnWarnings.push({ sheet: sheetName, message: '「上位組織コード」列が見つかりません。組織の親子関係が読み込まれません。' })
+  if (cName   < 0) columnWarnings.push({ sheet: sheetName, message: '「組織名」列が見つかりません。組織コードを名称の代わりに使用します。' })
 
   for (let r = dataStartRow; r < rowCount; r++) {
     const code = cellStr(raw, r, cCode)
@@ -75,7 +74,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): ParseOrgMasterResult {
       parentCode:       cParent       >= 0 ? (cellStr(raw, r, cParent)       || undefined) : undefined,
       name:             cName         >= 0 ? (cellStr(raw, r, cName)          || undefined) : undefined,
       company:          cCompany      >= 0 ? cellStr(raw, r, cCompany) : '',
-      phase:            parsePhase(cPhase >= 0 ? cellStr(raw, r, cPhase) : ''),
+      phase:            defaultPhase,
       pathBusinessUnit: cellStr(raw, r, cBu),
       pathDivision:     cellStr(raw, r, cDiv),
       pathDepartment:   cellStr(raw, r, cDept),
@@ -90,11 +89,12 @@ export function parseOrgMasterRaw(raw: unknown[][]): ParseOrgMasterResult {
 }
 
 export function orgMasterToEntities(
-  entries:             OrgMasterEntry[],
+  newEntries:          OrgMasterEntry[],   // 組織CD一覧（新組織） → afterOrganizations
+  oldEntries:          OrgMasterEntry[],   // 旧組織CD一覧（旧組織） → beforeOrganizations（空なら新組織でフォールバック）
   fallbackCompanyName = 'インポートデータ',
 ): { beforeOrganizations: Organization[]; afterOrganizations: Organization[] } {
   const companyIds = new Set<string>()
-  for (const e of entries) companyIds.add(e.company || fallbackCompanyName)
+  for (const e of [...newEntries, ...oldEntries]) companyIds.add(e.company || fallbackCompanyName)
 
   function buildOrgList(subset: OrgMasterEntry[]): Organization[] {
     const codeSet = new Set(subset.map(e => e.code))
@@ -118,10 +118,8 @@ export function orgMasterToEntities(
     return orgs
   }
 
-  const beforeEntries = entries.filter(e => e.phase === 'before')
-  const afterEntries  = entries.filter(e => e.phase === 'after')
   return {
-    beforeOrganizations: buildOrgList(beforeEntries.length > 0 ? beforeEntries : afterEntries),
-    afterOrganizations:  buildOrgList(afterEntries.length  > 0 ? afterEntries  : beforeEntries),
+    afterOrganizations:  buildOrgList(newEntries),
+    beforeOrganizations: buildOrgList(oldEntries.length > 0 ? oldEntries : newEntries),
   }
 }

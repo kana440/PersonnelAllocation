@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
+import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
 import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
 import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
@@ -47,7 +47,7 @@ export function ModeSelectStep({ result, onAdmin, onAssigneeSelect, onBack }: Pr
           >
             <span className={`font-medium ${criticalOk ? 'text-green-600' : 'text-amber-600'}`}>
               {criticalOk
-                ? `✓ ${result.allocationRowCount}行 · ${result.orgEntries.length}組織 読み込み完了`
+                ? `✓ ${result.allocationRowCount}行 · 新組織${result.orgEntries.length}件 読み込み完了`
                 : '⚠ 一部シートが見つかりません'}
             </span>
             <span className="text-gray-400 ml-2 flex-shrink-0">{summaryOpen ? '▾' : '▸'}</span>
@@ -62,7 +62,13 @@ export function ModeSelectStep({ result, onAdmin, onAssigneeSelect, onBack }: Pr
               <SummaryRow
                 label={SHEET_ORG_MASTER}
                 found={result.sheetsFound.includes(SHEET_ORG_MASTER)}
-                detail={`${result.orgEntries.length} 組織`}
+                detail={`${result.orgEntries.length} 組織（新）`}
+              />
+              <SummaryRow
+                label={SHEET_ORG_MASTER_OLD}
+                found={result.sheetsFound.includes(SHEET_ORG_MASTER_OLD)}
+                detail={result.oldOrgEntries.length > 0 ? `${result.oldOrgEntries.length} 組織（旧）` : undefined}
+                optional
               />
               <CodeListSummaryRow result={result} />
             </div>
@@ -106,15 +112,16 @@ export function ModeSelectStep({ result, onAdmin, onAssigneeSelect, onBack }: Pr
   )
 }
 
-function SummaryRow({ label, found, detail }: { label: string; found: boolean; detail?: string }) {
+function SummaryRow({ label, found, detail, optional }: { label: string; found: boolean; detail?: string; optional?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <span className={`text-sm leading-none ${found ? 'text-green-500' : 'text-red-400'}`}>
-        {found ? '✓' : '✗'}
+      <span className={`text-sm leading-none ${found ? 'text-green-500' : optional ? 'text-gray-300' : 'text-red-400'}`}>
+        {found ? '✓' : optional ? '—' : '✗'}
       </span>
-      <span className={`font-mono ${found ? 'text-gray-700' : 'text-red-500'}`}>{label}</span>
+      <span className={`font-mono ${found ? 'text-gray-700' : optional ? 'text-gray-400' : 'text-red-500'}`}>{label}</span>
       {found && detail && <span className="text-gray-400">{detail}</span>}
-      {!found && <span className="text-red-400 italic">シートが見つかりません</span>}
+      {!found && !optional && <span className="text-red-400 italic">シートが見つかりません</span>}
+      {!found && optional && <span className="text-gray-400 italic">省略可（なければ新組織と同じ）</span>}
     </div>
   )
 }

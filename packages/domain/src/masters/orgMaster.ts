@@ -15,5 +15,5 @@ export interface OrgMasterEntry {
   orgCategory:         string          // 組織区分（例: '出向者用組織'）
   costCenter:          string          // コストセンター
   workLocation:        string          // 勤務地
-  phase:               'before' | 'after'  // 発令前後フラグ（列なし・空セル → 'after'）
+  phase:               'before' | 'after'  // 新旧フラグ（'after'=組織CD一覧 / 'before'=旧組織CD一覧）
 }

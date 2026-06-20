@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
-import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
+import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
 import { isUninitializedRow } from '../../application/setup/afterInit'
 import { SetupHelp } from './SetupHelp'
@@ -198,7 +198,8 @@ function IdleView({ onFileClick, onFileDrop, onSample, onHelp }: {
           <p className="mt-0.5 text-xs text-gray-400">
             <span className="font-mono">{SHEET_ALLOCATION}</span>・
             <span className="font-mono">{SHEET_CODE_LISTS}</span>・
-            <span className="font-mono">{SHEET_ORG_MASTER}</span> シートを自動で読み取ります。
+            <span className="font-mono">{SHEET_ORG_MASTER}</span>・
+            <span className="font-mono">{SHEET_ORG_MASTER_OLD}</span> シートを自動で読み取ります。
           </p>
         </div>
         <button

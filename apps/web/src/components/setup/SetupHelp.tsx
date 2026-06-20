@@ -1,4 +1,4 @@
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../infrastructure/excel/engine'
+import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
 
 interface Props {
   onClose: () => void
@@ -44,8 +44,8 @@ export function SetupHelp({ onClose }: Props) {
             ]} />
           </HelpSection>
 
-          <HelpSection title={`シート③：${SHEET_ORG_MASTER}`}>
-            <p className="text-gray-500 mb-2">組織マスタデータのシートです。行1がヘッダ、行2以降がデータ。</p>
+          <HelpSection title={`シート③：${SHEET_ORG_MASTER}（新組織）`}>
+            <p className="text-gray-500 mb-2">新組織マスタデータのシートです。行1がヘッダ、行2以降がデータ。</p>
             <HelpTable rows={[
               ['B列', '組織コード（必須・行末判定キー）'],
               ['C列', '関係部門'],
@@ -55,6 +55,10 @@ export function SetupHelp({ onClose }: Props) {
               ['G列', 'チーム'],
               ['H列', '組織レベル（数値）'],
             ]} />
+          </HelpSection>
+
+          <HelpSection title={`シート④：${SHEET_ORG_MASTER_OLD}（旧組織・省略可）`}>
+            <p className="text-gray-500 mb-2">旧組織マスタデータのシートです。省略時は新組織と同じ組織構造を旧組織として使用します。列構成はシート③と同一です。</p>
           </HelpSection>
 
           <p className="text-gray-400 border-t border-gray-100 pt-3">

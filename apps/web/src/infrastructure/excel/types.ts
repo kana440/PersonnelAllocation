@@ -16,7 +16,8 @@ export interface ImportedWorkbookResult {
   allocationList:               AllocationRow[]
   sheetsFound:                  string[]
   sheetsMissing:                string[]
-  orgEntries:                   OrgMasterEntry[]
+  orgEntries:                   OrgMasterEntry[]   // 新組織CD一覧エントリ
+  oldOrgEntries:                OrgMasterEntry[]   // 旧組織CD一覧エントリ（シートなし時は空配列）
   allocationRowCount:           number
   codeListCompatibilityWarnings: CompatibilityWarning[]
   columnWarnings:               ColumnWarning[]

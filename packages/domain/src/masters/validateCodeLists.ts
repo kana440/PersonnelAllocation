@@ -78,8 +78,8 @@ function checkA5_orgMasterParentCode(cl: AllCodeLists): CodeListWarning[] {
         seen.add(key)
         warnings.push({
           category: 'A',
-          message:  `組織マスタ（${org.phase}）の親組織コード "${org.parentCode}" が同フェーズに存在しません`,
-          detail:   { phase: org.phase, parentCode: org.parentCode, exampleOrg: org.name ?? org.code },
+          message:  `組織マスタ（${org.phase === 'after' ? '新' : '旧'}）の親組織コード "${org.parentCode}" が同フェーズに存在しません`,
+          detail:   { phase: org.phase === 'after' ? '新' : '旧', parentCode: org.parentCode, exampleOrg: org.name ?? org.code },
         })
       }
     }

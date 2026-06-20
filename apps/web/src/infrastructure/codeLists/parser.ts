@@ -20,14 +20,9 @@ import type {
 import { TRAINING_POSITION_VALUES } from '@personnel/domain/masters/trainingPosition'
 import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '@personnel/domain/masters/discretionaryWork'
 import { CONCURRENT_TYPES } from '@personnel/domain/masters/concurrentType'
+import type { ColumnWarning } from '../excel/types'
 
-// ── Column utilities ───────────────────────────────────────────────────────────
-
-function colIdx(letter: string): number {
-  let n = 0
-  for (const ch of letter.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64)
-  return n - 1
-}
+// ── Cell utilities ─────────────────────────────────────────────────────────────
 
 // r, c は 0-indexed
 function cellStr(raw: unknown[][], r: number, c: number): string {
@@ -44,17 +39,52 @@ function cellNum(raw: unknown[][], r: number, c: number): number {
   return typeof v === 'number' ? v : (Number(String(v ?? '')) || 0)
 }
 
+// ── Anchor scan ────────────────────────────────────────────────────────────────
+// 各テーブルのキー列ヘッダー文字列（Excel 行0 に記載）。
+// ここを変えるだけでテーブル位置の変更に追従する。
+
+const ANCHORS = {
+  companyFilters:           '会社絞込用CD',
+  transferReasons:          '申請区分(異動事由)',
+  employmentTypes:          '雇用タイプCD',
+  payGrades:                '給与等級CD',
+  officialPositions:        '役職CD',
+  workLocations:            '勤務場所CD',
+  jobFamilies:              'Job Family CD',
+  jobTypes:                 '職種CD',
+  jobLevels:                '職務レベルCD',
+  trainingPositions:        '業務研修ポジション',
+  discretionaryWorkOptions: '裁量労働／業務研修',
+  concurrentReasons:        '兼務理由',
+  demotionReasons:          '昇降格理由',
+  concurrentType:           '本務兼務区分',
+} as const
+
+type AnchorKey = keyof typeof ANCHORS
+
+// 行 0〜3 をスキャンしてアンカー文字列 → 列インデックスのマップを返す
+function scanAnchorCols(raw: unknown[][]): Map<string, number> {
+  const cols     = new Map<string, number>()
+  const needles  = new Set<string>(Object.values(ANCHORS))
+  for (let r = 0; r <= Math.min(3, raw.length - 1); r++) {
+    const row = raw[r] as unknown[]
+    for (let c = 0; c < row.length; c++) {
+      const cell = String(row[c] ?? '').trim()
+      if (needles.has(cell) && !cols.has(cell)) cols.set(cell, c)
+    }
+  }
+  return cols
+}
+
 // ── Row range detection ────────────────────────────────────────────────────────
-// Row 0 (Excel row 1) = header.  Data starts at row 1 (Excel row 2).
-// Stop when keyCol cell is empty.
+// Row 0 (Excel row 1) = header。Data は row 1 から始まり、キー列が空になると終了。
 
 const DATA_START_ROW = 1
 
-function dataRowIndices(raw: unknown[][], keyColLetter: string): number[] {
-  const kc   = colIdx(keyColLetter)
+function dataRowIndicesAt(raw: unknown[][], col: number): number[] {
   const rows: number[] = []
   for (let r = DATA_START_ROW; r < raw.length; r++) {
-    if (!cellStr(raw, r, kc)) break
+    if (!cellStr(raw, r, col)) break
     rows.push(r)
   }
   return rows
@@ -70,7 +100,7 @@ export const CODE_LIST_LABELS: Record<keyof AllCodeLists, string> = {
   officialPositions:        '役職',
   workLocations:            '勤務場所',
   jobFamilies:              '職種（Job Family）',
-  jobTypes:           'Sub Job Family',
+  jobTypes:                 'Sub Job Family',
   jobLevels:                '職務レベル',
   transferReasons:          '異動事由',
   concurrentReasons:        '兼務理由',
@@ -79,120 +109,121 @@ export const CODE_LIST_LABELS: Record<keyof AllCodeLists, string> = {
   discretionaryWorkOptions: '裁量労働／業務研修',
 }
 
-// ── Per-group parsers ──────────────────────────────────────────────────────────
+// ── Per-group parsers（col = キー列の 0-indexed 列番号）─────────────────────────
 
-function parseCompanyFilters(raw: unknown[][]): CompanyFilterEntry[] {
-  return dataRowIndices(raw, 'B').map(r => {
-    const errorType = cellStr(raw, r, colIdx('E'))
+function parseCompanyFilters(raw: unknown[][], col: number): CompanyFilterEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => {
+    const errorType = cellStr(raw, r, col + 3)
     return {
-      code:                        cellStr(raw, r, colIdx('B')),
-      label:                       cellStr(raw, r, colIdx('C')),
-      noDiscretionaryVMAutoCreate: cellBool(raw, r, colIdx('D')),
+      code:                        cellStr(raw, r, col),
+      label:                       cellStr(raw, r, col + 1),
+      noDiscretionaryVMAutoCreate: cellBool(raw, r, col + 2),
       ...(errorType ? { errorType } : {}),
     }
   })
 }
 
-function parseTransferReasons(raw: unknown[][]): TransferReasonEntry[] {
-  return dataRowIndices(raw, 'F').map(r => {
-    const text = cellStr(raw, r, colIdx('F'))
-    const note = cellStr(raw, r, colIdx('I'))
+function parseTransferReasons(raw: unknown[][], col: number): TransferReasonEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => {
+    const text = cellStr(raw, r, col)
+    const note = cellStr(raw, r, col + 3)
     return {
       code:                text,
       label:               text,
-      noCheckRequired:     cellBool(raw, r, colIdx('G')),
-      concurrentCheckSign: cellBool(raw, r, colIdx('H')),
+      noCheckRequired:     cellBool(raw, r, col + 1),
+      concurrentCheckSign: cellBool(raw, r, col + 2),
       ...(note ? { note } : {}),
     }
   })
 }
 
-function parseEmploymentTypes(raw: unknown[][]): EmploymentTypeEntry[] {
-  return dataRowIndices(raw, 'K').map(r => ({
-    code:                            cellStr(raw, r, colIdx('K')),
-    label:                           cellStr(raw, r, colIdx('L')),
-    isSecondmentAcceptance:           cellBool(raw, r, colIdx('M')),
-    isRegularEmployee:                      cellBool(raw, r, colIdx('N')),
-    isConcurrentSecondmentAcceptance: cellBool(raw, r, colIdx('O')),
-    isExtendedEmployee:           cellBool(raw, r, colIdx('P')),
+function parseEmploymentTypes(raw: unknown[][], col: number): EmploymentTypeEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => ({
+    code:                             cellStr(raw, r, col),
+    label:                            cellStr(raw, r, col + 1),
+    isSecondmentAcceptance:           cellBool(raw, r, col + 2),
+    isRegularEmployee:                cellBool(raw, r, col + 3),
+    isConcurrentSecondmentAcceptance: cellBool(raw, r, col + 4),
+    isExtendedEmployee:               cellBool(raw, r, col + 5),
   }))
 }
 
-function parsePayGrades(raw: unknown[][]): PayGradeEntry[] {
-  return dataRowIndices(raw, 'R').map(r => {
-    const compensationCategory = cellStr(raw, r, colIdx('T'))
-    const band                 = cellStr(raw, r, colIdx('U'))
+function parsePayGrades(raw: unknown[][], col: number): PayGradeEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => {
+    const compensationCategory = cellStr(raw, r, col + 2)
+    const band                 = cellStr(raw, r, col + 3)
     return {
-      code:                   cellStr(raw, r, colIdx('R')),
-      label:                  cellStr(raw, r, colIdx('S')),
+      code:                   cellStr(raw, r, col),
+      label:                  cellStr(raw, r, col + 1),
       ...(compensationCategory ? { compensationCategory } : {}),
-      ...(band               ? { band }                : {}),
-      isSecondmentAcceptance:  cellBool(raw, r, colIdx('V')),
-      isRegularEmployee:             cellBool(raw, r, colIdx('W')),
-      isExtendedEmployee:  cellBool(raw, r, colIdx('X')),
-      isConcurrent:           cellBool(raw, r, colIdx('Y')),
-      isPayGradeChange:   cellBool(raw, r, colIdx('Z')),
+      ...(band                 ? { band }                 : {}),
+      isSecondmentAcceptance:  cellBool(raw, r, col + 4),
+      isRegularEmployee:       cellBool(raw, r, col + 5),
+      isExtendedEmployee:      cellBool(raw, r, col + 6),
+      isConcurrent:            cellBool(raw, r, col + 7),
+      isPayGradeChange:        cellBool(raw, r, col + 8),
     }
   })
 }
 
-function parseOfficialPositions(raw: unknown[][]): OfficialPositionEntry[] {
-  return dataRowIndices(raw, 'AE').map(r => ({
-    code:                  cellStr(raw, r, colIdx('AE')),
-    label:                 cellStr(raw, r, colIdx('AF')),
-    requiresFreeTitle:           cellBool(raw, r, colIdx('AG')),
-    isDiscretionaryTarget: cellBool(raw, r, colIdx('AH')),
+function parseOfficialPositions(raw: unknown[][], col: number): OfficialPositionEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => ({
+    code:                  cellStr(raw, r, col),
+    label:                 cellStr(raw, r, col + 1),
+    requiresFreeTitle:     cellBool(raw, r, col + 2),
+    isDiscretionaryTarget: cellBool(raw, r, col + 3),
   }))
 }
 
-function parseWorkLocations(raw: unknown[][]): WorkLocationEntry[] {
-  return dataRowIndices(raw, 'AJ').map(r => ({
-    code:  cellStr(raw, r, colIdx('AJ')),
-    label: cellStr(raw, r, colIdx('AK')),
+function parseWorkLocations(raw: unknown[][], col: number): WorkLocationEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => ({
+    code:  cellStr(raw, r, col),
+    label: cellStr(raw, r, col + 1),
   }))
 }
 
-function parseJobFamilies(raw: unknown[][]): JobFamilyEntry[] {
-  return dataRowIndices(raw, 'AM').map(r => ({
-    code:  cellStr(raw, r, colIdx('AM')),
-    label: cellStr(raw, r, colIdx('AN')),
+function parseJobFamilies(raw: unknown[][], col: number): JobFamilyEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => ({
+    code:  cellStr(raw, r, col),
+    label: cellStr(raw, r, col + 1),
   }))
 }
 
-function parseJobTypes(raw: unknown[][]): JobTypeEntry[] {
-  return dataRowIndices(raw, 'AR').map(r => ({
-    code:                  cellStr(raw, r, colIdx('AR')),
-    label:                 cellStr(raw, r, colIdx('AS')),
-    jobFamilyCode:         cellStr(raw, r, colIdx('AP')),
-    isDiscretionaryTarget: cellBool(raw, r, colIdx('AT')),
-    compensationCategory:  cellStr(raw, r, colIdx('AU')),
+function parseJobTypes(raw: unknown[][], col: number): JobTypeEntry[] {
+  // col = '職種CD'列。jobFamilyCode はその2列左（Job Family CD 参照列）
+  return dataRowIndicesAt(raw, col).map(r => ({
+    code:                  cellStr(raw, r, col),
+    label:                 cellStr(raw, r, col + 1),
+    jobFamilyCode:         cellStr(raw, r, col - 2),
+    isDiscretionaryTarget: cellBool(raw, r, col + 2),
+    compensationCategory:  cellStr(raw, r, col + 3),
   }))
 }
 
-function parseJobLevels(raw: unknown[][]): JobLevelEntry[] {
-  return dataRowIndices(raw, 'AW').map(r => {
-    const promotionDemotionBand = cellStr(raw, r, colIdx('AY'))
+function parseJobLevels(raw: unknown[][], col: number): JobLevelEntry[] {
+  return dataRowIndicesAt(raw, col).map(r => {
+    const promotionDemotionBand = cellStr(raw, r, col + 2)
     return {
-      code:                                    cellStr(raw, r, colIdx('AW')),
-      label:                                   cellStr(raw, r, colIdx('AX')),
+      code:                                    cellStr(raw, r, col),
+      label:                                   cellStr(raw, r, col + 1),
       ...(promotionDemotionBand ? { promotionDemotionBand } : {}),
-      promotionDemotionWarningLevel:             cellNum(raw, r, colIdx('AZ')),
-      isSecondmentAcceptance:                     cellBool(raw, r, colIdx('BA')),
-      isRegularEmployee:                                cellBool(raw, r, colIdx('BB')),
-      isExtendedEmployeePosition:             cellBool(raw, r, colIdx('BC')),
-      isExtendedEmployeeJobClassification:    cellBool(raw, r, colIdx('BD')),
-      isRegularEmployeeOrSecondmentAcceptance:           cellBool(raw, r, colIdx('BE')),
-      isExtendedEmployeeUnionMember:          cellBool(raw, r, colIdx('BF')),
-      isDiscretionaryTarget:                     cellNum(raw, r, colIdx('BG')),
+      promotionDemotionWarningLevel:                   cellNum(raw, r, col + 3),
+      isSecondmentAcceptance:                          cellBool(raw, r, col + 4),
+      isRegularEmployee:                               cellBool(raw, r, col + 5),
+      isExtendedEmployeePosition:                      cellBool(raw, r, col + 6),
+      isExtendedEmployeeJobClassification:             cellBool(raw, r, col + 7),
+      isRegularEmployeeOrSecondmentAcceptance:         cellBool(raw, r, col + 8),
+      isExtendedEmployeeUnionMember:                   cellBool(raw, r, col + 9),
+      isDiscretionaryTarget:                           cellNum(raw, r, col + 10),
     }
   })
 }
 
-function parseCodeEntryList<T extends { code: string; label: string }>(
-  raw: unknown[][], keyColLetter: string
+function parseCodeEntryListAt<T extends { code: string; label: string }>(
+  raw: unknown[][], col: number
 ): T[] {
-  return dataRowIndices(raw, keyColLetter).map(r => {
-    const text = cellStr(raw, r, colIdx(keyColLetter))
+  return dataRowIndicesAt(raw, col).map(r => {
+    const text = cellStr(raw, r, col)
     return { code: text, label: text } as T
   })
 }
@@ -234,15 +265,13 @@ export function parseCompanySheet(raw: unknown[][]): CompanyEntry[] {
 }
 
 // ── Hardcoded-list compatibility check ────────────────────────────────────────
-// ドメイン層でハードコードされた選択肢と Excel の実データを照合する。
-// 不一致があれば警告として返す（Excel 後方互換の破損検出）。
 
 export interface CompatibilityWarning {
-  field:      string    // チェック対象フィールド名
-  expected:   string[]  // ハードコード定数側の値
-  actual:     string[]  // Excel から読み取った値
-  unexpected: string[]  // Excel にあってハードコードにない値
-  missing:    string[]  // ハードコードにあって Excel にない値
+  field:      string
+  expected:   string[]
+  actual:     string[]
+  unexpected: string[]
+  missing:    string[]
 }
 
 function checkHardcoded(
@@ -263,47 +292,49 @@ export interface ParseCodeListsResult {
   foundKeys:             (keyof AllCodeLists)[]
   missingKeys:           (keyof AllCodeLists)[]
   compatibilityWarnings: CompatibilityWarning[]
+  columnWarnings:        ColumnWarning[]
 }
 
 export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult {
+  const SHEET      = '各種TBL'
+  const anchorCols = scanAnchorCols(raw)
+  const col        = (key: AnchorKey): number => anchorCols.get(ANCHORS[key]) ?? -1
+
+  const columnWarnings: ColumnWarning[] = (Object.keys(ANCHORS) as AnchorKey[])
+    .filter(key => col(key) < 0)
+    .map(key => ({ sheet: SHEET, message: `「${ANCHORS[key]}」列が見つかりません（${key}）` }))
+
+  const at = <T>(key: AnchorKey, fn: (c: number) => T[], empty: T[] = []): T[] =>
+    col(key) >= 0 ? fn(col(key)) : empty
+
   const lists: Partial<AllCodeLists> = {
-    companyFilters:           parseCompanyFilters(raw),
-    transferReasons:          parseTransferReasons(raw),
-    employmentTypes:          parseEmploymentTypes(raw),
-    payGrades:                parsePayGrades(raw),
-    officialPositions:        parseOfficialPositions(raw),
-    workLocations:            parseWorkLocations(raw),
-    jobFamilies:              parseJobFamilies(raw),
-    jobTypes:                 parseJobTypes(raw),
-    jobLevels:                parseJobLevels(raw),
-    trainingPositions:        parseCodeEntryList<TrainingPositionEntry>(raw, 'BI'),
-    discretionaryWorkOptions: parseCodeEntryList<DiscretionaryWorkEntry>(raw, 'BM'),
-    concurrentReasons:        parseCodeEntryList<ConcurrentReasonEntry>(raw, 'BQ'),
-    demotionReasons:          parseCodeEntryList<DemotionReasonEntry>(raw, 'BS'),
+    companyFilters:           at('companyFilters',           c => parseCompanyFilters(raw, c)),
+    transferReasons:          at('transferReasons',          c => parseTransferReasons(raw, c)),
+    employmentTypes:          at('employmentTypes',          c => parseEmploymentTypes(raw, c)),
+    payGrades:                at('payGrades',                c => parsePayGrades(raw, c)),
+    officialPositions:        at('officialPositions',        c => parseOfficialPositions(raw, c)),
+    workLocations:            at('workLocations',            c => parseWorkLocations(raw, c)),
+    jobFamilies:              at('jobFamilies',              c => parseJobFamilies(raw, c)),
+    jobTypes:                 at('jobTypes',                 c => parseJobTypes(raw, c)),
+    jobLevels:                at('jobLevels',                c => parseJobLevels(raw, c)),
+    trainingPositions:        at('trainingPositions',        c => parseCodeEntryListAt<TrainingPositionEntry>(raw, c)),
+    discretionaryWorkOptions: at('discretionaryWorkOptions', c => parseCodeEntryListAt<DiscretionaryWorkEntry>(raw, c)),
+    concurrentReasons:        at('concurrentReasons',        c => parseCodeEntryListAt<ConcurrentReasonEntry>(raw, c)),
+    demotionReasons:          at('demotionReasons',          c => parseCodeEntryListAt<DemotionReasonEntry>(raw, c)),
   }
 
-  const concurrentTypeActual = dataRowIndices(raw, 'BK').map(r => cellStr(raw, r, colIdx('BK')))
+  const concurrentTypeActual = at('concurrentType', c =>
+    dataRowIndicesAt(raw, c).map(r => cellStr(raw, r, c))
+  )
 
   const compatibilityWarnings: CompatibilityWarning[] = [
-    checkHardcoded(
-      (lists.trainingPositions ?? []).map(e => e.label),
-      TRAINING_POSITION_VALUES,
-      'trainingPositions',
-    ),
-    checkHardcoded(
-      (lists.discretionaryWorkOptions ?? []).map(e => e.label),
-      [DISCRETIONARY_YES, DISCRETIONARY_NO],
-      'discretionaryWorkOptions',
-    ),
-    checkHardcoded(
-      concurrentTypeActual,
-      CONCURRENT_TYPES,
-      'concurrentType',
-    ),
+    checkHardcoded((lists.trainingPositions        ?? []).map(e => e.label), TRAINING_POSITION_VALUES,          'trainingPositions'),
+    checkHardcoded((lists.discretionaryWorkOptions ?? []).map(e => e.label), [DISCRETIONARY_YES, DISCRETIONARY_NO], 'discretionaryWorkOptions'),
+    checkHardcoded(concurrentTypeActual,                                      CONCURRENT_TYPES,                  'concurrentType'),
   ].filter((w): w is CompatibilityWarning => w !== null)
 
   const allKeys     = Object.keys(CODE_LIST_LABELS) as (keyof AllCodeLists)[]
   const foundKeys   = allKeys.filter(k => (lists[k] as unknown[])?.length > 0)
   const missingKeys = allKeys.filter(k => !foundKeys.includes(k))
-  return { lists, foundKeys, missingKeys, compatibilityWarnings }
+  return { lists, foundKeys, missingKeys, compatibilityWarnings, columnWarnings }
 }

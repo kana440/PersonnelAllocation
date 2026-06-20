@@ -8,5 +8,5 @@ export { importFromFile, importFromUrl, importWorkbook } from './exceljs/importe
 export { exportToXlsx, buildExportBuffer }              from './zip/exporter'
 
 // ── エンジン非依存の共有エクスポート ─────────────────────────────────────────
-export { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_COMPANY } from './sheetNames'
+export { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD, SHEET_COMPANY } from './sheetNames'
 export type { ImportedWorkbookResult, ProgressCallback }         from './types'

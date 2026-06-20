@@ -11,8 +11,8 @@ export interface TableDef {
 }
 
 export const TABLE_REGISTRY: TableDef[] = [
-  { key: 'beforeOrgs',              label: '組織CD一覧（発令前）', group: '組織' },
-  { key: 'afterOrgs',               label: '組織CD一覧（発令後）', group: '組織' },
+  { key: 'beforeOrgs',              label: '旧組織CD一覧', group: '組織' },
+  { key: 'afterOrgs',               label: '組織CD一覧（新）', group: '組織' },
   { key: 'companies',               label: CODE_LIST_LABELS.companies,               group: '組織' },
   { key: 'companyFilters',          label: CODE_LIST_LABELS.companyFilters,          group: '組織' },
   { key: 'employmentTypes',         label: CODE_LIST_LABELS.employmentTypes,         group: '雇用・給与' },
