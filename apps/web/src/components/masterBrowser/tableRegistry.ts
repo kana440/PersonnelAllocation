@@ -73,7 +73,7 @@ export const FIELD_LABELS: Record<string, string> = {
 }
 
 const ORG_FIELDS = [
-  'code', 'name', 'pathBusinessUnit', 'pathDivision', 'pathDepartment',
+  'code', 'name', 'company', 'pathBusinessUnit', 'pathDivision', 'pathDepartment',
   'pathGroup', 'pathTeam', 'orgCategory', 'costCenter', 'workLocation', 'parentCode',
 ] as const
 

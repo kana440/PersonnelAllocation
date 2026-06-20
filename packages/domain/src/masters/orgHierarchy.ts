@@ -5,15 +5,16 @@ import type { OrgMasterEntry } from './orgMaster'
 
 const SEP = '\x00'
 
-// 5 つのパス値を連結してマップキーを作る（array alloc を避けるため直接連結）
+// 会社名 + 5 つのパス値を連結してマップキーを作る（array alloc を避けるため直接連結）
 export function orgPathKey(
+  company: string,
   bu:   string,
   div:  string,
   dept: string,
   grp:  string,
   team: string,
 ): string {
-  return bu + SEP + div + SEP + dept + SEP + grp + SEP + team
+  return company + SEP + bu + SEP + div + SEP + dept + SEP + grp + SEP + team
 }
 
 export interface OrgHierarchyInfo {
@@ -40,7 +41,7 @@ export function buildOrgHierarchy(entries: OrgMasterEntry[]): {
   const pathToCode = new Map<string, string>()
   for (const e of entries) {
     if (!e.code) continue
-    const key = orgPathKey(e.pathBusinessUnit, e.pathDivision, e.pathDepartment, e.pathGroup, e.pathTeam)
+    const key = orgPathKey(e.company, e.pathBusinessUnit, e.pathDivision, e.pathDepartment, e.pathGroup, e.pathTeam)
     if (!pathToCode.has(key)) pathToCode.set(key, e.code)
   }
 
@@ -50,11 +51,12 @@ export function buildOrgHierarchy(entries: OrgMasterEntry[]): {
     if (!e.code) continue
     let level:     number
     let parentKey: string | null = null
+    const c = e.company
 
-    if      (e.pathTeam)       { level = 5; parentKey = orgPathKey(e.pathBusinessUnit, e.pathDivision, e.pathDepartment, e.pathGroup, '') }
-    else if (e.pathGroup)      { level = 4; parentKey = orgPathKey(e.pathBusinessUnit, e.pathDivision, e.pathDepartment, '', '') }
-    else if (e.pathDepartment) { level = 3; parentKey = orgPathKey(e.pathBusinessUnit, e.pathDivision, '', '', '') }
-    else if (e.pathDivision)   { level = 2; parentKey = orgPathKey(e.pathBusinessUnit, '', '', '', '') }
+    if      (e.pathTeam)       { level = 5; parentKey = orgPathKey(c, e.pathBusinessUnit, e.pathDivision, e.pathDepartment, e.pathGroup, '') }
+    else if (e.pathGroup)      { level = 4; parentKey = orgPathKey(c, e.pathBusinessUnit, e.pathDivision, e.pathDepartment, '', '') }
+    else if (e.pathDepartment) { level = 3; parentKey = orgPathKey(c, e.pathBusinessUnit, e.pathDivision, '', '', '') }
+    else if (e.pathDivision)   { level = 2; parentKey = orgPathKey(c, e.pathBusinessUnit, '', '', '', '') }
     else                       { level = 1 }
 
     hierarchy.set(e.code, {

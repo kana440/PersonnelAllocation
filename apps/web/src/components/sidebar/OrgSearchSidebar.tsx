@@ -20,11 +20,17 @@ export function OrgSearchSidebar() {
     selectedPersonId, selectPerson, enterOperationPanel,
   } = useScopedStore()
 
-  const { panels, setOrgOpen } = useCanvasLayoutStore()
-
+  const { requestScrollToPerson, panels, setOrgOpen, addPanel: addCanvasPanel } = useCanvasLayoutStore()
   const treeScrollRef = useRef<HTMLDivElement>(null)
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    const t = setTimeout(() => document.addEventListener('pointerdown', close), 0)
+    return () => { clearTimeout(t); document.removeEventListener('pointerdown', close) }
+  }, [contextMenu !== null]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const enterEditForPerson = (personId: string) => {
     const person = persons.find(p => p.id === personId)
@@ -33,8 +39,6 @@ export function OrgSearchSidebar() {
     if (!firstRow) return
     enterOperationPanel(firstRow.rowId, 'directEdit')
   }
-
-  const handlePersonDoubleClick = (personId: string) => enterEditForPerson(personId)
 
   const handlePersonContextMenu = (e: React.MouseEvent, personId: string) => {
     e.preventDefault()
@@ -47,63 +51,106 @@ export function OrgSearchSidebar() {
     () => afterOrganizations.filter(o => !o.isAbandoned),
     [afterOrganizations]
   )
-
-  // スコープ内に親がない = この表示内でのルート組織（スコープ選択時は true root でなくなる）
   const viewOrgIds = useMemo(() => new Set(viewOrgs.map(o => o.id)), [viewOrgs])
 
-  // スコープ変更など viewOrgs が変わった際、会社グループを自動展開する
-  useEffect(() => {
-    const effectiveRoots = viewOrgs.filter(o => !o.parentId || !viewOrgIds.has(o.parentId))
-    if (effectiveRoots.length === 0) return
-    setExpandedCompanies(prev => {
-      const next = new Set(prev)
-      effectiveRoots.forEach(o => { if (o.companyId) next.add(o.companyId) })
-      return next
-    })
-  }, [viewOrgs, viewOrgIds])
+  // ── ツリー展開状態（ローカル state のみ）──────────────────────────
+  const [closedCompanies, setClosedCompanies] = useState<Set<string>>(new Set())
+  const [expandedOrgIds, setExpandedOrgIds]   = useState<Set<string>>(new Set())
 
-  // 人物が選択されたらサイドバーの該当組織を展開してスクロール
+  const toggleCompany = (id: string) =>
+    setClosedCompanies(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleOrg = (id: string) =>
+    setExpandedOrgIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
+  // org とその祖先を展開し、会社も開く
+  const expandToOrg = (orgId: string) => {
+    const org = viewOrgs.find(o => o.id === orgId)
+    if (!org) return
+    if (org.companyId)
+      setClosedCompanies(prev => { const s = new Set(prev); s.delete(org.companyId!); return s })
+    setExpandedOrgIds(prev => {
+      const s = new Set(prev)
+      s.add(orgId)
+      let cur: Organization | undefined = org
+      while (cur?.parentId) {
+        cur = viewOrgs.find(o => o.id === cur!.parentId)
+        if (cur) s.add(cur.id)
+      }
+      return s
+    })
+  }
+
+  // ── キャンバスパネルを開く ──────────────────────────────────────
+  // orgId から祖先をたどって最初に見つかったパネルを開く。
+  // 祖先パネルが windowed モードの場合、その子孫の人物はインライン表示されないため、
+  // orgId 専用パネルを作成（チップクリックと同等の操作）する。
+  const openCanvasPanel = (orgId: string) => {
+    const orgMap = new Map(viewOrgs.map(o => [o.id, o]))
+
+    // 対象 org 自身にパネルがあるか確認
+    const exactPanel = panels.find(pp => pp.orgId === orgId)
+    if (exactPanel) {
+      if (!exactPanel.open) setOrgOpen(orgId, true)
+      return
+    }
+
+    // 祖先チェーンを上る
+    let cur: Organization | undefined = orgMap.get(orgId)?.parentId
+      ? orgMap.get(orgMap.get(orgId)!.parentId!)
+      : undefined
+    while (cur) {
+      const p = panels.find(pp => pp.orgId === cur!.id)
+      if (p) {
+        if (!p.open) setOrgOpen(cur.id, true)
+        if (p.childrenMode === 'windowed') {
+          // windowed モード: 人物が祖先パネルにインライン表示されないため、
+          // orgId のパネルを作成してスタンドアロンウィンドウとして表示する
+          addCanvasPanel(orgId)
+        }
+        // inline モードなら人物は祖先パネル内に表示されているので追加不要
+        return
+      }
+      cur = cur.parentId ? orgMap.get(cur.parentId) : undefined
+    }
+  }
+
+  // ── 人物クリック（サイドバーから）──────────────────────────────
+  // キャンバスパネルを開く＋スクロール要求を同一バッチで更新する。
+  // React が1回のレンダーでパネルを開いた後に TreeWindowCanvas の effect が動く。
+  const handlePersonClick = (personId: string, orgId: string) => {
+    selectPerson(personId)
+    openCanvasPanel(orgId)
+    requestScrollToPerson(personId)
+  }
+
+  // ── キャンバス等の外部から人物が選択されたらサイドバーを展開 ──
+  const afterOrgByCode = useMemo(() => buildOrgMap(afterOrganizations), [afterOrganizations])
+
   useEffect(() => {
     if (!selectedPersonId) return
     const person = persons.find(p => p.id === selectedPersonId)
     if (!person?.sfPersonId) return
     const row = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
              ?? allocationList.find(r => r.userId === person.sfPersonId)
-    const deptCode = row?.departmentCode
-    if (!deptCode) return
-
-    const orgById  = new Map(viewOrgs.map(o => [o.id, o]))
-    const orgByExt = new Map(viewOrgs.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
-    const personOrg = orgByExt.get(deptCode) ?? orgById.get(deptCode)
+    if (!row?.departmentCode) return
+    const personOrg = afterOrgByCode.get(row.departmentCode)
+      ?? viewOrgs.find(o => o.id === row.departmentCode)
     if (!personOrg) return
 
-    // 会社グループを展開
-    if (personOrg.companyId) {
-      setExpandedCompanies(prev => { const s = new Set(prev); s.add(personOrg.companyId!); return s })
-    }
+    expandToOrg(personOrg.id)
 
-    // 祖先 + 当該組織をキャンバスストアで open に
-    setOrgOpen(personOrg.id, true)
-    let cur = personOrg.parentId ? orgById.get(personOrg.parentId) : undefined
-    while (cur) { setOrgOpen(cur.id, true); cur = cur.parentId ? orgById.get(cur.parentId) : undefined }
-
-    // 展開後にスクロール（二重 rAF で React の描画を待つ）
-    requestAnimationFrame(() => requestAnimationFrame(() => {
+    // expandToOrg は setState なのでレンダー後に実行（setTimeout(0) = 次の macrotask = React 再描画後）
+    const id = selectedPersonId
+    setTimeout(() => {
       treeScrollRef.current
-        ?.querySelector(`[data-org-id="${personOrg.id}"]`)
+        ?.querySelector(`[data-sidebar-personid="${id}"]`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }))
+    }, 0)
   }, [selectedPersonId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const afterOrgByCode  = useMemo(() => buildOrgMap(afterOrganizations), [afterOrganizations])
-  const beforeOrgByCode = useMemo(() => buildOrgMap(beforeOrgs),         [beforeOrgs])
+  const beforeOrgByCode = useMemo(() => buildOrgMap(beforeOrgs), [beforeOrgs])
+  const personBySfId    = useMemo(() => new Map(persons.map(p => [p.sfPersonId ?? '', p])), [persons])
 
-  const personBySfId = useMemo(
-    () => new Map(persons.map(p => [p.sfPersonId ?? '', p])),
-    [persons]
-  )
-
-  // orgId → {row, person}[] for after state
   const afterMembersByOrgId = useMemo(() => {
     const map = new Map<string, Array<{ row: AllocationRow; person: Person }>>()
     for (const row of allocationList) {
@@ -119,7 +166,6 @@ export function OrgSearchSidebar() {
     return map
   }, [allocationList, afterOrgByCode, personBySfId])
 
-  // orgId → Set<personId> for before state
   const beforeMembersByOrgId = useMemo(() => {
     const map = new Map<string, Set<string>>()
     for (const row of allocationList) {
@@ -135,20 +181,18 @@ export function OrgSearchSidebar() {
     return map
   }, [allocationList, beforeOrgByCode, personBySfId])
 
-  // personId set for persons assigned to any after-org
   const assignedPersonIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const members of afterMembersByOrgId.values()) {
+    for (const members of afterMembersByOrgId.values())
       for (const { person } of members) ids.add(person.id)
-    }
     return ids
   }, [afterMembersByOrgId])
 
-  const handlePersonDragStart = (e: React.DragEvent, personId: string) => {
+  const handlePersonDragStart = (e: React.DragEvent, personId: string, orgId: string) => {
     const person = persons.find(p => p.id === personId)
     if (!person?.sfPersonId) return
     const row = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
-    const org = row?.departmentCode ? afterOrgByCode.get(row.departmentCode) : null
+    const org = viewOrgs.find(o => o.id === orgId)
     e.dataTransfer.setData('application/json', JSON.stringify({
       personId,
       fromOrgId:       org?.id ?? '',
@@ -157,66 +201,50 @@ export function OrgSearchSidebar() {
       source:          'sidebar',
     }))
     e.dataTransfer.effectAllowed = 'move'
+    void row
   }
 
   const [orgSearch, setOrgSearch] = useState('')
-  // 組織の展開/折りたたみ状態はキャンバスストアと共有（panels の open フィールド）
-  const expandedOrgs = new Set(panels.filter(p => p.open).map(p => p.orgId))
-  const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(
-    () => new Set(viewOrgs.map(o => o.companyId).filter(Boolean))
-  )
-
   const orgSearchLower = orgSearch.toLowerCase().trim()
 
-  const hasPersonChanges = (personId: string): boolean => {
+  const hasPersonChanges = (personId: string) => {
     const sfId = persons.find(p => p.id === personId)?.sfPersonId ?? ''
     return allocationList.filter(r => r.userId === sfId).some(r => rowDiff(r).length > 0)
   }
-
-  const getPersonsInOrg = (orgId: string) => afterMembersByOrgId.get(orgId) ?? []
 
   const getOrgChangeStatus = (orgId: string): 'changed' | 'new' | 'removed' | null => {
     const beforeIds = beforeMembersByOrgId.get(orgId) ?? new Set<string>()
     const afterIds  = new Set((afterMembersByOrgId.get(orgId) ?? []).map(m => m.person.id))
     if (beforeIds.size === 0 && afterIds.size > 0) return 'new'
     if (beforeIds.size > 0 && afterIds.size === 0) return 'removed'
-    for (const pid of [...beforeIds, ...afterIds]) {
+    for (const pid of [...beforeIds, ...afterIds])
       if (!beforeIds.has(pid) || !afterIds.has(pid)) return 'changed'
-    }
     return null
   }
 
-  const toggleOrg     = (id: string) => setOrgOpen(id, !expandedOrgs.has(id))
-  const toggleCompany = (id: string) => setExpandedCompanies(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
-
   const renderOrgNode = (org: Organization, depth: number): React.ReactNode => {
     const children     = viewOrgs.filter(o => o.parentId === org.id)
-    const directPeople = getPersonsInOrg(org.id)
-    const isExpanded   = expandedOrgs.has(org.id)
-    const isSelected   = panels.some(p => p.orgId === org.id && p.open)
+    const directPeople = afterMembersByOrgId.get(org.id) ?? []
+    const isExpanded   = expandedOrgIds.has(org.id)
     const changeStatus = getOrgChangeStatus(org.id)
     const isNewOrg     = !beforeOrgs.find(o => o.id === org.id)
+    const hasContent   = children.length > 0 || directPeople.length > 0
 
     return (
       <div key={org.id} style={{ marginLeft: `${depth * 10}px` }}>
         <div
           data-org-id={org.id}
-          className={`flex items-center gap-0.5 rounded py-0.5 px-1 transition-colors ${
-          isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
-        }`}>
+          className="flex items-center gap-0.5 rounded py-0.5 px-1 transition-colors hover:bg-gray-50"
+        >
           <button
-            onClick={() => toggleOrg(org.id)}
+            onClick={() => hasContent && toggleOrg(org.id)}
             className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs"
           >
-            {(children.length > 0 || directPeople.length > 0)
-              ? (isExpanded ? '▾' : '▸')
-              : <span className="w-4" />}
+            {hasContent ? (isExpanded ? '▾' : '▸') : <span className="w-4" />}
           </button>
           <button
-            onClick={() => setOrgOpen(org.id, !isSelected)}
-            className={`flex-1 text-left text-xs py-0.5 truncate font-medium ${
-              isSelected ? 'text-blue-700 font-semibold' : 'text-gray-700 hover:text-blue-600'
-            }`}
+            onClick={() => toggleOrg(org.id)}
+            className="flex-1 text-left text-xs py-0.5 truncate font-medium text-gray-700 hover:text-blue-600"
           >
             {org.name}
           </button>
@@ -233,15 +261,16 @@ export function OrgSearchSidebar() {
           return (
             <div
               key={row.rowId}
+              data-sidebar-personid={person.id}
               draggable
               style={{ marginLeft: `${depth * 10 + 16}px` }}
               className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-grab active:cursor-grabbing ${
                 isPersonSelected ? 'bg-yellow-50' : 'hover:bg-gray-50'
               }`}
-              onClick={() => selectPerson(person.id)}
-              onDoubleClick={() => handlePersonDoubleClick(person.id)}
+              onClick={() => handlePersonClick(person.id, org.id)}
+              onDoubleClick={() => enterEditForPerson(person.id)}
               onContextMenu={e => handlePersonContextMenu(e, person.id)}
-              onDragStart={e => handlePersonDragStart(e, person.id)}
+              onDragStart={e => handlePersonDragStart(e, person.id, org.id)}
             >
               <span className={`text-xs flex-shrink-0 leading-none ${isConcurrent ? 'text-purple-400' : 'text-blue-300'}`}>
                 {isConcurrent ? '兼' : '—'}
@@ -268,15 +297,14 @@ export function OrgSearchSidebar() {
       .filter(o => o.name.toLowerCase().includes(orgSearchLower))
       .map(o => ({
         type: 'org' as const, id: o.id, label: o.name,
-        sub: o.companyId,
+        sub: o.companyId ?? '',
         orgId: o.id, personId: undefined as string | undefined,
       })),
     ...persons
       .filter(p => p.name.toLowerCase().includes(orgSearchLower))
       .map(p => {
-        const sfId = p.sfPersonId ?? ''
-        const row  = allocationList.find(r => r.userId === sfId && r.concurrentType !== '兼務')
-        const org  = row?.departmentCode ? afterOrgByCode.get(row.departmentCode) : null
+        const row = allocationList.find(r => r.userId === p.sfPersonId && r.concurrentType !== '兼務')
+        const org = row?.departmentCode ? afterOrgByCode.get(row.departmentCode) : null
         return {
           type: 'person' as const, id: p.id, label: p.name,
           sub: org?.name ?? '所属なし',
@@ -288,7 +316,7 @@ export function OrgSearchSidebar() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* Search */}
+      {/* 検索 */}
       <div className="flex-shrink-0 px-2 pt-2 pb-1.5">
         <input
           type="text"
@@ -308,34 +336,13 @@ export function OrgSearchSidebar() {
             <button
               key={`${r.type}-${r.id}`}
               onClick={() => {
-                if (r.personId) {
+                if (r.personId && r.orgId) {
+                  handlePersonClick(r.personId, r.orgId)
+                } else if (r.personId) {
                   selectPerson(r.personId)
-                  if (r.orgId) setOrgOpen(r.orgId, true)
-                  setOrgSearch('')
-                  return
                 }
-                if (r.orgId) {
-                  setOrgOpen(r.orgId, true)
-                  const org = viewOrgs.find(o => o.id === r.orgId)
-                  if (org) {
-                    if (org.companyId)
-                      setExpandedCompanies(prev => { const s = new Set(prev); s.add(org.companyId!); return s })
-                    // 祖先の open も連鎖展開
-                    let cur: Organization | undefined = org
-                    while (cur) {
-                      if (cur.id !== org.id) setOrgOpen(cur.id, true)
-                      const pid: string | null | undefined = cur.parentId
-                      cur = pid ? viewOrgs.find(o => o.id === pid) : undefined
-                    }
-                    const orgId = r.orgId
-                    requestAnimationFrame(() => requestAnimationFrame(() => {
-                      treeScrollRef.current
-                        ?.querySelector(`[data-org-id="${orgId}"]`)
-                        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                    }))
-                  }
-                  setOrgSearch('')
-                }
+                if (r.orgId) expandToOrg(r.orgId)
+                setOrgSearch('')
               }}
               className="w-full text-left flex items-center gap-1.5 px-1 py-1 rounded hover:bg-blue-50 transition-colors"
             >
@@ -352,11 +359,13 @@ export function OrgSearchSidebar() {
           {(() => {
             const allCompanies = [...new Set(viewOrgs.map(o => o.companyId))]
               .filter(Boolean)
-              .map(id => ({ id, name: id }))
+              .map(id => ({ id: id!, name: id! }))
             return allCompanies.map(company => {
-              const rootOrgs = viewOrgs.filter(o => o.companyId === company.id && (!o.parentId || !viewOrgIds.has(o.parentId)))
+              const rootOrgs = viewOrgs.filter(
+                o => o.companyId === company.id && (!o.parentId || !viewOrgIds.has(o.parentId))
+              )
               if (rootOrgs.length === 0) return null
-              const isOpen = expandedCompanies.has(company.id)
+              const isOpen = !closedCompanies.has(company.id)
               return (
                 <div key={company.id} className="border border-gray-200 rounded">
                   <button
@@ -391,9 +400,8 @@ export function OrgSearchSidebar() {
                       key={p.id}
                       draggable
                       onClick={() => selectPerson(p.id)}
-                      onDoubleClick={() => handlePersonDoubleClick(p.id)}
+                      onDoubleClick={() => enterEditForPerson(p.id)}
                       onContextMenu={e => handlePersonContextMenu(e, p.id)}
-                      onDragStart={e => handlePersonDragStart(e, p.id)}
                       className={`w-full text-left flex items-center gap-1 py-0.5 px-1 rounded text-xs transition-colors cursor-grab active:cursor-grabbing ${
                         selectedPersonId === p.id ? 'bg-yellow-50 text-gray-800 font-semibold' : 'text-gray-500 hover:bg-gray-50'
                       }`}
@@ -407,7 +415,7 @@ export function OrgSearchSidebar() {
             )
           })()}
 
-          {/* Legend */}
+          {/* 凡例 */}
           <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 pt-1 border-t border-gray-100 px-1 pb-1">
             <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-0.5 align-middle" />組織変更</span>
             <span><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 mr-0.5 align-middle" />行変更</span>
@@ -416,24 +424,24 @@ export function OrgSearchSidebar() {
       )}
 
       {contextMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null) }} />
-          <div
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-36"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
+        <div
+          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-36"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onPointerDown={e => e.stopPropagation()}
+        >
+          {(() => {
+            const p = persons.find(pp => pp.id === contextMenu.personId)
+            return p
+              ? <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500 truncate">{p.name}</div>
+              : null
+          })()}
+          <button
+            onClick={() => { enterEditForPerson(contextMenu.personId); setContextMenu(null) }}
+            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
           >
-            {(() => {
-              const p = persons.find(pp => pp.id === contextMenu.personId)
-              return p ? <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500 truncate">{p.name}</div> : null
-            })()}
-            <button
-              onClick={() => { enterEditForPerson(contextMenu.personId); setContextMenu(null) }}
-              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 transition-colors"
-            >
-              <span>✏️</span> 編集画面を開く
-            </button>
-          </div>
-        </>
+            <span>✏️</span> 編集画面を開く
+          </button>
+        </div>
       )}
     </div>
   )

@@ -111,8 +111,26 @@ export function TreeWindowCanvas() {
   const {
     panels, setPositions,
     autoArrange, arrangeVersion, setAutoArrange,
+    scrollToPersonId, requestScrollToPerson,
   } = useCanvasLayoutStore()
   const { organizations, addPersonsToSelection, clearSelection } = useOrgView()
+
+  // ── キャンバスパン要求: data-personid 要素をスクロールして中央に ──
+  // クリックハンドラーで setOrgOpen + requestScrollToPerson が同一バッチで更新されるため、
+  // この effect が動くタイミングではパネルが既に開いており data-personid 要素が DOM にある。
+  useEffect(() => {
+    if (!scrollToPersonId || !scrollerRef.current) return
+    requestScrollToPerson(null)
+    const el = scrollerRef.current.querySelector<HTMLElement>(`[data-personid="${scrollToPersonId}"]`)
+    if (!el) return
+    const elRect       = el.getBoundingClientRect()
+    const scrollerRect = scrollerRef.current.getBoundingClientRect()
+    scrollerRef.current.scrollBy({
+      left: elRect.left - scrollerRect.left - scrollerRect.width  / 2 + elRect.width  / 2,
+      top:  elRect.top  - scrollerRect.top  - scrollerRect.height / 2 + elRect.height / 2,
+      behavior: 'smooth',
+    })
+  }, [scrollToPersonId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Space キー保持状態（カーソル変更用）────────────────────────
   const [spaceHeld, setSpaceHeld] = useState(false)
