@@ -16,12 +16,12 @@ interface Props {
 export function OrgTransferWidget({
   persons, targetOrgName, transferReason: initialReason, label, isActive, onConfirm, onCancel,
 }: Props) {
-  const { codeLists } = useStore()
+  const { masters } = useStore()
   const [transferReason, setTransferReason] = useState(initialReason ?? '')
 
   const transferReasonOptions = useMemo(
-    () => codeLists.transferReasons?.map((e: { label: string }) => e.label) ?? [],
-    [codeLists]
+    () => masters.transferReasons?.map((e: { label: string }) => e.label) ?? [],
+    [masters]
   )
 
   const canSubmit = !!transferReason

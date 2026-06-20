@@ -1,4 +1,4 @@
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 
 export type StepMode = '1' | '2' | 'all'
 
@@ -34,16 +34,16 @@ export function BandStepFilter({ mode, direction, onChange }: Props) {
 export function filterBandsByStep(
   options: string[],
   baseBand: string | undefined,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
   stepMode: StepMode,
   direction: 'up' | 'down',
 ): string[] {
   if (stepMode === 'all' || !baseBand) return options
-  const baseLevel = codeLists.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
+  const baseLevel = masters.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
   if (baseLevel === 0) return options
   const steps = parseInt(stepMode, 10)
   return options.filter(opt => {
-    const optLevel = codeLists.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
+    const optLevel = masters.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
     if (optLevel === 0) return false
     const diff = optLevel - baseLevel
     if (direction === 'up')   return diff >= 1 && diff <= steps

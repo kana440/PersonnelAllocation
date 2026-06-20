@@ -1,6 +1,6 @@
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization }   from '@personnel/domain/schemas'
-import type { AllCodeLists }   from '@personnel/domain/masters/aggregate'
+import type { AllMasters }   from '@personnel/domain/masters/aggregate'
 import { FIELD_METADATA }      from '@personnel/domain/allocationRow'
 import { buildOrgMap }         from '@personnel/domain/choices/rows'
 
@@ -11,10 +11,10 @@ import { buildOrgMap }         from '@personnel/domain/choices/rows'
  * 条件: userId あり かつ transferReason も FIELD_METADATA の全 after フィールドも全て空。
  * noCheckRequired な異動事由（退職・削除系）が入っている行は false になる。
  */
-export function isUninitializedRow(row: AllocationRow, codeLists: AllCodeLists): boolean {
+export function isUninitializedRow(row: AllocationRow, masters: AllMasters): boolean {
   if (!row.userId) return false
   if (row.transferReason) return false
-  const reasonEntry = codeLists.transferReasons.find(r => r.label === row.transferReason)
+  const reasonEntry = masters.transferReasons.find(r => r.label === row.transferReason)
   if (reasonEntry?.noCheckRequired) return false
   return FIELD_METADATA.every(({ after }) => !row[after as keyof AllocationRow])
 }
@@ -37,9 +37,9 @@ export function buildOrgMappingGroups(
   allocationList: AllocationRow[],
   afterOrganizations: Organization[],
   beforeOrganizations: Organization[],
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): OrgMappingGroup[] {
-  const uninit = allocationList.filter(r => isUninitializedRow(r, codeLists))
+  const uninit = allocationList.filter(r => isUninitializedRow(r, masters))
   const afterOrgByCode  = buildOrgMap(afterOrganizations)
   const beforeOrgByCode = buildOrgMap(beforeOrganizations)
 

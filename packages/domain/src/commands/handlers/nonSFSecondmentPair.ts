@@ -4,7 +4,7 @@ import type { AllocationRow } from '../../allocationRow'
 import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { isRegularEmployee, wasSecondedOut, isMainAssignment, wasSecondedIn } from '../helpers'
-import type { AllCodeLists } from '../../masters/aggregate'
+import type { AllMasters } from '../../masters/aggregate'
 
 export interface NonSFSecondmentSourceChanges {
   secondmentToCompany: string    // 出向先会社（必須）
@@ -23,8 +23,8 @@ export interface NonSFSecondmentReceivingFields {
 }
 
 /** SF外出向ペア作成条件 */
-export function canCreateNonSFSecondmentPair(row: AllocationRow, cl: AllCodeLists): boolean {
-  return isRegularEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row)
+export function canCreateNonSFSecondmentPair(row: AllocationRow, ms: AllMasters): boolean {
+  return isRegularEmployee(row, ms) && isMainAssignment(row) && !wasSecondedOut(row)
 }
 
 /** SF外出向取り消し条件（出向元行 or 出向受入行のどちらからでも判定） */
@@ -120,7 +120,7 @@ export class NonSFSecondmentPairCommand implements EditCommand {
 
     // 出向元行の更新
     const srcOrgSub = this.source.departmentCode
-      ? deriveOrgSubFields(this.source.departmentCode, ctx.codeLists)
+      ? deriveOrgSubFields(this.source.departmentCode, ctx.masters)
       : {}
     const updatedSource: AllocationRow = {
       ...sourceRow,
@@ -133,7 +133,7 @@ export class NonSFSecondmentPairCommand implements EditCommand {
 
     // 出向受入行の新規作成
     const newRowId   = nextRowId(ctx.allocationList)
-    const recvOrgSub = deriveOrgSubFields(this.receiving.departmentCode, ctx.codeLists)
+    const recvOrgSub = deriveOrgSubFields(this.receiving.departmentCode, ctx.masters)
     const receivingRow: AllocationRow = {
       rowId:                         newRowId,
       positionCode:                  `_pos_${newRowId}`,

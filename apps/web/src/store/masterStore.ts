@@ -1,23 +1,23 @@
 import { create } from 'zustand/react'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
-import { EMPTY_CODE_LISTS } from '@personnel/domain/masters/aggregate'
-import { LocalStorageCodeListRepository } from '../infrastructure/codeLists/localStorageRepository'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
+import { EMPTY_MASTERS } from '@personnel/domain/masters/aggregate'
+import { LocalStorageMasterRepository } from '../infrastructure/masters/localStorageRepository'
 
 // Write path: only the setup flow needs to write code lists.
-// The read path goes through HRApplicationService.initialize() → DomainSnapshot → useStore().codeLists.
-const repo = new LocalStorageCodeListRepository()
+// The read path goes through HRApplicationService.initialize() → DomainSnapshot → useStore().masters.
+const repo = new LocalStorageMasterRepository()
 
-interface CodeListState {
+interface MasterState {
   isChecked:   boolean   // true once localStorage has been read
   isSetupDone: boolean   // true once the user has completed setup
 
   checkStorage: () => void
-  save:         (lists: AllCodeLists) => Promise<void>
+  save:         (lists: AllMasters) => Promise<void>
   skipSetup:    () => Promise<void>
   resetSetup:   () => Promise<void>
 }
 
-export const useCodeListStore = create<CodeListState>()((set) => ({
+export const useMasterStore = create<MasterState>()((set) => ({
   isChecked:   false,
   isSetupDone: false,
 
@@ -32,7 +32,7 @@ export const useCodeListStore = create<CodeListState>()((set) => ({
   },
 
   skipSetup: async () => {
-    await repo.save(EMPTY_CODE_LISTS)
+    await repo.save(EMPTY_MASTERS)
     set({ isSetupDone: true })
   },
 

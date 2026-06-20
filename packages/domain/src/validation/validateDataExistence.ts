@@ -1,6 +1,6 @@
 import type { AllocationRow } from '../allocationRow'
 import type { Organization } from '../schemas'
-import type { AllCodeLists } from '../masters/aggregate'
+import type { AllMasters } from '../masters/aggregate'
 import { FIELD_CONSTRAINTS, evaluateConstraint, type ConstraintRule } from '../fieldConstraints'
 import type { FieldStrictness } from '../optionStrictness'
 import type { ValidationIssue } from './types'
@@ -21,16 +21,16 @@ function checkD2_1(row: AllocationRow, orgs: Organization[]): ValidationIssue[] 
 }
 
 // ── D2-7: ジョブタイプ（カスタム: 親子フィルタ）─────────────────────────────
-function checkD2_7(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkD2_7(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   const jobType = row.jobType
-  if (!jobType || codeLists.jobTypes.length === 0) return []
-  const parent = codeLists.jobFamilies.find(jf => jf.label === row.jobFamily)
+  if (!jobType || masters.jobTypes.length === 0) return []
+  const parent = masters.jobFamilies.find(jf => jf.label === row.jobFamily)
   if (parent) {
-    const children = codeLists.jobTypes.filter(s => s.jobFamilyCode === parent.code)
+    const children = masters.jobTypes.filter(s => s.jobFamilyCode === parent.code)
     if (children.some(s => s.label === jobType)) return []
     return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは選択中のジョブファミリーに含まれる値を選択してください' }]
   }
-  if (codeLists.jobTypes.some(s => s.label === jobType)) return []
+  if (masters.jobTypes.some(s => s.label === jobType)) return []
   return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは有効な選択肢から選択してください' }]
 }
 
@@ -39,19 +39,19 @@ const EXISTENCE_RULES = FIELD_CONSTRAINTS.filter(
   (r): r is ConstraintRule => r.kind === 'constraint' && !r.when
 )
 
-function checkFromValueRules(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
-  return EXISTENCE_RULES.flatMap(r => evaluateConstraint(r, row, codeLists, overrides))
+function checkFromValueRules(row: AllocationRow, masters: AllMasters, overrides?: Overrides): ValidationIssue[] {
+  return EXISTENCE_RULES.flatMap(r => evaluateConstraint(r, row, masters, overrides))
 }
 
 export function runDataExistence(
   row:       AllocationRow,
   orgs:      Organization[],
-  codeLists: AllCodeLists,
+  masters: AllMasters,
   overrides?: Overrides,
 ): ValidationIssue[] {
   return [
     ...checkD2_1(row, orgs),
-    ...checkFromValueRules(row, codeLists, overrides),
-    ...checkD2_7(row, codeLists),
+    ...checkFromValueRules(row, masters, overrides),
+    ...checkD2_7(row, masters),
   ]
 }

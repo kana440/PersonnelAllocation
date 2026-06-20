@@ -1,7 +1,7 @@
 import type { Organization } from '@personnel/domain/schemas'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
-import { EMPTY_CODE_LISTS } from '@personnel/domain/masters/aggregate'
-import { validateCodeListsIntegrity, type CodeListWarning } from '@personnel/domain/masters/validateCodeLists'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
+import { EMPTY_MASTERS } from '@personnel/domain/masters/aggregate'
+import { validateMastersIntegrity, type MasterWarning } from '@personnel/domain/masters/validateMasters'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { nextRowId } from '@personnel/domain/allocationRow'
 import type { AfterValues } from '@personnel/domain/allocationRow'
@@ -38,7 +38,7 @@ export interface DomainSnapshot {
   allocationList:            AllocationRow[]
   beforeOrganizations:       Organization[]
   afterOrganizations:        Organization[]
-  codeLists:                 AllCodeLists
+  masters:                 AllMasters
   persons:                   Person[]
   canUndo:                   boolean
   canRedo:                   boolean
@@ -51,7 +51,7 @@ export interface DomainSnapshot {
   previewAfterOrganizations: Organization[] | null
   patternCache:              Map<string, PatternDetectionResult>
   organizations:             Organization[]      // = beforeOrganizations（後方互換エイリアス）
-  codeListWarnings:          CodeListWarning[]   // マスタ整合性警告（インポート時に検出）
+  masterWarnings:          MasterWarning[]   // マスタ整合性警告（インポート時に検出）
 }
 
 // ── HRApplicationService ──────────────────────────────────────────────────────
@@ -59,8 +59,8 @@ export class HRApplicationService {
   private allocationList:      AllocationRow[] = []
   private beforeOrganizations: Organization[]  = []
   private afterOrganizations:  Organization[]  = []
-  private codeLists:           AllCodeLists    = EMPTY_CODE_LISTS
-  private codeListWarnings:    CodeListWarning[] = []
+  private masters:           AllMasters    = EMPTY_MASTERS
+  private masterWarnings:    MasterWarning[] = []
 
   private undoStack = new UndoStack()
 
@@ -102,7 +102,7 @@ export class HRApplicationService {
       allocationList:      this.allocationList,
       beforeOrganizations: this.beforeOrganizations,
       afterOrganizations:  this.afterOrganizations,
-      codeLists:           this.codeLists,
+      masters:           this.masters,
       persons:             this.cachedPersons,
       canUndo:             !this.isPreviewMode && this.undoStack.canUndo,
       canRedo:             !this.isPreviewMode && this.undoStack.canRedo,
@@ -113,7 +113,7 @@ export class HRApplicationService {
       ...this.buildPreviewSnapshot(),
       patternCache:        this.patternCache,
       organizations:       this.beforeOrganizations,
-      codeListWarnings:    this.codeListWarnings,
+      masterWarnings:    this.masterWarnings,
     }
   }
 
@@ -122,14 +122,14 @@ export class HRApplicationService {
     allocationList:      AllocationRow[]
     beforeOrganizations: Organization[]
     afterOrganizations:  Organization[]
-    codeLists:           AllCodeLists
+    masters:           AllMasters
   }): void {
     this.historyPreviewPosition = null  // プレビューをリセット
     this.allocationList      = data.allocationList
     this.beforeOrganizations = data.beforeOrganizations
     this.afterOrganizations  = data.afterOrganizations
-    this.codeLists        = data.codeLists
-    this.codeListWarnings = validateCodeListsIntegrity(data.codeLists)
+    this.masters        = data.masters
+    this.masterWarnings = validateMastersIntegrity(data.masters)
     this.undoStack.clear()
     this.emit()
   }
@@ -176,7 +176,7 @@ export class HRApplicationService {
     const ctx = {
       allocationList:     this.allocationList,
       afterOrganizations: this.afterOrganizations,
-      codeLists:          this.codeLists,
+      masters:          this.masters,
     }
 
     const vr = op.validate(ctx)
@@ -355,7 +355,7 @@ export class HRApplicationService {
 
   reDeriveOrgSubFields(): number {
     return this._reDeriveAndCommit(
-      reDeriveOrgSubFieldsForList(this.allocationList, this.codeLists),
+      reDeriveOrgSubFieldsForList(this.allocationList, this.masters),
       '組織サブフィールド 一括再導出',
     )
   }
@@ -459,7 +459,7 @@ export class HRApplicationService {
     this.allocationList      = []
     this.beforeOrganizations = []
     this.afterOrganizations  = []
-    this.codeLists           = EMPTY_CODE_LISTS
+    this.masters           = EMPTY_MASTERS
     this.undoStack.clear()
     this.emit()
   }

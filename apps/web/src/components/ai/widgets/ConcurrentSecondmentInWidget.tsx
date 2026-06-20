@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function ConcurrentSecondmentInWidget({ rowId, sfIntegrated, label, isActive, onConfirm, onCancel }: Props) {
-  const { allocationList, codeLists } = useStore()
+  const { allocationList, masters } = useStore()
   const row = useMemo(() => allocationList.find(r => r.rowId === rowId), [allocationList, rowId])
 
   const [secondmentFromCompany,        setSecondmentFromCompany]        = useState('')
@@ -21,10 +21,10 @@ export function ConcurrentSecondmentInWidget({ rowId, sfIntegrated, label, isAct
   const [concurrentReason,             setConcurrentReason]             = useState('')
 
   const employmentTypeOptions = useMemo(() => {
-    return codeLists.employmentTypes
+    return masters.employmentTypes
       ?.filter((e: { label: string; isConcurrentSecondmentAcceptance?: boolean }) => e.isConcurrentSecondmentAcceptance)
       .map((e: { label: string }) => e.label) ?? []
-  }, [codeLists])
+  }, [masters])
 
   if (!row) return <div className="text-xs text-red-500 px-3 py-2">行が見つかりません (rowId: {rowId})</div>
 

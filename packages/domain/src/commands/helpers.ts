@@ -1,30 +1,30 @@
 // 操作定義で共通して使うユーティリティ
 
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists }  from '../masters/aggregate'
+import type { AllMasters }  from '../masters/aggregate'
 
 /** 雇用タイプエントリを label / code どちらでも引ける */
-function findEmpType(row: AllocationRow, codeLists: AllCodeLists) {
+function findEmpType(row: AllocationRow, masters: AllMasters) {
   const v = row.employmentType as string | undefined
   if (!v) return undefined
-  return codeLists.employmentTypes.find(e => e.label === v || e.code === v)
+  return masters.employmentTypes.find(e => e.label === v || e.code === v)
 }
 
 /** 社員（isRegularEmployee = true）かどうか */
-export function isRegularEmployee(row: AllocationRow, codeLists: AllCodeLists): boolean {
-  return findEmpType(row, codeLists)?.isRegularEmployee ?? false
+export function isRegularEmployee(row: AllocationRow, masters: AllMasters): boolean {
+  return findEmpType(row, masters)?.isRegularEmployee ?? false
 }
 
 /** 出向受入（isSecondmentAcceptance = true）かどうか */
-export function isSecondmentAcceptance(row: AllocationRow, codeLists: AllCodeLists): boolean {
-  return findEmpType(row, codeLists)?.isSecondmentAcceptance ?? false
+export function isSecondmentAcceptance(row: AllocationRow, masters: AllMasters): boolean {
+  return findEmpType(row, masters)?.isSecondmentAcceptance ?? false
 }
 
 /** 雇用延長ポジション対象（isExtendedEmployeePosition = true）かどうか */
-export function isExtendedEmployeeTarget(row: AllocationRow, codeLists: AllCodeLists): boolean {
+export function isExtendedEmployeeTarget(row: AllocationRow, masters: AllMasters): boolean {
   const band = row.band as string | undefined
   if (!band) return false
-  return codeLists.jobLevels.find(e => e.label === band)?.isExtendedEmployeePosition ?? false
+  return masters.jobLevels.find(e => e.label === band)?.isExtendedEmployeePosition ?? false
 }
 
 /** 本務行かどうか（concurrentType が兼務でない） */
@@ -43,17 +43,17 @@ export function wasSecondedIn(row: AllocationRow): boolean {
 }
 
 /** 前の雇用タイプに「出向受入」が含まれるかどうか */
-export function prevWasSecondmentIn(row: AllocationRow, codeLists: AllCodeLists): boolean {
+export function prevWasSecondmentIn(row: AllocationRow, masters: AllMasters): boolean {
   const prevEt = row.prevEmploymentType as string | undefined
   if (!prevEt) return false
-  const entry = codeLists.employmentTypes.find(e => e.label === prevEt || e.code === prevEt)
+  const entry = masters.employmentTypes.find(e => e.label === prevEt || e.code === prevEt)
   return entry?.isSecondmentAcceptance ?? false
 }
 
 /** SF統合済み会社かどうか（companyEntry の isSFIntegrated フラグで判定） */
-export function isSFIntegratedCompany(companyLabel: string | undefined, codeLists: AllCodeLists): boolean {
+export function isSFIntegratedCompany(companyLabel: string | undefined, masters: AllMasters): boolean {
   if (!companyLabel) return false
-  return codeLists.companies.find(c => c.label === companyLabel || c.code === companyLabel)?.isSFIntegrated ?? false
+  return masters.companies.find(c => c.label === companyLabel || c.code === companyLabel)?.isSFIntegrated ?? false
 }
 
 /**

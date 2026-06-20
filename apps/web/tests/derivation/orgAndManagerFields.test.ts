@@ -8,17 +8,17 @@ import { makeRow, makeCL, MOCK_ORG_ENTRIES } from '../helpers/fixtures'
 // departmentCode から組織サブフィールドを導出する
 
 describe('deriveOrgSubFields', () => {
-  const cl = makeCL()
+  const ms = makeCL()
 
   test('既知の org コード → サブフィールドを返す', () => {
-    const result = deriveOrgSubFields('ORG001', cl)
+    const result = deriveOrgSubFields('ORG001', ms)
     expect(result.businessUnit).toBe(MOCK_ORG_ENTRIES.normal.pathBusinessUnit)
     expect(result.costCenter).toBe(MOCK_ORG_ENTRIES.normal.costCenter)
     expect(result.location).toBe(MOCK_ORG_ENTRIES.normal.workLocation)
   })
 
   test('不明な org コード → 空オブジェクト', () => {
-    const result = deriveOrgSubFields('UNKNOWN', cl)
+    const result = deriveOrgSubFields('UNKNOWN', ms)
     expect(result).toEqual({})
   })
 
@@ -50,12 +50,12 @@ describe('deriveOrgSubFields', () => {
 
 describe('reDeriveOrgSubFieldsForList', () => {
   test('departmentCode が変わった行のみ再導出される', () => {
-    const cl = makeCL()
+    const ms = makeCL()
     const rows = [
       makeRow({ rowId: 1, departmentCode: 'ORG001', businessUnit: 'OLD_BU' }),
       makeRow({ rowId: 2, departmentCode: undefined }),  // org コードなし → 変化なし
     ]
-    const result = reDeriveOrgSubFieldsForList(rows, cl)
+    const result = reDeriveOrgSubFieldsForList(rows, ms)
     // ORG001 の行は businessUnit が更新される
     expect(result.find(r => r.rowId === 1)?.businessUnit).toBe(MOCK_ORG_ENTRIES.normal.pathBusinessUnit)
     // org コードなし行は変化なし

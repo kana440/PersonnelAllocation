@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../masters/aggregate'
+import type { AllMasters } from '../masters/aggregate'
 import type { RowChanges } from '../patterns/changeDetection'
 import type { ValidationIssue } from './types'
 import { findEmpType } from '../fieldConstraints'
@@ -32,12 +32,12 @@ function checkG1_bandChangeRequiresNewPosition(row: AllocationRow, changes?: Row
  * W2: F2条件（社員・グループ社員ID一致）で、band と prevBand の昇降格ワーニング要チェック値の差が2以上の場合にワーニング。
  * どちらかの値が 0 の場合は判定対象外（出向受入など昇降格判定対象外のバンド）。
  */
-function checkW2_promotionDemotionWarning(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
-  const et = findEmpType(codeLists, row)
+function checkW2_promotionDemotionWarning(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
+  const et = findEmpType(masters, row)
   if (!et?.isRegularEmployee || !row.userId || row.userId !== row.groupEmployeeId) return []
 
-  const bandEntry     = codeLists.jobLevels.find(e => e.label === (row.band     as string | undefined))
-  const prevBandEntry = codeLists.jobLevels.find(e => e.label === (row.prevBand as string | undefined))
+  const bandEntry     = masters.jobLevels.find(e => e.label === (row.band     as string | undefined))
+  const prevBandEntry = masters.jobLevels.find(e => e.label === (row.prevBand as string | undefined))
 
   const level     = bandEntry?.promotionDemotionWarningLevel     ?? 0
   const prevLevel = prevBandEntry?.promotionDemotionWarningLevel ?? 0
@@ -54,11 +54,11 @@ function checkW2_promotionDemotionWarning(row: AllocationRow, codeLists: AllCode
 
 export function runGlobalConsistency(
   row:       AllocationRow,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
   changes?:  RowChanges,
 ): ValidationIssue[] {
   return [
     ...checkG1_bandChangeRequiresNewPosition(row, changes),
-    ...checkW2_promotionDemotionWarning(row, codeLists),
+    ...checkW2_promotionDemotionWarning(row, masters),
   ]
 }

@@ -150,11 +150,11 @@ export function buildPromotionProposal(opts: {
   newOfficialPositionCode?: string
   newLocalJobTitle?:        string
 }): ProposalResult {
-  const { allocationList, codeLists } = appService.getSnapshot()
+  const { allocationList, masters } = appService.getSnapshot()
   const row = allocationList.find(r => r.rowId === opts.rowId)
   if (!row) return { error: '対象行が見つかりません' }
 
-  const stepDiff = computeBandStepDiff(row.positionBand as string | undefined, opts.newPositionBand, codeLists)
+  const stepDiff = computeBandStepDiff(row.positionBand as string | undefined, opts.newPositionBand, masters)
   const label = stepDiff !== undefined && stepDiff >= 2
     ? `昇格の確認（${stepDiff}段階変更）`
     : '昇格の確認'
@@ -196,8 +196,8 @@ export function buildReDeriveManagerNamesProposal(): ProposalResult {
 // ── 組織サブフィールド 一括再導出 ─────────────────────────────────────────────
 
 export function buildReDeriveOrgSubFieldsProposal(): ProposalResult {
-  const { allocationList, afterOrganizations, codeLists } = appService.getSnapshot()
-  const updated = reDeriveOrgSubFieldsForList(allocationList, codeLists)
+  const { allocationList, afterOrganizations, masters } = appService.getSnapshot()
+  const updated = reDeriveOrgSubFieldsForList(allocationList, masters)
   const persons: PersonDiff[] = allocationList
     .map((r, i) => ({ r, u: updated[i] }))
     .filter(({ r, u }) => r !== u)

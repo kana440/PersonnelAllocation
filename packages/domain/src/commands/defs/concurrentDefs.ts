@@ -62,7 +62,7 @@ export const concurrentAddDef: EditOperation = {
   onSubmit(ctx, rowId, values) {
     const src      = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
-    const orgSub   = deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
+    const orgSub   = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
     const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
 
     const newRow: AllocationRow = {
@@ -129,7 +129,7 @@ export const concurrentAddNewDef: EditOperation = {
   onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = values.departmentCode
-      ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
+      ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
       : {}
     const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
 

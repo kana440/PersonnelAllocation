@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../../allocationRow'
-import type { AllCodeLists }  from '../../masters/aggregate'
+import type { AllMasters }  from '../../masters/aggregate'
 import type { DomainContext, EditCommand } from '../types'
 import type { OperationInput } from './types'
 import type { OperationBadge } from './badge'
@@ -27,7 +27,7 @@ export interface MultiRowOperationDef {
   readonly badge?:       OperationBadge
   readonly affectedRowCount?: number
 
-  availableFor(anchor: AllocationRow, cl: AllCodeLists, allRows: AllocationRow[]): boolean
+  availableFor(anchor: AllocationRow, ms: AllMasters, allRows: AllocationRow[]): boolean
 
   readonly sections: readonly MultiRowFormSection[]
 

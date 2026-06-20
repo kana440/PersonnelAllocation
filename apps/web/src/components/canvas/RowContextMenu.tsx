@@ -68,10 +68,10 @@ const SECTIONS: { label: string; patterns: EditPattern[] }[] = [
 
 // 雇用タイプバッジ（出向受入のみ表示）
 function useEmpBadge(row: AllocationRow): { label: string; cls: string } | null {
-  const { codeLists } = useStore()
+  const { masters } = useStore()
   const et = row.employmentType as string | undefined
   if (!et) return null
-  const entry = codeLists.employmentTypes.find(e => e.label === et || e.code === et)
+  const entry = masters.employmentTypes.find(e => e.label === et || e.code === et)
   if (!entry?.isSecondmentAcceptance) return null
   return { label: '出向受入', cls: 'bg-orange-100 text-orange-700' }
 }
@@ -91,7 +91,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
   const clampedX = Math.min(x, window.innerWidth  - MENU_W - 8)
   const clampedY = Math.min(y, window.innerHeight - 520 - 8)
 
-  const { codeLists } = useStore()
+  const { masters } = useStore()
   const empBadge = useEmpBadge(row)
 
   // 設定済みパターン（ヘッダー表示用）
@@ -102,7 +102,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
     const opId = PATTERN_OP_ID[p]
     if (!opId) return true
     const def = OP_BY_ID.get(opId)
-    return def ? def.availableFor(row, codeLists) : true
+    return def ? def.availableFor(row, masters) : true
   }
 
   const name         = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'

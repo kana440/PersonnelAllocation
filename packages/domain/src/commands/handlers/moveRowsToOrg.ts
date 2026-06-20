@@ -33,7 +33,7 @@ export class MoveRowsToOrgOperation implements EditCommand {
     const targetCode = targetOrg.externalCode ?? ''
     const rowIdSet   = new Set(this.rowIds)
 
-    const orgSubFields = deriveOrgSubFields(targetCode, ctx.codeLists)
+    const orgSubFields = deriveOrgSubFields(targetCode, ctx.masters)
     const updatedList = ctx.allocationList.map(r =>
       rowIdSet.has(r.rowId) ? { ...r, departmentCode: targetCode, ...orgSubFields } : r
     )

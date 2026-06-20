@@ -54,7 +54,7 @@ export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
       if ((row.transferReason as string | undefined) !== TR.CONCURRENT_OR_SECONDMENT_IN_RELEASE) return false
       const prevEt = (row.prevEmploymentType as string | undefined) ?? ''
       const isRegular = prevEt !== '' &&
-        (ctx.codeLists.employmentTypes.find(e => e.label === prevEt)?.isRegularEmployee ?? false)
+        (ctx.masters.employmentTypes.find(e => e.label === prevEt)?.isRegularEmployee ?? false)
       return isRegular && (row.prevConcurrentType as string | undefined) === '兼務'
     },
   },

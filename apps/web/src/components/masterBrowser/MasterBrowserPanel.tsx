@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import { TABLE_REGISTRY, getTableData, type TableKey } from './tableRegistry'
-import { CodeListTable } from './CodeListTable'
+import { MasterTable } from './MasterTable'
 
 interface Props {
   onClose: () => void
@@ -9,20 +9,20 @@ interface Props {
 
 const GROUPS = [...new Set(TABLE_REGISTRY.map(t => t.group))]
 
-export function CodeListBrowserPanel({ onClose }: Props) {
-  const { codeLists, beforeOrganizations, afterOrganizations, codeListWarnings } = useStore()
+export function MasterBrowserPanel({ onClose }: Props) {
+  const { masters, beforeOrganizations, afterOrganizations, masterWarnings } = useStore()
   const [selectedKey, setSelectedKey] = useState<TableKey>('beforeOrgs')
   const [warningsExpanded, setWarningsExpanded] = useState(true)
 
   const data = useMemo(
-    () => getTableData(selectedKey, codeLists, beforeOrganizations, afterOrganizations),
-    [selectedKey, codeLists, beforeOrganizations, afterOrganizations],
+    () => getTableData(selectedKey, masters, beforeOrganizations, afterOrganizations),
+    [selectedKey, masters, beforeOrganizations, afterOrganizations],
   )
 
   const selectedDef = TABLE_REGISTRY.find(t => t.key === selectedKey)!
-  const warnCount   = codeListWarnings.length
-  const catACount   = codeListWarnings.filter(w => w.category === 'A').length
-  const catBCount   = codeListWarnings.filter(w => w.category === 'B').length
+  const warnCount   = masterWarnings.length
+  const catACount   = masterWarnings.filter(w => w.category === 'A').length
+  const catBCount   = masterWarnings.filter(w => w.category === 'B').length
 
   return (
     <div
@@ -79,7 +79,7 @@ export function CodeListBrowserPanel({ onClose }: Props) {
           </button>
           {warningsExpanded && (
             <div className="px-4 pb-3 space-y-1 max-h-48 overflow-y-auto">
-              {codeListWarnings.map((w, i) => (
+              {masterWarnings.map((w, i) => (
                 <div key={i} className="flex items-start gap-2 text-[11px]">
                   <span className={`flex-shrink-0 mt-0.5 font-bold ${w.category === 'B' ? 'text-orange-600' : 'text-amber-600'}`}>
                     [{w.category}]
@@ -94,7 +94,7 @@ export function CodeListBrowserPanel({ onClose }: Props) {
 
       {/* テーブル本体 */}
       <div className="flex-1 overflow-hidden">
-        <CodeListTable data={data} />
+        <MasterTable data={data} />
       </div>
     </div>
   )

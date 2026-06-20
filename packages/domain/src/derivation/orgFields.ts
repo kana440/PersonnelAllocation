@@ -1,13 +1,13 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists }  from '../masters/aggregate'
+import type { AllMasters }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
 export function deriveOrgSubFields(
   departmentCode: string,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): DerivedUpdates {
-  const entry = codeLists.orgMasterEntries.find(e => e.code === departmentCode && e.phase === 'after')
-            ?? codeLists.orgMasterEntries.find(e => e.code === departmentCode)
+  const entry = masters.orgMasterEntries.find(e => e.code === departmentCode && e.phase === 'after')
+            ?? masters.orgMasterEntries.find(e => e.code === departmentCode)
   if (!entry) return {}
   return {
     businessUnit: entry.pathBusinessUnit || undefined,
@@ -22,11 +22,11 @@ export function deriveOrgSubFields(
 
 export function reDeriveOrgSubFieldsForList(
   allocationList: AllocationRow[],
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): AllocationRow[] {
   return allocationList.map(r => {
     if (!r.departmentCode) return r
-    const derived = deriveOrgSubFields(r.departmentCode as string, codeLists)
+    const derived = deriveOrgSubFields(r.departmentCode as string, masters)
     const unchanged =
       r.businessUnit === derived.businessUnit &&
       r.division     === derived.division     &&
@@ -41,8 +41,8 @@ export function reDeriveOrgSubFieldsForList(
 }
 
 /** 出向者用組織かどうか（orgCategory に "出向者用組織" が含まれる） */
-export function isSecondmentOrg(departmentCode: string, codeLists: AllCodeLists): boolean {
-  const entry = codeLists.orgMasterEntries.find(e => e.code === departmentCode)
+export function isSecondmentOrg(departmentCode: string, masters: AllMasters): boolean {
+  const entry = masters.orgMasterEntries.find(e => e.code === departmentCode)
   return entry?.orgCategory?.includes('出向者用組織') ?? false
 }
 
@@ -53,9 +53,9 @@ export function isSecondmentOrg(departmentCode: string, codeLists: AllCodeLists)
  */
 export function suggestSecondmentOrgCodes(
   prevDepartmentCode: string,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): string[] {
-  const entries = codeLists.orgMasterEntries.filter(e => e.phase === 'after' || !e.phase)
+  const entries = masters.orgMasterEntries.filter(e => e.phase === 'after' || !e.phase)
 
   // code → parentCode マップ（1パス構築）
   const parentMap = new Map<string, string>()

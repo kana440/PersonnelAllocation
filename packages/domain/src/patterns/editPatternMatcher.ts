@@ -7,7 +7,7 @@ import { ALL_EDIT_PATTERNS, type EditPattern } from './defs'
 export function deriveEditPatterns(
   _kinds: Set<string>,
   row: AllocationRow,
-  _codeLists?: unknown,
+  _masters?: unknown,
 ): { active: EditPattern[]; available: EditPattern[] } {
   const active = detectPatterns(row).patterns
   return {

@@ -46,7 +46,7 @@ function ModalShell({ title, count, onCancel, children }: {
 }
 
 export function BulkTransferReasonModal({ selectedPersonIds, persons, allocationList, onDone, onCancel }: BulkProps) {
-  const { codeLists } = appService.getSnapshot()
+  const { masters } = appService.getSnapshot()
   const [value, setValue] = useState('')
 
   const handleApply = () => {
@@ -65,7 +65,7 @@ export function BulkTransferReasonModal({ selectedPersonIds, persons, allocation
           className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-blue-400"
         >
           <option value="">（クリア）</option>
-          {codeLists.transferReasons.map(opt => (
+          {masters.transferReasons.map(opt => (
             <option key={opt.code} value={opt.code}>{opt.label || opt.code}</option>
           ))}
         </select>
@@ -154,7 +154,7 @@ export function BulkManagerModal({ selectedPersonIds, persons, allocationList, o
 }
 
 export function BulkSecondmentModal({ selectedPersonIds, persons, allocationList, onDone, onCancel }: BulkProps) {
-  const { codeLists } = appService.getSnapshot()
+  const { masters } = appService.getSnapshot()
   const [toCompany, setToCompany] = useState('')
 
   const handleApply = () => {
@@ -173,7 +173,7 @@ export function BulkSecondmentModal({ selectedPersonIds, persons, allocationList
           className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-blue-400"
         >
           <option value="">（クリア）</option>
-          {codeLists.companies.map(c => (
+          {masters.companies.map(c => (
             <option key={c.code} value={c.code}>{c.label || c.code}</option>
           ))}
         </select>

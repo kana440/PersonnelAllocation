@@ -30,7 +30,7 @@ export function MaintenanceDialog({ onClose }: Props) {
   // ── Operation definitions ─────────────────────────────────────────────────
 
   const autoOps: OperationDef[] = useMemo(() => {
-    const { allocationList, afterOrganizations, codeLists } = appService.getSnapshot()
+    const { allocationList, afterOrganizations, masters } = appService.getSnapshot()
     return [
       {
         id:          'managerNames',
@@ -47,7 +47,7 @@ export function MaintenanceDialog({ onClose }: Props) {
         label:       '組織サブフィールド 再導出',
         description: '組織コードをもとに、ビジネスユニット / 事業部 / 部 / グループ / チームを組織マスタから再導出します。組織移動後などにサブフィールドがずれているときに使います。',
         kind:        'auto',
-        computeChanges: () => computeOrgSubFieldChanges(allocationList, afterOrganizations, codeLists),
+        computeChanges: () => computeOrgSubFieldChanges(allocationList, afterOrganizations, masters),
         execute:     () => store.reDeriveOrgSubFields(),
       },
     ]

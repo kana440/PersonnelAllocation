@@ -1,4 +1,4 @@
-import type { AllCodeLists }  from '../masters/aggregate'
+import type { AllMasters }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
 /**
@@ -8,11 +8,11 @@ import type { DerivedUpdates } from './types'
 export function computeBandStepDiff(
   fromBand: string | undefined,
   toBand:   string | undefined,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): number | undefined {
   if (!fromBand || !toBand || fromBand === toBand) return undefined
-  const fromLevel = codeLists.jobLevels.find(e => e.label === fromBand)?.promotionDemotionWarningLevel
-  const toLevel   = codeLists.jobLevels.find(e => e.label === toBand)?.promotionDemotionWarningLevel
+  const fromLevel = masters.jobLevels.find(e => e.label === fromBand)?.promotionDemotionWarningLevel
+  const toLevel   = masters.jobLevels.find(e => e.label === toBand)?.promotionDemotionWarningLevel
   if (!fromLevel || !toLevel) return undefined
   return toLevel - fromLevel
 }
@@ -25,12 +25,12 @@ export function getBandsByStep(
   currentBand: string | undefined,
   steps:       number,
   direction:   'up' | 'down',
-  codeLists:   AllCodeLists,
+  masters:   AllMasters,
 ): string[] {
   if (!currentBand) return []
-  const baseLevel = codeLists.jobLevels.find(e => e.label === currentBand)?.promotionDemotionWarningLevel
+  const baseLevel = masters.jobLevels.find(e => e.label === currentBand)?.promotionDemotionWarningLevel
   if (!baseLevel) return []
-  return codeLists.jobLevels
+  return masters.jobLevels
     .filter(e => {
       if (!e.promotionDemotionWarningLevel) return false
       const diff = e.promotionDemotionWarningLevel - baseLevel
@@ -62,9 +62,9 @@ export function derivePromotionSignFromLevel(
   return { promotionSign: '1' }
 }
 
-function warningLevel(bandLabel: string | undefined, codeLists: AllCodeLists): number {
+function warningLevel(bandLabel: string | undefined, masters: AllMasters): number {
   if (!bandLabel) return 0
-  return codeLists.jobLevels.find(e => e.label === bandLabel)?.promotionDemotionWarningLevel ?? 0
+  return masters.jobLevels.find(e => e.label === bandLabel)?.promotionDemotionWarningLevel ?? 0
 }
 
 /**
@@ -74,10 +74,10 @@ function warningLevel(bandLabel: string | undefined, codeLists: AllCodeLists): n
 export function derivePromotionSign(
   afterBand: string | undefined,
   prevBand:  string | undefined,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): DerivedUpdates {
-  const afterLevel = warningLevel(afterBand, codeLists)
-  const prevLevel  = warningLevel(prevBand,  codeLists)
+  const afterLevel = warningLevel(afterBand, masters)
+  const prevLevel  = warningLevel(prevBand,  masters)
 
   if (afterLevel === 0 || prevLevel === 0 || afterLevel === prevLevel) {
     return { promotionSign: undefined }

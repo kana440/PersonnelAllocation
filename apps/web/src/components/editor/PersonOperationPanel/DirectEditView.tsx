@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function DirectEditView({ row, onBack }: Props) {
-  const { allocationList, saveRow, afterOrganizations, codeLists } = useStore()
+  const { allocationList, saveRow, afterOrganizations, masters } = useStore()
 
   const [buffer,        setBuffer]        = useState<Partial<Record<string, string>>>({})
   const [isDirty,       setIsDirty]       = useState(false)
@@ -33,13 +33,13 @@ export function DirectEditView({ row, onBack }: Props) {
   )
 
   const issues = useMemo(
-    () => validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }),
-    [effectiveRow, afterOrganizations, codeLists, allocationList]
+    () => validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }),
+    [effectiveRow, afterOrganizations, masters, allocationList]
   )
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
     const changes = { [key as string]: value } as Partial<Record<keyof AllocationRow, string>>
-    const derived = deriveFieldUpdates(changes, effectiveRow, codeLists)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters)
     setBuffer(prev => ({ ...prev, ...changes, ...derived }))
     setIsDirty(true)
   }
@@ -59,13 +59,13 @@ export function DirectEditView({ row, onBack }: Props) {
     if (derivedName) updates.managerName = derivedName
 
     const deptCode = (effectiveRow.departmentCode as string | undefined) ?? ''
-    const orgFields = deriveOrgSubFields(deptCode, codeLists)
+    const orgFields = deriveOrgSubFields(deptCode, masters)
     if (orgFields) Object.assign(updates, orgFields)
 
     const jobType = (effectiveRow.jobType as string | undefined) ?? ''
     const band    = (effectiveRow.band    as string | undefined) ?? ''
     if (jobType && band) {
-      const pg = deriveFieldUpdates({ jobType, band } as Partial<Record<keyof AllocationRow, string>>, effectiveRow, codeLists)
+      const pg = deriveFieldUpdates({ jobType, band } as Partial<Record<keyof AllocationRow, string>>, effectiveRow, masters)
       if (pg.payGrade) updates.payGrade = pg.payGrade
     }
 
@@ -143,8 +143,8 @@ export function DirectEditView({ row, onBack }: Props) {
         effectiveRow={effectiveRow}
         issues={issues}
         readOnly={false}
-        transferReasonOptions={getOptions('transferReason', codeLists, currentJobFamily, effectiveRow).valid}
-        demotionReasonOptions={getOptions('demotionReason', codeLists, currentJobFamily, effectiveRow).valid}
+        transferReasonOptions={getOptions('transferReason', masters, currentJobFamily, effectiveRow).valid}
+        demotionReasonOptions={getOptions('demotionReason', masters, currentJobFamily, effectiveRow).valid}
         onChange={handleChange}
       />
 
@@ -166,7 +166,7 @@ export function DirectEditView({ row, onBack }: Props) {
         issues={issues}
         allocationList={allocationList}
         afterOrganizations={afterOrganizations}
-        codeLists={codeLists}
+        masters={masters}
         readOnly={false}
         currentJobFamily={currentJobFamily}
         onChange={handleChange}

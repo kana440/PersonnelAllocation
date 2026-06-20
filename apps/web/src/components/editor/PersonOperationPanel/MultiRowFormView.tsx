@@ -17,7 +17,7 @@ interface Props {
 }
 
 export function MultiRowFormView({ def, anchor, onBack }: Props) {
-  const { allocationList, afterOrganizations, codeLists } = useStore()
+  const { allocationList, afterOrganizations, masters } = useStore()
 
   const [sectionValues, setSectionValues] = useState<Record<string, string>[]>(
     () => def.sections.map(() => ({}))
@@ -26,8 +26,8 @@ export function MultiRowFormView({ def, anchor, onBack }: Props) {
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const ctx = useMemo(
-    () => ({ allocationList, afterOrganizations, codeLists }),
-    [allocationList, afterOrganizations, codeLists],
+    () => ({ allocationList, afterOrganizations, masters }),
+    [allocationList, afterOrganizations, masters],
   )
 
   const setFieldValue = (sectionIdx: number, field: string, value: string) => {
@@ -120,7 +120,7 @@ export function MultiRowFormView({ def, anchor, onBack }: Props) {
                       currentVal={vals[inp.field as string] ?? ''}
                       anchorVal={(anchor[inp.field] as string | undefined) ?? ''}
                       afterOrganizations={afterOrganizations}
-                      options={getGroupedFieldOptions(inp.field as string, anchor, codeLists, undefined).valid}
+                      options={getGroupedFieldOptions(inp.field as string, anchor, masters, undefined).valid}
                       onChange={v => setFieldValue(sectionIdx, inp.field as string, v)}
                       onOpenOrgPicker={() => setOrgPicker({ sectionIdx, field: inp.field as string })}
                     />
@@ -148,7 +148,7 @@ export function MultiRowFormView({ def, anchor, onBack }: Props) {
       {orgPicker && (
         <OrgSearchDialog
           afterOrganizations={afterOrganizations}
-          orgMasterEntries={codeLists.orgMasterEntries}
+          orgMasterEntries={masters.orgMasterEntries}
           onSelect={code => {
             setFieldValue(orgPicker.sectionIdx, orgPicker.field, code)
             setOrgPicker(null)

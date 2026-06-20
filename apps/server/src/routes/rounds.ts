@@ -20,7 +20,7 @@ const createRoundSchema = z.object({
   rows:                z.array(z.unknown()).optional(),
   beforeOrganizations: z.array(z.unknown()).optional(),
   afterOrganizations:  z.array(z.unknown()).optional(),
-  codeLists:           z.record(z.string(), z.array(z.unknown())).optional(),
+  masters:           z.record(z.string(), z.array(z.unknown())).optional(),
   excelBase64:         z.string().optional(),
   excelFilename:       z.string().optional(),
 })
@@ -151,8 +151,8 @@ app.post('/', requireRole('admin'), zValidator('json', createRoundSchema), async
 
     // コードリスト
     // orgMasterEntries は組織マスタ（label 非保持・roundCompanyOrgs 管理）なので除外
-    if (body.codeLists) {
-      for (const [category, items] of Object.entries(body.codeLists)) {
+    if (body.masters) {
+      for (const [category, items] of Object.entries(body.masters)) {
         if (category === 'orgMasterEntries') continue
         const codeItems = items as Array<{ code?: string; label?: string; name?: string; [k: string]: unknown }>
         for (let i = 0; i < codeItems.length; i++) {
@@ -277,10 +277,10 @@ app.get('/:id/companies/:companyId/masters', requireRole('admin', 'coordinator',
   const beforeOrganizations = orgs.filter(o => !o.isAfter)
   const afterOrganizations  = orgs.filter(o => o.isAfter)
 
-  const codeLists: Record<string, unknown[]> = {}
+  const masters: Record<string, unknown[]> = {}
   for (const item of codeItems) {
-    if (!codeLists[item.category]) codeLists[item.category] = []
-    codeLists[item.category].push({
+    if (!masters[item.category]) masters[item.category] = []
+    masters[item.category].push({
       code:      item.code,
       label:     item.label,
       sortOrder: item.sortOrder,
@@ -288,7 +288,7 @@ app.get('/:id/companies/:companyId/masters', requireRole('admin', 'coordinator',
     })
   }
 
-  return c.json({ beforeOrganizations, afterOrganizations, codeLists })
+  return c.json({ beforeOrganizations, afterOrganizations, masters })
 })
 
 // ── Excel ダウンロード（company ごと）────────────────────────────────────────

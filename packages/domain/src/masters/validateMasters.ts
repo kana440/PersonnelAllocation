@@ -1,8 +1,10 @@
 // マスタデータのクロスリファレンス整合性チェック
 // 警告メッセージを返すだけ（副作用なし）。呼び出し側がUIに表示する。
-import type { AllCodeLists } from './aggregate'
+import type { AllMasters }    from './aggregate'
+import type { OrgMasterEntry }  from './orgMaster'
+import { buildOrgHierarchy }    from './orgHierarchy'
 
-export interface CodeListWarning {
+export interface MasterWarning {
   category: 'A' | 'B'
   message:  string
   detail:   Record<string, unknown>
@@ -10,9 +12,9 @@ export interface CodeListWarning {
 
 // ── カテゴリ A: マスタ間の外部キー整合 ───────────────────────────────────────
 
-function checkA1_promotionDemotionBandInPayGrades(cl: AllCodeLists): CodeListWarning[] {
-  const payGradeBands = new Set(cl.payGrades.map(e => e.band).filter(Boolean) as string[])
-  return cl.jobLevels
+function checkA1_promotionDemotionBandInPayGrades(ms: AllMasters): MasterWarning[] {
+  const payGradeBands = new Set(ms.payGrades.map(e => e.band).filter(Boolean) as string[])
+  return ms.jobLevels
     .filter(jl => jl.promotionDemotionBand && !payGradeBands.has(jl.promotionDemotionBand))
     .map(jl => ({
       category: 'A' as const,
@@ -21,9 +23,9 @@ function checkA1_promotionDemotionBandInPayGrades(cl: AllCodeLists): CodeListWar
     }))
 }
 
-function checkA2_compensationCategoryInPayGrades(cl: AllCodeLists): CodeListWarning[] {
-  const payGradeCompCats = new Set(cl.payGrades.map(e => e.compensationCategory).filter(Boolean) as string[])
-  return cl.jobTypes
+function checkA2_compensationCategoryInPayGrades(ms: AllMasters): MasterWarning[] {
+  const payGradeCompCats = new Set(ms.payGrades.map(e => e.compensationCategory).filter(Boolean) as string[])
+  return ms.jobTypes
     .filter(jt => jt.compensationCategory && !payGradeCompCats.has(jt.compensationCategory))
     .map(jt => ({
       category: 'A' as const,
@@ -32,10 +34,10 @@ function checkA2_compensationCategoryInPayGrades(cl: AllCodeLists): CodeListWarn
     }))
 }
 
-function checkA3_jobTypeFamilyCode(cl: AllCodeLists): CodeListWarning[] {
-  if (cl.jobFamilies.length === 0) return []
-  const familyCodes = new Set(cl.jobFamilies.map(jf => jf.code))
-  return cl.jobTypes
+function checkA3_jobTypeFamilyCode(ms: AllMasters): MasterWarning[] {
+  if (ms.jobFamilies.length === 0) return []
+  const familyCodes = new Set(ms.jobFamilies.map(jf => jf.code))
+  return ms.jobTypes
     .filter(jt => jt.jobFamilyCode && !familyCodes.has(jt.jobFamilyCode))
     .map(jt => ({
       category: 'A' as const,
@@ -44,11 +46,11 @@ function checkA3_jobTypeFamilyCode(cl: AllCodeLists): CodeListWarning[] {
     }))
 }
 
-function checkA4_orgMasterCompanyCode(cl: AllCodeLists): CodeListWarning[] {
-  if (cl.companyFilters.length === 0 || cl.orgMasterEntries.length === 0) return []
-  const filterCodes = new Set(cl.companyFilters.map(cf => cf.code))
+function checkA4_orgMasterCompanyCode(ms: AllMasters): MasterWarning[] {
+  if (ms.companyFilters.length === 0 || ms.orgMasterEntries.length === 0) return []
+  const filterCodes = new Set(ms.companyFilters.map(cf => cf.code))
   const missing = new Map<string, string>()
-  for (const org of cl.orgMasterEntries) {
+  for (const org of ms.orgMasterEntries) {
     if (org.companyCode && !filterCodes.has(org.companyCode) && !missing.has(org.companyCode)) {
       missing.set(org.companyCode, org.name ?? org.code)
     }
@@ -60,38 +62,43 @@ function checkA4_orgMasterCompanyCode(cl: AllCodeLists): CodeListWarning[] {
   }))
 }
 
-function checkA5_orgMasterParentCode(cl: AllCodeLists): CodeListWarning[] {
-  if (cl.orgMasterEntries.length === 0) return []
-  const byPhase = new Map<string, Set<string>>()
-  for (const org of cl.orgMasterEntries) {
-    if (!byPhase.has(org.phase)) byPhase.set(org.phase, new Set())
-    byPhase.get(org.phase)!.add(org.code)
+function checkA5_orgMasterParentCode(ms: AllMasters): MasterWarning[] {
+  if (ms.orgMasterEntries.length === 0) return []
+
+  const phaseLabel = (p: string) => p === 'after' ? '新' : '旧'
+  const warnings: MasterWarning[] = []
+
+  // phase ごとに buildOrgHierarchy を 1 回呼んで hierarchy を取得
+  const byPhase = new Map<string, OrgMasterEntry[]>()
+  for (const org of ms.orgMasterEntries) {
+    if (!byPhase.has(org.phase)) byPhase.set(org.phase, [])
+    byPhase.get(org.phase)!.push(org)
   }
-  const warnings: CodeListWarning[] = []
-  const seen = new Set<string>()
-  for (const org of cl.orgMasterEntries) {
-    if (!org.parentCode) continue
-    const codes = byPhase.get(org.phase)
-    if (codes && !codes.has(org.parentCode)) {
-      const key = `${org.phase}:${org.parentCode}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        warnings.push({
-          category: 'A',
-          message:  `組織マスタ（${org.phase === 'after' ? '新' : '旧'}）の親組織コード "${org.parentCode}" が同フェーズに存在しません`,
-          detail:   { phase: org.phase === 'after' ? '新' : '旧', parentCode: org.parentCode, exampleOrg: org.name ?? org.code },
-        })
-      }
+
+  for (const [phase, entries] of byPhase) {
+    const { hierarchy } = buildOrgHierarchy(entries)
+    const seen = new Set<string>()
+    for (const org of entries) {
+      if (!org.parentCode) continue
+      const derived = hierarchy.get(org.code)?.parentId ?? null
+      if (derived === org.parentCode) continue
+      if (seen.has(org.code)) continue
+      seen.add(org.code)
+      warnings.push({
+        category: 'A',
+        message:  `組織マスタ（${phaseLabel(phase)}）"${org.name ?? org.code}" の上位組織コード "${org.parentCode}" が、階層パスから導出した親 "${derived ?? 'なし'}" と一致しません`,
+        detail:   { phase: phaseLabel(phase), code: org.code, parentCode: org.parentCode, derivedParent: derived },
+      })
     }
   }
   return warnings
 }
 
-function checkA6_orgMasterWorkLocation(cl: AllCodeLists): CodeListWarning[] {
-  if (cl.workLocations.length === 0 || cl.orgMasterEntries.length === 0) return []
-  const locationLabels = new Set(cl.workLocations.map(wl => wl.label))
+function checkA6_orgMasterWorkLocation(ms: AllMasters): MasterWarning[] {
+  if (ms.workLocations.length === 0 || ms.orgMasterEntries.length === 0) return []
+  const locationLabels = new Set(ms.workLocations.map(wl => wl.label))
   const missing = new Map<string, string>()
-  for (const org of cl.orgMasterEntries) {
+  for (const org of ms.orgMasterEntries) {
     if (org.workLocation && !locationLabels.has(org.workLocation) && !missing.has(org.workLocation)) {
       missing.set(org.workLocation, org.name ?? org.code)
     }
@@ -105,9 +112,9 @@ function checkA6_orgMasterWorkLocation(cl: AllCodeLists): CodeListWarning[] {
 
 // ── カテゴリ B: 給与等級の導出完結性 ─────────────────────────────────────────
 
-function checkB1_payGradeDuplication(cl: AllCodeLists): CodeListWarning[] {
+function checkB1_payGradeDuplication(ms: AllMasters): MasterWarning[] {
   const counts = new Map<string, number>()
-  for (const pg of cl.payGrades) {
+  for (const pg of ms.payGrades) {
     if (!pg.band || !pg.compensationCategory) continue
     const key = `${pg.compensationCategory}||${pg.band}`
     counts.set(key, (counts.get(key) ?? 0) + 1)
@@ -124,17 +131,17 @@ function checkB1_payGradeDuplication(cl: AllCodeLists): CodeListWarning[] {
     })
 }
 
-function checkB2_payGradeCoverage(cl: AllCodeLists): CodeListWarning[] {
+function checkB2_payGradeCoverage(ms: AllMasters): MasterWarning[] {
   const payGradeSet = new Set(
-    cl.payGrades
+    ms.payGrades
       .filter(p => p.compensationCategory && p.band)
       .map(p => `${p.compensationCategory}||${p.band}`)
   )
-  const warnings: CodeListWarning[] = []
+  const warnings: MasterWarning[] = []
   const seen = new Set<string>()
-  for (const jt of cl.jobTypes) {
+  for (const jt of ms.jobTypes) {
     if (!jt.compensationCategory) continue
-    for (const jl of cl.jobLevels) {
+    for (const jl of ms.jobLevels) {
       const gradingBand = jl.promotionDemotionBand
       if (!gradingBand) continue
       const key = `${jt.compensationCategory}||${gradingBand}`
@@ -153,15 +160,15 @@ function checkB2_payGradeCoverage(cl: AllCodeLists): CodeListWarning[] {
 
 // ── エントリポイント ──────────────────────────────────────────────────────────
 
-export function validateCodeListsIntegrity(cl: AllCodeLists): CodeListWarning[] {
+export function validateMastersIntegrity(ms: AllMasters): MasterWarning[] {
   return [
-    ...checkA1_promotionDemotionBandInPayGrades(cl),
-    ...checkA2_compensationCategoryInPayGrades(cl),
-    ...checkA3_jobTypeFamilyCode(cl),
-    ...checkA4_orgMasterCompanyCode(cl),
-    ...checkA5_orgMasterParentCode(cl),
-    ...checkA6_orgMasterWorkLocation(cl),
-    ...checkB1_payGradeDuplication(cl),
-    ...checkB2_payGradeCoverage(cl),
+    ...checkA1_promotionDemotionBandInPayGrades(ms),
+    ...checkA2_compensationCategoryInPayGrades(ms),
+    ...checkA3_jobTypeFamilyCode(ms),
+    ...checkA4_orgMasterCompanyCode(ms),
+    ...checkA5_orgMasterParentCode(ms),
+    ...checkA6_orgMasterWorkLocation(ms),
+    ...checkB1_payGradeDuplication(ms),
+    ...checkB2_payGradeCoverage(ms),
   ]
 }

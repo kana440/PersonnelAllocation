@@ -195,14 +195,14 @@ export const useStore = create<AppState>()((set, get) => {
 
     // ── アクション ────────────────────────────────────────────────
     loadExcelData: async (result) => {
-      const { save } = await import('../store/codeListStore').then(m => ({ save: m.useCodeListStore.getState().save }))
+      const { save } = await import('../store/masterStore').then(m => ({ save: m.useMasterStore.getState().save }))
       appService.loadExcelData({
         allocationList:      result.allocationList,
         beforeOrganizations: result.beforeOrganizations,
         afterOrganizations:  result.afterOrganizations,
-        codeLists:           result.codeLists,
+        masters:           result.masters,
       })
-      await save(result.codeLists)
+      await save(result.masters)
       set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
       // 新しいデータが読み込まれたらパネルをリセットして関連組織を自動追加
       const { clearPanels, initPanels } = await import('../store/canvasLayoutStore').then(m => ({

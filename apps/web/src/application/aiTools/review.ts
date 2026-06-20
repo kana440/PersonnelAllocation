@@ -14,8 +14,8 @@ export function createReviewMethods(service: HRApplicationService) {
     errorCount:   number
     warningCount: number
   } {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
     const kindCount: Record<string, number> = {}
     let changedRows = 0, errorCount = 0, warningCount = 0
     for (const row of allocationList) {
@@ -24,7 +24,7 @@ export function createReviewMethods(service: HRApplicationService) {
         changedRows++
         for (const k of changes.patterns) kindCount[k] = (kindCount[k] ?? 0) + 1
       }
-      for (const issue of validateRow({ row, afterOrganizations, codeLists, allocationList, changes })) {
+      for (const issue of validateRow({ row, afterOrganizations, masters, allocationList, changes })) {
         issue.level === 'error' ? errorCount++ : warningCount++
       }
     }
@@ -64,8 +64,8 @@ export function createReviewMethods(service: HRApplicationService) {
     totalCount: number
     truncated:  boolean
   } {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
 
     let subtreeCodes: Set<string> | null = null
     if (filter.subtreeOrgCode) {
@@ -147,8 +147,8 @@ export function createReviewMethods(service: HRApplicationService) {
     message:          string
     currentValue?:    string
   }> {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
 
     let subtreeCodes: Set<string> | null = null
     if (filter.subtreeOrgCode) {
@@ -174,7 +174,7 @@ export function createReviewMethods(service: HRApplicationService) {
       }
 
       const changes = detectPatterns(row, ctx)
-      const issues  = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
+      const issues  = validateRow({ row, afterOrganizations, masters, allocationList, changes })
       for (const issue of issues) {
         if (filter.level && issue.level !== filter.level) continue
         const field  = String(issue.field)
@@ -212,14 +212,14 @@ export function createReviewMethods(service: HRApplicationService) {
       suggestedAction?: string
     }>
   } {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
     type Entry = { level: 'error' | 'warning'; rowIds: Set<number> }
     const fieldMap = new Map<string, Entry>()
 
     for (const row of allocationList) {
       const changes = detectPatterns(row, ctx)
-      for (const issue of validateRow({ row, afterOrganizations, codeLists, allocationList, changes })) {
+      for (const issue of validateRow({ row, afterOrganizations, masters, allocationList, changes })) {
         const key = String(issue.field)
         const existing = fieldMap.get(key)
         if (existing) {

@@ -7,7 +7,7 @@
 
 import type { AllocationRow } from './allocationRow'
 import type { Organization }  from './schemas'
-import type { AllCodeLists }  from './masters/aggregate'
+import type { AllMasters }  from './masters/aggregate'
 import type { RowChanges }    from './patterns/changeDetection'
 
 // ── 全ドメイン処理の共通基盤 ─────────────────────────────────────────────────
@@ -15,7 +15,7 @@ import type { RowChanges }    from './patterns/changeDetection'
 export interface DomainContext {
   readonly allocationList:     AllocationRow[]   // 全行（E系・cross-row 参照に使用）
   readonly afterOrganizations: Organization[]    // 組織ツリー
-  readonly codeLists:          AllCodeLists      // マスタデータ
+  readonly masters:          AllMasters      // マスタデータ
 }
 
 // ── 行単位の処理に追加情報を付与 ─────────────────────────────────────────────

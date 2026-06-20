@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function SecondmentInAddModal({ orgCode: _orgCode, orgName, sfIntegrated, concurrent, onConfirm, onClose }: Props) {
-  const { codeLists } = useStore()
+  const { masters } = useStore()
 
   const [form, setForm] = useState<Partial<SecondmentInValues>>({
     concurrentType: concurrent ? '兼務' : undefined,
@@ -56,7 +56,7 @@ export function SecondmentInAddModal({ orgCode: _orgCode, orgName, sfIntegrated,
     secondmentFromCompany: form.secondmentFromCompany ?? 'pending',
     concurrentType: form.concurrentType,
   } as AllocationRow
-  const { valid: employmentTypes } = getGroupedFieldOptions('employmentType', simulatedRow, codeLists)
+  const { valid: employmentTypes } = getGroupedFieldOptions('employmentType', simulatedRow, masters)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">

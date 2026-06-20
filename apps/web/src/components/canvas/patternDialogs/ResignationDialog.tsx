@@ -12,15 +12,15 @@ interface Props {
 const FIELD_KEYS = new Set(['transferReason', 'memo'])
 
 export function ResignationDialog({ rowId, onClose }: Props) {
-  const { allocationList, codeLists, afterOrganizations } = useStore()
+  const { allocationList, masters, afterOrganizations } = useStore()
   const row = allocationList.find(r => r.rowId === rowId)
 
   const defaultReason = useMemo(() => {
-    const match = codeLists.transferReasons.find(e =>
+    const match = masters.transferReasons.find(e =>
       e.label.includes('退職') || e.label.includes('退任')
     )
     return match?.label ?? '退職'
-  }, [codeLists.transferReasons])
+  }, [masters.transferReasons])
 
   const [memo, setMemo] = useState((row?.memo as string | undefined) ?? '')
 
@@ -31,9 +31,9 @@ export function ResignationDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList })
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList })
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList])
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   if (!row) return null
 

@@ -38,7 +38,7 @@ export const addEmptyPositionDef: EditOperation = {
     const newRowId = nextRowId(ctx.allocationList)
     const deptCode = (values.departmentCode as string | undefined) ?? ''
     const posCode  = ((values.positionCode as string | undefined) ?? '').trim() || `_pos_${newRowId}`
-    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.codeLists) : {}
+    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
 
     const newRow: AllocationRow = {
       ...orgSub,

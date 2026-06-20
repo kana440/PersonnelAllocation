@@ -1,4 +1,4 @@
-// AllCodeLists — domain-level aggregate of all reference/master code lists.
+// AllMasters — domain-level aggregate of all reference/master code lists.
 // Belongs in the domain layer because it defines valid value sets for domain fields.
 import type { CompanyEntry }        from './company'
 import type { CompanyFilterEntry }  from './companyFilter'
@@ -16,7 +16,7 @@ import type { OrgMasterEntry }      from './orgMaster'
 import type { TrainingPositionEntry }  from './trainingPosition'
 import type { DiscretionaryWorkEntry } from './discretionaryWork'
 
-export interface AllCodeLists {
+export interface AllMasters {
   // 組織マスタ
   orgMasterEntries:         OrgMasterEntry[]
 
@@ -49,7 +49,7 @@ export interface AllCodeLists {
   discretionaryWorkOptions: DiscretionaryWorkEntry[]  // 裁量労働／業務研修 (BM)
 }
 
-export const EMPTY_CODE_LISTS: AllCodeLists = {
+export const EMPTY_MASTERS: AllMasters = {
   orgMasterEntries:         [],
   companies:                [],
   companyFilters:           [],

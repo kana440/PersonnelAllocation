@@ -1,8 +1,8 @@
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { Organization }  from '@personnel/domain/schemas'
-import { CODE_LIST_LABELS }   from '../../infrastructure/codeLists/parser'
+import { MASTER_LABELS }   from '../../infrastructure/masters/parser'
 
-export type TableKey = keyof AllCodeLists | 'beforeOrgs' | 'afterOrgs'
+export type TableKey = keyof AllMasters | 'beforeOrgs' | 'afterOrgs'
 
 export interface TableDef {
   key:   TableKey
@@ -13,20 +13,20 @@ export interface TableDef {
 export const TABLE_REGISTRY: TableDef[] = [
   { key: 'beforeOrgs',              label: '旧組織CD一覧', group: '組織' },
   { key: 'afterOrgs',               label: '組織CD一覧（新）', group: '組織' },
-  { key: 'companies',               label: CODE_LIST_LABELS.companies,               group: '組織' },
-  { key: 'companyFilters',          label: CODE_LIST_LABELS.companyFilters,          group: '組織' },
-  { key: 'employmentTypes',         label: CODE_LIST_LABELS.employmentTypes,         group: '雇用・給与' },
-  { key: 'payGrades',               label: CODE_LIST_LABELS.payGrades,               group: '雇用・給与' },
-  { key: 'jobLevels',               label: CODE_LIST_LABELS.jobLevels,               group: '雇用・給与' },
-  { key: 'officialPositions',       label: CODE_LIST_LABELS.officialPositions,       group: '職位・勤務' },
-  { key: 'workLocations',           label: CODE_LIST_LABELS.workLocations,           group: '職位・勤務' },
-  { key: 'jobFamilies',             label: CODE_LIST_LABELS.jobFamilies,             group: '職務分類' },
-  { key: 'jobTypes',          label: CODE_LIST_LABELS.jobTypes,          group: '職務分類' },
-  { key: 'transferReasons',         label: CODE_LIST_LABELS.transferReasons,         group: '事由' },
-  { key: 'concurrentReasons',       label: CODE_LIST_LABELS.concurrentReasons,       group: '事由' },
-  { key: 'demotionReasons',         label: CODE_LIST_LABELS.demotionReasons,         group: '事由' },
-  { key: 'trainingPositions',       label: CODE_LIST_LABELS.trainingPositions,       group: 'その他' },
-  { key: 'discretionaryWorkOptions',label: CODE_LIST_LABELS.discretionaryWorkOptions,group: 'その他' },
+  { key: 'companies',               label: MASTER_LABELS.companies,               group: '組織' },
+  { key: 'companyFilters',          label: MASTER_LABELS.companyFilters,          group: '組織' },
+  { key: 'employmentTypes',         label: MASTER_LABELS.employmentTypes,         group: '雇用・給与' },
+  { key: 'payGrades',               label: MASTER_LABELS.payGrades,               group: '雇用・給与' },
+  { key: 'jobLevels',               label: MASTER_LABELS.jobLevels,               group: '雇用・給与' },
+  { key: 'officialPositions',       label: MASTER_LABELS.officialPositions,       group: '職位・勤務' },
+  { key: 'workLocations',           label: MASTER_LABELS.workLocations,           group: '職位・勤務' },
+  { key: 'jobFamilies',             label: MASTER_LABELS.jobFamilies,             group: '職務分類' },
+  { key: 'jobTypes',          label: MASTER_LABELS.jobTypes,          group: '職務分類' },
+  { key: 'transferReasons',         label: MASTER_LABELS.transferReasons,         group: '事由' },
+  { key: 'concurrentReasons',       label: MASTER_LABELS.concurrentReasons,       group: '事由' },
+  { key: 'demotionReasons',         label: MASTER_LABELS.demotionReasons,         group: '事由' },
+  { key: 'trainingPositions',       label: MASTER_LABELS.trainingPositions,       group: 'その他' },
+  { key: 'discretionaryWorkOptions',label: MASTER_LABELS.discretionaryWorkOptions,group: 'その他' },
 ]
 
 export const FIELD_LABELS: Record<string, string> = {
@@ -71,11 +71,11 @@ export const FIELD_LABELS: Record<string, string> = {
 
 export function getTableData(
   key: TableKey,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
   beforeOrgs: Organization[],
   afterOrgs:  Organization[],
 ): Record<string, unknown>[] {
   if (key === 'beforeOrgs') return beforeOrgs as unknown as Record<string, unknown>[]
   if (key === 'afterOrgs')  return afterOrgs  as unknown as Record<string, unknown>[]
-  return (codeLists[key] as unknown as Record<string, unknown>[]) ?? []
+  return (masters[key] as unknown as Record<string, unknown>[]) ?? []
 }

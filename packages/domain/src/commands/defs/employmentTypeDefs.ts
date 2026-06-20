@@ -36,7 +36,7 @@ export const jobTypeChangeDef: EditOperation = {
 
   description: 'ジョブファミリー・ジョブタイプを変更します。給与等級の変更が発生する場合は、適切な給与等級を選択してください。',
 
-  availableFor: (row, cl) => !isSecondmentAcceptance(row, cl),
+  availableFor: (row, ms) => !isSecondmentAcceptance(row, ms),
 
   inputs: [
     { field: 'transferReason', required: false,
@@ -83,7 +83,7 @@ export const employmentExtensionDef: EditOperation = {
 
   description: '３月末に雇用延長する対象者については、当個別に雇用延長登録いたします。申請書上は申請区分を入力いただき、他の入力項目は空欄にしてください。',
 
-  availableFor: (row, cl) => isExtendedEmployeeTarget(row, cl) || isRegularEmployee(row, cl),
+  availableFor: (row, ms) => isExtendedEmployeeTarget(row, ms) || isRegularEmployee(row, ms),
 
   inputs: [
     { field: 'transferReason', required: true, readOnly: true },

@@ -1,9 +1,9 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists }  from '../masters/aggregate'
+import type { AllMasters }  from '../masters/aggregate'
 
 export type DerivedUpdates = Partial<Omit<AllocationRow, 'rowId' | 'operationGroupId'>>
 
 export interface DerivationContext {
-  readonly codeLists:      AllCodeLists
+  readonly masters:      AllMasters
   readonly allocationList: readonly AllocationRow[]
 }

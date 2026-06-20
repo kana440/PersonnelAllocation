@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../masters/aggregate'
+import type { AllMasters } from '../masters/aggregate'
 import type { ValidationIssue } from './types'
 import { findEmpType, findTransferReason } from '../fieldConstraints'
 
@@ -56,18 +56,18 @@ function checkA1_2(row: AllocationRow): ValidationIssue[] {
 }
 
 /** A2: 組織コードが出向者用組織 → 出向先会社は必須 */
-function checkA2(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkA2(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.departmentCode) return []
-  const org = codeLists.orgMasterEntries.find(e => e.code === row.departmentCode)
+  const org = masters.orgMasterEntries.find(e => e.code === row.departmentCode)
   if (org?.orgCategory !== '出向者用組織') return []
   if (row.secondmentToCompany) return []
   return [{ field: 'secondmentToCompany', level: 'error', message: '出向者用組織の場合、出向先会社は必須です' }]
 }
 
 /** A3: 雇用タイプが出向受入 → 出向元会社・出向元社員番号は必須 */
-function checkA3(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkA3(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.employmentType) return []
-  const entry = findEmpType(codeLists, row)
+  const entry = findEmpType(masters, row)
   if (!entry?.isSecondmentAcceptance) return []
   const issues: ValidationIssue[] = []
   if (!row.secondmentFromCompany)
@@ -78,31 +78,31 @@ function checkA3(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
 }
 
 /** A4: 申請区分（異動事由）の兼務チェックサイン → 兼務理由は必須 */
-function checkA4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkA4(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.transferReason) return []
-  const entry = findTransferReason(codeLists, row)
+  const entry = findTransferReason(masters, row)
   if (!entry?.concurrentCheckSign) return []
   if (row.concurrentReason) return []
   return [{ field: 'concurrentReason', level: 'error', message: '兼務チェックサインが設定されている場合、兼務理由は必須です' }]
 }
 
 /** A5: 役職のフリータイトルフラグ → フリータイトルは必須 */
-function checkA5(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkA5(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.officialPositionCode) return []
-  const entry = codeLists.officialPositions.find(e => e.label === row.officialPositionCode)
+  const entry = masters.officialPositions.find(e => e.label === row.officialPositionCode)
   if (!entry?.requiresFreeTitle) return []
   if (row.localJobTitle) return []
   return [{ field: 'localJobTitle', level: 'error', message: 'フリータイトル対象の役職の場合、フリータイトルは必須です' }]
 }
 
-export function runAssertRequired(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+export function runAssertRequired(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   return [
     ...checkA1_0(row),
     ...checkA1_1(row),
     ...checkA1_2(row),
-    ...checkA2(row, codeLists),
-    ...checkA3(row, codeLists),
-    ...checkA4(row, codeLists),
-    ...checkA5(row, codeLists),
+    ...checkA2(row, masters),
+    ...checkA3(row, masters),
+    ...checkA4(row, masters),
+    ...checkA5(row, masters),
   ]
 }

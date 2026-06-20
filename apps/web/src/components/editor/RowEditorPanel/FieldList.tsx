@@ -11,7 +11,7 @@ import {
 import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
 import { resolveFieldStrictness } from '@personnel/domain/optionStrictness'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { Organization } from '@personnel/domain/schemas'
 import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
 
@@ -21,7 +21,7 @@ interface Props {
   issues:              ValidationIssue[]
   allocationList:      AllocationRow[]
   afterOrganizations:  Organization[]
-  codeLists:           AllCodeLists
+  masters:           AllMasters
   readOnly:            boolean
   currentJobFamily:    string
   onChange:            (key: keyof AllocationRow, value: string) => void
@@ -31,7 +31,7 @@ interface Props {
 
 export function FieldList({
   effectiveRow, savedRow, issues,
-  allocationList, afterOrganizations, codeLists,
+  allocationList, afterOrganizations, masters,
   readOnly, currentJobFamily,
   onChange, onManagerChange, onOrgChange,
 }: Props) {
@@ -88,7 +88,7 @@ export function FieldList({
               code={afterStr}
               prevVal={prevStr}
               afterOrganizations={afterOrganizations}
-              orgMasterEntries={codeLists.orgMasterEntries}
+              orgMasterEntries={masters.orgMasterEntries}
               relatedValues={{
                 businessUnit: (effectiveRow.businessUnit as string | undefined),
                 division:     (effectiveRow.division     as string | undefined),
@@ -104,7 +104,7 @@ export function FieldList({
           )
         }
 
-        const { valid, invalid } = getOptions(key, codeLists, currentJobFamily, effectiveRow)
+        const { valid, invalid } = getOptions(key, masters, currentJobFamily, effectiveRow)
         return (
           <Fragment key={key}>
             <RowEditorField

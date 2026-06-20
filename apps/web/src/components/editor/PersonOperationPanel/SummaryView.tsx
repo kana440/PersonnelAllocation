@@ -106,7 +106,7 @@ interface Props {
 }
 
 export function SummaryView({ row, onSelect }: Props) {
-  const { codeLists, afterOrganizations, allocationList } = useStore()
+  const { masters, afterOrganizations, allocationList } = useStore()
   const unavailableDisplay = useUnavailableOperationDisplay()
 
   const diffs   = useMemo(() => rowDiff(row), [row])
@@ -158,7 +158,7 @@ export function SummaryView({ row, onSelect }: Props) {
               // MultiRowOperationDef
               const def = multiRowById.get(entry.multiRowId)
               if (!def) return []
-              const available = def.availableFor(row, codeLists, allocationList)
+              const available = def.availableFor(row, masters, allocationList)
               if (!available && unavailableDisplay === 'hide') return []
               return [{
                 key:        def.id,
@@ -173,7 +173,7 @@ export function SummaryView({ row, onSelect }: Props) {
             // EditOperation
             const def = editOpById.get(entry.id)
             if (!def) return []
-            const available = def.availableFor(row, codeLists)
+            const available = def.availableFor(row, masters)
             if (!available && unavailableDisplay === 'hide') return []
             return [{
               key:        def.id,

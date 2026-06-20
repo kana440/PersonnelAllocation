@@ -1,6 +1,6 @@
 // コードリスト（各種TBL シート）を unknown[][] から解析する純粋関数（ライブラリ非依存）
 
-import type { AllCodeLists } from './types'
+import type { AllMasters } from './types'
 import type {
   CompanyEntry,
   CompanyFilterEntry,
@@ -91,7 +91,7 @@ function dataRowIndicesAt(raw: unknown[][], col: number): number[] {
 }
 
 // ── Human-readable labels (for SetupView UI) ──────────────────────────────────
-export const CODE_LIST_LABELS: Record<keyof AllCodeLists, string> = {
+export const MASTER_LABELS: Record<keyof AllMasters, string> = {
   orgMasterEntries:         '組織CD一覧',   // parsed by orgMasterParser, not this parser
   companies:                '会社CD一覧',   // parsed by parseCompanySheet, not this parser
   companyFilters:           '会社絞込用',
@@ -287,15 +287,15 @@ function checkHardcoded(
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export interface ParseCodeListsResult {
-  lists:                 Partial<AllCodeLists>
-  foundKeys:             (keyof AllCodeLists)[]
-  missingKeys:           (keyof AllCodeLists)[]
+export interface ParseMastersResult {
+  lists:                 Partial<AllMasters>
+  foundKeys:             (keyof AllMasters)[]
+  missingKeys:           (keyof AllMasters)[]
   compatibilityWarnings: CompatibilityWarning[]
   columnWarnings:        ColumnWarning[]
 }
 
-export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult {
+export function parseMastersFromSheet(raw: unknown[][]): ParseMastersResult {
   const SHEET      = '各種TBL'
   const anchorCols = scanAnchorCols(raw)
   const col        = (key: AnchorKey): number => anchorCols.get(ANCHORS[key]) ?? -1
@@ -307,7 +307,7 @@ export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult 
   const at = <T>(key: AnchorKey, fn: (c: number) => T[], empty: T[] = []): T[] =>
     col(key) >= 0 ? fn(col(key)) : empty
 
-  const lists: Partial<AllCodeLists> = {
+  const lists: Partial<AllMasters> = {
     companyFilters:           at('companyFilters',           c => parseCompanyFilters(raw, c)),
     transferReasons:          at('transferReasons',          c => parseTransferReasons(raw, c)),
     employmentTypes:          at('employmentTypes',          c => parseEmploymentTypes(raw, c)),
@@ -333,7 +333,7 @@ export function parseCodeListsFromSheet(raw: unknown[][]): ParseCodeListsResult 
     checkHardcoded(concurrentTypeActual,                                      CONCURRENT_TYPES,                  'concurrentType'),
   ].filter((w): w is CompatibilityWarning => w !== null)
 
-  const allKeys     = Object.keys(CODE_LIST_LABELS) as (keyof AllCodeLists)[]
+  const allKeys     = Object.keys(MASTER_LABELS) as (keyof AllMasters)[]
   const foundKeys   = allKeys.filter(k => (lists[k] as unknown[])?.length > 0)
   const missingKeys = allKeys.filter(k => !foundKeys.includes(k))
   return { lists, foundKeys, missingKeys, compatibilityWarnings, columnWarnings }

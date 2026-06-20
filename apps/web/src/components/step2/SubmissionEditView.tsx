@@ -6,7 +6,7 @@ import { EditViewCore, HeaderButton } from '../editor/EditViewCore'
 import { RowDelegationModal } from './RowDelegationModal'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
-import { EMPTY_CODE_LISTS, type AllCodeLists } from '@personnel/domain/masters/aggregate'
+import { EMPTY_MASTERS, type AllMasters } from '@personnel/domain/masters/aggregate'
 import type { AuthUser } from '../../infrastructure/api/authApi'
 
 interface Props {
@@ -56,7 +56,7 @@ export function SubmissionEditView({ submission, user, onBack, onLogout }: Props
             allocationList:      rows as AllocationRow[],
             beforeOrganizations: masters.beforeOrganizations as Organization[],
             afterOrganizations:  masters.afterOrganizations  as Organization[],
-            codeLists:           { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>) },
+            masters:           { ...EMPTY_MASTERS, ...(masters.masters as Partial<AllMasters>) },
           })
         } else {
           // マスタ未登録（Revision ベースの申請回）: 行のみ差し替え

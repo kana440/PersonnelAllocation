@@ -1,4 +1,4 @@
-import type { AllCodeLists }   from '@personnel/domain/masters/aggregate'
+import type { AllMasters }   from '@personnel/domain/masters/aggregate'
 import type { AllocationRow }  from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
 import type { PositionCodeAssignment } from '@personnel/domain/commands/handlers/assignPositionCodes'
@@ -8,7 +8,7 @@ export interface AllocationData {
   allocationList:      AllocationRow[]
   beforeOrganizations: Organization[]
   afterOrganizations:  Organization[]
-  codeLists:           AllCodeLists
+  masters:           AllMasters
 }
 
 export interface IAllocationDataSource {
@@ -21,8 +21,8 @@ export interface IAllocationExporter {
 }
 
 // ── Code list port ───────────────────────────────────────────────────────────
-export interface ICodeListSource {
-  load(): Promise<AllCodeLists | null>
+export interface IMasterSource {
+  load(): Promise<AllMasters | null>
 }
 
 // ── Position code port ───────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
       const prevEt = (row.prevEmploymentType as string | undefined) ?? ''
       const prevIsSecondmentAcceptance =
         prevEt !== '' &&
-        (ctx.codeLists.employmentTypes.find(e => e.label === prevEt)?.isSecondmentAcceptance ?? false)
+        (ctx.masters.employmentTypes.find(e => e.label === prevEt)?.isSecondmentAcceptance ?? false)
       const prevIsMain = !row.prevConcurrentType || row.prevConcurrentType !== '兼務'
       const tr = (row.transferReason as string | undefined) ?? ''
       return prevIsSecondmentAcceptance && prevIsMain && tr === TR.CONCURRENT_OR_SECONDMENT_IN_RELEASE

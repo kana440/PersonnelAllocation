@@ -21,21 +21,21 @@ export function validateRow(
   ctx:       RowContext,
   overrides?: Partial<Record<string, FieldStrictness>>,
 ): ValidationIssue[] {
-  const { row, afterOrganizations: orgs, codeLists, allocationList, changes } = ctx
-  const reasonEntry = codeLists.transferReasons.find(r => r.label === row.transferReason)
+  const { row, afterOrganizations: orgs, masters, allocationList, changes } = ctx
+  const reasonEntry = masters.transferReasons.find(r => r.label === row.transferReason)
 
   if (reasonEntry?.noCheckRequired) {
     return allocationList.length > 0 ? runExclusivity(row, allocationList) : []
   }
 
   return [
-    ...runAssertRequired(row, codeLists),
+    ...runAssertRequired(row, masters),
     ...runBasedOnFormat(row),
-    ...runCorrelation(row, codeLists),
-    ...runFilteredByEmployment(row, codeLists, overrides),
-    ...runDataExistence(row, orgs, codeLists, overrides),
+    ...runCorrelation(row, masters),
+    ...runFilteredByEmployment(row, masters, overrides),
+    ...runDataExistence(row, orgs, masters, overrides),
     ...(allocationList.length > 0 ? runExclusivity(row, allocationList) : []),
-    ...runGlobalConsistency(row, codeLists, changes),
+    ...runGlobalConsistency(row, masters, changes),
   ]
 }
 

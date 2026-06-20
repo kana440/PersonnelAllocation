@@ -1,6 +1,6 @@
 import type { AllocationRow }  from '@personnel/domain/allocationRow'
 import type { Organization }   from '@personnel/domain/schemas'
-import type { AllCodeLists }   from '@personnel/domain/masters/aggregate'
+import type { AllMasters }   from '@personnel/domain/masters/aggregate'
 import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '@personnel/domain/commands/orgHelpers'
 import type { PersonChange, OrgPreview } from './types'
 import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
@@ -44,9 +44,9 @@ export function computeManagerNameChanges(
 export function computeOrgSubFieldChanges(
   allocationList: AllocationRow[],
   afterOrganizations: Organization[],
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): PersonChange[] {
-  const updated = reDeriveOrgSubFieldsForList(allocationList, codeLists)
+  const updated = reDeriveOrgSubFieldsForList(allocationList, masters)
   const ORG_FIELD_LABELS = FIELD_DISPLAY_LABELS
   const result: PersonChange[] = []
   for (let i = 0; i < allocationList.length; i++) {

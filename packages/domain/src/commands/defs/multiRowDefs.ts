@@ -15,7 +15,7 @@ export const nonSFSecondmentOutDef: MultiRowOperationDef = {
   description: '出向元行を出向箱に移動し、SF未導入会社の受入行を新規作成します。',
   badge:       'secondment',
 
-  availableFor: (anchor, cl, _allRows) => canCreateNonSFSecondmentPair(anchor, cl),
+  availableFor: (anchor, ms, _allRows) => canCreateNonSFSecondmentPair(anchor, ms),
 
   sections: [
     {

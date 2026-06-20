@@ -12,7 +12,7 @@ function makeCtx(overrides: Partial<DomainContext> = {}): DomainContext {
   return {
     allocationList:     [row],
     afterOrganizations: MOCK_ORGS,
-    codeLists:          makeCL(),
+    masters:          makeCL(),
     ...overrides,
   }
 }

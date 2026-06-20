@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../../allocationRow'
-import { EMPTY_CODE_LISTS }   from '../../masters/aggregate'
+import { EMPTY_MASTERS }   from '../../masters/aggregate'
 import type { EditPattern }   from '../defs'
 import { ALL_EDIT_PATTERNS, EDIT_PATTERN_META } from '../defs'
 import { parseBandLevel, parsePositionBandRange } from './helpers'
@@ -17,7 +17,7 @@ export interface RowChanges {
 const EMPTY_CTX: DetectContext = {
   allocationList:     [],
   afterOrganizations: [],
-  codeLists:          EMPTY_CODE_LISTS,
+  masters:          EMPTY_MASTERS,
 }
 
 export function detectPatterns(row: AllocationRow, ctx?: DetectContext): RowChanges {

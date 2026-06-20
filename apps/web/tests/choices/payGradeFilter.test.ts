@@ -1,5 +1,5 @@
 // fieldConstraints.ts の payGrade 絞り込みロジックのテスト
-// getGroupedFieldOptions('payGrade', row, codeLists) を通して検証する
+// getGroupedFieldOptions('payGrade', row, masters) を通して検証する
 import { describe, test, expect } from 'vitest'
 import { getGroupedFieldOptions } from '@personnel/domain/choices'
 import { makePersonRow, makeCL } from '../helpers/fixtures'

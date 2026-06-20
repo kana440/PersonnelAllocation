@@ -52,7 +52,7 @@ export class TransferPersonOperation implements EditCommand {
       rowId:               newRowId,
       positionCode:        `_pos_${newRowId}`,
       departmentCode:      targetCode,
-      ...deriveOrgSubFields(targetCode, ctx.codeLists),
+      ...deriveOrgSubFields(targetCode, ctx.masters),
       managerPositionCode: newManagerPositionCode,
       ...allocClears,
       // managerName は allocClears で一度消えるため、positionCode 確定後に再セット

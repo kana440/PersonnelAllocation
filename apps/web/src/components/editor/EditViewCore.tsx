@@ -6,7 +6,7 @@ import { HistoryPanel }  from '../history/HistoryPanel'
 import { BottomPanel }   from './BottomPanel'
 import { AIChatDrawer }  from '../ai/AIChatDrawer'
 import { MaintenanceDialog }        from '../maintenanceDialog'
-import { CodeListBrowserPanel }     from '../codelistBrowser'
+import { MasterBrowserPanel }     from '../masterBrowser'
 import { StrictnessSettingsPanel }  from '../settings/StrictnessSettingsPanel'
 import { useStore }          from '../../store/useStore'
 import { useResizablePanel } from '../../hooks/useResizablePanel'
@@ -58,14 +58,14 @@ interface Props {
 }
 
 export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: Props) {
-  const { undo, redo, canUndo, canRedo, selectedPersonId, codeListWarnings } = useStore()
+  const { undo, redo, canUndo, canRedo, selectedPersonId, masterWarnings } = useStore()
 
   const [isTreeOpen,    setIsTreeOpen]    = useState(true)
   const [isChatOpen,    setIsChatOpen]    = useState(true)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [excelCollapsed,         setExcelCollapsed]         = useState(false)
   const [maintenanceOpen,        setMaintenanceOpen]        = useState(false)
-  const [codeListBrowserOpen,    setCodeListBrowserOpen]    = useState(false)
+  const [masterBrowserOpen,    setMasterBrowserOpen]    = useState(false)
   const [strictnessSettingsOpen, setStrictnessSettingsOpen] = useState(false)
 
   const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
@@ -151,14 +151,14 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
           </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />
           <HeaderButton
-            onClick={() => setCodeListBrowserOpen(o => !o)}
-            active={codeListBrowserOpen}
+            onClick={() => setMasterBrowserOpen(o => !o)}
+            active={masterBrowserOpen}
             title="コードリスト・組織マスタなどのテーブルを照会"
           >
             <span>📋</span><span>テーブル参照</span>
-            {codeListWarnings.length > 0 && (
+            {masterWarnings.length > 0 && (
               <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                {codeListWarnings.length > 9 ? '9+' : codeListWarnings.length}
+                {masterWarnings.length > 9 ? '9+' : masterWarnings.length}
               </span>
             )}
           </HeaderButton>
@@ -183,7 +183,7 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
       {topBanner}
 
       {maintenanceOpen        && <MaintenanceDialog        onClose={() => setMaintenanceOpen(false)} />}
-      {codeListBrowserOpen    && <CodeListBrowserPanel     onClose={() => setCodeListBrowserOpen(false)} />}
+      {masterBrowserOpen    && <MasterBrowserPanel     onClose={() => setMasterBrowserOpen(false)} />}
       {strictnessSettingsOpen && <StrictnessSettingsPanel  onClose={() => setStrictnessSettingsOpen(false)} />}
 
       {/* 上段: サイドバー + キャンバス + AI チャット + 履歴 */}

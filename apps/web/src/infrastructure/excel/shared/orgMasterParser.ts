@@ -1,8 +1,9 @@
 // 組織CD一覧 / 旧組織CD一覧シートを unknown[][] から解析する純粋関数（ライブラリ非依存）
 
-import type { OrgMasterEntry } from '@personnel/domain/masters/orgMaster'
-import type { Organization }   from '@personnel/domain/schemas'
-import type { ColumnWarning }  from '../types'
+import type { OrgMasterEntry }   from '@personnel/domain/masters/orgMaster'
+import { buildOrgHierarchy }     from '@personnel/domain/masters/orgHierarchy'
+import type { Organization }     from '@personnel/domain/schemas'
+import type { ColumnWarning }    from '../types'
 
 // r, c は 0-indexed
 function cellStr(raw: unknown[][], r: number, c: number): string {
@@ -62,8 +63,7 @@ export function parseOrgMasterRaw(
     if (foundCode) { dataStartRow = r + 1; break }
   }
 
-  if (cParent < 0) columnWarnings.push({ sheet: sheetName, message: '「上位組織コード」列が見つかりません。組織の親子関係が読み込まれません。' })
-  if (cName   < 0) columnWarnings.push({ sheet: sheetName, message: '「組織名」列が見つかりません。組織コードを名称の代わりに使用します。' })
+  if (cName < 0) columnWarnings.push({ sheet: sheetName, message: '「組織名」列が見つかりません。組織コードを名称の代わりに使用します。' })
 
   for (let r = dataStartRow; r < rowCount; r++) {
     const code = cellStr(raw, r, cCode)
@@ -97,19 +97,17 @@ export function orgMasterToEntities(
   for (const e of [...newEntries, ...oldEntries]) companyIds.add(e.company || fallbackCompanyName)
 
   function buildOrgList(subset: OrgMasterEntry[]): Organization[] {
-    const codeSet = new Set(subset.map(e => e.code))
-    const orgs: Organization[] = subset.filter(e => e.code).map(e => {
-      const cid         = e.company || fallbackCompanyName
-      const derivedName = e.pathTeam || e.pathGroup || e.pathDepartment || e.pathDivision || e.pathBusinessUnit || e.code
-      const parentId    = (e.parentCode && codeSet.has(e.parentCode)) ? e.parentCode : null
-      return { id: e.code, name: e.name || derivedName, companyId: cid, parentId, level: 1, externalCode: e.code }
-    })
+    // buildOrgHierarchy が O(n) 2 パスで level / parentId を確定する
+    const { hierarchy } = buildOrgHierarchy(subset)
 
-    const byId = new Map(orgs.map(o => [o.id, o]))
-    for (const org of orgs) {
-      let lvl = 1, cur = org
-      while (cur.parentId && byId.has(cur.parentId) && lvl < 10) { cur = byId.get(cur.parentId)!; lvl++ }
-      ;(org as { level: number }).level = lvl
+    const orgs: Organization[] = []
+    for (const e of subset) {
+      if (!e.code) continue
+      const h    = hierarchy.get(e.code)!
+      const cid  = e.company || fallbackCompanyName
+      const name = e.name
+        ?? (e.pathTeam || e.pathGroup || e.pathDepartment || e.pathDivision || e.pathBusinessUnit || e.code)
+      orgs.push({ id: e.code, name, companyId: cid, parentId: h.parentId, level: h.level, externalCode: e.code })
     }
 
     for (const cid of companyIds) {

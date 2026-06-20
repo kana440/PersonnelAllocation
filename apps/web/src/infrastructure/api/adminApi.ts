@@ -87,7 +87,7 @@ export interface CreateRoundBody {
   rows?:               unknown[]
   beforeOrganizations?: unknown[]
   afterOrganizations?:  unknown[]
-  codeLists?:           unknown
+  masters?:           unknown
   excelBase64?:         string
   excelFilename?:       string
 }
@@ -95,7 +95,7 @@ export interface CreateRoundBody {
 export interface RoundMasters {
   beforeOrganizations: unknown[]
   afterOrganizations:  unknown[]
-  codeLists:           unknown
+  masters:           unknown
 }
 
 // ── Submission ───────────────────────────────────────────────────────────────

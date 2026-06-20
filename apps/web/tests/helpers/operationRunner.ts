@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import type { AllocationRow }   from '@personnel/domain/allocationRow'
-import type { AllCodeLists }    from '@personnel/domain/masters/aggregate'
+import type { AllMasters }    from '@personnel/domain/masters/aggregate'
 import type { Organization }    from '@personnel/domain/schemas'
 import type { EditOperation }   from '@personnel/domain/commands/defs/types'
 import type { EditCommand, DomainContext } from '@personnel/domain/commands/types'
@@ -17,7 +17,7 @@ export interface OperationScenario {
   /** テスト対象行（makeRow へのオーバーライド） */
   row?: Partial<AllocationRow>
   /** コードリスト（makeCL へのオーバーライド） */
-  cl?: Partial<AllCodeLists>
+  cl?: Partial<AllMasters>
   /** 全行リスト（省略時は [row] のみ） */
   allocationList?: AllocationRow[]
   /** 組織リスト（省略時は MOCK_ORGS） */
@@ -67,15 +67,15 @@ export function runOperationScenarios(
     for (const s of scenarios) {
       test(`${s.id}: ${s.desc}`, () => {
         const row  = makeRow(s.row)
-        const cl   = makeCL(s.cl)
+        const ms = makeCL(s.cl)
         const orgs = s.orgs ?? MOCK_ORGS
         const list = s.allocationList ?? [row]
-        const ctx: DomainContext = { allocationList: list, afterOrganizations: orgs, codeLists: cl }
+        const ctx: DomainContext = { allocationList: list, afterOrganizations: orgs, masters: ms }
 
         // availableFor
         if (s.expect.available !== undefined) {
           expect(
-            def.availableFor(row, cl),
+            def.availableFor(row, ms),
             `availableFor() は ${s.expect.available} であるはず`,
           ).toBe(s.expect.available)
         }

@@ -11,7 +11,7 @@ import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
 import { deriveFieldUpdates } from '@personnel/domain/derivation'
 import { nextRowId } from '@personnel/domain/allocationRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 
 type StepMode = '1' | '2' | 'all'
 
@@ -33,22 +33,22 @@ const FIELD_KEYS = new Set(FIELDS.map(f => f.key as string))
 function filterBandsByStep(
   options: string[],
   baseBand: string | undefined,
-  codeLists: AllCodeLists,
+  masters: AllMasters,
   stepMode: StepMode,
 ): string[] {
   if (stepMode === 'all' || !baseBand) return options
-  const baseLevel = codeLists.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
+  const baseLevel = masters.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
   if (baseLevel === 0) return options
   const steps = parseInt(stepMode, 10)
   return options.filter(opt => {
-    const optLevel = codeLists.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
+    const optLevel = masters.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
     if (optLevel === 0) return false
     return Math.abs(optLevel - baseLevel) >= 1 && Math.abs(optLevel - baseLevel) <= steps
   })
 }
 
 export function PromotionDialog({ rowId, onClose }: Props) {
-  const { allocationList, codeLists, afterOrganizations } = useStore()
+  const { allocationList, masters, afterOrganizations } = useStore()
   const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
@@ -65,9 +65,9 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList])
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   if (!row || !effectiveRow) return null
 
@@ -76,7 +76,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   const handleChange = (key: string, v: string) => {
     const changes = { [key]: v } as Partial<AllocationRow>
-    const derived = deriveFieldUpdates(changes, effectiveRow, codeLists, allocationList)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList)
     if (key === 'officialPositionCode' && v) {
       setTitleSuggest(v)
     }
@@ -159,9 +159,9 @@ export function PromotionDialog({ rowId, onClose }: Props) {
               const fieldIssues = issues.filter(i => i.field === key)
               const hasError    = fieldIssues.some(i => i.level === 'error')
               const hasWarning  = fieldIssues.some(i => i.level === 'warning')
-              const { valid, invalid } = getGroupedFieldOptions(key as string, effectiveRow, codeLists, get('jobFamily'))
+              const { valid, invalid } = getGroupedFieldOptions(key as string, effectiveRow, masters, get('jobFamily'))
               const filteredValid = key === 'band'
-                ? filterBandsByStep(valid, baseBand, codeLists, stepMode)
+                ? filterBandsByStep(valid, baseBand, masters, stepMode)
                 : valid
 
               return (

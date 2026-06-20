@@ -16,16 +16,16 @@ interface Props {
 const FIELD_KEYS = new Set(['employmentType', 'secondmentToCompany', 'secondmentFromCompany', 'transferReason'])
 
 export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
-  const { allocationList, codeLists, afterOrganizations } = useStore()
+  const { allocationList, masters, afterOrganizations } = useStore()
   const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
   const defaultReason = useMemo(() => {
-    const match = codeLists.transferReasons.find(e =>
+    const match = masters.transferReasons.find(e =>
       e.label.includes('出向解除') || e.label.includes('帰任')
     )
     return match?.label ?? '出向解除'
-  }, [codeLists.transferReasons])
+  }, [masters.transferReasons])
 
   // 発令前の雇用タイプを解除後のデフォルトに使わず、選択肢から選ばせる
   const [buffer, setBuffer] = useState<Partial<Record<string, string>>>({
@@ -41,9 +41,9 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList, overrides])
+  }, [effectiveRow, afterOrganizations, masters, allocationList, overrides])
 
   if (!row || !effectiveRow) return null
 
@@ -88,7 +88,7 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
             const fieldIssues = issues.filter(i => i.field as string === key)
             const hasError    = fieldIssues.some(i => i.level === 'error')
             const hasWarning  = fieldIssues.some(i => i.level === 'warning')
-            const { valid, invalid } = getGroupedFieldOptions(key, effectiveRow, codeLists)
+            const { valid, invalid } = getGroupedFieldOptions(key, effectiveRow, masters)
 
             return (
               <div key={key}>

@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function SecondmentInWidget({ rowId, sfIntegrated, label, isActive, onConfirm, onCancel }: Props) {
-  const { allocationList, codeLists } = useStore()
+  const { allocationList, masters } = useStore()
   const row = useMemo(() => allocationList.find(r => r.rowId === rowId), [allocationList, rowId])
 
   const [secondmentFromCompany,        setSecondmentFromCompany]        = useState('')
@@ -20,10 +20,10 @@ export function SecondmentInWidget({ rowId, sfIntegrated, label, isActive, onCon
   const [employmentType,               setEmploymentType]               = useState('')
 
   const employmentTypeOptions = useMemo(() => {
-    return codeLists.employmentTypes
+    return masters.employmentTypes
       ?.filter((e: { label: string; isSecondmentAcceptance?: boolean }) => e.isSecondmentAcceptance)
       .map((e: { label: string }) => e.label) ?? []
-  }, [codeLists])
+  }, [masters])
 
   if (!row) return <div className="text-xs text-red-500 px-3 py-2">行が見つかりません (rowId: {rowId})</div>
 

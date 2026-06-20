@@ -1,6 +1,6 @@
 import { BEFORE_AFTER_FIELD_PAIRS, FIELD_METADATA } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { buildBaseOptions, getGroupedFieldOptions, type OptionsGroup } from '@personnel/domain/choices'
 
@@ -70,12 +70,12 @@ export const READONLY_FIELDS = new Set<string>([
  */
 export function getOptions(
   key:               string,
-  codeLists:         AllCodeLists,
+  masters:         AllMasters,
   currentJobFamily?: string,
   row?:              AllocationRow,
 ): OptionsGroup {
   if (FLAG_FIELDS.has(key)) return { valid: FLAG_OPTIONS, invalid: [] }
-  if (row) return getGroupedFieldOptions(key, row, codeLists, currentJobFamily)
-  return { valid: buildBaseOptions(key, codeLists, currentJobFamily), invalid: [] }
+  if (row) return getGroupedFieldOptions(key, row, masters, currentJobFamily)
+  return { valid: buildBaseOptions(key, masters, currentJobFamily), invalid: [] }
 }
 

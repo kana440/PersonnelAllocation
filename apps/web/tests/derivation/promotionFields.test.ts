@@ -37,30 +37,30 @@ describe('derivePromotionSignFromLevel', () => {
 
 describe('derivePromotionSign', () => {
   // MOCK_JOB_LEVELS: M3=warningLevel2, M4=warningLevel3, M6=warningLevel5
-  const cl = makeCL()
+  const ms = makeCL()
 
   test('M4 → M6: warningLevel 上昇 → 昇格', () => {
-    const result = derivePromotionSign('M6', 'M4', cl)
+    const result = derivePromotionSign('M6', 'M4', ms)
     expect(result.promotionSign).toBe('1')
   })
 
   test('M6 → M4: warningLevel 下降 → 降格', () => {
-    const result = derivePromotionSign('M4', 'M6', cl)
+    const result = derivePromotionSign('M4', 'M6', ms)
     expect(result.promotionSign).toBe('1')
   })
 
   test('M4 → M4: 変化なし → promotionSign は undefined', () => {
-    const result = derivePromotionSign('M4', 'M4', cl)
+    const result = derivePromotionSign('M4', 'M4', ms)
     expect(result.promotionSign).toBeUndefined()
   })
 
   test('マスタに存在しないバンド（warningLevel=0）→ promotionSign は undefined', () => {
-    const result = derivePromotionSign('UNKNOWN', 'M4', cl)
+    const result = derivePromotionSign('UNKNOWN', 'M4', ms)
     expect(result.promotionSign).toBeUndefined()
   })
 
   test('prevBand が undefined → promotionSign は undefined', () => {
-    const result = derivePromotionSign('M4', undefined, cl)
+    const result = derivePromotionSign('M4', undefined, ms)
     expect(result.promotionSign).toBeUndefined()
   })
 })

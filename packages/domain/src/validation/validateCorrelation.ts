@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../masters/aggregate'
+import type { AllMasters } from '../masters/aggregate'
 import type { OrgMasterEntry } from '../masters/orgMaster'
 import { UNION_MEMBER_CODE } from '../masters/unionMember'
 import type { ValidationIssue } from './types'
@@ -28,12 +28,12 @@ const ORG_SUB_FIELDS: OrgSubField[] = [
  * 自動導出が働いた場合は一致するが、直接変更で不整合が生じた場合を検出する。
  * マスタ未ロード時（orgMasterEntries が空）はスキップ。
  */
-function checkC1(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkC1(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.departmentCode) return []
-  if (codeLists.orgMasterEntries.length === 0) return []
+  if (masters.orgMasterEntries.length === 0) return []
 
-  const entry = codeLists.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
-             ?? codeLists.orgMasterEntries.find(e => e.code === row.departmentCode)
+  const entry = masters.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
+             ?? masters.orgMasterEntries.find(e => e.code === row.departmentCode)
   if (!entry) return []
 
   const issues: ValidationIssue[] = []
@@ -51,12 +51,12 @@ function checkC1(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[]
  * C2: C1 の派生。勤務場所・コストセンターをマスタと照合する。
  * マスタ側が未入力のフィールドはスキップ。
  */
-function checkC2(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkC2(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.departmentCode) return []
-  if (codeLists.orgMasterEntries.length === 0) return []
+  if (masters.orgMasterEntries.length === 0) return []
 
-  const entry = codeLists.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
-             ?? codeLists.orgMasterEntries.find(e => e.code === row.departmentCode)
+  const entry = masters.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
+             ?? masters.orgMasterEntries.find(e => e.code === row.departmentCode)
   if (!entry) return []
 
   const issues: ValidationIssue[] = []
@@ -87,23 +87,23 @@ function checkC3(row: AllocationRow): ValidationIssue[] {
 const SECONDMENT_ORG_LEVEL = '出向者用組織'
 
 // C4: 出向先会社設定時の組織コードチェック（カスタム部分のみ）
-function checkC4(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+function checkC4(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (!row.secondmentToCompany) return []
   if (!row.departmentCode) return []
 
-  const org = codeLists.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
-           ?? codeLists.orgMasterEntries.find(e => e.code === row.departmentCode)
+  const org = masters.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
+           ?? masters.orgMasterEntries.find(e => e.code === row.departmentCode)
   if (org && org.orgCategory !== SECONDMENT_ORG_LEVEL)
     return [{ field: 'departmentCode', level: 'error',
       message: '出向先会社が入力されている場合、組織コードは出向者用組織を選択してください' }]
   return []
 }
 
-export function runCorrelation(row: AllocationRow, codeLists: AllCodeLists): ValidationIssue[] {
+export function runCorrelation(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   return [
-    ...checkC1(row, codeLists),
-    ...checkC2(row, codeLists),
+    ...checkC1(row, masters),
+    ...checkC2(row, masters),
     ...checkC3(row),
-    ...checkC4(row, codeLists),
+    ...checkC4(row, masters),
   ]
 }

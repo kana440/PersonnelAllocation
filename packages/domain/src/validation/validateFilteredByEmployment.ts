@@ -1,5 +1,5 @@
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../masters/aggregate'
+import type { AllMasters } from '../masters/aggregate'
 import { FIELD_CONSTRAINTS, evaluateConstraint, type ConstraintRule } from '../fieldConstraints'
 import type { FieldStrictness } from '../optionStrictness'
 import type { ValidationIssue } from './types'
@@ -12,6 +12,6 @@ const CONDITIONAL_CONSTRAINT_RULES = FIELD_CONSTRAINTS.filter(
   (r): r is ConstraintRule => r.kind === 'constraint' && !!r.when
 )
 
-export function runFilteredByEmployment(row: AllocationRow, codeLists: AllCodeLists, overrides?: Overrides): ValidationIssue[] {
-  return CONDITIONAL_CONSTRAINT_RULES.flatMap(r => evaluateConstraint(r, row, codeLists, overrides))
+export function runFilteredByEmployment(row: AllocationRow, masters: AllMasters, overrides?: Overrides): ValidationIssue[] {
+  return CONDITIONAL_CONSTRAINT_RULES.flatMap(r => evaluateConstraint(r, row, masters, overrides))
 }

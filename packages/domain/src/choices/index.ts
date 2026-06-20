@@ -3,7 +3,7 @@
 // jobType のみ currentJobFamily コンテキストが必要なためカスタム処理。
 
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists } from '../masters/aggregate'
+import type { AllMasters } from '../masters/aggregate'
 import { FIELD_CONSTRAINTS, getEffectiveSource } from '../fieldConstraints'
 
 /** 条件付きルールが適用されたときの有効・無効の分類結果 */
@@ -17,26 +17,26 @@ export interface OptionsGroup {
 // ── ベース選択肢の組み立て ───────────────────────────────────────────────────
 
 /**
- * フィールド名と codeLists からベース選択肢リストを返す。
+ * フィールド名と masters からベース選択肢リストを返す。
  * 行の状態による絞り込みは行わない。
  */
 export function buildBaseOptions(
   field:             string,
-  codeLists:         AllCodeLists,
+  masters:         AllMasters,
   currentJobFamily?: string,
 ): string[] {
   // jobType: 親子フィルタが必要なためカスタム処理
   if (field === 'jobType') {
-    const parent   = codeLists.jobFamilies.find(jf => jf.label === currentJobFamily)
+    const parent   = masters.jobFamilies.find(jf => jf.label === currentJobFamily)
     const filtered = parent
-      ? codeLists.jobTypes.filter(s => s.jobFamilyCode === parent.code)
-      : codeLists.jobTypes
+      ? masters.jobTypes.filter(s => s.jobFamilyCode === parent.code)
+      : masters.jobTypes
     return filtered.map(s => s.label)
   }
 
   // その他: FIELD_CONSTRAINTS の一般ルール（when なし）から source を取得
   const general = FIELD_CONSTRAINTS.find(r => r.field === (field as keyof AllocationRow) && !r.when)
-  return general ? general.source(codeLists) : []  // general rules do not need row
+  return general ? general.source(masters) : []  // general rules do not need row
 }
 
 // ── 絞り込み ─────────────────────────────────────────────────────────────────
@@ -50,15 +50,15 @@ export function filterOptions(
   field:     string,
   row:       AllocationRow,
   base:      string[],
-  codeLists: AllCodeLists,
+  masters: AllMasters,
 ): string[] {
-  const effective = getEffectiveSource(field as keyof AllocationRow, row, codeLists)
+  const effective = getEffectiveSource(field as keyof AllocationRow, row, masters)
   // effective が base と同じ内容（条件ルールなし）なら base を返す
   // getEffectiveSource は条件ルールが優先なので、条件付きルールが存在すれば上書きされる
   if (effective === null) return base
   // 条件付きルールが適用された場合は effective を返す（base を無視）
   const hasConditional = FIELD_CONSTRAINTS.some(
-    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
+    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, masters)
   )
   return hasConditional ? effective : base
 }
@@ -73,16 +73,16 @@ export function filterOptions(
 export function getGroupedFieldOptions(
   field:             string,
   row:               AllocationRow,
-  codeLists:         AllCodeLists,
+  masters:         AllMasters,
   currentJobFamily?: string,
 ): OptionsGroup {
-  const base = buildBaseOptions(field, codeLists, currentJobFamily)
+  const base = buildBaseOptions(field, masters, currentJobFamily)
   const hasConditional = FIELD_CONSTRAINTS.some(
-    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, codeLists)
+    r => r.field === (field as keyof AllocationRow) && r.when && r.when(row, masters)
   )
   if (!hasConditional) return { valid: base, invalid: [] }
 
-  const effective = getEffectiveSource(field as keyof AllocationRow, row, codeLists)
+  const effective = getEffectiveSource(field as keyof AllocationRow, row, masters)
   if (!effective || effective.length === 0) return { valid: base, invalid: [] }
 
   const effectiveSet = new Set(effective)
@@ -99,9 +99,9 @@ export function getGroupedFieldOptions(
 export function getFieldOptions(
   field:             string,
   row:               AllocationRow,
-  codeLists:         AllCodeLists,
+  masters:         AllMasters,
   currentJobFamily?: string,
 ): string[] {
-  const { valid, invalid } = getGroupedFieldOptions(field, row, codeLists, currentJobFamily)
+  const { valid, invalid } = getGroupedFieldOptions(field, row, masters, currentJobFamily)
   return [...valid, ...invalid]
 }

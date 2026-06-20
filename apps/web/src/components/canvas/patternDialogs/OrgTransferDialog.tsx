@@ -13,7 +13,7 @@ interface Props {
 const FIELD_KEYS = new Set(['departmentCode'])
 
 export function OrgTransferDialog({ rowId, onClose }: Props) {
-  const { allocationList, codeLists, afterOrganizations } = useStore()
+  const { allocationList, masters, afterOrganizations } = useStore()
   const row = allocationList.find(r => r.rowId === rowId)
 
   const [deptCode,      setDeptCode]      = useState((row?.departmentCode as string | undefined) ?? '')
@@ -26,9 +26,9 @@ export function OrgTransferDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList })
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList })
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList])
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   if (!row || !effectiveRow) return null
 
@@ -97,7 +97,7 @@ export function OrgTransferDialog({ rowId, onClose }: Props) {
       {orgSearchOpen && (
         <OrgSearchDialog
           afterOrganizations={afterOrganizations}
-          orgMasterEntries={codeLists.orgMasterEntries}
+          orgMasterEntries={masters.orgMasterEntries}
           onSelect={(code) => { setDeptCode(code); setOrgSearchOpen(false) }}
           onClose={() => setOrgSearchOpen(false)}
         />

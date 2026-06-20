@@ -12,7 +12,7 @@ import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList
 export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
   const {
     allocationList, selectedRowId, saveRow,
-    afterOrganizations, codeLists,
+    afterOrganizations, masters,
   } = useStore()
 
   const [buffer,       setBuffer]       = useState<Partial<Record<string, string>>>({})
@@ -34,8 +34,8 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList })
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList])
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList })
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   if (!selectedRowId || !row || !effectiveRow) {
     return (
@@ -47,7 +47,7 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
     const changes = { [key as string]: value } as Partial<Record<keyof AllocationRow, string>>
-    const derived = deriveFieldUpdates(changes, effectiveRow, codeLists)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters)
     setBuffer(prev => ({ ...prev, ...changes, ...derived }))
     setIsDirty(true)
   }
@@ -68,13 +68,13 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
     if (derivedName) updates.managerName = derivedName
 
     const deptCode = (effectiveRow.departmentCode as string | undefined) ?? ''
-    const orgFields = deriveOrgSubFields(deptCode, codeLists)
+    const orgFields = deriveOrgSubFields(deptCode, masters)
     if (orgFields) Object.assign(updates, orgFields)
 
     const jobType = (effectiveRow.jobType as string | undefined) ?? ''
     const band    = (effectiveRow.band    as string | undefined) ?? ''
     if (jobType && band) {
-      const pg = deriveFieldUpdates({ jobType, band } as Partial<Record<keyof AllocationRow, string>>, effectiveRow, codeLists)
+      const pg = deriveFieldUpdates({ jobType, band } as Partial<Record<keyof AllocationRow, string>>, effectiveRow, masters)
       if (pg.payGrade) updates.payGrade = pg.payGrade
     }
 
@@ -146,8 +146,8 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
         effectiveRow={effectiveRow}
         issues={issues}
         readOnly={readOnly}
-        transferReasonOptions={getOptions('transferReason', codeLists, currentJobFamily, effectiveRow).valid}
-        demotionReasonOptions={getOptions('demotionReason', codeLists, currentJobFamily, effectiveRow).valid}
+        transferReasonOptions={getOptions('transferReason', masters, currentJobFamily, effectiveRow).valid}
+        demotionReasonOptions={getOptions('demotionReason', masters, currentJobFamily, effectiveRow).valid}
         onChange={handleChange}
       />
 
@@ -169,7 +169,7 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
         issues={issues}
         allocationList={allocationList}
         afterOrganizations={afterOrganizations}
-        codeLists={codeLists}
+        masters={masters}
         readOnly={readOnly}
         currentJobFamily={currentJobFamily}
         onChange={handleChange}

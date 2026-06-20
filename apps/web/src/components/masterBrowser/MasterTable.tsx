@@ -19,7 +19,7 @@ function cellClass(v: unknown): string {
   return ''
 }
 
-export function CodeListTable({ data }: Props) {
+export function MasterTable({ data }: Props) {
   const [search,  setSearch]  = useState('')
   const [sortCol, setSortCol] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')

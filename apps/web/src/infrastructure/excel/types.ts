@@ -1,8 +1,8 @@
-import type { AllCodeLists }  from '@personnel/domain/masters/aggregate'
+import type { AllMasters }  from '@personnel/domain/masters/aggregate'
 import type { Organization }  from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { OrgMasterEntry } from '@personnel/domain/masters/orgMaster'
-import type { CompatibilityWarning } from '../codeLists/parser'
+import type { CompatibilityWarning } from '../masters/parser'
 
 export interface ColumnWarning {
   sheet:   string
@@ -10,7 +10,7 @@ export interface ColumnWarning {
 }
 
 export interface ImportedWorkbookResult {
-  codeLists:                    AllCodeLists
+  masters:                    AllMasters
   beforeOrganizations:          Organization[]
   afterOrganizations:           Organization[]
   allocationList:               AllocationRow[]
@@ -19,7 +19,7 @@ export interface ImportedWorkbookResult {
   orgEntries:                   OrgMasterEntry[]   // 新組織CD一覧エントリ
   oldOrgEntries:                OrgMasterEntry[]   // 旧組織CD一覧エントリ（シートなし時は空配列）
   allocationRowCount:           number
-  codeListCompatibilityWarnings: CompatibilityWarning[]
+  masterCompatibilityWarnings: CompatibilityWarning[]
   columnWarnings:               ColumnWarning[]
 }
 

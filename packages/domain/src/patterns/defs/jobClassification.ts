@@ -20,7 +20,7 @@ function detectBandChangeKind(row: AllocationRow, ctx: DetectContext): 'promotio
   }
 
   if (posBandChanged) {
-    const jlwm = new Map(ctx.codeLists.jobLevels.map(e => [e.code, e.promotionDemotionWarningLevel]))
+    const jlwm = new Map(ctx.masters.jobLevels.map(e => [e.code, e.promotionDemotionWarningLevel]))
     const prev  = jlwm.get(row.prevPositionBand ?? '')
     const after = jlwm.get(row.positionBand     ?? '')
     if (prev !== undefined && after !== undefined) {

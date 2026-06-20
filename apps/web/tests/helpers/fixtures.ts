@@ -1,7 +1,7 @@
 import type { AllocationRow }  from '@personnel/domain/allocationRow'
-import type { AllCodeLists }   from '@personnel/domain/masters/aggregate'
+import type { AllMasters }   from '@personnel/domain/masters/aggregate'
 import type { Organization }   from '@personnel/domain/schemas'
-import { EMPTY_CODE_LISTS }    from '@personnel/domain/masters/aggregate'
+import { EMPTY_MASTERS }    from '@personnel/domain/masters/aggregate'
 
 // ── 最小有効行 ─────────────────────────────────────────────────────────────────
 // transferReason のみ設定。各テストが必要なフィールドを override する。
@@ -90,8 +90,8 @@ export const MOCK_ORG_ENTRIES = {
 }
 
 // デフォルトのコードリストモック（テスト可能な最小セット）
-export const MOCK_CODE_LISTS: AllCodeLists = {
-  ...EMPTY_CODE_LISTS,
+export const MOCK_CODE_LISTS: AllMasters = {
+  ...EMPTY_MASTERS,
   employmentTypes:   Object.values(MOCK_EMP_TYPES),
   jobLevels:         Object.values(MOCK_JOB_LEVELS),
   payGrades:         Object.values(MOCK_PAY_GRADES),
@@ -105,7 +105,7 @@ export const MOCK_CODE_LISTS: AllCodeLists = {
 }
 
 // 部分的な override でマージ
-export const makeCL = (overrides: Partial<AllCodeLists> = {}): AllCodeLists =>
+export const makeCL = (overrides: Partial<AllMasters> = {}): AllMasters =>
   ({ ...MOCK_CODE_LISTS, ...overrides })
 
 // Organization モック

@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import type { AllocationRow }  from '@personnel/domain/allocationRow'
-import type { AllCodeLists }   from '@personnel/domain/masters/aggregate'
+import type { AllMasters }   from '@personnel/domain/masters/aggregate'
 import type { Organization }   from '@personnel/domain/schemas'
 import type { FieldStrictness } from '@personnel/domain/optionStrictness'
 import type { RowChanges }     from '@personnel/domain/patterns/changeDetection'
@@ -17,7 +17,7 @@ export interface Scenario {
   /** makeRow へのオーバーライド */
   row: Partial<AllocationRow>
   /** makeCL へのオーバーライド */
-  cl?: Partial<AllCodeLists>
+  cl?: Partial<AllMasters>
   /** Organization リスト（省略時は MOCK_ORGS） */
   orgs?: Organization[]
   /** 全行リスト（E系の循環参照チェック用） */
@@ -50,10 +50,10 @@ export function runScenarios(suiteName: string, scenarios: Scenario[]) {
     for (const s of scenarios) {
       test(`${s.id}: ${s.desc}`, () => {
         const row      = makeRow(s.row)
-        const cl       = makeCL(s.cl)
+        const ms = makeCL(s.cl)
         const orgs     = s.orgs ?? MOCK_ORGS
         const issues   = validateRow(
-          { row, afterOrganizations: orgs, codeLists: cl, allocationList: s.allRows ?? [], changes: s.changes },
+          { row, afterOrganizations: orgs, masters: ms, allocationList: s.allRows ?? [], changes: s.changes },
           s.strictnessOverrides,
         )
 
@@ -73,7 +73,7 @@ export function runScenarios(suiteName: string, scenarios: Scenario[]) {
         }
 
         for (const opt of s.expect.options ?? []) {
-          const { valid } = getGroupedFieldOptions(opt.field, row, cl)
+          const { valid } = getGroupedFieldOptions(opt.field, row, ms)
           for (const v of opt.includes ?? []) {
             expect(
               valid,

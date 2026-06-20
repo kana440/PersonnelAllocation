@@ -3,13 +3,13 @@ import { adminApi, type ApiRound, type CreateRoundBody } from '../../../infrastr
 import { importFromFile } from '../../../infrastructure/excel/exceljs/importer'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 
 interface ImportedData {
   rows:               AllocationRow[]
   beforeOrganizations: Organization[]
   afterOrganizations:  Organization[]
-  codeLists:           AllCodeLists
+  masters:           AllMasters
   excelBase64:         string
   filename:            string
 }
@@ -54,7 +54,7 @@ export function RoundCreateModal({ onCreated, onCancel }: Props) {
         rows:                result.allocationList,
         beforeOrganizations: result.beforeOrganizations,
         afterOrganizations:  result.afterOrganizations,
-        codeLists:           result.codeLists,
+        masters:           result.masters,
         excelBase64,
         filename:            file.name,
       })
@@ -88,7 +88,7 @@ export function RoundCreateModal({ onCreated, onCancel }: Props) {
           rows:                importedData.rows,
           beforeOrganizations: importedData.beforeOrganizations,
           afterOrganizations:  importedData.afterOrganizations,
-          codeLists:           importedData.codeLists,
+          masters:           importedData.masters,
           excelBase64:         importedData.excelBase64,
           excelFilename:       importedData.filename,
         } : {}),

@@ -14,10 +14,10 @@ interface Props {
 }
 
 export function AfterInitWizard({ result, onComplete }: Props) {
-  const { allocationList, afterOrganizations, beforeOrganizations, codeLists } = result
+  const { allocationList, afterOrganizations, beforeOrganizations, masters } = result
 
   const initialGroups = useMemo(
-    () => buildOrgMappingGroups(allocationList, afterOrganizations, beforeOrganizations, codeLists),
+    () => buildOrgMappingGroups(allocationList, afterOrganizations, beforeOrganizations, masters),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
@@ -25,7 +25,7 @@ export function AfterInitWizard({ result, onComplete }: Props) {
   const [groups, setGroups] = useState<OrgMappingGroup[]>(initialGroups)
 
   const uninitCount = useMemo(
-    () => allocationList.filter(r => isUninitializedRow(r, codeLists)).length,
+    () => allocationList.filter(r => isUninitializedRow(r, masters)).length,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )

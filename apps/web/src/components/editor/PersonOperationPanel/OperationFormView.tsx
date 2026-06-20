@@ -29,11 +29,11 @@ interface Props {
 }
 
 export function OperationFormView({ def, row, onBack, overrideInitial }: Props) {
-  const { allocationList, codeLists, afterOrganizations } = useStore()
+  const { allocationList, masters, afterOrganizations } = useStore()
 
   const ctx = useMemo(
-    () => ({ allocationList, afterOrganizations, codeLists }),
-    [allocationList, afterOrganizations, codeLists]
+    () => ({ allocationList, afterOrganizations, masters }),
+    [allocationList, afterOrganizations, masters]
   )
   const initialValues = useMemo(
     () => ({ ...def.onOpen(row, ctx), ...(overrideInitial ?? {}) }),
@@ -63,7 +63,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
 
   const handleChange = (field: keyof AllocationRow, value: string) => {
     const changes  = { [field]: value } as Partial<AllocationRow>
-    const derived  = deriveFieldUpdates(changes, draftRow, codeLists, allocationList)
+    const derived  = deriveFieldUpdates(changes, draftRow, masters, allocationList)
     const effects  = def.onFieldChange?.[field]?.(value, ctx)
 
     setValues(prev => ({
@@ -97,9 +97,9 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   }
 
   const issues = useMemo(
-    () => validateRow({ row: draftRow, afterOrganizations, codeLists, allocationList })
+    () => validateRow({ row: draftRow, afterOrganizations, masters, allocationList })
       .filter(i => fieldInputs.some(inp => inp.field === i.field && !inp.readOnly)),
-    [draftRow, afterOrganizations, codeLists, allocationList, fieldInputs]
+    [draftRow, afterOrganizations, masters, allocationList, fieldInputs]
   )
 
   const needsNewPosition = (): boolean => {
@@ -337,10 +337,10 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               : null
             const { valid, invalid } = resolvedOptions
               ? { valid: resolvedOptions, invalid: [] as string[] }
-              : getGroupedFieldOptions(fieldKey, draftRow, codeLists, currentJobFamily)
+              : getGroupedFieldOptions(fieldKey, draftRow, masters, currentJobFamily)
             const fieldBaseBand = (row[field] as string | undefined)
             const filteredValid = stepFilter
-              ? filterBandsByStep(valid, fieldBaseBand, codeLists, stepMode, stepFilter)
+              ? filterBandsByStep(valid, fieldBaseBand, masters, stepMode, stepFilter)
               : valid
 
             return (
@@ -390,7 +390,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
         {orgPickerField && (
           <OrgSearchDialog
             afterOrganizations={afterOrganizations}
-            orgMasterEntries={codeLists.orgMasterEntries}
+            orgMasterEntries={masters.orgMasterEntries}
             onSelect={(code) => {
               handleChange(orgPickerField as keyof AllocationRow, code)
               setOrgPickerField(null)

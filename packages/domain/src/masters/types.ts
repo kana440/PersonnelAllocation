@@ -5,4 +5,4 @@ export interface CodeEntry {
 }
 
 // Type helper for runtime code list arrays (populated from master data imports)
-export type CodeList<T extends CodeEntry = CodeEntry> = readonly T[]
+export type MasterList<T extends CodeEntry = CodeEntry> = readonly T[]

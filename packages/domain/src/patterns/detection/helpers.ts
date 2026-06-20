@@ -14,7 +14,7 @@ export interface DetectContext extends DomainContext {
 export function isNoCheckReason(row: AllocationRow, ctx: DetectContext): boolean {
   const tr = row.transferReason as string | undefined
   if (!tr) return false
-  return ctx.codeLists.transferReasons.some(r => r.label === tr && r.noCheckRequired)
+  return ctx.masters.transferReasons.some(r => r.label === tr && r.noCheckRequired)
 }
 
 // ── バンド比較ヘルパー ────────────────────────────────────────────────────────

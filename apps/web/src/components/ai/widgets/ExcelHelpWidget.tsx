@@ -1,4 +1,4 @@
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER } from '../../../infrastructure/excel/engine'
+import { SHEET_ALLOCATION, SHEET_MASTERS, SHEET_ORG_MASTER } from '../../../infrastructure/excel/engine'
 
 export function ExcelHelpWidget() {
   return (
@@ -7,7 +7,7 @@ export function ExcelHelpWidget() {
         <p className="text-gray-500 mb-2">要員の配置情報シートです。「No」または「ユーザー/社員ID」を含むヘッダ行を自動検出します。</p>
       </Section>
 
-      <Section title={`シート②：${SHEET_CODE_LISTS}`}>
+      <Section title={`シート②：${SHEET_MASTERS}`}>
         <p className="text-gray-500 mb-2">コードリストが横並びのシートです。行1がヘッダ、行2以降がデータです。</p>
         <Table rows={[
           ['B–D列',   '会社絞込用（会社CD・名称）'],

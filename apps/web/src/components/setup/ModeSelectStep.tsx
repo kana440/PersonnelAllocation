@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
+import { SHEET_ALLOCATION, SHEET_MASTERS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
-import { CODE_LIST_LABELS } from '../../infrastructure/codeLists/parser'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
+import { MASTER_LABELS } from '../../infrastructure/masters/parser'
 import { AssigneeSelectStep } from './AssigneeSelectStep'
 
 interface Props {
@@ -70,7 +70,7 @@ export function ModeSelectStep({ result, onAdmin, onAssigneeSelect, onBack }: Pr
                 detail={result.oldOrgEntries.length > 0 ? `${result.oldOrgEntries.length} 組織（旧）` : undefined}
                 optional
               />
-              <CodeListSummaryRow result={result} />
+              <MasterSummaryRow result={result} />
             </div>
           )}
         </div>
@@ -126,13 +126,13 @@ function SummaryRow({ label, found, detail, optional }: { label: string; found: 
   )
 }
 
-function CodeListSummaryRow({ result }: { result: ImportedWorkbookResult }) {
-  const codeListKeys = (Object.keys(CODE_LIST_LABELS) as (keyof AllCodeLists)[]).filter(k => k !== 'orgMasterEntries')
-  const foundKeys = codeListKeys.filter(k => {
-    const val = result.codeLists[k]
+function MasterSummaryRow({ result }: { result: ImportedWorkbookResult }) {
+  const masterKeys = (Object.keys(MASTER_LABELS) as (keyof AllMasters)[]).filter(k => k !== 'orgMasterEntries')
+  const foundKeys = masterKeys.filter(k => {
+    const val = result.masters[k]
     return Array.isArray(val) && val.length > 0
   })
-  const found = result.sheetsFound.includes(SHEET_CODE_LISTS)
+  const found = result.sheetsFound.includes(SHEET_MASTERS)
   return (
     <div className="flex items-start gap-2">
       <span className={`text-sm leading-none mt-0.5 ${found ? 'text-green-500' : 'text-gray-300'}`}>
@@ -140,18 +140,18 @@ function CodeListSummaryRow({ result }: { result: ImportedWorkbookResult }) {
       </span>
       <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`font-mono ${found ? 'text-gray-700' : 'text-gray-400'}`}>{SHEET_CODE_LISTS}</span>
-          {found && <span className="text-gray-400">{foundKeys.length} / {codeListKeys.length} 種類</span>}
+          <span className={`font-mono ${found ? 'text-gray-700' : 'text-gray-400'}`}>{SHEET_MASTERS}</span>
+          {found && <span className="text-gray-400">{foundKeys.length} / {masterKeys.length} 種類</span>}
           {!found && <span className="text-gray-400 italic">シートが見つかりません</span>}
         </div>
         {found && foundKeys.length > 0 && (
           <p className="text-gray-400 mt-0.5 leading-relaxed">
-            {foundKeys.map(k => CODE_LIST_LABELS[k]).join(' · ')}
+            {foundKeys.map(k => MASTER_LABELS[k]).join(' · ')}
           </p>
         )}
-        {result.codeListCompatibilityWarnings.length > 0 && (
+        {result.masterCompatibilityWarnings.length > 0 && (
           <div className="mt-1 space-y-0.5">
-            {result.codeListCompatibilityWarnings.map(w => (
+            {result.masterCompatibilityWarnings.map(w => (
               <p key={w.field} className="text-amber-600 text-xs">
                 ⚠ {w.field}: Excel の値 [{w.actual.join(', ')}] がハードコード定数 [{w.expected.join(', ')}] と一致しません
               </p>

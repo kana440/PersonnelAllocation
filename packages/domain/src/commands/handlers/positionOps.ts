@@ -29,7 +29,7 @@ export class CreateVacantPositionOperation implements EditCommand {
     const newRow: AllocationRow = {
       rowId,
       departmentCode: this.departmentCode,
-      ...deriveOrgSubFields(this.departmentCode, ctx.codeLists),
+      ...deriveOrgSubFields(this.departmentCode, ctx.masters),
       localJobTitle:  this.localJobTitle,
       positionCode:   `_pos_${rowId}`,
       ...(this.extraFields ?? {}),

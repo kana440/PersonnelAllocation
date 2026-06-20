@@ -5,7 +5,7 @@ import { SetupView }          from './components/setup/SetupView'
 import { ClearSessionDialog } from './components/common/ClearSessionDialog'
 import { useStore }           from './store/useStore'
 import { useUserSession }     from './store/useUserSession'
-import { useCodeListStore }   from './store/codeListStore'
+import { useMasterStore }   from './store/masterStore'
 import { ScopeSelector }          from './components/header/ScopeSelector'
 import { MergeImportButton }      from './components/header/MergeImportButton'
 import { AssigneeWizard }         from './components/header/AssigneeWizard'
@@ -64,7 +64,7 @@ interface Props {
 
 export default function App({ onExit }: Props = {}) {
   const { isLoading } = useStore()
-  const { isChecked, checkStorage } = useCodeListStore()
+  const { isChecked, checkStorage } = useMasterStore()
 
   const [appMode,      setAppMode]      = useState<'editor' | 'admin'>('editor')
   const [sessionReady, setSessionReady] = useState(false)

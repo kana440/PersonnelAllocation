@@ -42,7 +42,7 @@ export const orgTransferDef: EditOperation = {
 
   onOpen: (row, ctx) => {
     const mpc      = row.managerPositionCode as string | undefined
-    const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.codeLists)
+    const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.masters)
     return {
       transferReason:      row.transferReason as string | undefined,
       departmentCode:      row.departmentCode as string | undefined,
@@ -70,7 +70,7 @@ export const orgTransferDef: EditOperation = {
     const row     = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string
     const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
-    const subFields = deriveOrgSubFields(deptCode, ctx.codeLists)
+    const subFields = deriveOrgSubFields(deptCode, ctx.masters)
     const managerFields = values.managerPositionCode !== undefined
       ? { managerPositionCode: values.managerPositionCode, managerName: values.managerName }
       : {}
@@ -97,7 +97,7 @@ export const orgRestructureDef: EditOperation = {
 
   inputs: [
     { field: 'transferReason',  required: false,
-      options: (ctx) => ctx.codeLists.transferReasons
+      options: (ctx) => ctx.masters.transferReasons
         .map(r => r.label)
         .filter(l => l.includes('改組') || l === '分掌移動') },
     { field: 'departmentCode',  required: true, label: '継承先組織コード', picker: 'org' },
@@ -111,7 +111,7 @@ export const orgRestructureDef: EditOperation = {
   ],
 
   onOpen: (row, ctx) => {
-    const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.codeLists)
+    const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.masters)
     return {
       transferReason: row.transferReason as string | undefined,
       departmentCode: row.departmentCode as string | undefined,
@@ -137,7 +137,7 @@ export const orgRestructureDef: EditOperation = {
     const row      = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string
     const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
-    const subFields = deriveOrgSubFields(deptCode, ctx.codeLists)
+    const subFields = deriveOrgSubFields(deptCode, ctx.masters)
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId

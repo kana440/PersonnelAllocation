@@ -1,4 +1,4 @@
-import { SHEET_ALLOCATION, SHEET_CODE_LISTS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
+import { SHEET_ALLOCATION, SHEET_MASTERS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
 
 interface Props {
   onClose: () => void
@@ -25,7 +25,7 @@ export function SetupHelp({ onClose }: Props) {
             ]} />
           </HelpSection>
 
-          <HelpSection title={`シート②：${SHEET_CODE_LISTS}`}>
+          <HelpSection title={`シート②：${SHEET_MASTERS}`}>
             <p className="text-gray-500 mb-2">コードリストが横並びで配置されているシートです。行1がヘッダ、行2以降がデータ。</p>
             <HelpTable rows={[
               ['B – D列',    '会社絞込用（会社CD・名称・裁量VMフラグ）'],

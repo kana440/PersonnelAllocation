@@ -63,14 +63,14 @@ export function TreeWindow({ panel }: TreeWindowProps) {
     addPanel, setOrgOpen, setCollapsedOrgIds,
     comparisonMode, comparisonOrgMapping, setComparisonOrgMap, clearComparisonOrgMap,
   } = useCanvasLayoutStore()
-  const codeLists           = useStore(s => s.codeLists)
+  const masters           = useStore(s => s.masters)
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
 
   // ── ヘッダー色 ─────────────────────────────────────────────────
   const org = organizations.find(o => o.id === panel.orgId)
   const hasRows      = subtreeRowCount(panel.orgId, organizations, positionTreeByOrgId) > 0
   const isSecondment = org?.externalCode
-    ? isSecondmentOrg(org.externalCode, codeLists)
+    ? isSecondmentOrg(org.externalCode, masters)
     : false
   const headerBg = isSecondment ? '#2e7d52' : !hasRows ? '#b54520' : '#3c7abf'
 

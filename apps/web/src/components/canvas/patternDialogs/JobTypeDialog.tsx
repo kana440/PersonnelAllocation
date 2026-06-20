@@ -21,7 +21,7 @@ const FIELDS: Array<{ key: keyof AllocationRow; prevKey: keyof AllocationRow; la
 const FIELD_KEYS = new Set(FIELDS.map(f => f.key as string))
 
 export function JobTypeDialog({ rowId, onClose }: Props) {
-  const { allocationList, codeLists, afterOrganizations } = useStore()
+  const { allocationList, masters, afterOrganizations } = useStore()
   const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
@@ -34,9 +34,9 @@ export function JobTypeDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }, overrides)
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList, overrides])
+  }, [effectiveRow, afterOrganizations, masters, allocationList, overrides])
 
   if (!row || !effectiveRow) return null
 
@@ -72,7 +72,7 @@ export function JobTypeDialog({ rowId, onClose }: Props) {
             const fieldIssues = issues.filter(i => i.field === key)
             const hasError    = fieldIssues.some(i => i.level === 'error')
             const hasWarning  = fieldIssues.some(i => i.level === 'warning')
-            const { valid, invalid } = getGroupedFieldOptions(key as string, effectiveRow, codeLists, get('jobFamily'))
+            const { valid, invalid } = getGroupedFieldOptions(key as string, effectiveRow, masters, get('jobFamily'))
 
             return (
               <div key={key as string}>

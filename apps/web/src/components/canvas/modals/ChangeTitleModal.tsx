@@ -12,7 +12,7 @@ interface ChangeTitleModalProps {
 
 export function ChangeTitleModal({ rowId, allocationList, onDone, onCancel }: ChangeTitleModalProps) {
   const row = allocationList.find(r => r.rowId === rowId)
-  const { codeLists } = appService.getSnapshot()
+  const { masters } = appService.getSnapshot()
 
   const [officialPositionCode, setOfficialPositionCode] = useState(row?.officialPositionCode ?? '')
   const [localJobTitle,        setLocalJobTitle]        = useState(row?.localJobTitle        ?? '')
@@ -36,7 +36,7 @@ export function ChangeTitleModal({ rowId, allocationList, onDone, onCancel }: Ch
     onDone()
   }
 
-  const selectedOfficialEntry = codeLists.officialPositions.find(e => e.code === officialPositionCode)
+  const selectedOfficialEntry = masters.officialPositions.find(e => e.code === officialPositionCode)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
@@ -59,7 +59,7 @@ export function ChangeTitleModal({ rowId, allocationList, onDone, onCancel }: Ch
               className="w-full border border-gray-300 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-blue-400"
             >
               <option value="">（未設定）</option>
-              {codeLists.officialPositions.map(opt => (
+              {masters.officialPositions.map(opt => (
                 <option key={opt.code} value={opt.code}>{opt.label || opt.code}</option>
               ))}
             </select>
@@ -115,7 +115,7 @@ export function ChangeTitleModal({ rowId, allocationList, onDone, onCancel }: Ch
                 className="w-full border border-gray-300 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-blue-400"
               >
                 <option value="">（未設定）</option>
-                {codeLists.payGrades.map(opt => (
+                {masters.payGrades.map(opt => (
                   <option key={opt.code} value={opt.code}>{opt.label || opt.code}</option>
                 ))}
               </select>

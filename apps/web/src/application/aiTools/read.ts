@@ -159,20 +159,20 @@ export function createReadMethods(service: HRApplicationService) {
 
   /** 選択行のコンテキスト情報を返す。buildSystemPrompt に渡すために使う。 */
   function getRowContext(rowId: number): SelectedRowContext | null {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
     const row = allocationList.find(r => r.rowId === rowId)
     if (!row) return null
 
     const name    = [row.lastName, row.firstName].filter(Boolean).join(' ') || `行 ${rowId}`
     const org     = afterOrganizations.find(o => (o.externalCode ?? o.id) === row.departmentCode)
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
     const changes = detectPatterns(row, ctx)
-    const issues  = validateRow({ row, afterOrganizations, codeLists, allocationList, changes })
+    const issues  = validateRow({ row, afterOrganizations, masters, allocationList, changes })
 
     const changeKinds = [...changes.patterns].map(p => EDIT_PATTERN_META[p]?.label ?? p)
 
     const availableOps = ALL_EDIT_OPERATIONS
-      .filter(def => def.availableFor(row, codeLists))
+      .filter(def => def.availableFor(row, masters))
       .map(def => def.label)
 
     return {
@@ -204,7 +204,7 @@ export function createReadMethods(service: HRApplicationService) {
     const snap = service.getSnapshot()
     const row  = snap.allocationList.find(r => r.rowId === rowId)
     if (!row) return []
-    return getFieldOptionsFromDomain(field, row, snap.codeLists, row.jobFamily as string | undefined)
+    return getFieldOptionsFromDomain(field, row, snap.masters, row.jobFamily as string | undefined)
   }
 
   function findVacantPositions(query: { orgCode?: string; subtreeOrgCode?: string } = {}): VacantPositionResult[] {
@@ -324,8 +324,8 @@ export function createReadMethods(service: HRApplicationService) {
     totalCount: number
     truncated:  boolean
   } {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
     const limit  = options.limit  ?? CHANGED_ROWS_LIMIT
     const offset = options.offset ?? 0
 
@@ -415,15 +415,15 @@ export function createReadMethods(service: HRApplicationService) {
     oneLevelDown: string[]
     stepDiffFn: undefined
   } | { ok: false; error: string } {
-    const { allocationList, codeLists } = service.getSnapshot()
+    const { allocationList, masters } = service.getSnapshot()
     const row = allocationList.find(r => r.rowId === rowId)
     if (!row) return { ok: false, error: '行が見つかりません' }
     const currentPositionBand = row.positionBand as string | undefined
     return {
       currentPositionBand,
-      oneLevelUp:   getBandsByStep(currentPositionBand, 1, 'up',   codeLists),
-      twoLevelsUp:  getBandsByStep(currentPositionBand, 2, 'up',   codeLists).filter(b => !getBandsByStep(currentPositionBand, 1, 'up', codeLists).includes(b)),
-      oneLevelDown: getBandsByStep(currentPositionBand, 1, 'down', codeLists),
+      oneLevelUp:   getBandsByStep(currentPositionBand, 1, 'up',   masters),
+      twoLevelsUp:  getBandsByStep(currentPositionBand, 2, 'up',   masters).filter(b => !getBandsByStep(currentPositionBand, 1, 'up', masters).includes(b)),
+      oneLevelDown: getBandsByStep(currentPositionBand, 1, 'down', masters),
       stepDiffFn:   undefined,
     }
   }
@@ -433,18 +433,18 @@ export function createReadMethods(service: HRApplicationService) {
    * propose_promotion 前の確認に使う（2以上なら大きな昇格）。
    */
   function computePromotionStepDiff(rowId: number, newPositionBand: string): number | undefined | { ok: false; error: string } {
-    const { allocationList, codeLists } = service.getSnapshot()
+    const { allocationList, masters } = service.getSnapshot()
     const row = allocationList.find(r => r.rowId === rowId)
     if (!row) return { ok: false, error: '行が見つかりません' }
-    return computeBandStepDiff(row.positionBand as string | undefined, newPositionBand, codeLists)
+    return computeBandStepDiff(row.positionBand as string | undefined, newPositionBand, masters)
   }
 
   function getAvailableMultiRowOperations(anchorRowId: number) {
-    const { allocationList, codeLists } = service.getSnapshot()
+    const { allocationList, masters } = service.getSnapshot()
     const anchor = allocationList.find(r => r.rowId === anchorRowId)
     if (!anchor) return []
     return ALL_MULTI_ROW_OPERATION_DEFS
-      .filter(d => d.availableFor(anchor, codeLists, allocationList))
+      .filter(d => d.availableFor(anchor, masters, allocationList))
       .map(d => ({
         id:          d.id,
         label:       d.label,

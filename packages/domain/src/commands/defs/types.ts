@@ -1,5 +1,5 @@
 import type { AllocationRow }  from '../../allocationRow'
-import type { AllCodeLists }   from '../../masters/aggregate'
+import type { AllMasters }   from '../../masters/aggregate'
 import type { DomainContext, ValidationResult, OperationResult } from '../types'
 import type { OperationBadge } from './badge'
 
@@ -113,7 +113,7 @@ export interface EditOperation {
   /**
    * この操作が対象行に対してメニューに表示されるかどうか。
    */
-  availableFor(row: AllocationRow, codeLists: AllCodeLists): boolean
+  availableFor(row: AllocationRow, masters: AllMasters): boolean
 
   /**
    * 操作選択時の初期フィールド値を計算する（プレビュー用・UndoStack 非対象）。

@@ -6,12 +6,12 @@
  * UndoStack への記録は行わない（呼び出し側が判断する）。
  *
  * 使い方:
- *   const extra = deriveFieldUpdates(changes, currentRow, codeLists, allocationList)
+ *   const extra = deriveFieldUpdates(changes, currentRow, masters, allocationList)
  *   const merged = { ...changes, ...extra }
  */
 
 import type { AllocationRow } from '../allocationRow'
-import type { AllCodeLists }  from '../masters/aggregate'
+import type { AllMasters }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
 import { deriveOrgSubFields }        from './orgFields'
@@ -26,10 +26,10 @@ export { computePayGrade }                                from './jobFields'
 export type { DerivedUpdates, DerivationContext }         from './types'
 
 /** 社員（isRegularEmployee = true）かどうか — 循環依存回避のため derivation 内でローカル定義 */
-function isRegularEmp(row: AllocationRow, codeLists: AllCodeLists): boolean {
+function isRegularEmp(row: AllocationRow, masters: AllMasters): boolean {
   const emp = row.employmentType as string | undefined
   if (!emp) return false
-  const entry = codeLists.employmentTypes.find(e => e.label === emp || e.code === emp)
+  const entry = masters.employmentTypes.find(e => e.label === emp || e.code === emp)
   return !!entry?.isRegularEmployee
 }
 
@@ -47,7 +47,7 @@ function isRegularEmp(row: AllocationRow, codeLists: AllCodeLists): boolean {
 export function deriveFieldUpdates(
   changes:        DerivedUpdates,
   currentRow:     AllocationRow,
-  codeLists:      AllCodeLists,
+  masters:      AllMasters,
   allocationList: readonly AllocationRow[] = [],
 ): DerivedUpdates {
   const draft = { ...currentRow, ...changes } as AllocationRow
@@ -56,14 +56,14 @@ export function deriveFieldUpdates(
   // positionBand → band（社員かつ band が明示変更でない場合に自動連動）
   // effectiveChanges を正規化することで後続の band 依存ルールがそのまま働く
   const effectiveChanges: DerivedUpdates = { ...changes }
-  if ('positionBand' in changes && !('band' in changes) && isRegularEmp(draft, codeLists)) {
+  if ('positionBand' in changes && !('band' in changes) && isRegularEmp(draft, masters)) {
     effectiveChanges.band = changes.positionBand
     result.band = changes.positionBand  // positionBand → band を呼び出し側にも返す
   }
 
   // departmentCode → 組織サブフィールド群
   if ('departmentCode' in effectiveChanges && effectiveChanges.departmentCode) {
-    Object.assign(result, deriveOrgSubFields(effectiveChanges.departmentCode, codeLists))
+    Object.assign(result, deriveOrgSubFields(effectiveChanges.departmentCode, masters))
   }
 
   // managerPositionCode → managerName
@@ -74,7 +74,7 @@ export function deriveFieldUpdates(
   // band → promotionSign（warningLevel 比較）
   if ('band' in effectiveChanges) {
     const prevBand = draft.prevBand as string | undefined
-    Object.assign(result, derivePromotionSign(effectiveChanges.band, prevBand, codeLists))
+    Object.assign(result, derivePromotionSign(effectiveChanges.band, prevBand, masters))
   }
 
   // jobFamily → jobType / payGrade リセット
@@ -87,7 +87,7 @@ export function deriveFieldUpdates(
   const newBand    = ('band'    in effectiveChanges ? effectiveChanges.band    : draft.band)    as string | undefined
   if (('jobType' in effectiveChanges || 'band' in effectiveChanges) && newJobType && newBand) {
     if (!('jobFamily' in effectiveChanges)) {
-      Object.assign(result, derivePayGradeFromJobType(newJobType, newBand, codeLists))
+      Object.assign(result, derivePayGradeFromJobType(newJobType, newBand, masters))
     }
   }
 

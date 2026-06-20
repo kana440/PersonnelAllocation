@@ -63,7 +63,7 @@ export function RowCard({
   } = useOrgView()
 
   const displayFields = useCanvasDisplayStore(s => s.displayFields)
-  const codeLists     = useStore(s => s.codeLists)
+  const masters     = useStore(s => s.masters)
 
   const isVacant     = !person
   const isConcurrent = row.concurrentType === '兼務'
@@ -73,7 +73,7 @@ export function RowCard({
   )
   const isDropTarget = isVacant && dragOverVacantRowId === row.rowId
   const posTitle     = getPositionTitle(row)
-  const empBorder    = getEmpBorderClass(row, codeLists.employmentTypes)
+  const empBorder    = getEmpBorderClass(row, masters.employmentTypes)
   const draggable    = !isSelectMode && !isVacant && !isHistoryPreviewMode
 
   const bgClass =

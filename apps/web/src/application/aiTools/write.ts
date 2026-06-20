@@ -29,14 +29,14 @@ export function createWriteMethods(service: HRApplicationService) {
   function runPostValidation(
     beforeList: AllocationRow[],
   ): Array<{ rowId: number; issues: ValidationIssue[] }> {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    const ctx: DetectContext = { allocationList, afterOrganizations, codeLists }
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    const ctx: DetectContext = { allocationList, afterOrganizations, masters }
     const beforeMap = new Map(beforeList.map(r => [r.rowId, r]))
     return allocationList
       .filter(r => beforeMap.get(r.rowId) !== r)
       .map(r => ({
         rowId:  r.rowId,
-        issues: validateRow({ row: r, afterOrganizations, codeLists, allocationList, changes: detectPatterns(r, ctx) }),
+        issues: validateRow({ row: r, afterOrganizations, masters, allocationList, changes: detectPatterns(r, ctx) }),
       }))
       .filter(v => v.issues.length > 0)
   }
@@ -44,8 +44,8 @@ export function createWriteMethods(service: HRApplicationService) {
   // ── Core operations ───────────────────────────────────────────────────────
 
   function validateOperation(op: EditCommand): ValidationResult {
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
-    return op.validate({ allocationList, afterOrganizations, codeLists })
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
+    return op.validate({ allocationList, afterOrganizations, masters })
   }
 
   function executeOperation(op: EditCommand): AIOperationResult {
@@ -317,14 +317,14 @@ export function createWriteMethods(service: HRApplicationService) {
     newOfficialPositionCode?: string
     newLocalJobTitle?:        string
   }): { ok: true; name: string; diff: Record<string, { before: string | undefined; after: string | undefined }> } | { ok: false; error: string } {
-    const { allocationList, codeLists } = service.getSnapshot()
+    const { allocationList, masters } = service.getSnapshot()
     const row = allocationList.find(r => r.rowId === opts.rowId)
     if (!row) return { ok: false, error: '対象行が見つかりません' }
 
     const changes: Partial<AllocationRow> = { positionBand: opts.newPositionBand }
 
     // positionBand → band（社員なら連動）→ payGrade は deriveFieldUpdates が一括処理
-    const derived = deriveFieldUpdates(changes as AfterValues, row, codeLists, allocationList)
+    const derived = deriveFieldUpdates(changes as AfterValues, row, masters, allocationList)
     Object.assign(changes, derived)
 
     if (opts.newOfficialPositionCode !== undefined) changes.officialPositionCode = opts.newOfficialPositionCode
@@ -545,14 +545,14 @@ export function createWriteMethods(service: HRApplicationService) {
   ): AIOperationResult {
     const def = ALL_MULTI_ROW_OPERATION_DEFS.find(d => d.id === id)
     if (!def) return { ok: false, errors: [{ message: `MultiRowOperation "${id}" が見つかりません` }] }
-    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
     const anchor = allocationList.find(r => r.rowId === anchorRowId)
     if (!anchor) return { ok: false, errors: [{ message: `行 ${anchorRowId} が見つかりません` }] }
-    if (!def.availableFor(anchor, codeLists, allocationList)) {
+    if (!def.availableFor(anchor, masters, allocationList)) {
       return { ok: false, errors: [{ message: `${def.label} はこの行では使用できません` }] }
     }
     const beforeList = allocationList
-    const cmd    = def.createCommand(anchorRowId, sectionValues, { allocationList, afterOrganizations, codeLists })
+    const cmd    = def.createCommand(anchorRowId, sectionValues, { allocationList, afterOrganizations, masters })
     const result = service.executeOperation(cmd)
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }

@@ -21,7 +21,7 @@ export function DemotionWidget({
   rowId, proposedPositionBand, proposedOfficialPositionCode, proposedLocalJobTitle,
   demotionReason: initialDemotionReason, label, isActive, onConfirm, onCancel,
 }: Props) {
-  const { allocationList, codeLists } = useStore()
+  const { allocationList, masters } = useStore()
   const row = useMemo(() => allocationList.find(r => r.rowId === rowId), [allocationList, rowId])
 
   const [positionBand,         setPositionBand]         = useState(proposedPositionBand)
@@ -32,30 +32,30 @@ export function DemotionWidget({
 
   const bandOptions = useMemo(() => {
     if (!row) return []
-    const { valid } = getGroupedFieldOptions('positionBand', row, codeLists)
+    const { valid } = getGroupedFieldOptions('positionBand', row, masters)
     return valid
-  }, [row, codeLists])
+  }, [row, masters])
 
   const filteredBands = useMemo(
-    () => filterBandsByStep(bandOptions, row?.positionBand as string | undefined, codeLists, stepMode, 'down'),
-    [bandOptions, row?.positionBand, codeLists, stepMode]
+    () => filterBandsByStep(bandOptions, row?.positionBand as string | undefined, masters, stepMode, 'down'),
+    [bandOptions, row?.positionBand, masters, stepMode]
   )
 
   const demotionReasonOptions = useMemo(() => {
-    return codeLists.demotionReasons?.map((e: { label: string }) => e.label) ?? []
-  }, [codeLists])
+    return masters.demotionReasons?.map((e: { label: string }) => e.label) ?? []
+  }, [masters])
 
   const derived = useMemo(() => {
     if (!row) return {}
-    return deriveFieldUpdates({ positionBand }, row, codeLists, allocationList)
-  }, [row, positionBand, codeLists, allocationList])
+    return deriveFieldUpdates({ positionBand }, row, masters, allocationList)
+  }, [row, positionBand, masters, allocationList])
 
   const derivedBand     = derived.band     as string | undefined
   const derivedPayGrade = derived.payGrade as string | undefined
 
   const stepDiff = useMemo(
-    () => computeBandStepDiff(row?.positionBand as string | undefined, positionBand, codeLists),
-    [row?.positionBand, positionBand, codeLists]
+    () => computeBandStepDiff(row?.positionBand as string | undefined, positionBand, masters),
+    [row?.positionBand, positionBand, masters]
   )
 
   if (!row) return <div className="text-xs text-red-500 px-3 py-2">行が見つかりません (rowId: {rowId})</div>

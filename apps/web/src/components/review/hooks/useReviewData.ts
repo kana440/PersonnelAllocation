@@ -23,7 +23,7 @@ export interface ReviewData {
 }
 
 export function useReviewData(): ReviewData {
-  const { allocationList, afterOrganizations, beforeOrganizations, codeLists, orgMapping } = useScopedStore()
+  const { allocationList, afterOrganizations, beforeOrganizations, masters, orgMapping } = useScopedStore()
 
   // 旧組織ID → externalCode
   const beforeCodeById = useMemo(
@@ -53,9 +53,9 @@ export function useReviewData(): ReviewData {
   const detectCtx = useMemo((): DetectContext => ({
     allocationList,
     afterOrganizations,
-    codeLists,
+    masters,
     sameOrgPairs,
-  }), [allocationList, afterOrganizations, codeLists, sameOrgPairs])
+  }), [allocationList, afterOrganizations, masters, sameOrgPairs])
 
   const rows = useMemo((): ReviewRow[] =>
     allocationList.map(row => {
@@ -64,10 +64,10 @@ export function useReviewData(): ReviewData {
         row,
         changes,
         activePatterns: changes.patterns,
-        issues: validateRow({ row, afterOrganizations, codeLists, allocationList: [], changes }),
+        issues: validateRow({ row, afterOrganizations, masters, allocationList: [], changes }),
       }
     }),
-    [allocationList, afterOrganizations, codeLists, detectCtx]
+    [allocationList, afterOrganizations, masters, detectCtx]
   )
 
   const summary = useMemo(() => {
