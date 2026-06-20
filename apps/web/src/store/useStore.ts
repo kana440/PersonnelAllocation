@@ -1,4 +1,5 @@
 import { create } from 'zustand/react'
+import { useCanvasLayoutStore } from './canvasLayoutStore'
 import type { AfterValues } from '@personnel/domain/allocationRow'
 import type { ValidationResult } from '@personnel/domain/commands/types'
 import { appService } from '../application/HRApplicationService'
@@ -413,7 +414,10 @@ export const useStore = create<AppState>()((set, get) => {
     setOverviewViewMode:     (mode) => set({ overviewViewMode: mode }),
     focusOrg:                (orgId) => set({ focusedOrgId: orgId, workspaceMode: 'org' }),
     focusBefore:             (orgId) => set({ beforeFocusedOrgId: orgId }),
-    selectPerson:            (personId) => set({ selectedPersonId: personId, workspaceMode: 'person' }),
+    selectPerson:            (personId) => {
+      useCanvasLayoutStore.getState().clearOrgSelection()
+      set({ selectedPersonId: personId, workspaceMode: 'person' })
+    },
     clearPersonSelection:    () => set({ selectedPersonId: null, selectedRowId: null }),
     setPersonPickupViewMode: (mode) => set({ personPickupViewMode: mode }),
     setMemberPanelOrgId:     (orgId) => set({ memberPanelOrgId: orgId }),

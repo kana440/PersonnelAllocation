@@ -41,14 +41,33 @@ function makePanelDef(
 interface CanvasLayoutState {
   panels: PanelDef[]
 
-  /** Excel 読み込み時: メンバーがいる組織とその祖先のみパネルを作成。memberOrgIds 省略時は全組織 */
-  initPanels:    (orgs: { id: string; parentId?: string | null }[], memberOrgIds?: Set<string>) => void
+  // ── 接続線スタイル ──────────────────────────────────────────────
+  lineStyle:    'bezier' | 'polyline'
+  setLineStyle: (style: 'bezier' | 'polyline') => void
+
+  // ── パネル実測高さ（ResizeObserver から更新）────────────────────
+  /** panelId → px。未計測は undefined（計算時は EST_WIN_H でフォールバック） */
+  panelHeights:   Record<string, number>
+  setPanelHeight: (panelId: string, height: number) => void
+
+  // ── 組織選択（キャンバスフォーカス）──────────────────────────────
+  /** 選択中の組織 ID（ハイライト用）。人物選択と排他 */
+  selectedOrgId:     string | null
+  /** 組織を選択しキャンバス中央にスクロール要求を発行する */
+  selectOrg:         (orgId: string) => void
+  clearOrgSelection: () => void
+  /** 非null のとき TreeWindowCanvas が対応パネルを中央にスクロールし null に戻す */
+  scrollToOrgId:       string | null
+  requestScrollToOrg:  (orgId: string | null) => void
+
+  /** Excel 読み込み時: ルート組織のみパネルを作成 */
+  initPanels:         (orgs: { id: string; parentId?: string | null }[], memberOrgIds?: Set<string>) => void
   addPanel:           (orgId: string, options?: { childrenMode?: ChildrenMode; collapsedOrgIds?: string[] }) => void
   setCollapsedOrgIds: (panelId: string, ids: string[]) => void
-  removePanel:   (panelId: string) => void
-  reorderPanels: (orderedIds: string[]) => void
-  isInPanels:    (orgId: string) => boolean
-  clearPanels:   () => void
+  removePanel:        (panelId: string) => void
+  reorderPanels:      (orderedIds: string[]) => void
+  isInPanels:         (orgId: string) => boolean
+  clearPanels:        () => void
 
   setOpen:     (panelId: string, open: boolean) => void
   setOrgOpen:  (orgId: string, open: boolean) => void
@@ -61,10 +80,10 @@ interface CanvasLayoutState {
   setChildrenMode: (panelId: string, mode: ChildrenMode) => void
 
   // ── 自動整列 ────────────────────────────────────────────────────
+  // positions は autoArrange=ON のとき TreeWindowCanvas の useMemo で直接導出される。
+  // autoArrange=OFF のとき panel.x/y（手動配置済み座標）を使用。
   autoArrange:    boolean
-  arrangeVersion: number
   setAutoArrange: (v: boolean) => void
-  triggerArrange: () => void
 
   // ── キャンバスパン要求 ──────────────────────────────────────────
   /** 非null のとき TreeWindowCanvas が data-personid 要素を中央にスクロールし null に戻す */
@@ -101,10 +120,28 @@ interface CanvasLayoutState {
 export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   panels: [],
 
+  // ── 接続線スタイル ──────────────────────────────────────────────
+  lineStyle:    'polyline',
+  setLineStyle: (style) => set({ lineStyle: style }),
+
+  // ── パネル実測高さ ──────────────────────────────────────────────
+  panelHeights: {},
+  setPanelHeight: (panelId, height) => {
+    set(s => {
+      if (s.panelHeights[panelId] === height) return s
+      return { panelHeights: { ...s.panelHeights, [panelId]: height } }
+    })
+  },
+
+  // ── 組織選択 ────────────────────────────────────────────────────
+  selectedOrgId: null,
+  selectOrg: (orgId) => set({ selectedOrgId: orgId, scrollToOrgId: orgId }),
+  clearOrgSelection: () => set({ selectedOrgId: null }),
+  scrollToOrgId: null,
+  requestScrollToOrg: (orgId) => set({ scrollToOrgId: orgId }),
+
   initPanels: (orgs, _memberOrgIds?) => {
-    // 全 org のうち parentId がない or 親が org リストにないものだけをルートパネルとして表示。
-    // これにより全メンバーがいずれかのパネル配下に必ず収まる。
-    const orgIds = new Set(orgs.map(o => o.id))
+    const orgIds   = new Set(orgs.map(o => o.id))
     const rootOrgs = orgs.filter(o => !o.parentId || !orgIds.has(o.parentId))
     const panels: PanelDef[] = rootOrgs.map((org, i) =>
       makePanelDef(
@@ -115,9 +152,6 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
       )
     )
     set({ panels })
-    // 読み込み直後に自動整列を発火（arrangeVersion を必ず 1 以上にする）
-    if (get().autoArrange) get().triggerArrange()
-    else set(s => ({ arrangeVersion: Math.max(s.arrangeVersion, 1) }))
   },
 
   addPanel: (orgId, options?) => {
@@ -149,19 +183,18 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
 
   isInPanels: (orgId) => get().panels.some(p => p.orgId === orgId),
 
-  clearPanels: () => set({ panels: [], comparisonPanels: [], comparisonOrgMapping: {}, pendingMappingBeforeOrgId: null, comparisonArrangeVersion: 0 }),
+  clearPanels: () => set({
+    panels: [], panelHeights: {}, selectedOrgId: null, scrollToOrgId: null,
+    comparisonPanels: [], comparisonOrgMapping: {},
+    pendingMappingBeforeOrgId: null, comparisonArrangeVersion: 0,
+  }),
 
-  setOpen: (panelId, open) => {
-    set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, open } : p) }))
-    if (get().autoArrange) get().triggerArrange()
-  },
+  setOpen:    (panelId, open) =>
+    set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, open } : p) })),
 
-  setOrgOpen: (orgId, open) => {
-    set(s => ({ panels: s.panels.map(p => p.orgId === orgId ? { ...p, open } : p) }))
-    if (get().autoArrange) get().triggerArrange()
-  },
+  setOrgOpen: (orgId, open) =>
+    set(s => ({ panels: s.panels.map(p => p.orgId === orgId ? { ...p, open } : p) })),
 
-  // ─ ボタンはウィンドウの最小化操作なので自動整列は発火しない
   toggleOpen: (panelId) =>
     set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, open: !p.open } : p) })),
 
@@ -176,18 +209,12 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
       }),
     })),
 
-  setChildrenMode: (panelId, mode) => {
-    set(s => ({
-      panels: s.panels.map(p => p.id === panelId ? { ...p, childrenMode: mode } : p),
-    }))
-    if (get().autoArrange) get().triggerArrange()
-  },
+  setChildrenMode: (panelId, mode) =>
+    set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, childrenMode: mode } : p) })),
 
   // ── 自動整列 ────────────────────────────────────────────────────
   autoArrange:    true,
-  arrangeVersion: 0,
   setAutoArrange: (v) => set({ autoArrange: v }),
-  triggerArrange: ()  => set(s => ({ arrangeVersion: s.arrangeVersion + 1 })),
 
   // ── キャンバスパン要求 ──────────────────────────────────────────
   scrollToPersonId: null,

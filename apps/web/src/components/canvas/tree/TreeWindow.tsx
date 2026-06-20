@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { useOrgView }            from '../OrgViewContext'
 import { subtreeRowCount, hasAnyRows } from '../panel/helpers'
 import { useCanvasLayoutStore }  from '../../../store/canvasLayoutStore'
@@ -29,10 +29,9 @@ function getDescendantOrgIds(
   return result
 }
 
-const MAX_BODY_H = 1600
-
 interface TreeWindowProps {
-  panel: PanelDef
+  panel:       PanelDef
+  isSelected?: boolean
 }
 
 // ── iOS風トグルスイッチ（視覚のみ・クリックは親要素が担当）─────────
@@ -51,7 +50,7 @@ function ToggleTrack({ on }: { on: boolean }) {
   )
 }
 
-export function TreeWindow({ panel }: TreeWindowProps) {
+export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const {
     organizations, positionTreeByOrgId,
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
@@ -62,6 +61,7 @@ export function TreeWindow({ panel }: TreeWindowProps) {
     setPosition, toggleOpen, setChildrenMode,
     addPanel, setOrgOpen, setCollapsedOrgIds,
     comparisonMode, comparisonOrgMapping, setComparisonOrgMap, clearComparisonOrgMap,
+    setPanelHeight, selectOrg,
   } = useCanvasLayoutStore()
   const masters           = useStore(s => s.masters)
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
@@ -213,6 +213,20 @@ export function TreeWindow({ panel }: TreeWindowProps) {
     }
   }, [currentRootId, organizations, positionTreeByOrgId, panel, panels, addPanel, setOrgOpen, setChildrenMode, setCollapsedOrgIds])
 
+  // ── 開閉トグル（選択+スクロール付き）────────────────────────────
+  const handleToggleOpen = useCallback(() => {
+    const nextOpen = !panel.open
+    toggleOpen(panel.id)
+    if (nextOpen) {
+      selectOrg(panel.orgId)
+    } else {
+      const org = organizations.find(o => o.id === panel.orgId)
+      const parentOrgId = org?.parentId
+      if (parentOrgId) selectOrg(parentOrgId)
+      else selectOrg(panel.orgId)
+    }
+  }, [panel, toggleOpen, selectOrg, organizations])
+
   // ── リスト↔個別 トグル ────────────────────────────────────────
   // 切り替え時は常に「子のみ展開」状態にする（対称的な動作）
   const handleToggleIndividualMode = useCallback(() => {
@@ -240,7 +254,8 @@ export function TreeWindow({ panel }: TreeWindowProps) {
       })
       setChildrenMode(panel.id, 'windowed')
     }
-  }, [panel, panels, currentRootId, organizations, positionTreeByOrgId, setCollapsedOrgIds, setOrgOpen, setChildrenMode, addPanel])
+    selectOrg(panel.orgId)
+  }, [panel, panels, currentRootId, organizations, positionTreeByOrgId, setCollapsedOrgIds, setOrgOpen, setChildrenMode, addPanel, selectOrg])
 
   // ──
   const currentOrg  = organizations.find(o => o.id === currentRootId)
@@ -252,13 +267,26 @@ export function TreeWindow({ panel }: TreeWindowProps) {
     o => o.parentId === currentRootId && hasAnyRows(o.id, organizations, positionTreeByOrgId),
   )
 
+  // ── ResizeObserver でパネル実測高さをストアへ通知 ────────────────
+  const panelDivRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = panelDivRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setPanelHeight(panel.id, el.offsetHeight)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [panel.id, setPanelHeight])
+
   return (
     <div
+      ref={panelDivRef}
       data-window="true"
       data-panelid={panel.id}
       className={`flex flex-col rounded shadow-lg border transition-colors select-none overflow-hidden
-        ${isDragOver ? 'border-blue-400' : 'border-gray-400'}`}
-      style={{ background: '#ffffff', width: 288 }}
+        ${isDragOver ? 'border-blue-400' : isSelected ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-400'}`}
+      style={{ background: '#ffffff', width: 288, maxHeight: 'calc(100vh - 80px)' }}
       onDragOver={e => handleDragOver(e, currentRootId)}
       onDragLeave={handleDragLeave}
       onDrop={e => handleDrop(e, currentRootId)}
@@ -266,6 +294,7 @@ export function TreeWindow({ panel }: TreeWindowProps) {
       {/* ── タイトルバー ─────────────────────────────────────────── */}
       <div
         onMouseDown={onTitleMouseDown}
+        onClick={() => selectOrg(panel.orgId)}
         onDragOver={onTitleDragOver}
         onDragLeave={onTitleDragLeave}
         onDrop={onTitleDrop}
@@ -309,7 +338,7 @@ export function TreeWindow({ panel }: TreeWindowProps) {
               >↑</button>
             )}
             <button
-              onClick={() => toggleOpen(panel.id)}
+              onClick={e => { e.stopPropagation(); handleToggleOpen() }}
               title={panel.open ? '折りたたむ' : '展開'}
               className="w-7 h-7 flex items-center justify-center text-white hover:bg-blue-700 text-xs transition-colors"
             >{panel.open ? '─' : '▲'}</button>
@@ -362,18 +391,18 @@ export function TreeWindow({ panel }: TreeWindowProps) {
           {/* セパレーター */}
           <div className="w-px bg-gray-200 flex-shrink-0" />
 
-          {/* 包含モード トグル */}
+          {/* 縦並モード トグル */}
           <button
             role="switch"
             aria-checked={isContained}
             onClick={handleToggleIndividualMode}
             title={isContained
-              ? '包含モード: 子組織をこの中に表示（クリックで個別に切り替え）'
-              : '個別モード: 子組織を別ウィンドウで表示（クリックで包含に切り替え）'}
+              ? '縦並モード: 子組織をこの中に縦並びで表示（クリックで個別に切り替え）'
+              : '個別モード: 子組織を別ウィンドウで表示（クリックで縦並びに切り替え）'}
             className="flex items-center gap-1.5 px-2.5 flex-shrink-0 h-full hover:bg-gray-100 transition-colors"
           >
             <span className={`text-[9px] font-medium transition-colors ${isContained ? 'text-blue-600' : 'text-gray-400'}`}>
-              包含
+              縦並
             </span>
             <ToggleTrack on={isContained} />
           </button>
@@ -382,7 +411,7 @@ export function TreeWindow({ panel }: TreeWindowProps) {
 
       {/* ── ボディ ───────────────────────────────────────────────── */}
       {panel.open && (
-        <div className="overflow-y-auto p-1.5" style={{ maxHeight: MAX_BODY_H }}>
+        <div className="flex-1 min-h-0 overflow-y-auto p-1.5">
           {currentOrg ? (
             <TreeNode
               key={currentRootId}

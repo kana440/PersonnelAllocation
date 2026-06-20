@@ -27,7 +27,7 @@ export function TreeNode({
   collapsedOrgs, onOrgCollapse, onOrgExpand,
 }: TreeNodeProps) {
   const { organizations, positionTreeByOrgId } = useOrgView()
-  const { panels, setOrgOpen, addPanel } = useCanvasLayoutStore()
+  const { panels, setOrgOpen, addPanel, selectedOrgId, selectOrg } = useCanvasLayoutStore()
 
   // TreeWindow から collapsedOrgs が渡されない場合のローカルフォールバック
   // （空セット = 全部デフォルト展開）
@@ -65,7 +65,7 @@ export function TreeNode({
                   child={child}
                   count={count}
                   variant="windowed"
-                  onClick={() => setOrgOpen(child.id, false)}
+                  onClick={() => { setOrgOpen(child.id, false); selectOrg(orgId) }}
                 />
               )
             }
@@ -76,7 +76,7 @@ export function TreeNode({
                 child={child}
                 count={count}
                 variant="closed"
-                onClick={() => childPanel ? setOrgOpen(child.id, true) : addPanel(child.id)}
+                onClick={() => { childPanel ? setOrgOpen(child.id, true) : addPanel(child.id); selectOrg(child.id) }}
               />
             )
           }
@@ -99,7 +99,9 @@ export function TreeNode({
                 onCollapse={() => {
                   if (onOrgCollapse) onOrgCollapse(child.id)
                   else setLocalCollapsed(prev => new Set([...prev, child.id]))
+                  selectOrg(orgId)
                 }}
+                isSelected={selectedOrgId === child.id}
                 collapsedOrgs={collapsedOrgs}
                 onOrgCollapse={onOrgCollapse}
                 onOrgExpand={onOrgExpand}
@@ -117,6 +119,7 @@ export function TreeNode({
               onClick={() => {
                 if (onOrgExpand) onOrgExpand(child.id)
                 else setLocalCollapsed(prev => { const s = new Set(prev); s.delete(child.id); return s })
+                selectOrg(child.id)
               }}
             />
           )
@@ -194,12 +197,13 @@ function ChildChip({
 // ── リストモード用: インライン展開セクション ─────────────────────────
 function InlineOrgSection({
   child, childPanelId, onNavigate, onCollapse,
-  collapsedOrgs, onOrgCollapse, onOrgExpand,
+  isSelected, collapsedOrgs, onOrgCollapse, onOrgExpand,
 }: {
   child:         Organization
   childPanelId:  string
   onNavigate:    (orgId: string) => void
   onCollapse:    () => void
+  isSelected?:   boolean
   collapsedOrgs?: ReadonlySet<string>
   onOrgCollapse?: (id: string) => void
   onOrgExpand?:   (id: string) => void
@@ -213,18 +217,24 @@ function InlineOrgSection({
 
   return (
     <div
-      className={`rounded border transition-colors ${isDragOver ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200'}`}
+      className={`rounded border transition-colors ${
+        isDragOver    ? 'border-blue-300 bg-blue-50/40' :
+        isSelected    ? 'border-blue-400 ring-1 ring-blue-200' :
+        'border-gray-200'
+      }`}
       onDragOver={e => { e.stopPropagation(); handleDragOver(e, child.id) }}
       onDragLeave={handleDragLeave}
       onDrop={e => { e.stopPropagation(); handleDrop(e, child.id) }}
     >
       <div
-        className="flex items-center gap-1 px-1.5 py-0.5 cursor-pointer hover:bg-gray-50 rounded-t"
+        className={`flex items-center gap-1 px-1.5 py-0.5 cursor-pointer rounded-t transition-colors ${
+          isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'
+        }`}
         onClick={onCollapse}
       >
-        <span className="text-[9px] text-gray-500 flex-shrink-0">▼</span>
-        <span className="flex-1 text-[10px] font-medium text-gray-700 truncate min-w-0">{child.name}</span>
-        <span className="text-[9px] text-gray-400 flex-shrink-0">{count}名</span>
+        <span className={`text-[9px] flex-shrink-0 ${isSelected ? 'text-blue-500' : 'text-gray-500'}`}>▼</span>
+        <span className={`flex-1 text-[10px] font-medium truncate min-w-0 ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>{child.name}</span>
+        <span className={`text-[9px] flex-shrink-0 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`}>{count}名</span>
         <AddRowDropdown orgCode={child.externalCode ?? ''} variant="inline" />
       </div>
       <div className="px-1 pb-1">

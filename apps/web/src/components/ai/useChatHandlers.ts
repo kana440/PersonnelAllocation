@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
+import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useSkillStore } from '../../store/skillStore'
 import { aiTools } from '../../application/aiTools'
 import { ChatSession, buildSystemPrompt, type SessionState } from '../../application/chatSession'
@@ -51,7 +52,9 @@ export function useChatHandlers({
     const { scopeOrgId, afterOrganizations } = useStore.getState()
     const { chatContextRowIds } = useChatStore.getState()
     const { activeSkills } = useSkillStore.getState()
-    const scopeOrg = scopeOrgId ? afterOrganizations.find(o => o.id === scopeOrgId) : null
+    const { selectedOrgId } = useCanvasLayoutStore.getState()
+    const scopeOrg    = scopeOrgId    ? afterOrganizations.find(o => o.id === scopeOrgId)    : null
+    const selectedOrg = selectedOrgId ? afterOrganizations.find(o => o.id === selectedOrgId) : null
     const rowCtxs  = chatContextRowIds
       .map(id => aiTools.getRowContext(id))
       .filter((c): c is NonNullable<typeof c> => c !== null)
@@ -66,6 +69,8 @@ export function useChatHandlers({
       scopeOrg?.externalCode ?? undefined,
       rowCtxs.length > 0 ? rowCtxs : undefined,
       session,
+      selectedOrg?.name,
+      selectedOrg?.externalCode ?? undefined,
     )
     const learnedRules = feedbackStore.getAppliedRules()
       .filter(r => r.kind === 'learned_rule' && r.isActive)

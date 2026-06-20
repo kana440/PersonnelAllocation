@@ -20,7 +20,10 @@ export function OrgSearchSidebar() {
     selectedPersonId, selectPerson, enterOperationPanel,
   } = useScopedStore()
 
-  const { requestScrollToPerson, panels, setOrgOpen, addPanel: addCanvasPanel } = useCanvasLayoutStore()
+  const {
+    requestScrollToPerson, panels, setOrgOpen, addPanel: addCanvasPanel,
+    selectOrg,
+  } = useCanvasLayoutStore()
   const treeScrollRef = useRef<HTMLDivElement>(null)
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
@@ -115,12 +118,18 @@ export function OrgSearchSidebar() {
   }
 
   // ── 人物クリック（サイドバーから）──────────────────────────────
-  // キャンバスパネルを開く＋スクロール要求を同一バッチで更新する。
-  // React が1回のレンダーでパネルを開いた後に TreeWindowCanvas の effect が動く。
+  // selectPerson が canvasLayoutStore.clearOrgSelection() を自動呼出し（useStore.ts）
   const handlePersonClick = (personId: string, orgId: string) => {
     selectPerson(personId)
     openCanvasPanel(orgId)
     requestScrollToPerson(personId)
+  }
+
+  // ── 組織クリック（サイドバーから）──────────────────────────────
+  // キャンバスパネルにフォーカス + 組織選択。サイドバーツリー展開は別途 ▸ ボタンで行う。
+  const handleOrgClick = (orgId: string) => {
+    openCanvasPanel(orgId)
+    selectOrg(orgId)
   }
 
   // ── キャンバス等の外部から人物が選択されたらサイドバーを展開 ──
@@ -230,27 +239,33 @@ export function OrgSearchSidebar() {
     const isNewOrg     = !beforeOrgs.find(o => o.id === org.id)
     const hasContent   = children.length > 0 || directPeople.length > 0
 
+    // インデントは 1 階層あたり 8px、最大 40px（5 階層相当）で上限止め
+    const indent       = Math.min(depth * 8, 40)
+    const personIndent = Math.min(depth * 8 + 14, 54)
+
     return (
-      <div key={org.id} style={{ marginLeft: `${depth * 10}px` }}>
+      <div key={org.id}>
         <div
           data-org-id={org.id}
+          style={{ paddingLeft: indent }}
           className="flex items-center gap-0.5 rounded py-0.5 px-1 transition-colors hover:bg-gray-50"
         >
           <button
             onClick={() => hasContent && toggleOrg(org.id)}
-            className="w-4 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs"
+            className="w-3.5 h-4 flex items-center justify-center text-gray-400 hover:text-gray-600 flex-shrink-0 text-[10px]"
           >
-            {hasContent ? (isExpanded ? '▾' : '▸') : <span className="w-4" />}
+            {hasContent ? (isExpanded ? '▾' : '▸') : <span className="w-3.5" />}
           </button>
           <button
-            onClick={() => toggleOrg(org.id)}
+            onClick={() => handleOrgClick(org.id)}
+            onDoubleClick={() => hasContent && toggleOrg(org.id)}
             className="flex-1 text-left text-xs py-0.5 truncate font-medium text-gray-700 hover:text-blue-600"
           >
             {org.name}
           </button>
-          {isNewOrg && <span className="text-xs text-green-600 font-bold flex-shrink-0">新</span>}
-          {directPeople.length > 0 && <span className="text-xs text-gray-400 flex-shrink-0">{directPeople.length}</span>}
-          {changeStatus && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${CHANGE_DOT[changeStatus]}`} />}
+          {isNewOrg && <span className="text-[10px] text-green-600 font-bold flex-shrink-0">新</span>}
+          {directPeople.length > 0 && <span className="text-[10px] text-gray-400 flex-shrink-0">{directPeople.length}</span>}
+          {changeStatus && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CHANGE_DOT[changeStatus]}`} />}
         </div>
 
         {isExpanded && directPeople.map(({ row, person }) => {
@@ -263,7 +278,7 @@ export function OrgSearchSidebar() {
               key={row.rowId}
               data-sidebar-personid={person.id}
               draggable
-              style={{ marginLeft: `${depth * 10 + 16}px` }}
+              style={{ paddingLeft: personIndent }}
               className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-grab active:cursor-grabbing ${
                 isPersonSelected ? 'bg-yellow-50' : 'hover:bg-gray-50'
               }`}
@@ -340,6 +355,8 @@ export function OrgSearchSidebar() {
                   handlePersonClick(r.personId, r.orgId)
                 } else if (r.personId) {
                   selectPerson(r.personId)
+                } else if (r.orgId) {
+                  handleOrgClick(r.orgId)
                 }
                 if (r.orgId) expandToOrg(r.orgId)
                 setOrgSearch('')

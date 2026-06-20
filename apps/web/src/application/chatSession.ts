@@ -64,10 +64,12 @@ export interface SessionState {
 }
 
 export function buildSystemPrompt(
-  scopeOrgName?:  string,
-  scopeOrgCode?:  string,
-  selectedRows?:  SelectedRowContext[],
-  session?:       SessionState,
+  scopeOrgName?:      string,
+  scopeOrgCode?:      string,
+  selectedRows?:      SelectedRowContext[],
+  session?:           SessionState,
+  selectedOrgName?:   string,
+  selectedOrgCode?:   string,
 ): string {
   let prompt = BASE_SYSTEM_PROMPT
 
@@ -85,6 +87,11 @@ export function buildSystemPrompt(
     prompt +=
       `\n## 現在の作業スコープ\n作業対象組織: ${scopeOrgName}（コード: ${scopeOrgCode ?? '不明'}）\n` +
       'この組織とその配下が主な操作対象です。'
+  }
+  if (selectedOrgName) {
+    prompt +=
+      `\n\n## 現在フォーカスしている組織\nユーザーが組織図でフォーカス中の組織: ${selectedOrgName}（コード: ${selectedOrgCode ?? '不明'}）\n` +
+      '「この組織を」「ここの」など組織を指している場合はこの組織を操作対象にしてください。'
   }
   if (selectedRows && selectedRows.length > 0) {
     const count = selectedRows.length
