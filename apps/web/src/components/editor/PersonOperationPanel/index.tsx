@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useStore } from '../../../store/useStore'
 import { SummaryView } from './SummaryView'
 import { OperationFormView } from './OperationFormView'
+import { DirectEditView } from './DirectEditView'
+import { MultiRowFormView } from './MultiRowFormView'
 import type { PanelView } from './types'
 
 interface Props {
@@ -9,27 +11,35 @@ interface Props {
 }
 
 export function PersonOperationPanel({ rowId }: Props) {
-  const { allocationList, enterEditMode } = useStore()
-  const [view, setView] = useState<PanelView>('summary')
+  const { allocationList, operationPanelInitialView } = useStore()
+  const [view, setView] = useState<PanelView>(() =>
+    operationPanelInitialView === 'directEdit' ? 'directEdit' : 'summary'
+  )
 
   const row = allocationList.find(r => r.rowId === rowId)
   if (!row) return <div className="p-4 text-xs text-gray-400">行が見つかりません</div>
 
-  if (view === 'summary') {
+  if (view === 'directEdit') {
+    return <DirectEditView row={row} onBack={() => setView('summary')} />
+  }
+
+  if (view !== 'summary') {
+    if ('multiRowDef' in view) {
+      return <MultiRowFormView def={view.multiRowDef} anchor={row} onBack={() => setView('summary')} />
+    }
     return (
-      <SummaryView
+      <OperationFormView
+        def={view.def}
         row={row}
-        onSelect={setView}
-        onDirectEdit={() => enterEditMode(rowId)}
+        onBack={() => setView('summary')}
       />
     )
   }
 
   return (
-    <OperationFormView
-      def={view.def}
+    <SummaryView
       row={row}
-      onBack={() => setView('summary')}
+      onSelect={setView}
     />
   )
 }

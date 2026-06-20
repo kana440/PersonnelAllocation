@@ -3,6 +3,7 @@ import type { AllCodeLists } from '../masters/aggregate'
 import type { OrgMasterEntry } from '../masters/orgMaster'
 import { UNION_MEMBER_CODE } from '../masters/unionMember'
 import type { ValidationIssue } from './types'
+import { FIELD_DISPLAY_LABELS } from '../csvImport/allocationList/labels'
 
 // C系: 関連チェック（マスタ参照による整合性チェック）
 // C1/C2/C3 はカスタムロジック。
@@ -15,11 +16,11 @@ type OrgSubField = {
 }
 
 const ORG_SUB_FIELDS: OrgSubField[] = [
-  { rowKey: 'businessUnit', masterKey: 'pathBusinessUnit', label: 'ビジネスユニット' },
-  { rowKey: 'division',     masterKey: 'pathDivision',     label: '部門'           },
-  { rowKey: 'subDivision',  masterKey: 'pathDepartment',   label: '統括部'         },
-  { rowKey: 'group',        masterKey: 'pathGroup',        label: 'グループ'       },
-  { rowKey: 'team',         masterKey: 'pathTeam',         label: 'チーム'         },
+  { rowKey: 'businessUnit', masterKey: 'pathBusinessUnit', label: FIELD_DISPLAY_LABELS['businessUnit'] ?? '関係部門' },
+  { rowKey: 'division',     masterKey: 'pathDivision',     label: FIELD_DISPLAY_LABELS['division']     ?? '部門'    },
+  { rowKey: 'subDivision',  masterKey: 'pathDepartment',   label: FIELD_DISPLAY_LABELS['subDivision']  ?? '統括部'  },
+  { rowKey: 'group',        masterKey: 'pathGroup',        label: FIELD_DISPLAY_LABELS['group']        ?? 'グループ'},
+  { rowKey: 'team',         masterKey: 'pathTeam',         label: FIELD_DISPLAY_LABELS['team']         ?? 'チーム'  },
 ]
 
 /**

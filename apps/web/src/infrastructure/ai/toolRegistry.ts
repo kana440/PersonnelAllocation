@@ -24,27 +24,29 @@ import {
   concurrentSecondmentOutSFDef,
   employmentTransferDef,
 } from '@personnel/domain/commands/defs'
+import { CompoundCommand } from '@personnel/domain/commands/handlers/compoundCommand'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { ToolDefinition, ToolCall } from '../../ports'
+import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
 // ── 連動変更ウィジェット構築ヘルパー ─────────────────────────────────────────
 // execute 操作後に監視対象フィールドが意図せず変わっていた場合に diff-preview を返す。
 // primaryField: 直接編集したフィールド（連動検出の対象外）
 
 const CASCADE_LABELS: Partial<Record<keyof AllocationRow, string>> = {
-  positionBand:         'ポジションバンド',
-  band:                 'バンド',
-  payGrade:             '給与等級',
-  officialPositionCode: '役職コード',
-  localJobTitle:        '役職名',
-  businessUnit:         'BU',
-  division:             '部門',
-  subDivision:          '統括部',
-  group:                'グループ',
-  team:                 'チーム',
-  managerName:          '上司姓名',
-  managerPositionCode:  '上司ポジションコード',
-  employmentType:       '雇用タイプ',
+  positionBand:         FIELD_DISPLAY_LABELS['positionBand']         ?? 'ポジションバンド',
+  band:                 FIELD_DISPLAY_LABELS['band']                 ?? 'バンド',
+  payGrade:             FIELD_DISPLAY_LABELS['payGrade']             ?? '給与等級',
+  officialPositionCode: FIELD_DISPLAY_LABELS['officialPositionCode'] ?? '役職コード',
+  localJobTitle:        FIELD_DISPLAY_LABELS['localJobTitle']        ?? '役職名',
+  businessUnit:         FIELD_DISPLAY_LABELS['businessUnit']         ?? '関係部門',
+  division:             FIELD_DISPLAY_LABELS['division']             ?? '部門',
+  subDivision:          FIELD_DISPLAY_LABELS['subDivision']          ?? '統括部',
+  group:                FIELD_DISPLAY_LABELS['group']                ?? 'グループ',
+  team:                 FIELD_DISPLAY_LABELS['team']                 ?? 'チーム',
+  managerName:          FIELD_DISPLAY_LABELS['managerName']          ?? '上司氏名',
+  managerPositionCode:  FIELD_DISPLAY_LABELS['managerPositionCode']  ?? '上司ポジションコード',
+  employmentType:       FIELD_DISPLAY_LABELS['employmentType']       ?? '雇用タイプ',
 }
 
 function detectCascadeWidget(
@@ -170,13 +172,13 @@ const TOOL_ENTRIES: ToolEntry[] = [
       type: 'function',
       function: {
         name:        'findOrgs',
-        description: '組織を名前・コード・階層レベルで検索する。戻り値の descendantOrgCodes[] に配下の全 orgCode が含まれるため、「この組織とその配下全員」を findPersons で取得するときは subtreeOrgCode に渡すだけでよい。level: 1=会社、2=BU、3=部門、4=統括部、5=グループ、6=チーム（目安）。',
+        description: '組織を名前・コード・階層レベルで検索する。戻り値の descendantOrgCodes[] に配下の全 orgCode が含まれるため、「この組織とその配下全員」を findPersons で取得するときは subtreeOrgCode に渡すだけでよい。level: 1=会社、2=関係部門、3=部門、4=統括部、5=グループ、6=チーム（目安）。',
         parameters: {
           type: 'object',
           properties: {
             name:    { type: 'string',  description: '組織名（部分一致）' },
             code:    { type: 'string',  description: '組織コード（部分一致）' },
-            level:   { type: 'number',  description: '階層レベルで絞り込む（1=会社、2=BU、3=部門、4=統括部、5=グループ、6=チーム）' },
+            level:   { type: 'number',  description: '階層レベルで絞り込む（1=会社、2=関係部門、3=部門、4=統括部、5=グループ、6=チーム）' },
             company: { type: 'string',  description: '会社ID で絞り込む（任意）' },
           },
         },
@@ -998,9 +1000,8 @@ const TOOL_ENTRIES: ToolEntry[] = [
       const secondmentDeptCode  = row.departmentCode!
       const homeDeptCode        = row.prevDepartmentCode
 
-      return aiTools.executeScenario({
-        label: `本務出向→兼務出向: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
-        commands: [
+      return aiTools.executeOperation(new CompoundCommand(
+        [
           bindOperation(secondmentOutReleaseSFDef, rowId, { departmentCode: homeDeptCode }),
           bindOperation(concurrentSecondmentOutSFDef, rowId, {
             secondmentToCompany,
@@ -1008,7 +1009,8 @@ const TOOL_ENTRIES: ToolEntry[] = [
             concurrentReason: args.concurrentReason as string | undefined,
           }),
         ],
-      })
+        `本務出向→兼務出向: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
+      ))
     },
   },
 
@@ -1042,13 +1044,13 @@ const TOOL_ENTRIES: ToolEntry[] = [
 
       const homeDeptCode = row.prevDepartmentCode
 
-      return aiTools.executeScenario({
-        label: `出向先転籍: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
-        commands: [
+      return aiTools.executeOperation(new CompoundCommand(
+        [
           bindOperation(secondmentOutReleaseSFDef, rowId, { departmentCode: homeDeptCode }),
           bindOperation(employmentTransferDef, rowId, { transferReason }),
         ],
-      })
+        `出向先転籍: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
+      ))
     },
   },
 

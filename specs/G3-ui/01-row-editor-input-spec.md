@@ -12,9 +12,9 @@
 
 ## 1. 入力種別の実装方針
 
-### 1.1 select（コードリスト選択）
+### 1.1 select（マスタ選択）
 ```tsx
-// codeListsから選択肢を生成。RowEditorPanelのgetOptions()を拡張する
+// マスタ（AllCodeLists）から選択肢を生成。RowEditorPanelのgetOptions()を拡張する
 const CODE_LIST_KEYS: Partial<Record<string, string>> = {
   // 既存
   employmentType: 'employmentTypes',
@@ -102,7 +102,7 @@ function resolveManagerName(managerPositionCode: string, allocationList: Allocat
 
 ## 4. 実装タスク（優先順位順）
 
-### 🔴 P1: codeListのワイヤー追加
+### 🔴 P1: マスタのワイヤー追加
 - [x] `CODE_LIST_KEYS` に `officialPositionCode`, `payGrade`, `location`, `concurrentReason`, `demotionReason` を追加
 - [x] `trainingPositionFlag`, `discretionaryWorkFlag` の文字列配列対応（`getOptions` で `typeof v === 'string'` 分岐）
 - 実装ファイル: `RowEditorPanel.tsx` の `CODE_LIST_KEYS` と `getOptions()`
@@ -139,5 +139,5 @@ function resolveManagerName(managerPositionCode: string, allocationList: Allocat
 
 - [ ] flag フィールドの有効値（"Y"/"N"? "1"/"0"? "true"/"false"?）
 - [ ] `positionCode` の直接編集を許容するか（通常は操作経由）
-- [ ] `band` フィールドの有効値（codeListに定義なし）
+- [ ] `band` フィールドの有効値（マスタに定義なし）
 - [ ] `departmentCode` 変更時に `businessUnit`〜`team` を自動補完するか

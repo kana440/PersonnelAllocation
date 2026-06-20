@@ -72,7 +72,7 @@
 |---|---|---|---|
 | `getPersonDetail` | userId or rowId | 一人分の全フィールド（before/after） | 🔴 高 |
 | `getOrgMembers` | departmentCode | その組織の全メンバー一覧 | 🟡 中 |
-| `getCodeListValues` | codeListKey | 有効値一覧 | 🟡 中 |
+| `getMasterValues` | masterKey（`AllCodeLists` のプロパティ名） | 有効値一覧 | 🟡 中 |
 
 ### 2.2 書き込み Tools（EditCommand 経由）
 
@@ -96,7 +96,7 @@
     
     業務ルール:
     - 異動（transfer）が検出された行には必ず設定してください
-    - 有効値はgetCodeListValues('transferReasons')で取得できます
+    - 有効値はgetMasterValues('transferReasons')で取得できます
     - Excel保存時にそのまま出力されます
     
     使用タイミング:
@@ -107,7 +107,7 @@
     type: 'object',
     properties: {
       rowId: { type: 'number', description: '対象行のrowId' },
-      value: { type: 'string', description: '異動事由の値（codeListの有効値）' },
+      value: { type: 'string', description: '異動事由の値（マスタの有効値）' },
     },
     required: ['rowId', 'value'],
   },

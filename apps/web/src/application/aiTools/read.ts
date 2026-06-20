@@ -4,7 +4,7 @@ import type { Person, Organization } from '@personnel/domain/schemas'
 import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
-import { ALL_EDIT_OPERATIONS } from '@personnel/domain/commands/defs'
+import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS } from '@personnel/domain/commands/defs'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/choices'
 import { computeBandStepDiff, getBandsByStep } from '@personnel/domain/derivation'
@@ -439,10 +439,35 @@ export function createReadMethods(service: HRApplicationService) {
     return computeBandStepDiff(row.positionBand as string | undefined, newPositionBand, codeLists)
   }
 
+  function getAvailableMultiRowOperations(anchorRowId: number) {
+    const { allocationList, codeLists } = service.getSnapshot()
+    const anchor = allocationList.find(r => r.rowId === anchorRowId)
+    if (!anchor) return []
+    return ALL_MULTI_ROW_OPERATION_DEFS
+      .filter(d => d.availableFor(anchor, codeLists, allocationList))
+      .map(d => ({
+        id:          d.id,
+        label:       d.label,
+        description: d.description,
+        sections: d.sections.map(s => ({
+          label:    s.label,
+          style:    s.style,
+          isNewRow: s.isNewRow,
+          inputs: s.inputs.map(i => ({
+            field:    i.field as string,
+            required: i.required,
+            label:    i.label,
+            picker:   i.picker,
+          })),
+        })),
+      }))
+  }
+
   return {
     findPersons, findOrgs, getPersonRows, getRow, getOrgs, getPersons,
     getRowContext, getFieldOptions, findVacantPositions,
     getPersonsDetail, listChangedRows, getOrgTreeData,
     getPromotionBandInfo, computePromotionStepDiff,
+    getAvailableMultiRowOperations,
   }
 }

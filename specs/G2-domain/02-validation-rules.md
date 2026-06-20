@@ -153,7 +153,7 @@ src/domain/validation/
 
 実装ファイル: `validateCorrelation.ts`（FIELD_CONSTRAINTS 条件付き制約として `checkConditionalValueRules` で評価）
 
-雇用タイプや申請区分の CodeList フラグに応じて、バンド・給与等級の許容値を絞り込む。
+雇用タイプや申請区分のマスタフラグに応じて、バンド・給与等級の許容値を絞り込む。
 オプション絞り込み（`optionFilter`）にも同一ルールが自動適用される。
 
 | # | フィールド | 条件 | メッセージ | 実装状況 |

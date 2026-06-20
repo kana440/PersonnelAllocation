@@ -17,7 +17,7 @@ export const secondmentOutSFDef: EditOperation = {
   id:         'SecondmentOutSF',
   label:      '本務出向（SF統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-100 text-amber-700',
+  badge: 'secondment',
 
   availableFor: (row, cl) =>
     isRegularEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row),
@@ -30,12 +30,12 @@ export const secondmentOutSFDef: EditOperation = {
     { field: 'memo',                required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)                      return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId)               return fail('人が配属されていない行に本務出向を設定できません')
@@ -45,7 +45,7 @@ export const secondmentOutSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
     const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
@@ -64,7 +64,7 @@ export const secondmentOutNonSFDef: EditOperation = {
   id:         'SecondmentOutNonSF',
   label:      '本務出向（SF非統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-100 text-amber-700',
+  badge: 'secondment',
 
   availableFor: (row, cl) =>
     isRegularEmployee(row, cl) && isMainAssignment(row) && !wasSecondedOut(row),
@@ -77,12 +77,12 @@ export const secondmentOutNonSFDef: EditOperation = {
     { field: 'memo',                required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)                      return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId)               return fail('人が配属されていない行に本務出向を設定できません')
@@ -91,7 +91,7 @@ export const secondmentOutNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = (values.departmentCode as string | undefined) ?? ''
     const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.codeLists) : {}
@@ -111,7 +111,7 @@ export const secondmentInSFDef: EditOperation = {
   id:         'SecondmentInSF',
   label:      '本務出向受入（SF統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: (row, cl) =>
     !isSecondmentAcceptance(row, cl) && isMainAssignment(row) && !wasSecondedIn(row),
@@ -125,19 +125,19 @@ export const secondmentInSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string | undefined
     const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.codeLists) : {}
@@ -157,7 +157,7 @@ export const secondmentInNonSFDef: EditOperation = {
   id:         'SecondmentInNonSF',
   label:      '本務出向受入（SF非統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: (row, cl) =>
     !isSecondmentAcceptance(row, cl) && isMainAssignment(row) && !wasSecondedIn(row),
@@ -171,19 +171,19 @@ export const secondmentInNonSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string | undefined
     const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.codeLists) : {}
@@ -203,7 +203,7 @@ export const secondmentInNewSFDef: EditOperation = {
   id:         'SecondmentInNewSF',
   label:      '本務出向受入 新規（SF）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: () => false, // 組織パネルボタンからのみ起動
 
@@ -224,9 +224,9 @@ export const secondmentInNewSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({ departmentCode: row.departmentCode }),
+  onOpen: (row) => ({ departmentCode: row.departmentCode }),
 
-  validate(_ctx, _rowId, values) {
+  onValidate(_ctx, _rowId, values) {
     if (!values.lastName)                     return fail('姓は必須です')
     if (!values.firstName)                    return fail('名は必須です')
     if (!values.secondmentFromCompany)        return fail('出向元会社は必須です')
@@ -235,7 +235,7 @@ export const secondmentInNewSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, _rowId, values) {
+  onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = values.departmentCode
       ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
@@ -266,7 +266,7 @@ export const secondmentInNewNonSFDef: EditOperation = {
   id:         'SecondmentInNewNonSF',
   label:      '本務出向受入 新規（非SF）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: () => false,
 
@@ -287,9 +287,9 @@ export const secondmentInNewNonSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({ departmentCode: row.departmentCode }),
+  onOpen: (row) => ({ departmentCode: row.departmentCode }),
 
-  validate(_ctx, _rowId, values) {
+  onValidate(_ctx, _rowId, values) {
     if (!values.lastName)              return fail('姓は必須です')
     if (!values.firstName)             return fail('名は必須です')
     if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
@@ -297,7 +297,7 @@ export const secondmentInNewNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, _rowId, values) {
+  onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = values.departmentCode
       ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
@@ -328,7 +328,7 @@ export const concurrentSecondmentInNewSFDef: EditOperation = {
   id:         'ConcurrentSecondmentInNewSF',
   label:      '兼務出向受入 新規（SF）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: () => false,
 
@@ -350,9 +350,9 @@ export const concurrentSecondmentInNewSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({ departmentCode: row.departmentCode }),
+  onOpen: (row) => ({ departmentCode: row.departmentCode }),
 
-  validate(_ctx, _rowId, values) {
+  onValidate(_ctx, _rowId, values) {
     if (!values.lastName)                     return fail('姓は必須です')
     if (!values.firstName)                    return fail('名は必須です')
     if (!values.secondmentFromCompany)        return fail('出向元会社は必須です')
@@ -361,7 +361,7 @@ export const concurrentSecondmentInNewSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, _rowId, values) {
+  onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = values.departmentCode
       ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
@@ -393,7 +393,7 @@ export const concurrentSecondmentInNewNonSFDef: EditOperation = {
   id:         'ConcurrentSecondmentInNewNonSF',
   label:      '兼務出向受入 新規（非SF）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: () => false,
 
@@ -415,9 +415,9 @@ export const concurrentSecondmentInNewNonSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({ departmentCode: row.departmentCode }),
+  onOpen: (row) => ({ departmentCode: row.departmentCode }),
 
-  validate(_ctx, _rowId, values) {
+  onValidate(_ctx, _rowId, values) {
     if (!values.lastName)              return fail('姓は必須です')
     if (!values.firstName)             return fail('名は必須です')
     if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
@@ -425,7 +425,7 @@ export const concurrentSecondmentInNewNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, _rowId, values) {
+  onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = values.departmentCode
       ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
@@ -457,7 +457,7 @@ export const concurrentSecondmentOutSFDef: EditOperation = {
   id:         'ConcurrentSecondmentOutSF',
   label:      '兼務出向（SF統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-100 text-amber-700',
+  badge: 'secondment',
 
   availableFor: (row, cl) =>
     isRegularEmployee(row, cl) && isMainAssignment(row),
@@ -470,12 +470,12 @@ export const concurrentSecondmentOutSFDef: EditOperation = {
     { field: 'memo',                required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId) return fail('人が配属されていない行に兼務出向を追加できません')
@@ -485,7 +485,7 @@ export const concurrentSecondmentOutSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
@@ -523,7 +523,7 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
   id:         'ConcurrentSecondmentOutNonSF',
   label:      '兼務出向（SF非統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-100 text-amber-700',
+  badge: 'secondment',
 
   availableFor: (row, cl) =>
     isRegularEmployee(row, cl) && isMainAssignment(row),
@@ -536,12 +536,12 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
     { field: 'memo',                required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId) return fail('人が配属されていない行に兼務出向を追加できません')
@@ -550,7 +550,7 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
@@ -589,7 +589,7 @@ export const concurrentSecondmentInSFDef: EditOperation = {
   id:         'ConcurrentSecondmentInSF',
   label:      '兼務出向受入（SF統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: (row) => isMainAssignment(row),
 
@@ -602,12 +602,12 @@ export const concurrentSecondmentInSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId) return fail('人が配属されていない行に兼務出向受入を追加できません')
@@ -617,7 +617,7 @@ export const concurrentSecondmentInSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
@@ -656,7 +656,7 @@ export const concurrentSecondmentInNonSFDef: EditOperation = {
   id:         'ConcurrentSecondmentInNonSF',
   label:      '兼務出向受入（SF非統合先）',
   group:      'person',
-  badgeColor: 'bg-amber-50 text-amber-600',
+  badge: 'secondment',
 
   availableFor: (row) => isMainAssignment(row),
 
@@ -669,12 +669,12 @@ export const concurrentSecondmentInNonSFDef: EditOperation = {
     { field: 'memo',                         required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId) return fail('人が配属されていない行に兼務出向受入を追加できません')
@@ -684,7 +684,7 @@ export const concurrentSecondmentInNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
@@ -730,18 +730,18 @@ const outReleaseInputs = [
 
 export const secondmentOutReleaseSFDef: EditOperation = {
   id: 'SecondmentOutReleaseSF', label: '本務出向解除（SF導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     wasSecondedOut(row) && isMainAssignment(row) &&
     isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, cl),
   inputs: [...outReleaseInputs],
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason      as string | undefined,
     employmentType: row.prevEmploymentType  as string | undefined,
     memo:           row.memo               as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.prevSecondmentToCompany)
@@ -749,7 +749,7 @@ export const secondmentOutReleaseSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string | undefined
     const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.codeLists) : {}
@@ -769,18 +769,18 @@ export const secondmentOutReleaseSFDef: EditOperation = {
 
 export const secondmentOutReleaseNonSFDef: EditOperation = {
   id: 'SecondmentOutReleaseNonSF', label: '本務出向解除（SF未導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     wasSecondedOut(row) && isMainAssignment(row) &&
     !isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, cl),
   inputs: [...outReleaseInputs],
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason      as string | undefined,
     employmentType: row.prevEmploymentType  as string | undefined,
     memo:           row.memo               as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.prevSecondmentToCompany)
@@ -788,7 +788,7 @@ export const secondmentOutReleaseNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string | undefined
     const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.codeLists) : {}
@@ -819,14 +819,14 @@ const inReleaseInitial = () => ({
 
 export const secondmentInReleaseSFDef: EditOperation = {
   id: 'SecondmentInReleaseSF', label: '本務出向受入解除（SF導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     wasSecondedIn(row) && prevWasSecondmentIn(row, cl) &&
     isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, cl),
   inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
+  onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.prevSecondmentFromCompany)
@@ -834,7 +834,7 @@ export const secondmentInReleaseSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>
@@ -856,14 +856,14 @@ export const secondmentInReleaseSFDef: EditOperation = {
 
 export const secondmentInReleaseNonSFDef: EditOperation = {
   id: 'SecondmentInReleaseNonSF', label: '本務出向受入解除（SF未導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     wasSecondedIn(row) && prevWasSecondmentIn(row, cl) &&
     !isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, cl),
   inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
+  onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.prevSecondmentFromCompany)
@@ -871,7 +871,7 @@ export const secondmentInReleaseNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>
@@ -893,14 +893,14 @@ export const secondmentInReleaseNonSFDef: EditOperation = {
 
 export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
   id: 'ConcurrentSecondmentOutReleaseSF', label: '兼務出向解除（SF導入先）',
-  group: 'person', badgeColor: 'bg-red-50 text-red-500',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentToCompany &&
     isSFIntegratedCompany(row.secondmentToCompany as string | undefined, cl),
   inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
+  onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType !== '兼務' || !row.secondmentToCompany)
@@ -908,7 +908,7 @@ export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, _values) {
+  onSubmit(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
@@ -921,14 +921,14 @@ export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
 
 export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentOutReleaseNonSF', label: '兼務出向解除（SF未導入先）',
-  group: 'person', badgeColor: 'bg-red-50 text-red-500',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentToCompany &&
     !isSFIntegratedCompany(row.secondmentToCompany as string | undefined, cl),
   inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
+  onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType !== '兼務' || !row.secondmentToCompany)
@@ -936,7 +936,7 @@ export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, _values) {
+  onSubmit(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
@@ -949,14 +949,14 @@ export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
 
 export const concurrentSecondmentInReleaseSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInReleaseSF', label: '兼務出向受入解除（SF導入先）',
-  group: 'person', badgeColor: 'bg-red-50 text-red-500',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentFromCompany &&
     isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, cl),
   inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
+  onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType !== '兼務' || !row.secondmentFromCompany)
@@ -964,7 +964,7 @@ export const concurrentSecondmentInReleaseSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, _values) {
+  onSubmit(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
@@ -978,14 +978,14 @@ export const concurrentSecondmentInReleaseSFDef: EditOperation = {
 export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInReleaseNonSF',
   label: '兼務出向受入解除（SF未導入先）',
-  group: 'person', badgeColor: 'bg-red-50 text-red-500',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) =>
     row.concurrentType === '兼務' && !!row.secondmentFromCompany &&
     !isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, cl),
   inputs: [...inReleaseInputs],
-  deriveInitial: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
+  onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType !== '兼務' || !row.secondmentFromCompany)
@@ -993,7 +993,7 @@ export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, _values) {
+  onSubmit(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
@@ -1018,7 +1018,7 @@ const cancelDescription = 'このセッションで追加した出向受入を�
 
 export const secondmentInCancelSFDef: EditOperation = {
   id: 'SecondmentInCancelSF', label: '本務出向受入取消（SF導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) => isMainAssignment(row) && isCancelAvailableSF(row, cl),
   description: cancelDescription,
   suppressSideEffectWarning: true,
@@ -1030,7 +1030,7 @@ export const secondmentInCancelSFDef: EditOperation = {
     { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
     { field: 'employmentType',               required: false, readOnly: true },
   ],
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     lastName:                     row.lastName,
     firstName:                    row.firstName,
     secondmentFromCompany:        row.secondmentFromCompany,
@@ -1038,11 +1038,11 @@ export const secondmentInCancelSFDef: EditOperation = {
     departmentCode:               row.departmentCode,
     employmentType:               row.employmentType,
   }),
-  validate(ctx, rowId) {
+  onValidate(ctx, rowId) {
     if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
-  apply(ctx, rowId) {
+  onSubmit(ctx, rowId) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${personName(row)}` }
   },
@@ -1050,7 +1050,7 @@ export const secondmentInCancelSFDef: EditOperation = {
 
 export const secondmentInCancelNonSFDef: EditOperation = {
   id: 'SecondmentInCancelNonSF', label: '本務出向受入取消（SF未導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) => isMainAssignment(row) && isCancelAvailableNonSF(row, cl),
   description: cancelDescription,
   suppressSideEffectWarning: true,
@@ -1062,7 +1062,7 @@ export const secondmentInCancelNonSFDef: EditOperation = {
     { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
     { field: 'employmentType',               required: false, readOnly: true },
   ],
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     lastName:                     row.lastName,
     firstName:                    row.firstName,
     secondmentFromCompany:        row.secondmentFromCompany,
@@ -1070,11 +1070,11 @@ export const secondmentInCancelNonSFDef: EditOperation = {
     departmentCode:               row.departmentCode,
     employmentType:               row.employmentType,
   }),
-  validate(ctx, rowId) {
+  onValidate(ctx, rowId) {
     if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
-  apply(ctx, rowId) {
+  onSubmit(ctx, rowId) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${personName(row)}` }
   },
@@ -1084,7 +1084,7 @@ const concurrentCancelDescription = 'このセッションで追加した兼務�
 
 export const concurrentSecondmentInCancelSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInCancelSF', label: '兼務出向受入取消（SF導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) => row.concurrentType === '兼務' && isCancelAvailableSF(row, cl),
   description: concurrentCancelDescription,
   suppressSideEffectWarning: true,
@@ -1096,7 +1096,7 @@ export const concurrentSecondmentInCancelSFDef: EditOperation = {
     { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
     { field: 'concurrentReason',             required: false, readOnly: true },
   ],
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     lastName:                     row.lastName,
     firstName:                    row.firstName,
     secondmentFromCompany:        row.secondmentFromCompany,
@@ -1104,11 +1104,11 @@ export const concurrentSecondmentInCancelSFDef: EditOperation = {
     departmentCode:               row.departmentCode,
     concurrentReason:             row.concurrentReason,
   }),
-  validate(ctx, rowId) {
+  onValidate(ctx, rowId) {
     if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
-  apply(ctx, rowId) {
+  onSubmit(ctx, rowId) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${personName(row)}` }
   },
@@ -1116,7 +1116,7 @@ export const concurrentSecondmentInCancelSFDef: EditOperation = {
 
 export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInCancelNonSF', label: '兼務出向受入取消（SF未導入先）',
-  group: 'person', badgeColor: 'bg-red-100 text-red-600',
+  group: 'person', badge: 'negative',
   availableFor: (row, cl) => row.concurrentType === '兼務' && isCancelAvailableNonSF(row, cl),
   description: concurrentCancelDescription,
   suppressSideEffectWarning: true,
@@ -1128,7 +1128,7 @@ export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
     { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
     { field: 'concurrentReason',             required: false, readOnly: true },
   ],
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     lastName:                     row.lastName,
     firstName:                    row.firstName,
     secondmentFromCompany:        row.secondmentFromCompany,
@@ -1136,11 +1136,11 @@ export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
     departmentCode:               row.departmentCode,
     concurrentReason:             row.concurrentReason,
   }),
-  validate(ctx, rowId) {
+  onValidate(ctx, rowId) {
     if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
-  apply(ctx, rowId) {
+  onSubmit(ctx, rowId) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${personName(row)}` }
   },

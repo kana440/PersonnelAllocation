@@ -3,47 +3,39 @@ import { useStore } from '../../../store/useStore'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { deriveFieldUpdates, deriveManagerName, deriveOrgSubFields } from '@personnel/domain/derivation'
 import { AutoDeriveDialog } from '../AutoDeriveDialog'
-import { MetaSection } from './MetaSection'
-import { FieldList } from './FieldList'
-import { getOptions } from './helpers'
+import { MetaSection } from '../RowEditorPanel/MetaSection'
+import { FieldList } from '../RowEditorPanel/FieldList'
+import { getOptions } from '../RowEditorPanel/helpers'
 import type { AllocationRow, AfterValues } from '@personnel/domain/allocationRow'
 import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
-export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
-  const {
-    allocationList, selectedRowId, saveRow,
-    afterOrganizations, codeLists,
-  } = useStore()
+interface Props {
+  row:    AllocationRow
+  onBack: () => void
+}
 
-  const [buffer,       setBuffer]       = useState<Partial<Record<string, string>>>({})
-  const [isDirty,      setIsDirty]      = useState(false)
+export function DirectEditView({ row, onBack }: Props) {
+  const { allocationList, saveRow, afterOrganizations, codeLists } = useStore()
+
+  const [buffer,        setBuffer]        = useState<Partial<Record<string, string>>>({})
+  const [isDirty,       setIsDirty]       = useState(false)
   const [pendingDerive, setPendingDerive] = useState<{ updates: Record<string, string> } | null>(null)
-
-  const row = allocationList.find(r => r.rowId === selectedRowId)
 
   useEffect(() => {
     setBuffer({})
     setIsDirty(false)
     setPendingDerive(null)
-  }, [selectedRowId])
+  }, [row.rowId])
 
   const effectiveRow = useMemo(
-    () => (row ? ({ ...row, ...buffer } as AllocationRow) : null),
+    () => ({ ...row, ...buffer } as AllocationRow),
     [row, buffer]
   )
 
-  const issues = useMemo(() => {
-    if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList })
-  }, [effectiveRow, afterOrganizations, codeLists, allocationList])
-
-  if (!selectedRowId || !row || !effectiveRow) {
-    return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        行を選択すると編集できます
-      </div>
-    )
-  }
+  const issues = useMemo(
+    () => validateRow({ row: effectiveRow, afterOrganizations, codeLists, allocationList }),
+    [effectiveRow, afterOrganizations, codeLists, allocationList]
+  )
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
     const changes = { [key as string]: value } as Partial<Record<keyof AllocationRow, string>>
@@ -59,7 +51,6 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
     setIsDirty(true)
   }
 
-  // 自動補完：導出値を計算して確認ダイアログを表示
   const handleAutoDerive = () => {
     const updates: Record<string, string> = {}
 
@@ -78,15 +69,12 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
       if (pg.payGrade) updates.payGrade = pg.payGrade
     }
 
-    // 現在値と変わるフィールドのみ対象
     const changed = Object.fromEntries(
       Object.entries(updates).filter(([k, v]) =>
         v !== ((effectiveRow[k as keyof AllocationRow] as string | undefined) ?? '')
       )
     )
-    if (Object.keys(changed).length > 0) {
-      setPendingDerive({ updates: changed })
-    }
+    if (Object.keys(changed).length > 0) setPendingDerive({ updates: changed })
   }
 
   const handleSave = () => {
@@ -96,7 +84,17 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
     setIsDirty(false)
   }
 
-  const currentJobFamily = (effectiveRow.jobFamily as string | undefined) ?? ''
+  const handleCancel = () => {
+    setBuffer({})
+    setIsDirty(false)
+    onBack()
+  }
+
+  const currentJobFamily  = (effectiveRow.jobFamily as string | undefined) ?? ''
+  const personName        = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'
+  const employeeNumber    = (row.employeeNumber as string | undefined) ?? ''
+  const promotionSign     = (row.promotionSign as string | undefined) ?? ''
+  const payGradeChangeSign = (row.payGradeChangeSign as string | undefined) ?? ''
 
   const deriveChanges = pendingDerive
     ? Object.entries(pendingDerive.updates).map(([k, v]) => ({
@@ -109,14 +107,16 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* ── ヘッダーバー ── */}
-      <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-gray-700 truncate">
-          {row.lastName}{row.firstName}
-          <span className="ml-1.5 font-normal text-gray-400">({row.userId})</span>
-        </span>
-        <div className="ml-auto flex items-center gap-1.5">
-          {!readOnly && (
+      {/* ヘッダー */}
+      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCancel}
+            className="text-gray-400 hover:text-gray-700 text-sm leading-none px-1"
+            title="戻る"
+          >←</button>
+          <span className="text-xs font-semibold text-gray-700">直接編集</span>
+          <div className="ml-auto">
             <button
               onClick={handleAutoDerive}
               title="上司氏名・組織サブフィールド・給与等級を現在値から再導出します"
@@ -124,34 +124,31 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
             >
               自動補完
             </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5 ml-6 text-[11px] text-gray-500">
+          <span className="font-medium text-gray-700">{personName}</span>
+          {employeeNumber && <span className="text-gray-400">{employeeNumber}</span>}
+          {promotionSign && (
+            <span className="text-green-600 font-semibold">{promotionSign}</span>
           )}
-          {readOnly ? (
-            <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 font-medium">
-              照会のみ
-            </span>
-          ) : (
-            <button
-              onClick={handleSave}
-              disabled={!isDirty}
-              className="text-xs px-3 py-1 border rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {isDirty ? '● 保存' : '保存済'}
-            </button>
+          {payGradeChangeSign && (
+            <span className="text-blue-600 font-semibold">{payGradeChangeSign}</span>
           )}
         </div>
       </div>
 
-      {/* ── 管理項目 ── */}
+      {/* 管理項目 */}
       <MetaSection
         effectiveRow={effectiveRow}
         issues={issues}
-        readOnly={readOnly}
+        readOnly={false}
         transferReasonOptions={getOptions('transferReason', codeLists, currentJobFamily, effectiveRow).valid}
         demotionReasonOptions={getOptions('demotionReason', codeLists, currentJobFamily, effectiveRow).valid}
         onChange={handleChange}
       />
 
-      {/* ── ポジション・職務情報 セクションヘッダー + カラム ── */}
+      {/* ポジション・職務情報 セクションヘッダー + カラム */}
       <div className="flex-shrink-0 border-b border-gray-200">
         <div className="px-3 py-1 bg-gray-50 border-b border-gray-100">
           <span className="text-xs font-semibold text-gray-500">ポジション・職務情報</span>
@@ -170,7 +167,7 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
         allocationList={allocationList}
         afterOrganizations={afterOrganizations}
         codeLists={codeLists}
-        readOnly={readOnly}
+        readOnly={false}
         currentJobFamily={currentJobFamily}
         onChange={handleChange}
         onManagerChange={handleManagerPositionChange}
@@ -179,6 +176,23 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
           setIsDirty(true)
         }}
       />
+
+      {/* フッター */}
+      <div className="border-t border-gray-100 px-4 py-3 flex gap-2 flex-shrink-0">
+        <button
+          onClick={handleCancel}
+          className="flex-1 text-xs px-3 py-1.5 border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
+        >
+          {isDirty ? '変更を破棄して戻る' : 'キャンセル'}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={!isDirty}
+          className="flex-1 text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          保存
+        </button>
+      </div>
 
       {/* 自動補完確認ダイアログ */}
       {pendingDerive && (

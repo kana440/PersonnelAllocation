@@ -3,6 +3,7 @@
 import { ALLOCATION_LIST_FIELDS }                     from '@personnel/domain/csvImport/allocationList/labels'
 import { AllocationListSchema }                       from '@personnel/domain/csvImport/allocationList/schema'
 import type { AllocationList }                        from '@personnel/domain/csvImport/allocationList/schema'
+import type { ColumnWarning }                         from '../types'
 
 const headerToKey = new Map<string, keyof AllocationList>(
   ALLOCATION_LIST_FIELDS.flatMap(f => {
@@ -25,16 +26,18 @@ export function findHeaderRowIndex(raw: unknown[][]): number {
   return bestIdx
 }
 
-export function parseAllocationSheet(raw: unknown[][]): AllocationList[] {
+export interface ParseAllocationSheetResult {
+  rows:           AllocationList[]
+  columnWarnings: ColumnWarning[]
+}
+
+export function parseAllocationSheet(raw: unknown[][]): ParseAllocationSheetResult {
+  const SHEET = '要員配置リスト'
+  const columnWarnings: ColumnWarning[] = []
   const headerIdx = findHeaderRowIndex(raw)
-  console.group('[parseAllocationSheet]')
-  console.log('total rows in sheet:', raw.length)
-  console.log('header row index:', headerIdx)
 
   if (headerIdx < 0) {
-    console.warn('header row not found')
-    console.groupEnd()
-    return []
+    return { rows: [], columnWarnings: [{ sheet: SHEET, message: 'ヘッダー行が見つかりません。列のマッピングができませんでした。' }] }
   }
 
   const headers = (raw[headerIdx] as unknown[]).map(c => typeof c === 'string' ? c.trim() : '')
@@ -42,9 +45,10 @@ export function parseAllocationSheet(raw: unknown[][]): AllocationList[] {
   // A列（index 0）がヘッダーなし or 未知の場合、担当者列（assignee）として扱う
   const assigneeColIdx = !headerToKey.has(headers[0]) ? 0 : -1
 
-  console.log('mapped headers:', headers.filter(h => headerToKey.has(h)).length)
-  console.log('unmapped headers (first 10):', headers.filter(h => h && !headerToKey.has(h)).slice(0, 10))
-  console.log('assignee column index:', assigneeColIdx)
+  const unmapped = headers.filter(h => h && !headerToKey.has(h) && h !== headers[0])
+  if (unmapped.length > 0) {
+    columnWarnings.push({ sheet: SHEET, message: `認識できない列があります: ${unmapped.slice(0, 5).join(', ')}${unmapped.length > 5 ? ` 他${unmapped.length - 5}列` : ''}` })
+  }
 
   const rows: AllocationList[] = []
   for (let i = headerIdx + 1; i < raw.length; i++) {
@@ -65,14 +69,8 @@ export function parseAllocationSheet(raw: unknown[][]): AllocationList[] {
       if (val !== '' && val != null) entry['assignee'] = String(val)
     }
 
-    if (i === headerIdx + 1) {
-      console.log('first data row (parsed keys):', Object.keys(entry))
-    }
-
     if (!entry.no) continue
     rows.push(AllocationListSchema.parse(entry))
   }
-  console.log('parsed rows:', rows.length)
-  console.groupEnd()
-  return rows
+  return { rows, columnWarnings }
 }

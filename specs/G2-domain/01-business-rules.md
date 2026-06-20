@@ -139,7 +139,7 @@ managerPositionCode → allocationList.find(r => r.positionCode === code && r.us
 - `band`（人バンド）と `positionBand`（ポジションバンド）は基本的に一致するか？
 - 乖離が許容されるケースは？（例: 昇格待ち、降格猶予期間）
 - `payGrade` の有効値と `band` との対応関係
-- `band` の有効値一覧（codeListに定義なし。Excelシートに記載あるか？）
+- `band` の有効値一覧（マスタに定義なし。Excelシートに記載あるか？）
 
 ---
 

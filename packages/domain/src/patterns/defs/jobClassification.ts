@@ -3,7 +3,6 @@ import type { EditPatternMeta } from './types'
 import type { DetectContext } from '../detection/helpers'
 import { isNoCheckReason, parseBandLevel } from '../detection/helpers'
 import { TR } from '../../transferReasonLabels'
-import { C_GREEN, C_BLUE, C_RED } from './_shared'
 
 // band / positionBand の前後を比較して昇格・降格・役職変更を判定するヘルパー
 function detectBandChangeKind(row: AllocationRow, ctx: DetectContext): 'promotion' | 'demotion' | 'titleChange' | null {
@@ -38,7 +37,7 @@ function detectBandChangeKind(row: AllocationRow, ctx: DetectContext): 'promotio
 export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> = {
   promotion: {
     label: '昇格', addLabel: '昇格', editLabel: '昇格',
-    badgeColor: C_GREEN, group: 'jobClassification',
+    badge: 'positive', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.PROMOTION
       return detectBandChangeKind(row, ctx) === 'promotion'
@@ -46,7 +45,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
   },
   demotion: {
     label: '降格', addLabel: '降格', editLabel: '降格',
-    badgeColor: C_RED, group: 'jobClassification',
+    badge: 'negative', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.DEMOTION
       return detectBandChangeKind(row, ctx) === 'demotion'
@@ -55,7 +54,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
   titleChange: {
     label: '役職変更（昇降格なし）', addLabel: '役職変更', editLabel: '役職変更',
     menuLabel: '役職変更',
-    badgeColor: C_BLUE, group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.TITLE_CHANGE
       const bandResult = detectBandChangeKind(row, ctx)
@@ -68,7 +67,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
   jobTypeChange: {
     label: 'ジョブタイプ変更', addLabel: 'ジョブタイプ変更', editLabel: 'ジョブタイプ変更',
     menuLabel: '職種変更',
-    badgeColor: C_BLUE, group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return false
       return (
@@ -79,7 +78,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
   },
   employmentExtension: {
     label: '雇用延長', addLabel: '雇用延長', editLabel: '雇用延長',
-    badgeColor: C_BLUE, group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.EMPLOYMENT_EXTENSION
       const prevEt  = (row.prevEmploymentType as string | undefined) ?? ''
@@ -92,7 +91,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
   },
   employmentTypeChange: {
     label: '雇用タイプ変更', addLabel: '雇用タイプ変更', editLabel: '雇用タイプ変更',
-    badgeColor: C_BLUE, group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) {
         const reason = (row.transferReason as string | undefined) ?? ''

@@ -4,6 +4,7 @@ import type { EditPattern }     from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow }   from '@personnel/domain/allocationRow'
 import { ALL_EDIT_OPERATIONS }  from '@personnel/domain/commands/defs/index'
 import { useStore }             from '../../store/useStore'
+import { OPERATION_BADGE_COLORS } from '../../config/badgeColors'
 
 // EditPattern (camelCase) → EditOperation の availableFor を使うための静的マップ
 // 出向系パターンは EditOperation と 1:1 対応しないためマップ外（常時表示）
@@ -147,7 +148,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
               {[...active].map(p => (
                 <span
                   key={p}
-                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ring-1 ring-current/30 ${EDIT_PATTERN_META[p].badgeColor}`}
+                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ring-1 ring-current/30 ${OPERATION_BADGE_COLORS[EDIT_PATTERN_META[p].badge]}`}
                 >
                   {EDIT_PATTERN_META[p].menuLabel ?? EDIT_PATTERN_META[p].label}
                 </span>
@@ -187,7 +188,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
                         className={[
                           'py-1 rounded text-[11px] font-medium text-center',
                           'transition-all hover:brightness-95 active:scale-95',
-                          meta.badgeColor,
+                          OPERATION_BADGE_COLORS[meta.badge],
                           isActive ? 'ring-1 ring-current/40' : 'opacity-80',
                         ].join(' ')}
                       >

@@ -64,7 +64,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
   }, [])
 
   // クリック選択・ダブルクリック編集
-  const { persons, selectedPersonId, selectedRowId, selectRow, enterEditMode, selectPersonAndFocusOrg } = store
+  const { persons, selectedPersonId, selectedRowId, selectRow, enterOperationPanel, selectPersonAndFocusOrg } = store
 
   // ── 右クリックコンテキストメニュー ──────────────────────────
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
@@ -379,7 +379,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
                   draggable={!!matchedPerson}
                   onDragStart={handleRowDragStart}
                   onClick={handleRowClick}
-                  onDoubleClick={() => row.rowId && enterEditMode(row.rowId)}
+                  onDoubleClick={() => row.rowId && enterOperationPanel(row.rowId, 'directEdit')}
                   onContextMenu={e => {
                     if (!row.userId) return
                     e.preventDefault()

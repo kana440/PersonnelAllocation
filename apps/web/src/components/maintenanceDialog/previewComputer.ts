@@ -3,6 +3,7 @@ import type { Organization }   from '@personnel/domain/schemas'
 import type { AllCodeLists }   from '@personnel/domain/masters/aggregate'
 import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '@personnel/domain/commands/orgHelpers'
 import type { PersonChange, OrgPreview } from './types'
+import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,13 +47,7 @@ export function computeOrgSubFieldChanges(
   codeLists: AllCodeLists,
 ): PersonChange[] {
   const updated = reDeriveOrgSubFieldsForList(allocationList, codeLists)
-  const ORG_FIELD_LABELS: Record<string, string> = {
-    businessUnit: 'ビジネスユニット',
-    division:     '事業部',
-    subDivision:  '部',
-    group:        'グループ',
-    team:         'チーム',
-  }
+  const ORG_FIELD_LABELS = FIELD_DISPLAY_LABELS
   const result: PersonChange[] = []
   for (let i = 0; i < allocationList.length; i++) {
     const row  = allocationList[i]

@@ -1,12 +1,11 @@
 import type { EditPatternMeta } from './types'
 import { isNoCheckReason } from '../detection/helpers'
-import { C_BLUE, C_RED } from './_shared'
 
 export const LEGACY_META: Partial<Record<string, EditPatternMeta>> = {
   // 退職・退任（transferReason 文字列による後方互換検知）
   resignation: {
     label: '退職', addLabel: '退職', editLabel: '退職',
-    badgeColor: C_RED, group: 'legacy',
+    badge: 'negative', group: 'legacy',
     detect: (row, _ctx) => {
       // noCheck かどうかに関わらず transferReason 文字列に依存する後方互換パターン
       const tr = (row.transferReason as string | undefined) ?? ''
@@ -17,7 +16,7 @@ export const LEGACY_META: Partial<Record<string, EditPatternMeta>> = {
   vacantPositionMove: {
     label: 'ポジション異動', addLabel: 'ポジション異動', editLabel: 'ポジション異動',
     menuLabel: '席異動',
-    badgeColor: C_BLUE, group: 'legacy',
+    badge: 'transfer', group: 'legacy',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return false
       const posCodeChanged =

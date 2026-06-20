@@ -8,6 +8,9 @@
 > - チェックが不要な項目は「対象外」と判断した理由をコメントに残す
 > - スラッシュコマンド (`/project:implement-spec` 等) が自動的に参照する
 
+> **用語について**: spec 内で「マスタ」と記載しているものは、コード上の `AllCodeLists` 型（`packages/domain/src/masters/`）を指す。
+> 旧称「コードリスト（codeList）」から「マスタ（master）」へ統一。TypeScript 型名 `AllCodeLists` は後方互換のため据え置き。
+
 ---
 
 ## A. フィールドを追加・変更するとき
@@ -17,7 +20,7 @@
 | # | 領域 | 確認/更新先 | 必須度 |
 |---|---|---|---|
 | A1 | フィールド定義表 | `specs/G1-fields/01-field-definitions.md` — 行を追加・更新 | 必須 |
-| A2 | 入力種別 | `specs/G3-ui/01-row-editor-input-spec.md` — 入力種別・codeList対応を記載 | 必須 |
+| A2 | 入力種別 | `specs/G3-ui/01-row-editor-input-spec.md` — 入力種別・マスタ対応を記載 | 必須 |
 | A3 | RowEditorPanel | `CODE_LIST_KEYS`, `FLAG_FIELDS`, `ORG_FIELDS` のいずれかに追加が必要か | 必須 |
 | A4 | バリデーション | `specs/G2-domain/02-validation-rules.md` — このフィールドに必要な規則があるか | 必須 |
 | A5 | 変更検知 | `src/domain/review/changeDetection.ts` — ChangeKind の判定に影響するか | 要確認 |

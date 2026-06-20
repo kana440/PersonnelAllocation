@@ -36,7 +36,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
     [allocationList, afterOrganizations, codeLists]
   )
   const initialValues = useMemo(
-    () => ({ ...def.deriveInitial(row, ctx), ...(overrideInitial ?? {}) }),
+    () => ({ ...def.onOpen(row, ctx), ...(overrideInitial ?? {}) }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [def, row, ctx, overrideInitial],
   )
@@ -64,8 +64,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const handleChange = (field: keyof AllocationRow, value: string) => {
     const changes  = { [field]: value } as Partial<AllocationRow>
     const derived  = deriveFieldUpdates(changes, draftRow, codeLists, allocationList)
-    const inputDef = fieldInputs.find(i => i.field === field)
-    const effects  = inputDef?.afterChange?.(value, ctx)
+    const effects  = def.onFieldChange?.[field]?.(value, ctx)
 
     setValues(prev => ({
       ...prev,

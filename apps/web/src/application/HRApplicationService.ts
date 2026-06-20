@@ -1,12 +1,12 @@
 import type { Organization } from '@personnel/domain/schemas'
 import type { AllCodeLists } from '@personnel/domain/masters/aggregate'
 import { EMPTY_CODE_LISTS } from '@personnel/domain/masters/aggregate'
+import { validateCodeListsIntegrity, type CodeListWarning } from '@personnel/domain/masters/validateCodeLists'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { nextRowId } from '@personnel/domain/allocationRow'
 import type { AfterValues } from '@personnel/domain/allocationRow'
 import type { EditCommand, ValidationResult } from '@personnel/domain/commands/types'
 import { fail } from '@personnel/domain/commands/types'
-import type { EditScenario } from '@personnel/domain/commands/scenarios'
 import { DirectEditOperation }  from '@personnel/domain/commands/handlers/directEdit'
 import {
   CreateVacantPositionOperation,
@@ -51,6 +51,7 @@ export interface DomainSnapshot {
   previewAfterOrganizations: Organization[] | null
   patternCache:              Map<string, PatternDetectionResult>
   organizations:             Organization[]      // = beforeOrganizations（後方互換エイリアス）
+  codeListWarnings:          CodeListWarning[]   // マスタ整合性警告（インポート時に検出）
 }
 
 // ── HRApplicationService ──────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export class HRApplicationService {
   private beforeOrganizations: Organization[]  = []
   private afterOrganizations:  Organization[]  = []
   private codeLists:           AllCodeLists    = EMPTY_CODE_LISTS
+  private codeListWarnings:    CodeListWarning[] = []
 
   private undoStack = new UndoStack()
 
@@ -111,6 +113,7 @@ export class HRApplicationService {
       ...this.buildPreviewSnapshot(),
       patternCache:        this.patternCache,
       organizations:       this.beforeOrganizations,
+      codeListWarnings:    this.codeListWarnings,
     }
   }
 
@@ -125,7 +128,8 @@ export class HRApplicationService {
     this.allocationList      = data.allocationList
     this.beforeOrganizations = data.beforeOrganizations
     this.afterOrganizations  = data.afterOrganizations
-    this.codeLists           = data.codeLists
+    this.codeLists        = data.codeLists
+    this.codeListWarnings = validateCodeListsIntegrity(data.codeLists)
     this.undoStack.clear()
     this.emit()
   }
@@ -162,40 +166,30 @@ export class HRApplicationService {
     return result
   }
 
-  // ── EditScenario 実行（複合操作・Undo単位）────────────────────────
-  executeScenario(macro: EditScenario): ValidationResult {
+  // ── 操作の実行（Undo 対象）────────────────────────────────────────
+  executeOperation(op: EditCommand): ValidationResult {
     if (this.isPreviewMode) return fail('プレビュー中は編集できません')
-    if (macro.commands.length === 0) return fail('操作が空です')
 
     const beforeList = this.allocationList
     const beforeOrgs = this.afterOrganizations
 
-    // 各 Command を順に validate → 前の apply 結果を次の Context として渡す
-    let ctx = {
+    const ctx = {
       allocationList:     this.allocationList,
       afterOrganizations: this.afterOrganizations,
       codeLists:          this.codeLists,
     }
-    for (const cmd of macro.commands) {
-      const vr = cmd.validate(ctx)
-      if (!vr.ok) return vr
-      const applied = cmd.apply(ctx)
-      ctx = { ...ctx, allocationList: applied.updatedList, afterOrganizations: applied.updatedOrgs ?? ctx.afterOrganizations }
-    }
 
-    const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-    const finalOrgs = ctx.afterOrganizations !== beforeOrgs ? ctx.afterOrganizations : undefined
-    const patch = this.undoStack.computePatch(beforeList, ctx.allocationList, beforeOrgs, finalOrgs)
-    this.undoStack.push({ ...patch, label: macro.label, txId })
-    this.allocationList     = ctx.allocationList
-    this.afterOrganizations = ctx.afterOrganizations
+    const vr = op.validate(ctx)
+    if (!vr.ok) return vr
+    const result = op.apply(ctx)
+
+    const finalOrgs = result.updatedOrgs
+    const patch = this.undoStack.computePatch(beforeList, result.updatedList, beforeOrgs, finalOrgs)
+    this.undoStack.push({ ...patch, label: result.label })
+    this.allocationList     = result.updatedList
+    this.afterOrganizations = result.updatedOrgs ?? this.afterOrganizations
     this.emit()
     return { ok: true }
-  }
-
-  // ── 単一操作の実行（executeScenario の後方互換ラッパー）────────────
-  executeOperation(op: EditCommand): ValidationResult {
-    return this.executeScenario({ label: op.kind, commands: [op] })
   }
 
   // ── 行の直接編集（Undo なし・プレビュー/AI 内部用）────────────

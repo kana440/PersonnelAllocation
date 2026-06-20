@@ -2,22 +2,10 @@
 import type { EditOperation } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
+import { DirectEditOperation } from '../handlers/directEdit'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
-}
-
-function applyFields(
-  list: AllocationRow[],
-  rowId: number,
-  values: Partial<AllocationRow>,
-  label: string,
-) {
-  const changes = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-  return {
-    updatedList: list.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
-    label,
-  }
 }
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
@@ -31,7 +19,7 @@ export const promotionDef: EditOperation = {
   id:         'Promotion',
   label:      '昇格',
   group:      'jobClassification',
-  badgeColor: 'bg-green-100 text-green-700',
+  badge: 'positive',
   suppressSideEffectWarning: true,
 
   availableFor: () => true,
@@ -51,8 +39,7 @@ export const promotionDef: EditOperation = {
     { field: 'positionCode',       required: false },
     // ── 役職セクション ────────────────────────────────────────────────────
     { kind: 'section', label: '役職' },
-    { field: 'officialPositionCode', required: false,
-      afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
+    { field: 'officialPositionCode', required: false },
     { field: 'localJobTitle',      required: false },
     // ── 労働組合員・裁量労働セクション ────────────────────────────────────
     { kind: 'section', label: '労働組合員・裁量労働' },
@@ -63,7 +50,11 @@ export const promotionDef: EditOperation = {
     { field: 'memo',                          required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onFieldChange: {
+    officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
+  },
+
+  onOpen: (row) => ({
     promotionSign:                row.promotionSign                as string | undefined,
     payGradeChangeSign:           row.payGradeChangeSign           as string | undefined,
     transferReason:               row.transferReason               as string | undefined,
@@ -79,7 +70,7 @@ export const promotionDef: EditOperation = {
     discretionaryWorkFlag:        row.discretionaryWorkFlag        as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.positionBand)
@@ -87,9 +78,9 @@ export const promotionDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return applyFields(ctx.allocationList, rowId, values, `昇格: ${personName(row)}`)
+    return new DirectEditOperation(rowId, values, `昇格: ${personName(row)}`).apply(ctx)
   },
 }
 
@@ -101,7 +92,7 @@ export const demotionDef: EditOperation = {
   id:         'Demotion',
   label:      '降格',
   group:      'jobClassification',
-  badgeColor: 'bg-orange-100 text-orange-700',
+  badge: 'negative',
   suppressSideEffectWarning: true,
 
   availableFor: () => true,
@@ -122,8 +113,7 @@ export const demotionDef: EditOperation = {
     { field: 'positionCode',       required: false },
     // ── 役職セクション ────────────────────────────────────────────────────
     { kind: 'section', label: '役職' },
-    { field: 'officialPositionCode', required: false,
-      afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
+    { field: 'officialPositionCode', required: false },
     { field: 'localJobTitle',      required: false },
     // ── 労働組合員・裁量労働セクション ────────────────────────────────────
     { kind: 'section', label: '労働組合員・裁量労働' },
@@ -133,7 +123,11 @@ export const demotionDef: EditOperation = {
     { field: 'discretionaryWorkFlag',         required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onFieldChange: {
+    officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
+  },
+
+  onOpen: (row) => ({
     promotionSign:                row.promotionSign                as string | undefined,
     payGradeChangeSign:           row.payGradeChangeSign           as string | undefined,
     transferReason:               row.transferReason               as string | undefined,
@@ -150,7 +144,7 @@ export const demotionDef: EditOperation = {
     memo:                         row.memo                         as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.positionBand)
@@ -160,9 +154,9 @@ export const demotionDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return applyFields(ctx.allocationList, rowId, values, `降格: ${personName(row)}`)
+    return new DirectEditOperation(rowId, values, `降格: ${personName(row)}`).apply(ctx)
   },
 }
 
@@ -172,7 +166,7 @@ export const titleChangeDef: EditOperation = {
   id:         'TitleChange',
   label:      '役職変更（昇降格なし）',
   group:      'jobClassification',
-  badgeColor: 'bg-yellow-100 text-yellow-700',
+  badge: 'jobChange',
 
   availableFor: () => true,
 
@@ -180,27 +174,30 @@ export const titleChangeDef: EditOperation = {
     { field: 'transferReason',       required: false },
     { field: 'memo',                 required: false },
     { kind: 'section', label: '役職情報' },
-    { field: 'officialPositionCode', required: true,
-      afterChange: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }) },
+    { field: 'officialPositionCode', required: true },
     { field: 'localJobTitle',        required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onFieldChange: {
+    officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
+  },
+
+  onOpen: (row) => ({
     transferReason:       row.transferReason       as string | undefined,
     memo:                 row.memo                 as string | undefined,
     officialPositionCode: row.officialPositionCode as string | undefined,
     localJobTitle:        row.localJobTitle        as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return applyFields(ctx.allocationList, rowId, values, `役職変更: ${personName(row)}`)
+    return new DirectEditOperation(rowId, values, `役職変更: ${personName(row)}`).apply(ctx)
   },
 }
 

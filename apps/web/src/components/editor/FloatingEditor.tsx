@@ -1,5 +1,4 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
-import { EditView } from './EditView'
 import { PersonOperationPanel } from './PersonOperationPanel'
 import { useStore } from '../../store/useStore'
 
@@ -10,11 +9,11 @@ const FLOAT_MIN_H     = 320
 
 export function FloatingEditor() {
   const {
-    editMode, exitEditMode, isHistoryPreviewMode,
+    isHistoryPreviewMode,
     operationPanelRowId, exitOperationPanel,
   } = useStore()
 
-  const isOpen = editMode || operationPanelRowId !== null
+  const isOpen = operationPanelRowId !== null
 
   // ── 位置・サイズ ───────────────────────────────────────────────────────────
   const [pos,  setPos]  = useState(() => ({
@@ -100,17 +99,13 @@ export function FloatingEditor() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (editMode)                  exitEditMode()
       if (operationPanelRowId !== null) exitOperationPanel()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editMode, exitEditMode, operationPanelRowId, exitOperationPanel])
+  }, [operationPanelRowId, exitOperationPanel])
 
   if (!isOpen) return null
-
-  const isOperationMode = operationPanelRowId !== null
-  const onClose = isOperationMode ? exitOperationPanel : exitEditMode
 
   return (
     <div
@@ -122,20 +117,16 @@ export function FloatingEditor() {
         className={`flex-shrink-0 h-8 border-b flex items-center px-3 gap-2 cursor-move select-none ${
           isHistoryPreviewMode
             ? 'bg-amber-50 border-amber-200'
-            : isOperationMode
-            ? 'bg-blue-50 border-blue-100'
-            : 'bg-gray-100 border-gray-200'
+            : 'bg-blue-50 border-blue-100'
         }`}
         onMouseDown={onDragStart}
       >
         {isHistoryPreviewMode
           ? <span className="text-[11px] font-semibold text-amber-600 flex-1">🔍 照会（プレビュー中・保存不可）</span>
-          : isOperationMode
-          ? <span className="text-[11px] font-semibold text-blue-600 flex-1">操作</span>
-          : <span className="text-[11px] font-semibold text-gray-500 flex-1">編集</span>
+          : <span className="text-[11px] font-semibold text-blue-600 flex-1">操作</span>
         }
         <button
-          onClick={onClose}
+          onClick={exitOperationPanel}
           className="w-5 h-5 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-100 hover:text-red-500 transition-colors text-xs"
           title="閉じる (Esc)"
         >✕</button>
@@ -143,10 +134,10 @@ export function FloatingEditor() {
 
       {/* 本体 */}
       <div className="flex-1 overflow-hidden">
-        {isOperationMode
-          ? <PersonOperationPanel rowId={operationPanelRowId} />
-          : <EditView readOnly={isHistoryPreviewMode} />
-        }
+        <PersonOperationPanel
+          key={operationPanelRowId}
+          rowId={operationPanelRowId}
+        />
       </div>
 
       {/* 右端リサイズハンドル */}

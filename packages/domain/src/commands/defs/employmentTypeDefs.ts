@@ -32,7 +32,7 @@ export const jobTypeChangeDef: EditOperation = {
   id:         'JobTypeChange',
   label:      '職種変更',
   group:      'jobClassification',
-  badgeColor: 'bg-purple-100 text-purple-700',
+  badge: 'jobChange',
 
   description: 'ジョブファミリー・ジョブタイプを変更します。給与等級の変更が発生する場合は、適切な給与等級を選択してください。',
 
@@ -49,7 +49,7 @@ export const jobTypeChangeDef: EditOperation = {
     { field: 'payGrade',       required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: row.transferReason as string | undefined,
     jobFamily:      row.jobFamily      as string | undefined,
     jobType:        row.jobType        as string | undefined,
@@ -57,13 +57,13 @@ export const jobTypeChangeDef: EditOperation = {
     memo:           row.memo           as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const changes = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
     return {
@@ -79,7 +79,7 @@ export const employmentExtensionDef: EditOperation = {
   id:         'EmploymentExtension',
   label:      '雇用延長',
   group:      'jobClassification',
-  badgeColor: 'bg-teal-100 text-teal-700',
+  badge: 'jobChange',
 
   description: '３月末に雇用延長する対象者については、当個別に雇用延長登録いたします。申請書上は申請区分を入力いただき、他の入力項目は空欄にしてください。',
 
@@ -90,19 +90,19 @@ export const employmentExtensionDef: EditOperation = {
     { field: 'memo',           required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: '【個別対応】3月末雇用延長手続対象者（新規・更新）' as string | undefined,
     memo:           row.memo as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.transferReason) return fail('変更事由は必須です')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRow = { ...row }
     for (const [key, value] of Object.entries(computeEmploymentExtensionAfter())) {
@@ -125,7 +125,7 @@ export const employmentTypeChangeDef: EditOperation = {
   id:         'EmploymentTypeChange',
   label:      '雇用タイプ変更',
   group:      'jobClassification',
-  badgeColor: 'bg-indigo-100 text-indigo-700',
+  badge: 'jobChange',
 
   availableFor: (row) => !!row.userId,
 
@@ -136,20 +136,20 @@ export const employmentTypeChangeDef: EditOperation = {
     { field: 'employmentType', required: true },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: '【個別対応】従業員区分変更（社員⇔社員B・嘱託など）' as string | undefined,
     memo:           row.memo           as string | undefined,
     employmentType: row.employmentType as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.employmentType) return fail('雇用タイプは必須です')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const changes = Object.fromEntries(
       Object.entries(values).filter(([, v]) => v !== undefined)

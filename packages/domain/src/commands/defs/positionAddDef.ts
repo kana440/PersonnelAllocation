@@ -9,7 +9,7 @@ export const addEmptyPositionDef: EditOperation = {
   id:         'AddEmptyPosition',
   label:      'ポジション追加',
   group:      'position',
-  badgeColor: 'bg-gray-100 text-gray-700',
+  badge: 'neutral',
 
   suppressSideEffectWarning: true,
 
@@ -23,18 +23,18 @@ export const addEmptyPositionDef: EditOperation = {
   ],
 
   // row.departmentCode に追加先組織コードが入ってくる（NewRowOperationModal の syntheticRow）
-  deriveInitial: (row, ctx) => ({
+  onOpen: (row, ctx) => ({
     positionCode:   `_pos_${nextRowId(ctx.allocationList)}`,
     departmentCode: row.departmentCode,
     transferReason: undefined,
     memo:           undefined,
   }),
 
-  validate(_ctx, _rowId, _values) {
+  onValidate(_ctx, _rowId, _values) {
     return ok()
   },
 
-  apply(ctx, _rowId, values) {
+  onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const deptCode = (values.departmentCode as string | undefined) ?? ''
     const posCode  = ((values.positionCode as string | undefined) ?? '').trim() || `_pos_${newRowId}`

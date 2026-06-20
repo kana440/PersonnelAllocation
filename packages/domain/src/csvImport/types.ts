@@ -4,4 +4,5 @@ export type FieldDef = {
   header?: string  // SF CSV row-1 header — omit when identical to key
   en: string       // CSV row 2 (English)
   ja: string       // CSV row 3 (Japanese)
+  label?: string   // UI display name — derived from header by stripping _新 suffix if omitted
 }

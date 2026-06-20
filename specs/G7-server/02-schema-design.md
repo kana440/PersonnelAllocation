@@ -13,7 +13,7 @@
 | **マルチテナント** | グループ傘下の複数会社をサポート。`companies` がテナント単位 |
 | **Round = グループ横断** | Round は複数会社を束ねる。`round_companies` が Round × Company の実作業単位 |
 | **Revision 廃止** | 前回 Round の `allocation_rows` を次回の出発点として直接参照（`rounds.based_on_round_id`） |
-| **マスタ正規化** | 組織・コードリストを JSON blob ではなく正規化テーブルで管理 |
+| **マスタ正規化** | 組織・マスタを JSON blob ではなく正規化テーブルで管理 |
 | **Excel は 1:1** | `round_company_files` が Round × Company ごとに 1 ファイル（base64 text） |
 
 ---
@@ -67,7 +67,7 @@
 │   │        parent_id → round_company_orgs.id  ← self-ref                │
 │   │        level, path TEXT  ← マテリアライズドパス "/1/3/7/"            │
 │   │                                                                      │
-│   ├── 1:N  round_company_code_items  ← コードリスト（正規化）           │
+│   ├── 1:N  round_company_code_items  ← マスタ（正規化）                  │
 │   │        id (serial PK)                                                │
 │   │        round_company_id → round_companies                            │
 │   │        category  ← employment_type | job_level | ...                │
@@ -128,7 +128,7 @@
 | `round_companies` | Round × Company の実作業単位 | Round × Company |
 | `round_company_files` | Excel ファイル（1:1） | Round × Company |
 | `round_company_orgs` | 組織スナップショット（before/after） | Round × Company |
-| `round_company_code_items` | コードリスト（役職・バンド等） | Round × Company |
+| `round_company_code_items` | マスタ（役職・バンド等） | Round × Company |
 | `allocation_rows` | trunk の AllocationRow | Round × Company |
 | `submissions` | 委譲ツリーのノード | Round × Company |
 | `submission_rows` | ブランチの編集行スナップショット | Submission |
@@ -164,7 +164,7 @@
 - 会社横断の整合性チェック（同一グループ社員IDの重複検出）が必要
 - `UNIQUE(round_id, company_id)` で 1 Round に同一会社は 1 つだけ
 
-### マスタ（コードリスト）をラウンドごとに持つ理由
+### マスタをラウンドごとに持つ理由
 
 - Excel インポート時のマスタをそのまま保持（ラウンドをまたいで変わる可能性がある）
 - `round_company_code_items.category` で種別を区別（employment_type / job_level / ...）
@@ -183,7 +183,7 @@ GET    /api/rounds/:id/companies                      - Round 内の Company 一
 POST   /api/rounds/:id/finalize                       - Round 確定（status=merged）
 GET    /api/rounds/:id/tree                           - 委任ツリー（全 Company）
 
-GET    /api/rounds/:id/companies/:companyId/masters   - 組織・コードリスト取得
+GET    /api/rounds/:id/companies/:companyId/masters   - 組織・マスタ取得
 GET    /api/rounds/:id/companies/:companyId/excel     - Excel ダウンロード
 
 GET    /api/submissions                               - 自分の Submission 一覧

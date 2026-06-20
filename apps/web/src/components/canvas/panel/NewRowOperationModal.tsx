@@ -12,10 +12,10 @@ interface Props {
 /**
  * 組織パネルの追加ボタンから新規行を作成するモーダル。
  * 既存行を持たない操作（rowId = -1）のため、OperationFormView に合成行を渡す。
- * deriveInitial は row.departmentCode を初期値として使う。
+ * onOpen は row.departmentCode を初期値として使う。
  */
 export function NewRowOperationModal({ def, orgCode, onClose }: Props) {
-  // 合成行: departmentCode だけ設定。deriveInitial が組織コードを初期値として拾う
+  // 合成行: departmentCode だけ設定。onOpen が組織コードを初期値として拾う
   const syntheticRow = { rowId: -1, departmentCode: orgCode } as AllocationRow
 
   return (

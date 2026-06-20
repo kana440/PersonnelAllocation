@@ -58,7 +58,7 @@ interface Props {
 }
 
 export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: Props) {
-  const { undo, redo, canUndo, canRedo, selectedPersonId } = useStore()
+  const { undo, redo, canUndo, canRedo, selectedPersonId, codeListWarnings } = useStore()
 
   const [isTreeOpen,    setIsTreeOpen]    = useState(true)
   const [isChatOpen,    setIsChatOpen]    = useState(true)
@@ -156,6 +156,11 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
             title="コードリスト・組織マスタなどのテーブルを照会"
           >
             <span>📋</span><span>テーブル参照</span>
+            {codeListWarnings.length > 0 && (
+              <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                {codeListWarnings.length > 9 ? '9+' : codeListWarnings.length}
+              </span>
+            )}
           </HeaderButton>
           <HeaderButton
             onClick={() => setStrictnessSettingsOpen(o => !o)}

@@ -16,7 +16,7 @@ export const concurrentAddDef: EditOperation = {
   id:         'ConcurrentAdd',
   label:      '社内兼務追加',
   group:      'position',
-  badgeColor: 'bg-cyan-100 text-cyan-700',
+  badge: 'concurrent',
 
   availableFor: (row) => !!row.userId && isMainAssignment(row),
 
@@ -37,7 +37,7 @@ export const concurrentAddDef: EditOperation = {
     { field: 'memo',             required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason:  row.transferReason,
     lastName:        row.lastName,
     firstName:       row.firstName,
@@ -49,7 +49,7 @@ export const concurrentAddDef: EditOperation = {
     memo:            row.memo as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType === '兼務') return fail('兼務行には兼務を追加できません（本務行を指定してください）')
@@ -59,7 +59,7 @@ export const concurrentAddDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const src      = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
@@ -91,7 +91,7 @@ export const concurrentAddNewDef: EditOperation = {
   id:         'ConcurrentAddNew',
   label:      '社内兼務追加（新規）',
   group:      'position',
-  badgeColor: 'bg-cyan-100 text-cyan-700',
+  badge: 'concurrent',
 
   // 組織パネルボタンからのみ起動。行メニューには表示しない
   availableFor: () => false,
@@ -115,18 +115,18 @@ export const concurrentAddNewDef: EditOperation = {
   ],
 
   // 組織ボタン起動時: row.departmentCode に初期組織コードが入ってくる
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     departmentCode: row.departmentCode,
   }),
 
-  validate(_ctx, _rowId, values) {
+  onValidate(_ctx, _rowId, values) {
     if (!values.lastName)       return fail('姓は必須です')
     if (!values.firstName)      return fail('名は必須です')
     if (!values.departmentCode) return fail('兼務先組織コードは必須です')
     return ok()
   },
 
-  apply(ctx, _rowId, values) {
+  onSubmit(ctx, _rowId, values) {
     const newRowId = nextRowId(ctx.allocationList)
     const orgSub   = values.departmentCode
       ? deriveOrgSubFields(values.departmentCode as string, ctx.codeLists)
@@ -157,7 +157,7 @@ export const concurrentAddCancelDef: EditOperation = {
   id:         'ConcurrentAddCancel',
   label:      '社内兼務追加取消',
   group:      'position',
-  badgeColor: 'bg-red-100 text-red-600',
+  badge: 'negative',
 
   description: 'このセッションで追加した社内兼務を取消します。下記の情報が削除されます。',
   suppressSideEffectWarning: true,
@@ -179,7 +179,7 @@ export const concurrentAddCancelDef: EditOperation = {
     { field: 'concurrentReason', required: false, readOnly: true },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     lastName:         row.lastName,
     firstName:        row.firstName,
     employmentType:   row.employmentType,
@@ -189,7 +189,7 @@ export const concurrentAddCancelDef: EditOperation = {
     concurrentReason: row.concurrentReason,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType !== '兼務' || row.prevConcurrentType)
@@ -197,7 +197,7 @@ export const concurrentAddCancelDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, _values) {
+  onSubmit(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
     return {
@@ -213,7 +213,7 @@ export const concurrentReleaseDef: EditOperation = {
   id:         'ConcurrentRelease',
   label:      '社内兼務解除',
   group:      'position',
-  badgeColor: 'bg-cyan-50 text-cyan-600',
+  badge: 'concurrent',
 
   // prevConcurrentType = '兼務' → インポート時から兼務として存在していた行のみ対象
   // セッション内追加分は ConcurrentAddCancel で対処する
@@ -228,11 +228,11 @@ export const concurrentReleaseDef: EditOperation = {
     { field: 'memo',           required: false },
   ],
 
-  deriveInitial: () => ({
+  onOpen: () => ({
     transferReason: '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (row.concurrentType !== '兼務')
@@ -242,7 +242,7 @@ export const concurrentReleaseDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, _values) {
+  onSubmit(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
     return {

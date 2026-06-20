@@ -41,7 +41,7 @@ export function OrgOperationView() {
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
-    selectedPersonId, selectPerson, enterEditMode, saveRow,
+    selectedPersonId, selectPerson, saveRow,
     operationPanelRowId, enterOperationPanel,
     assignPersonToVacantPosition,
     assigneeWarnings,
@@ -111,7 +111,7 @@ export function OrgOperationView() {
     if (!person?.sfPersonId) return
     const firstRow = allocationList.find(r => r.userId === person.sfPersonId)
     if (!firstRow) return
-    enterEditMode(firstRow.rowId)
+    enterOperationPanel(firstRow.rowId, 'directEdit')
   }
 
   const handleRowDoubleClick = useCallback((e: React.MouseEvent, rowId: number) => {
@@ -225,7 +225,7 @@ export function OrgOperationView() {
     const newRowId = current.length === 0 ? 1 : Math.max(...current.map(r => r.rowId)) + 1
     const topMgrCode = topPositionCodeOfOrg(orgId)
     appService.createVacantPosition(orgCode, '', topMgrCode ? { managerPositionCode: topMgrCode } : undefined)
-    enterEditMode(newRowId)
+    enterOperationPanel(newRowId, 'directEdit')
   }
 
   // 複数選択時にAIチャットコンテキストを連動

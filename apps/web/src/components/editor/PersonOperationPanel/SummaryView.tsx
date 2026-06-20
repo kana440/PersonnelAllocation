@@ -2,15 +2,24 @@ import { useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { rowDiff, type AllocationRow } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
-import { ALL_EDIT_OPERATIONS, type EditOperation } from '@personnel/domain/commands/defs/index'
+import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS } from '@personnel/domain/commands/defs/index'
+import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 import { useUnavailableOperationDisplay } from '../../../hooks/useFieldStrictness'
 import type { PanelView } from './types'
 
-// ── セクション定義（業務語） ────────────────────────────────────────────────────
-// id は OperationDef.id と 1:1 対応。shortLabel はバッジ表示用の短縮ラベル。
-// 出向セクションは SF区別をセクションタイトルで示すため同じ shortLabel を使い分けて問題なし。
+// ── セクションエントリ型 ──────────────────────────────────────────────────────
+// id          : EditOperation の id（単一行操作）
+// multiRowId  : MultiRowOperationDef の id（複数行操作）
+// どちらかを持つ排他的ユニオン
+
+type SectionEntry =
+  | { id:         string; shortLabel: string; cancel?: boolean }
+  | { multiRowId: string; shortLabel: string; cancel?: boolean }
+
+// ── セクション定義 ────────────────────────────────────────────────────────────
+// MultiRowOperationDef を追加するときは multiRowId: '...' で記載する。
 // Domain 側の def を変更したときはここも合わせて更新する。
-const SECTIONS: { label: string; ops: { id: string; shortLabel: string; cancel?: boolean }[] }[] = [
+const SECTIONS: { label: string; ops: SectionEntry[] }[] = [
   {
     label: '昇降格・役職変更',
     ops: [
@@ -59,14 +68,17 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string; cancel?:
   {
     label: '出向・出向解除（SF未導入会社）',
     ops: [
-      { id: 'SecondmentOutNonSF',                     shortLabel: 'SF未導入\n本務出向' },
-      { id: 'SecondmentOutReleaseNonSF',               shortLabel: 'SF未導入\n本務出向解除' },
-      { id: 'SecondmentInReleaseNonSF',                shortLabel: 'SF未導入\n本務受入解除' },
-      { id: 'SecondmentInCancelNonSF',                 shortLabel: 'SF未導入\n本務受入取消', cancel: true },
-      { id: 'ConcurrentSecondmentOutNonSF',            shortLabel: 'SF未導入\n兼務出向' },
-      { id: 'ConcurrentSecondmentOutReleaseNonSF',     shortLabel: 'SF未導入\n兼務出向解除' },
-      { id: 'ConcurrentSecondmentInReleaseNonSF',      shortLabel: 'SF未導入\n兼務受入解除' },
-      { id: 'ConcurrentSecondmentInCancelNonSF',       shortLabel: 'SF未導入\n兼務受入取消', cancel: true },
+      // 本務出向・解除・取り消しは MultiRowOperationDef（複数行操作）
+      { multiRowId: 'NonSFSecondmentOut',     shortLabel: 'SF未導入\n本務出向' },
+      { multiRowId: 'NonSFSecondmentRelease', shortLabel: 'SF未導入\n本務出向解除' },
+      { multiRowId: 'NonSFSecondmentCancel',  shortLabel: 'SF外出向\n取消', cancel: true },
+      // 受入側の解除・取消（単一行操作。出向元がない場合など）
+      { id: 'SecondmentInReleaseNonSF',   shortLabel: 'SF未導入\n本務受入解除' },
+      { id: 'SecondmentInCancelNonSF',    shortLabel: 'SF未導入\n本務受入取消', cancel: true },
+      { id: 'ConcurrentSecondmentOutNonSF',        shortLabel: 'SF未導入\n兼務出向' },
+      { id: 'ConcurrentSecondmentOutReleaseNonSF', shortLabel: 'SF未導入\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseNonSF',  shortLabel: 'SF未導入\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInCancelNonSF',   shortLabel: 'SF未導入\n兼務受入取消', cancel: true },
     ],
   },
   {
@@ -75,8 +87,8 @@ const SECTIONS: { label: string; ops: { id: string; shortLabel: string; cancel?:
       { id: 'LeaveOfAbsence',       shortLabel: '休職' },
       { id: 'LeaveOfAbsenceCancel', shortLabel: '休職取消', cancel: true },
       { id: 'ReturnFromLeave',      shortLabel: '復職' },
-      { id: 'EmploymentTransfer', shortLabel: '移籍' },
-      { id: 'NoChange',              shortLabel: '変更なし' },
+      { id: 'EmploymentTransfer',   shortLabel: '移籍' },
+      { id: 'NoChange',             shortLabel: '変更なし' },
     ],
   },
 ]
@@ -85,16 +97,16 @@ const COLOR_AVAILABLE   = 'bg-blue-100 text-blue-700'
 const COLOR_CANCEL      = 'bg-red-100 text-red-600'
 const COLOR_UNAVAILABLE = 'bg-gray-100 text-gray-400'
 
-const defById = new Map(ALL_EDIT_OPERATIONS.map(d => [d.id, d]))
+const editOpById     = new Map(ALL_EDIT_OPERATIONS.map(d => [d.id, d]))
+const multiRowById   = new Map(ALL_MULTI_ROW_OPERATION_DEFS.map(d => [d.id, d]))
 
 interface Props {
-  row:          AllocationRow
-  onSelect:     (view: PanelView) => void
-  onDirectEdit: () => void
+  row:      AllocationRow
+  onSelect: (view: PanelView) => void
 }
 
-export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
-  const { codeLists, afterOrganizations } = useStore()
+export function SummaryView({ row, onSelect }: Props) {
+  const { codeLists, afterOrganizations, allocationList } = useStore()
   const unavailableDisplay = useUnavailableOperationDisplay()
 
   const diffs   = useMemo(() => rowDiff(row), [row])
@@ -138,11 +150,40 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
       {/* 操作ボタン群 */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {SECTIONS.map(({ label, ops }) => {
-          const items = ops
-            .map(({ id, shortLabel, cancel }) => ({ def: defById.get(id), shortLabel, cancel }))
-            .filter((x): x is { def: EditOperation; shortLabel: string; cancel: boolean | undefined } => !!x.def)
-            .map(({ def, shortLabel, cancel }) => ({ def, shortLabel, cancel, available: def.availableFor(row, codeLists) }))
-            .filter(({ available }) => unavailableDisplay !== 'hide' || available)
+          // 表示すべきボタンを収集
+          const items = ops.flatMap((entry): { key: string; shortLabel: string; cancel: boolean; available: boolean; onPress: () => void; badgeColor?: string }[] => {
+            const cancel = !!entry.cancel
+
+            if ('multiRowId' in entry) {
+              // MultiRowOperationDef
+              const def = multiRowById.get(entry.multiRowId)
+              if (!def) return []
+              const available = def.availableFor(row, codeLists, allocationList)
+              if (!available && unavailableDisplay === 'hide') return []
+              return [{
+                key:        def.id,
+                shortLabel: entry.shortLabel,
+                cancel,
+                available,
+                onPress:    () => onSelect({ multiRowDef: def, rowId: row.rowId }),
+                badgeColor: def.badge ? OPERATION_BADGE_COLORS[def.badge] : undefined,
+              }]
+            }
+
+            // EditOperation
+            const def = editOpById.get(entry.id)
+            if (!def) return []
+            const available = def.availableFor(row, codeLists)
+            if (!available && unavailableDisplay === 'hide') return []
+            return [{
+              key:        def.id,
+              shortLabel: entry.shortLabel,
+              cancel,
+              available,
+              onPress:    () => onSelect({ def, rowId: row.rowId }),
+              badgeColor: OPERATION_BADGE_COLORS[def.badge],
+            }]
+          })
 
           if (items.length === 0) return null
 
@@ -152,15 +193,15 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
                 {label}
               </div>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1">
-                {items.map(({ def, shortLabel, cancel, available }) => {
+                {items.map(({ key, shortLabel, cancel, available, onPress, badgeColor }) => {
                   const disabled = !available && unavailableDisplay === 'show-disabled'
                   const color = available
-                    ? (cancel ? COLOR_CANCEL : COLOR_AVAILABLE)
+                    ? (badgeColor ?? (cancel ? COLOR_CANCEL : COLOR_AVAILABLE))
                     : COLOR_UNAVAILABLE
                   return (
                     <button
-                      key={def.id}
-                      onClick={disabled ? undefined : () => onSelect({ def, rowId: row.rowId })}
+                      key={key}
+                      onClick={disabled ? undefined : onPress}
                       disabled={disabled}
                       className={[
                         'px-1 py-0.5 min-h-[1.75rem] rounded text-[10px] font-medium text-center leading-tight whitespace-pre-line',
@@ -169,7 +210,7 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
                           : 'transition-all hover:brightness-95 active:scale-95',
                         color,
                       ].join(' ')}
-                      title={available ? def.label : `${def.label}（この行では通常使用しません）`}
+                      title={available ? undefined : `${shortLabel}（この行では使用できません）`}
                     >
                       {shortLabel}
                     </button>
@@ -180,14 +221,14 @@ export function SummaryView({ row, onSelect, onDirectEdit }: Props) {
           )
         })}
 
-        {/* 全項目を直接編集（常に有効・unavailableDisplay フィルター対象外） */}
+        {/* 全項目を直接編集（常に有効） */}
         <div>
           <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
             全項目を直接編集
           </div>
           <div className="grid grid-cols-3 gap-1">
             <button
-              onClick={onDirectEdit}
+              onClick={() => onSelect('directEdit')}
               className="px-1 py-0.5 min-h-[1.75rem] rounded text-[10px] font-medium text-center leading-tight bg-gray-100 text-gray-500 hover:brightness-95 active:scale-95 transition-all"
             >
               直接編集

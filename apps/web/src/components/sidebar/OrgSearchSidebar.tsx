@@ -17,7 +17,7 @@ export function OrgSearchSidebar() {
   const {
     afterOrganizations, organizations: beforeOrgs,
     persons, allocationList,
-    selectedPersonId, selectPerson, enterEditMode,
+    selectedPersonId, selectPerson, enterOperationPanel,
   } = useScopedStore()
 
   const { panels, setOrgOpen } = useCanvasLayoutStore()
@@ -31,7 +31,7 @@ export function OrgSearchSidebar() {
     if (!person?.sfPersonId) return
     const firstRow = allocationList.find(r => r.userId === person.sfPersonId)
     if (!firstRow) return
-    enterEditMode(firstRow.rowId)
+    enterOperationPanel(firstRow.rowId, 'directEdit')
   }
 
   const handlePersonDoubleClick = (personId: string) => enterEditForPerson(personId)

@@ -16,7 +16,7 @@ export const orgTransferDef: EditOperation = {
   id:         'OrgTransfer',
   label:      '社内異動',
   group:      'position',
-  badgeColor: 'bg-blue-100 text-blue-700',
+  badge: 'transfer',
 
   availableFor: (row) => !!row.userId && isMainAssignment(row),
 
@@ -40,7 +40,7 @@ export const orgTransferDef: EditOperation = {
     { field: 'memo',        required: false },
   ],
 
-  deriveInitial: (row, ctx) => {
+  onOpen: (row, ctx) => {
     const mpc      = row.managerPositionCode as string | undefined
     const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.codeLists)
     return {
@@ -58,7 +58,7 @@ export const orgTransferDef: EditOperation = {
     }
   },
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.departmentCode)
@@ -66,7 +66,7 @@ export const orgTransferDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row     = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string
     const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
@@ -91,7 +91,7 @@ export const orgRestructureDef: EditOperation = {
   id:         'OrgRestructure',
   label:      '組織改変',
   group:      'position',
-  badgeColor: 'bg-indigo-100 text-indigo-700',
+  badge: 'transfer',
 
   availableFor: () => true,
 
@@ -110,7 +110,7 @@ export const orgRestructureDef: EditOperation = {
     { field: 'memo',            required: false },
   ],
 
-  deriveInitial: (row, ctx) => {
+  onOpen: (row, ctx) => {
     const subFields = deriveOrgSubFields(row.departmentCode as string ?? '', ctx.codeLists)
     return {
       transferReason: row.transferReason as string | undefined,
@@ -125,7 +125,7 @@ export const orgRestructureDef: EditOperation = {
     }
   },
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.departmentCode)
@@ -133,7 +133,7 @@ export const orgRestructureDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row      = ctx.allocationList.find(r => r.rowId === rowId)!
     const deptCode = values.departmentCode as string
     const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
@@ -155,7 +155,7 @@ export const managerChangeDef: EditOperation = {
   id:         'ManagerChange',
   label:      '上司変更',
   group:      'position',
-  badgeColor: 'bg-slate-100 text-slate-700',
+  badge: 'transfer',
 
   availableFor: (row) => !!row.positionCode,
 
@@ -178,7 +178,7 @@ export const managerChangeDef: EditOperation = {
     { field: 'memo', required: false },
   ],
 
-  deriveInitial: (row, ctx) => {
+  onOpen: (row, ctx) => {
     const mpc = row.managerPositionCode as string | undefined
     return {
       transferReason:      row.transferReason as string | undefined,
@@ -188,13 +188,13 @@ export const managerChangeDef: EditOperation = {
     }
   },
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>

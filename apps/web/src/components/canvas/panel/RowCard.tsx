@@ -5,6 +5,7 @@ import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { useStore }              from '../../../store/useStore'
 import { CanvasFieldDiff }       from '../components/CanvasFieldDiff'
+import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 
 const isInternalPosCode = (s?: string) => !s || s.startsWith('_pos_')
 
@@ -155,7 +156,7 @@ export function RowCard({
           {[...activePatterns].map(p => {
             const meta = EDIT_PATTERN_META[p]
             return (
-              <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none ${meta.badgeColor}`}>
+              <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none ${OPERATION_BADGE_COLORS[meta.badge]}`}>
                 {meta.label}
               </span>
             )

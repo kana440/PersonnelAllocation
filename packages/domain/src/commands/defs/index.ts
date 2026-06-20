@@ -12,8 +12,9 @@
  *   2. ここの再エクスポートに追加
  */
 
-export type { EditOperation, OperationDef, OperationGroup, OperationInput, SectionDivider } from './types'
+export type { EditOperation, OperationDef, OperationGroup, OperationInput, SectionDivider, FieldChangeEffect } from './types'
 export { isSectionDivider } from './types'
+export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
 
 // ── 昇降格・役職変更 ──────────────────────────────────────────────────────────
@@ -72,6 +73,10 @@ export const ALL_EDIT_OPERATIONS: EditOperation[] = [
 /** 後方互換エイリアス */
 export const ALL_OPERATION_DEFS = ALL_EDIT_OPERATIONS
 
+// ── 複数行操作 ────────────────────────────────────────────────────────────────
+export type { MultiRowOperationDef, MultiRowFormSection } from './multiRowTypes'
+export { ALL_MULTI_ROW_OPERATION_DEFS, nonSFSecondmentOutDef } from './multiRowDefs'
+
 /**
  * EditOperation にパラメータを束縛して EditCommand を生成する。
  * HRApplicationService.executeOperation() や EditScenario.commands に渡せる。
@@ -83,7 +88,7 @@ export function bindOperation(
 ): EditCommand {
   return {
     kind:     op.id,
-    validate: (ctx: DomainContext) => op.validate(ctx, rowId, values),
-    apply:    (ctx: DomainContext) => op.apply(ctx, rowId, values),
+    validate: (ctx: DomainContext) => op.onValidate(ctx, rowId, values),
+    apply:    (ctx: DomainContext) => op.onSubmit(ctx, rowId, values),
   }
 }

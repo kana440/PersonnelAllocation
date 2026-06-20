@@ -1,6 +1,6 @@
 import type { HRApplicationService } from '../HRApplicationService'
 import type { EditCommand, ValidationResult, OperationError } from '@personnel/domain/commands/types'
-import type { EditScenario } from '@personnel/domain/commands/scenarios'
+import { ALL_MULTI_ROW_OPERATION_DEFS } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow, AfterValues } from '@personnel/domain/allocationRow'
 import { ChangeTitleOperation, derivePersonGradeFields } from '@personnel/domain/commands/handlers/changeTitle'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
@@ -495,15 +495,6 @@ export function createWriteMethods(service: HRApplicationService) {
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
-  // ── Scenario execution ───────────────────────────────────────────────────
-
-  function executeScenario(scenario: EditScenario): AIOperationResult {
-    const beforeList = service.getSnapshot().allocationList
-    const result = service.executeScenario(scenario)
-    if (!result.ok) return { ok: false, errors: result.errors }
-    return { ok: true, postValidation: runPostValidation(beforeList) }
-  }
-
   // ── 出向受入 ──────────────────────────────────────────────────────────────
 
   function executeSecondmentIn(
@@ -547,8 +538,29 @@ export function createWriteMethods(service: HRApplicationService) {
     return errors.map(e => e.field ? `[${e.field}] ${e.message}` : e.message).join('\n')
   }
 
+  function executeMultiRowOperation(
+    id:            string,
+    anchorRowId:   number,
+    sectionValues: Record<string, string>[],
+  ): AIOperationResult {
+    const def = ALL_MULTI_ROW_OPERATION_DEFS.find(d => d.id === id)
+    if (!def) return { ok: false, errors: [{ message: `MultiRowOperation "${id}" が見つかりません` }] }
+    const { allocationList, afterOrganizations, codeLists } = service.getSnapshot()
+    const anchor = allocationList.find(r => r.rowId === anchorRowId)
+    if (!anchor) return { ok: false, errors: [{ message: `行 ${anchorRowId} が見つかりません` }] }
+    if (!def.availableFor(anchor, codeLists, allocationList)) {
+      return { ok: false, errors: [{ message: `${def.label} はこの行では使用できません` }] }
+    }
+    const beforeList = allocationList
+    const cmd    = def.createCommand(anchorRowId, sectionValues, { allocationList, afterOrganizations, codeLists })
+    const result = service.executeOperation(cmd)
+    if (!result.ok) return result
+    return { ok: true, postValidation: runPostValidation(beforeList) }
+  }
+
   return {
     validateOperation, executeOperation, undo,
+    executeMultiRowOperation,
     createVacantPosition, assignPersonToVacantPosition, unassignPersonFromPosition, removePosition,
     getUnassignedPositions, assignPositionCodes,
     changeTitle, suggestTitleFields,
@@ -561,7 +573,6 @@ export function createWriteMethods(service: HRApplicationService) {
     executeLeaveOfAbsence, executeReturnFromLeave,
     executeConcurrentAdd, executeConcurrentRelease, executeDemotionForUser,
     executeSecondmentIn, executeConcurrentSecondmentIn,
-    executeScenario,
     formatErrors,
   }
 }

@@ -1,6 +1,7 @@
 import type { AllocationRow }  from '../../allocationRow'
 import type { AllCodeLists }   from '../../masters/aggregate'
 import type { DomainContext, ValidationResult, OperationResult } from '../types'
+import type { OperationBadge } from './badge'
 
 /**
  * 操作の概念グループ。UI でのメニュー分類・説明文に使用する。
@@ -25,6 +26,18 @@ export function isSectionDivider(i: OperationInput | SectionDivider): i is Secti
 }
 
 /**
+ * フィールド変更時のサイドエフェクト型。
+ * onFieldChange ハンドラと onOpen 由来の値設定に使用する。
+ */
+export type FieldChangeEffect = {
+  setValues?:            Partial<AllocationRow>
+  openPickerFor?:        keyof AllocationRow
+  openPickerInitialOrg?: string
+  suggestFieldValue?:    { field: keyof AllocationRow; value: string }
+  suppressDerive?:       boolean   // true のとき deriveFieldUpdates をスキップ
+}
+
+/**
  * 操作の入力フィールド定義。
  * UI フォームでユーザーが入力する必要があるフィールドを宣言する。
  */
@@ -44,7 +57,7 @@ export interface OperationInput {
    * UI 側でステップ数セレクター（1段階/2段階/全て）と組み合わせて使用する。
    */
   readonly stepFilter?: 'up' | 'down'
-  /** true のとき値を表示するが編集不可にする。deriveInitial で設定した固定値の確認用 */
+  /** true のとき値を表示するが編集不可にする。onOpen で設定した固定値の確認用 */
   readonly readOnly?: boolean
   /** 入力 UI の種別。省略時はテキスト入力（ComboInput）。'checkbox' のとき truthy/falsy をチェックボックスで表示 */
   readonly inputType?: 'checkbox'
@@ -67,32 +80,16 @@ export interface OperationInput {
    * 指定された場合は ComboInput を strict モードで表示し、リスト外の入力を抑止する。
    */
   readonly options?: readonly string[] | ((ctx: DomainContext) => readonly string[])
-
-  /**
-   * このフィールドの値が変更されたとき、操作固有のサイドエフェクトを返す。
-   * - setValues          : 追加でセットするフィールド値（undefined = 空欄化）
-   * - openPickerFor      : 自動的に開くピッカー対象フィールド
-   * - openPickerInitialOrg: ピッカーを開く際の初期選択組織 ID
-   * - suggestFieldValue  : 別フィールドへの値提案（UI が確認モーダルを表示）
-   *
-   * deriveFieldUpdates（全操作共通）と共存する。afterChange の setValues が derived を上書きする。
-   */
-  readonly afterChange?: (value: string, ctx: DomainContext) => {
-    setValues?:            Partial<AllocationRow>
-    openPickerFor?:        keyof AllocationRow
-    openPickerInitialOrg?: string
-    suggestFieldValue?:    { field: keyof AllocationRow; value: string }
-  }
 }
 
 /**
  * 業務操作の統合定義。OperationDef（UI メタデータ）と EditCommand（ロジック）を統合した概念。
  *
- * - availableFor / inputs / deriveInitial: UI・AI 向けメタデータ
- * - validate / apply: ドメインロジック（DomainContext + rowId + values を受け取る純粋関数）
+ * - availableFor / inputs / onOpen: UI・AI 向けメタデータ
+ * - onValidate / onSubmit: ドメインロジック（DomainContext + rowId + values を受け取る純粋関数）
  *
  * bindOperation(op, rowId, values) で EditCommand（パラメータ束縛済み）に変換できる。
- * UI は apply() をドライランして inputs 外フィールドの変化を検出し、確認ダイアログを表示する。
+ * UI は onSubmit() をドライランして inputs 外フィールドの変化を検出し、確認ダイアログを表示する。
  */
 export interface EditOperation {
   /** 操作 ID */
@@ -101,14 +98,14 @@ export interface EditOperation {
   readonly label:      string
   /** 概念グループ */
   readonly group:      OperationGroup
-  /** バッジ色（Tailwind クラス） */
-  readonly badgeColor: string
+  /** バッジの意味分類（UI 側でこの値から色を導出する） */
+  readonly badge: OperationBadge
 
   /** フォーム上部に表示する操作説明文。業務上の注意事項や手順を記載する */
   readonly description?: string
 
   /**
-   * true のとき apply() ドライランによる副作用警告を表示しない。
+   * true のとき onSubmit() ドライランによる副作用警告を表示しない。
    * 昇格サイン等の自動付与など、副作用が操作名から自明な場合に設定する。
    */
   readonly suppressSideEffectWarning?: boolean
@@ -121,21 +118,28 @@ export interface EditOperation {
   /**
    * 操作選択時の初期フィールド値を計算する（プレビュー用・UndoStack 非対象）。
    */
-  deriveInitial(row: AllocationRow, ctx: DomainContext): Partial<AllocationRow>
+  onOpen(row: AllocationRow, ctx: DomainContext): Partial<AllocationRow>
 
   /** ユーザーが入力する必要があるフィールド（順序付き）。SectionDivider を挟むことでセクション区切りを定義できる */
   readonly inputs: (OperationInput | SectionDivider)[]
 
   /**
-   * 現在の状態と入力値に対してバリデーションを実行する。
-   * HRApplicationService.executeOperation() が apply() 前に呼ぶ。
+   * フィールド変更時の操作固有サイドエフェクト。
+   * deriveFieldUpdates（全操作共通）が先に動いた後、このマップのハンドラが実行される。
+   * setValues は deriveFieldUpdates の結果を上書きする。
    */
-  validate(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): ValidationResult
+  readonly onFieldChange?: Partial<Record<keyof AllocationRow, (value: string, ctx: DomainContext) => FieldChangeEffect>>
+
+  /**
+   * 現在の状態と入力値に対してバリデーションを実行する。
+   * HRApplicationService.executeOperation() が onSubmit() 前に呼ぶ。
+   */
+  onValidate(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): ValidationResult
 
   /**
    * バリデーション通過後、新しい状態を返す純粋関数。
    */
-  apply(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): OperationResult
+  onSubmit(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): OperationResult
 }
 
 /** 後方互換エイリアス */

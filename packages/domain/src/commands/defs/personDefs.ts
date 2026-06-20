@@ -16,7 +16,7 @@ export const leaveOfAbsenceDef: EditOperation = {
   id:         'LeaveOfAbsence',
   label:      '休職',
   group:      'person',
-  badgeColor: 'bg-gray-100 text-gray-600',
+  badge: 'neutral',
 
   description: '4/1付で休職する場合は個別対応します。3/31以前の休職については通常の申請を行った上で、必要な異動をしてください。',
 
@@ -28,13 +28,13 @@ export const leaveOfAbsenceDef: EditOperation = {
     { field: 'memo',               required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason:     TR.LEAVE_AND_RETURN,
     leaveOfAbsenceSign: '1',
     memo:               row.memo as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.userId) return fail('人が配属されていない行に休職を設定できません')
@@ -42,7 +42,7 @@ export const leaveOfAbsenceDef: EditOperation = {
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>
@@ -66,7 +66,7 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
   id:         'LeaveOfAbsenceCancel',
   label:      '休職取消',
   group:      'person',
-  badgeColor: 'bg-gray-100 text-gray-600',
+  badge: 'neutral',
 
   description: '4/1付休職を取り消します。4/1以前に休職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
 
@@ -79,19 +79,19 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
     { field: 'memo',               required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason:     undefined,
     leaveOfAbsenceSign: '',
     memo:               row.memo as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
@@ -114,7 +114,7 @@ export const returnFromLeaveDef: EditOperation = {
   id:         'ReturnFromLeave',
   label:      '復職',
   group:      'person',
-  badgeColor: 'bg-gray-100 text-gray-600',
+  badge: 'positive',
 
   description: '4/1付で復職します。4/1以前に復職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
 
@@ -126,20 +126,20 @@ export const returnFromLeaveDef: EditOperation = {
     { field: 'memo',               required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason:     undefined,
     leaveOfAbsenceSign: '',
     memo:               row.memo as string | undefined,
   }),
 
-  validate(ctx, rowId, _values) {
+  onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row)                    return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!row.leaveOfAbsenceSign) return fail('休職中ではないため復職できません')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>
@@ -163,7 +163,7 @@ export const employmentTransferDef: EditOperation = {
   id:         'EmploymentTransfer',
   label:      '移籍',
   group:      'person',
-  badgeColor: 'bg-rose-100 text-rose-700',
+  badge: 'negative',
 
   availableFor: () => true,
 
@@ -181,7 +181,7 @@ export const employmentTransferDef: EditOperation = {
     { field: 'memo',                 required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason:       TR.TRANSFER,
     lastName:             row.lastName             as string | undefined,
     firstName:            row.firstName            as string | undefined,
@@ -195,14 +195,14 @@ export const employmentTransferDef: EditOperation = {
     memo:                 row.memo                 as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.transferReason) return fail('異動事由は必須です')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
     return {
       updatedList: ctx.allocationList.map(r =>
@@ -234,7 +234,7 @@ export const noChangeDef: EditOperation = {
   id:         'NoChange',
   label:      '変更なし',
   group:      'person',
-  badgeColor: 'bg-neutral-100 text-neutral-500',
+  badge: 'neutral',
 
   description: '変更がない場合に選択してください。after 項目はすべて空白になります。',
 
@@ -245,19 +245,19 @@ export const noChangeDef: EditOperation = {
     { field: 'memo',           required: false },
   ],
 
-  deriveInitial: (row) => ({
+  onOpen: (row) => ({
     transferReason: TR.NO_CHANGE,
     memo:           row.memo as string | undefined,
   }),
 
-  validate(ctx, rowId, values) {
+  onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
       return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.transferReason) return fail('変更なし事由は必須です')
     return ok()
   },
 
-  apply(ctx, rowId, values) {
+  onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
 
     // after フィールドを全て空白にクリア（変更なし = Excel 上も after 欄は空欄）

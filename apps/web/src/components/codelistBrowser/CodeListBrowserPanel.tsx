@@ -10,8 +10,9 @@ interface Props {
 const GROUPS = [...new Set(TABLE_REGISTRY.map(t => t.group))]
 
 export function CodeListBrowserPanel({ onClose }: Props) {
-  const { codeLists, beforeOrganizations, afterOrganizations } = useStore()
+  const { codeLists, beforeOrganizations, afterOrganizations, codeListWarnings } = useStore()
   const [selectedKey, setSelectedKey] = useState<TableKey>('beforeOrgs')
+  const [warningsExpanded, setWarningsExpanded] = useState(true)
 
   const data = useMemo(
     () => getTableData(selectedKey, codeLists, beforeOrganizations, afterOrganizations),
@@ -19,6 +20,9 @@ export function CodeListBrowserPanel({ onClose }: Props) {
   )
 
   const selectedDef = TABLE_REGISTRY.find(t => t.key === selectedKey)!
+  const warnCount   = codeListWarnings.length
+  const catACount   = codeListWarnings.filter(w => w.category === 'A').length
+  const catBCount   = codeListWarnings.filter(w => w.category === 'B').length
 
   return (
     <div
@@ -28,6 +32,12 @@ export function CodeListBrowserPanel({ onClose }: Props) {
       {/* ヘッダー */}
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-2 bg-gray-800 text-white rounded-t-xl">
         <span className="text-sm font-semibold">テーブル参照</span>
+
+        {warnCount > 0 && (
+          <span className="flex items-center gap-1 text-xs bg-amber-500 text-white px-2 py-0.5 rounded-full font-medium">
+            ⚠ {warnCount} 件の整合性問題
+          </span>
+        )}
 
         {/* テーブル選択コンボボックス */}
         <select
@@ -53,6 +63,34 @@ export function CodeListBrowserPanel({ onClose }: Props) {
           title="閉じる"
         >✕</button>
       </div>
+
+      {/* マスタ整合性警告エリア */}
+      {warnCount > 0 && (
+        <div className="flex-shrink-0 border-b border-amber-200 bg-amber-50">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-amber-100 transition-colors"
+            onClick={() => setWarningsExpanded(v => !v)}
+          >
+            <span className="text-amber-700 font-semibold text-xs">⚠ マスタ整合性の問題</span>
+            <span className="text-xs text-amber-600">
+              参照整合（A）: {catACount} 件　給与等級導出（B）: {catBCount} 件
+            </span>
+            <span className="ml-auto text-amber-500 text-xs">{warningsExpanded ? '▲ 折りたたむ' : '▼ 展開'}</span>
+          </button>
+          {warningsExpanded && (
+            <div className="px-4 pb-3 space-y-1 max-h-48 overflow-y-auto">
+              {codeListWarnings.map((w, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px]">
+                  <span className={`flex-shrink-0 mt-0.5 font-bold ${w.category === 'B' ? 'text-orange-600' : 'text-amber-600'}`}>
+                    [{w.category}]
+                  </span>
+                  <span className="text-amber-900 leading-relaxed">{w.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* テーブル本体 */}
       <div className="flex-1 overflow-hidden">

@@ -1,6 +1,7 @@
 import { create } from 'zustand/react'
 import type { FieldStrictness, UnavailableOperationDisplay } from '@personnel/domain/optionStrictness'
 import { DEFAULT_UNAVAILABLE_OPERATION_DISPLAY } from '@personnel/domain/optionStrictness'
+import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
 const STORAGE_KEY                 = 'canvas_display_fields'
 const STRICTNESS_STORAGE_KEY      = 'field_strictness_overrides'
@@ -11,31 +12,33 @@ export interface CanvasField {
   label: string
 }
 
+const f = (key: string): CanvasField => ({ key, label: FIELD_DISPLAY_LABELS[key] ?? key })
+
 // All fields that can optionally appear on canvas cards.
 // Fixed fields (positionCode, group, userId) are always shown and not listed here.
 export const CANVAS_DISPLAYABLE_FIELDS: CanvasField[] = [
-  { key: 'transferReason',        label: '異動事由' },
-  { key: 'employmentType',        label: '雇用タイプ' },
-  { key: 'band',                  label: 'バンド' },
-  { key: 'payGrade',              label: '給与等級' },
-  { key: 'businessUnit',          label: 'ビジネスユニット' },
-  { key: 'division',              label: '部門' },
-  { key: 'subDivision',           label: '統括部' },
-  { key: 'team',                  label: 'チーム' },
-  { key: 'jobFamily',             label: 'ジョブファミリー' },
-  { key: 'jobType',               label: 'ジョブタイプ' },
-  { key: 'managerName',           label: '上司氏名' },
-  { key: 'managerPositionCode',   label: '上司ポジションコード' },
-  { key: 'officialPositionCode',  label: '役職コード' },
-  { key: 'positionBand',          label: 'ポジション_バンド' },
-  { key: 'location',              label: '勤務場所' },
-  { key: 'costCenter',            label: 'コストセンター' },
-  { key: 'concurrentType',        label: '本務兼務区分' },
-  { key: 'secondmentToCompany',   label: '出向先会社' },
-  { key: 'secondmentFromCompany', label: '出向元会社' },
-  { key: 'leaveOfAbsenceSign',             label: '休職者サイン' },
-  { key: 'unionFlag',             label: '労働組合員' },
-  { key: 'memo',                  label: 'メモ' },
+  f('transferReason'),
+  f('employmentType'),
+  f('band'),
+  f('payGrade'),
+  f('businessUnit'),
+  f('division'),
+  f('subDivision'),
+  f('team'),
+  f('jobFamily'),
+  f('jobType'),
+  f('managerName'),
+  f('managerPositionCode'),
+  f('officialPositionCode'),
+  f('positionBand'),
+  f('location'),
+  f('costCenter'),
+  f('concurrentType'),
+  f('secondmentToCompany'),
+  f('secondmentFromCompany'),
+  f('leaveOfAbsenceSign'),
+  f('unionFlag'),
+  f('memo'),
 ]
 
 const DEFAULT_FIELDS: string[] = ['band']

@@ -41,8 +41,8 @@ Excel にはデータは残るが「いつ・誰が・何の目的で行った�
 ```typescript
 interface EditCommand {
   readonly kind: string               // EditPattern 値（分類ラベル）
-  validate(ctx: DomainContext): ValidationResult
-  apply(ctx: DomainContext): OperationResult
+  validate(ctx: DomainContext): ValidationResult   // EditCommand のメソッド（変更しない）
+  apply(ctx: DomainContext): OperationResult       // EditCommand のメソッド（変更しない）
 }
 ```
 
@@ -193,6 +193,36 @@ function isNoCheckReason(row: AllocationRow, ctx: DetectContext): boolean
 - `detectPatterns(row, ctx?)` が全パターンを走査し `RowChanges` を返す。`ctx` 省略時は空コンテキストで動作（フィールド差分のみ判定）
 
 各グループの `detect()` 実装は `packages/domain/src/patterns/defs/` に配置する。
+
+---
+
+## EditOperation フォームライフサイクル
+
+`EditOperation` は UI フォームのライフサイクルに対応するメソッドを持つ。
+
+| タイミング | メソッド | 説明 |
+|---|---|---|
+| フォームを開いたとき | `onOpen(row, ctx)` | 初期フィールド値を計算する（プレビュー用・UndoStack 非対象） |
+| フィールド変更時 | `onFieldChange?.[field](value, ctx)` | 操作固有のサイドエフェクトを返す。`deriveFieldUpdates` の後に実行される |
+| 実行ボタン押下前 | `onValidate(ctx, rowId, values)` | バリデーションを実行する |
+| バリデーション通過後 | `onSubmit(ctx, rowId, values)` | 新しい状態を返す純粋関数 |
+
+### `FieldChangeEffect` 型
+
+`onFieldChange` ハンドラが返す型。
+
+```typescript
+type FieldChangeEffect = {
+  setValues?:            Partial<AllocationRow>       // 追加でセットするフィールド値（deriveFieldUpdates を上書き）
+  openPickerFor?:        keyof AllocationRow          // 自動的に開くピッカー対象フィールド
+  openPickerInitialOrg?: string                       // ピッカーを開く際の初期選択組織 ID
+  suggestFieldValue?:    { field: keyof AllocationRow; value: string }  // 別フィールドへの値提案
+  suppressDerive?:       boolean                      // true のとき deriveFieldUpdates をスキップ
+}
+```
+
+**注意**: `EditCommand` の `validate(ctx)` / `apply(ctx)` メソッド名は変更しない。
+`EditOperation` の `onValidate` / `onSubmit` とは別概念。
 
 ---
 

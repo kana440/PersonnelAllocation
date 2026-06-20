@@ -151,6 +151,15 @@ function CodeListSummaryRow({ result }: { result: ImportedWorkbookResult }) {
             ))}
           </div>
         )}
+        {result.columnWarnings.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {result.columnWarnings.map((w, i) => (
+              <p key={i} className="text-amber-600 text-xs">
+                ⚠ [{w.sheet}] {w.message}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

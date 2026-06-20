@@ -1,12 +1,11 @@
 import type { EditPatternMeta } from './types'
 import { isNoCheckReason } from '../detection/helpers'
 import { TR } from '../../transferReasonLabels'
-import { C_BLUE, C_RED } from './_shared'
 
 export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
   orgTransfer: {
     label: '社内異動', addLabel: '社内異動', editLabel: '社内異動',
-    badgeColor: C_BLUE, group: 'position',
+    badge: 'transfer', group: 'position',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.ORG_TRANSFER
       const prevCode  = row.prevDepartmentCode ?? ''
@@ -18,7 +17,7 @@ export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
   },
   orgRestructure: {
     label: '組織改変', addLabel: '組織改変', editLabel: '組織改変',
-    badgeColor: C_BLUE, group: 'position',
+    badge: 'transfer', group: 'position',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.ORG_RESTRUCTURE
       const prevCode  = row.prevDepartmentCode ?? ''
@@ -35,7 +34,7 @@ export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
   },
   managerChange: {
     label: '上司変更', addLabel: '上司変更', editLabel: '上司変更',
-    badgeColor: C_BLUE, group: 'position',
+    badge: 'transfer', group: 'position',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.MANAGER_CHANGE
       return (row.managerPositionCode ?? '') !== (row.prevManagerPositionCode ?? '')
@@ -44,13 +43,13 @@ export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
   concurrentAdd: {
     label: '社内兼務追加', addLabel: '社内兼務追加', editLabel: '社内兼務追加',
     menuLabel: '兼務追加',
-    badgeColor: C_BLUE, group: 'position',
+    badge: 'concurrent', group: 'position',
     detect: (row, _ctx) => (row.transferReason as string | undefined) === TR.CONCURRENT,
   },
   concurrentRelease: {
     label: '社内兼務解除', addLabel: '社内兼務解除', editLabel: '社内兼務解除',
     menuLabel: '兼務解除',
-    badgeColor: C_RED, group: 'position',
+    badge: 'negative', group: 'position',
     detect: (row, ctx) => {
       if ((row.transferReason as string | undefined) !== TR.CONCURRENT_OR_SECONDMENT_IN_RELEASE) return false
       const prevEt = (row.prevEmploymentType as string | undefined) ?? ''

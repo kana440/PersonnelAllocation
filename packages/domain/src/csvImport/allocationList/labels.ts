@@ -28,7 +28,7 @@ export const ALLOCATION_LIST_FIELDS: FieldDef[] = [
   { key: 'leaveOfAbsenceSign',                        header: '休職者サイン_新',              en: 'Leave of Absence Sign',                             ja: '休職者サイン_新' },
   { key: 'positionCode',                     header: 'ポジションコード_新',          en: 'Position Code',                          ja: 'ポジションコード_新' },
   { key: 'departmentCode',                   header: '組織コード_新',                en: 'Department Code',                        ja: '組織コード_新' },
-  { key: 'businessUnit',                     header: 'ビジネスユニット_新',          en: 'Business Unit',                          ja: 'ビジネスユニット_新' },
+  { key: 'businessUnit',                     header: '関係部門_新',                  en: 'Business Unit',                          ja: '関係部門_新' },
   { key: 'division',                         header: '部門_新',                      en: 'Division',                               ja: '部門_新' },
   { key: 'subDivision',                      header: '統括部_新',                    en: 'Sub-Division',                           ja: '統括部_新' },
   { key: 'group',                            header: 'グループ_新',                  en: 'Group',                                  ja: 'グループ_新' },
@@ -61,7 +61,7 @@ export const ALLOCATION_LIST_FIELDS: FieldDef[] = [
   { key: 'prevLeaveOfAbsenceSign',                    header: '休職者サイン',                 en: 'Prev Leave of Absence Sign',                        ja: '休職者サイン' },
   { key: 'prevPositionCode',                 header: 'ポジションコード',             en: 'Prev Position Code',                     ja: 'ポジションコード' },
   { key: 'prevDepartmentCode',               header: '組織コード',                   en: 'Prev Department Code',                   ja: '組織コード' },
-  { key: 'prevBusinessUnit',                 header: 'ビジネスユニット',             en: 'Prev Business Unit',                     ja: 'ビジネスユニット' },
+  { key: 'prevBusinessUnit',                 header: '関係部門',                     en: 'Prev Business Unit',                     ja: '関係部門' },
   { key: 'prevDivision',                     header: '部門',                         en: 'Prev Division',                          ja: '部門' },
   { key: 'prevSubDivision',                  header: '統括部',                       en: 'Prev Sub-Division',                      ja: '統括部' },
   { key: 'prevGroup',                        header: 'グループ',                     en: 'Prev Group',                             ja: 'グループ' },
@@ -91,4 +91,13 @@ export const ALLOCATION_LIST_FIELDS: FieldDef[] = [
 
 export const ALLOCATION_LIST_LABEL_MAP: Record<string, Omit<FieldDef, 'key'>> = Object.fromEntries(
   ALLOCATION_LIST_FIELDS.map(f => [f.key, { header: f.header, en: f.en, ja: f.ja }])
+)
+
+// UI 表示名の単一ソース。label が明示されていれば使い、なければ header から _新 を除去して導出する。
+// prev* フィールドも after フィールドと同じラベルになる（'関係部門_新' → '関係部門', '関係部門' → '関係部門'）。
+export const FIELD_DISPLAY_LABELS: Record<string, string> = Object.fromEntries(
+  ALLOCATION_LIST_FIELDS.map(f => [
+    f.key,
+    f.label ?? (f.header ?? f.key).replace(/_新$/, ''),
+  ])
 )

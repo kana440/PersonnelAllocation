@@ -5,7 +5,7 @@
 >
 > **ユースケース**:
 > - バリデーションルール追加（G2-02の1ルール → validateRow.ts）
-> - codeListのワイヤー追加（G3-01のP1タスク）
+> - マスタのワイヤー追加（G3-01のP1タスク）
 > - フィールドの入力種別変更
 > - ドキュメント更新
 
@@ -73,7 +73,7 @@ ui-input
 specs/G3-ui/01-row-editor-input-spec.md
 
 ## 実装タスク
-P1: codeListのワイヤー追加
+P1: マスタのワイヤー追加
 - officialPositionCode → officialPositions
 - payGrade → payGrades
 - location → workLocations

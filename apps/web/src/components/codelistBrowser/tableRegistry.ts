@@ -37,7 +37,7 @@ export const FIELD_LABELS: Record<string, string> = {
   companyCode:                   '会社コード',
   parentCode:                    '上位組織コード',
   company:                       '会社名',
-  businessUnit:                  'BU',
+  businessUnit:                  '関係部門',
   division:                      '部門',
   department:                    '統括部',
   group:                         'グループ',
@@ -66,6 +66,7 @@ export const FIELD_LABELS: Record<string, string> = {
   noCheckRequired:               'チェック不要',
   concurrentCheckSign:           '兼務チェック',
   noDiscretionaryVMAutoCreate:   '裁量VM自動作成なし',
+  errorType:                     'エラータイプ',
 }
 
 export function getTableData(

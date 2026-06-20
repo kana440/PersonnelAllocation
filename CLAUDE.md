@@ -136,7 +136,7 @@ Core に追加した機能は STEP2 への手動追加なしで自動継承さ�
 | `EditCommand` | `packages/domain/src/commands/types.ts` | 単行の原子操作。UndoStack 差分単位 |
 | `EditScenario` | `packages/domain/src/commands/scenarios.ts` | 複合操作。1件でも複数件でも同じ構造 |
 | `EditPattern` | `packages/domain/src/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
-| `OperationDef` | `packages/domain/src/commands/defs/` | メニュー表示条件・フォーム定義・初期値計算 |
+| `EditOperation` | `packages/domain/src/commands/defs/` | メニュー条件・フォーム定義・ライフサイクル（`onOpen`/`onFieldChange`/`onValidate`/`onSubmit`） |
 
 設計思想の詳細は `docs/05-operation-framework.md` を参照。
 
@@ -179,7 +179,7 @@ appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC]
 2. `packages/domain/src/patterns/defs/` の該当ファイルに `detect()` を実装する
 3. `EditCommand` の実装を追加（`packages/domain/src/commands/handlers/`）
 4. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-5. `OperationDef` を追加（`packages/domain/src/commands/defs/`）して `DEFS` 配列に登録
+5. `EditOperation` を追加（`packages/domain/src/commands/defs/`）して `DEFS` 配列に登録
 6. **`SummaryView.tsx` の `SECTIONS` に追加**（`apps/web/src/components/editor/PersonOperationPanel/SummaryView.tsx`）— これを忘れると UI に表示されない
 7. 複数行にまたがる操作なら `EditScenario` を組み立てる（`packages/domain/src/commands/scenarios.ts`）
 
@@ -190,18 +190,18 @@ TDD ガイド: `docs/07-tdd-guide.md`
 
 ### 取消操作のパターン（セッション内取消・トグル）
 
-「操作 X を実行した後に取り消せる」UIを作るときは、**別の `OperationDef`（`XCancelDef`）を `availableFor` の条件で排他制御する**。
+「操作 X を実行した後に取り消せる」UIを作るときは、**別の `EditOperation`（`XCancelDef`）を `availableFor` の条件で排他制御する**。
 
 ```typescript
 // 例: 休職 / 休職取消
-export const leaveOfAbsenceDef: OperationDef = {
+export const leaveOfAbsenceDef: EditOperation = {
   availableFor: (row) => !!row.userId && !row.leaveOfAbsenceSign,
   // ...
 }
-export const leaveOfAbsenceCancelDef: OperationDef = {
+export const leaveOfAbsenceCancelDef: EditOperation = {
   availableFor: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
   inputs: [],   // 確認なしで即実行
-  createCommand: (rowId) => new DirectEditOperation(rowId, { leaveOfAbsenceSign: undefined, transferReason: undefined }, '休職取消'),
+  onSubmit: (ctx, rowId) => new DirectEditOperation(rowId, { leaveOfAbsenceSign: undefined, transferReason: undefined }, '休職取消').apply(ctx),
 }
 ```
 
@@ -209,10 +209,10 @@ export const leaveOfAbsenceCancelDef: OperationDef = {
 - 取消は `DirectEditOperation` でフィールドを `undefined` に戻すだけでよいことが多い
 - 取消定義も `DEFS` 配列と `SummaryView.tsx SECTIONS` の両方に追加すること
 
-### `OperationDef` の補足オプション
+### `EditOperation` の補足オプション
 
 ```typescript
-export const myDef: OperationDef = {
+export const myDef: EditOperation = {
   // ...
   description: 'フォーム上部に表示する業務注意事項テキスト',
 

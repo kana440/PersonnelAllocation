@@ -48,7 +48,7 @@ export function SetupHelp({ onClose }: Props) {
             <p className="text-gray-500 mb-2">組織マスタデータのシートです。行1がヘッダ、行2以降がデータ。</p>
             <HelpTable rows={[
               ['B列', '組織コード（必須・行末判定キー）'],
-              ['C列', 'ビジネスユニット'],
+              ['C列', '関係部門'],
               ['D列', '部門'],
               ['E列', '統括部'],
               ['F列', 'グループ'],

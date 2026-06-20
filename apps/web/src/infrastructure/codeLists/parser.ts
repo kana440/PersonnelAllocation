@@ -82,11 +82,15 @@ export const CODE_LIST_LABELS: Record<keyof AllCodeLists, string> = {
 // ── Per-group parsers ──────────────────────────────────────────────────────────
 
 function parseCompanyFilters(raw: unknown[][]): CompanyFilterEntry[] {
-  return dataRowIndices(raw, 'B').map(r => ({
-    code:                        cellStr(raw, r, colIdx('B')),
-    label:                       cellStr(raw, r, colIdx('C')),
-    noDiscretionaryVMAutoCreate: cellBool(raw, r, colIdx('D')),
-  }))
+  return dataRowIndices(raw, 'B').map(r => {
+    const errorType = cellStr(raw, r, colIdx('E'))
+    return {
+      code:                        cellStr(raw, r, colIdx('B')),
+      label:                       cellStr(raw, r, colIdx('C')),
+      noDiscretionaryVMAutoCreate: cellBool(raw, r, colIdx('D')),
+      ...(errorType ? { errorType } : {}),
+    }
+  })
 }
 
 function parseTransferReasons(raw: unknown[][]): TransferReasonEntry[] {

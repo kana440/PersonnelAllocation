@@ -46,6 +46,7 @@ export async function importWorkbook(
 
   let codeLists = EMPTY_CODE_LISTS
   let codeListCompatibilityWarnings: ImportedWorkbookResult['codeListCompatibilityWarnings'] = []
+  const columnWarnings: ImportedWorkbookResult['columnWarnings'] = []
   if (wb.getWorksheet(SHEET_CODE_LISTS)) {
     await report('コードリスト（各種TBL）を解析中...')
     sheetsFound.push(SHEET_CODE_LISTS)
@@ -58,7 +59,9 @@ export async function importWorkbook(
   if (wb.getWorksheet(SHEET_ORG_MASTER)) {
     await report('組織マスタ（組織CD一覧）を解析中...')
     sheetsFound.push(SHEET_ORG_MASTER)
-    orgEntries = parseOrgMasterRaw(worksheetToRaw(wb.getWorksheet(SHEET_ORG_MASTER)!))
+    const orgResult = parseOrgMasterRaw(worksheetToRaw(wb.getWorksheet(SHEET_ORG_MASTER)!))
+    orgEntries = orgResult.entries
+    columnWarnings.push(...orgResult.columnWarnings)
     const entities = orgMasterToEntities(orgEntries, fallbackCompanyName)
     beforeOrganizations = entities.beforeOrganizations
     afterOrganizations  = entities.afterOrganizations
@@ -75,12 +78,13 @@ export async function importWorkbook(
   if (wb.getWorksheet(SHEET_ALLOCATION)) {
     await report('要員配置リストを解析中...')
     sheetsFound.push(SHEET_ALLOCATION)
-    const rawRows = parseAllocationSheet(worksheetToRaw(wb.getWorksheet(SHEET_ALLOCATION)!))
-    await report(`要員配置リストを処理中... (${rawRows.length} 行)`)
-    allocationList = rawRows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
+    const allocResult = parseAllocationSheet(worksheetToRaw(wb.getWorksheet(SHEET_ALLOCATION)!))
+    columnWarnings.push(...allocResult.columnWarnings)
+    await report(`要員配置リストを処理中... (${allocResult.rows.length} 行)`)
+    allocationList = allocResult.rows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
   } else { sheetsMissing.push(SHEET_ALLOCATION) }
 
-  return { codeLists, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, allocationRowCount: allocationList.length, codeListCompatibilityWarnings }
+  return { codeLists, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, allocationRowCount: allocationList.length, codeListCompatibilityWarnings, columnWarnings }
 }
 
 export function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {

@@ -62,7 +62,6 @@ interface UIState {
   selectedRowId:        number | null   // 編集対象の AllocationRow
   personPickupViewMode: 'before' | 'after'
   memberPanelOrgId:     string | null
-  editMode:             boolean
   previousViewState:    PreviousViewState | null
   mainCanvasMode:       '組織図' | 'レポートライン'
   expandedChipIds:      Set<string>
@@ -131,13 +130,10 @@ interface Actions {
   setPersonPickupViewMode: (mode: 'before' | 'after') => void
   setMemberPanelOrgId:     (orgId: string | null) => void
 
-  // 編集モード（直接編集）
-  enterEditMode:      (rowId: number) => void
-  exitEditMode:       () => void
-
   // 操作パネルモード（FloatingEditor 内で操作を選んで実行するフロー）
-  operationPanelRowId: number | null
-  enterOperationPanel: (rowId: number) => void
+  operationPanelRowId:        number | null
+  operationPanelInitialView:  'summary' | 'directEdit'
+  enterOperationPanel: (rowId: number, initialView?: 'summary' | 'directEdit') => void
   exitOperationPanel:  () => void
   setMainCanvasMode:  (mode: '組織図' | 'レポートライン') => void
 
@@ -185,9 +181,9 @@ export const useStore = create<AppState>()((set, get) => {
     selectedRowId:        null,
     personPickupViewMode: 'before',
     memberPanelOrgId:     null,
-    editMode:             false,
-    previousViewState:    null,
-    operationPanelRowId:  null,
+    previousViewState:          null,
+    operationPanelRowId:        null,
+    operationPanelInitialView:  'summary' as const,
     mainCanvasMode:       '組織図',
     expandedChipIds:      new Set<string>(),
     scopeOrgId:           null,
@@ -279,53 +275,29 @@ export const useStore = create<AppState>()((set, get) => {
       import('../store/canvasLayoutStore').then(m => m.useCanvasLayoutStore.getState().clearPanels())
     },
 
-    enterEditMode: (rowId) => {
-      const { focusedOrgId, selectedPersonId, mainCanvasMode, allocationList, persons } = get()
-      const row = allocationList.find(r => r.rowId === rowId)
-      if (!row) return
-      const person = persons.find(p => p.sfPersonId === row.userId)
-      set({
-        editMode:            true,
-        operationPanelRowId: null,   // 操作パネルと排他
-        previousViewState:   { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
-        selectedRowId:       rowId,
-        selectedPersonId:    person?.id ?? selectedPersonId,
-      })
-    },
-
-    exitEditMode: () => {
-      const { previousViewState } = get()
-      set({
-        editMode:          false,
-        selectedRowId:     null,
-        focusedOrgId:      previousViewState?.focusedOrgId ?? null,
-        selectedPersonId:  previousViewState?.selectedPersonId ?? null,
-        previousViewState: null,
-      })
-    },
-
-    enterOperationPanel: (rowId) => {
+    enterOperationPanel: (rowId, initialView = 'summary') => {
       const { allocationList, persons, focusedOrgId, selectedPersonId, mainCanvasMode } = get()
       const row    = allocationList.find(r => r.rowId === rowId)
       if (!row) return
       const person = persons.find(p => p.sfPersonId === row.userId)
       set({
-        operationPanelRowId: rowId,
-        editMode:            false,   // 直接編集と排他
-        previousViewState:   { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
-        selectedRowId:       rowId,
-        selectedPersonId:    person?.id ?? selectedPersonId,
+        operationPanelRowId:       rowId,
+        operationPanelInitialView: initialView,
+        previousViewState:         { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
+        selectedRowId:             rowId,
+        selectedPersonId:          person?.id ?? selectedPersonId,
       })
     },
 
     exitOperationPanel: () => {
       const { previousViewState } = get()
       set({
-        operationPanelRowId: null,
-        selectedRowId:       null,
-        focusedOrgId:        previousViewState?.focusedOrgId ?? null,
-        selectedPersonId:    previousViewState?.selectedPersonId ?? null,
-        previousViewState:   null,
+        operationPanelRowId:       null,
+        operationPanelInitialView: 'summary',
+        selectedRowId:             null,
+        focusedOrgId:              previousViewState?.focusedOrgId ?? null,
+        selectedPersonId:          previousViewState?.selectedPersonId ?? null,
+        previousViewState:         null,
       })
     },
 

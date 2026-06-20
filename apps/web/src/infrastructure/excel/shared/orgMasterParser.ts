@@ -2,6 +2,7 @@
 
 import type { OrgMasterEntry } from '@personnel/domain/masters/orgMaster'
 import type { Organization }   from '@personnel/domain/schemas'
+import type { ColumnWarning }  from '../types'
 
 // A=0, B=1 …
 function colIdx(letter: string): number {
@@ -19,7 +20,14 @@ function parsePhase(v: string): 'before' | 'after' {
   return /^(前|旧|before|B)$/i.test(v.trim()) ? 'before' : 'after'
 }
 
-export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
+export interface ParseOrgMasterResult {
+  entries:        OrgMasterEntry[]
+  columnWarnings: ColumnWarning[]
+}
+
+export function parseOrgMasterRaw(raw: unknown[][]): ParseOrgMasterResult {
+  const SHEET = '組織CD一覧'
+  const columnWarnings: ColumnWarning[] = []
   const rowCount = raw.length
   const entries: OrgMasterEntry[] = []
 
@@ -43,7 +51,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
       else if (/^会社コード$/i.test(h))                        { cCompanyCode = c }
       else if (/会社名|^会社$/i.test(h))                       { cCompany = c }
       else if (/発令区分|前後フラグ|フェーズ/i.test(h))        { cPhase = c }
-      else if (/ビジネスユニット|^BU$/i.test(h))               { cBu = c }
+      else if (/ビジネスユニット|関係部門|^BU$/i.test(h))        { cBu = c }
       else if (/^部門$/.test(h))                               { cDiv = c }
       else if (/統括部/.test(h))                               { cDept = c }
       else if (/グループ/.test(h))                             { cGroup = c }
@@ -54,6 +62,9 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
     }
     if (foundCode) { dataStartRow = r + 1; break }
   }
+
+  if (cParent < 0) columnWarnings.push({ sheet: SHEET, message: '「上位組織コード」列が見つかりません。組織の親子関係が読み込まれません。' })
+  if (cName   < 0) columnWarnings.push({ sheet: SHEET, message: '「組織名」列が見つかりません。組織コードを名称の代わりに使用します。' })
 
   for (let r = dataStartRow; r < rowCount; r++) {
     const code = cellStr(raw, r, cCode)
@@ -75,7 +86,7 @@ export function parseOrgMasterRaw(raw: unknown[][]): OrgMasterEntry[] {
       workLocation:     cWorkLocation >= 0 ? cellStr(raw, r, cWorkLocation) : '',
     })
   }
-  return entries
+  return { entries, columnWarnings }
 }
 
 export function orgMasterToEntities(

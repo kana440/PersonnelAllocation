@@ -4,6 +4,11 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { OrgMasterEntry } from '@personnel/domain/masters/orgMaster'
 import type { CompatibilityWarning } from '../codeLists/parser'
 
+export interface ColumnWarning {
+  sheet:   string
+  message: string
+}
+
 export interface ImportedWorkbookResult {
   codeLists:                    AllCodeLists
   beforeOrganizations:          Organization[]
@@ -14,6 +19,7 @@ export interface ImportedWorkbookResult {
   orgEntries:                   OrgMasterEntry[]
   allocationRowCount:           number
   codeListCompatibilityWarnings: CompatibilityWarning[]
+  columnWarnings:               ColumnWarning[]
 }
 
 export type ProgressCallback = (message: string) => void
