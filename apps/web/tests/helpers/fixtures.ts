@@ -51,10 +51,10 @@ export const makePersonRow = (overrides: Partial<AllocationRow> = {}): Allocatio
 // テストは必要なエントリを override して使う。
 
 export const MOCK_EMP_TYPES = {
-  employee:  { code: 'EMP', label: '社員',       isRegularEmployee: true,  isSecondmentAcceptance: false, isConcurrentSecondmentAcceptance: false, isExtendedEmployee: false },
-  outsource: { code: 'OUT', label: '出向受入社員', isRegularEmployee: false, isSecondmentAcceptance: true,  isConcurrentSecondmentAcceptance: false, isExtendedEmployee: false },
-  extension: { code: 'EXT', label: '雇用延長社員', isRegularEmployee: false, isSecondmentAcceptance: false, isConcurrentSecondmentAcceptance: false, isExtendedEmployee: true  },
-  other:     { code: 'OTH', label: 'その他',       isRegularEmployee: false, isSecondmentAcceptance: false, isConcurrentSecondmentAcceptance: false, isExtendedEmployee: false },
+  employee:  { code: 'EMP', label: '社員',       isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployee: false },
+  outsource: { code: 'OUT', label: '出向受入社員', isRegularEmployee: false, isSecondmentAcceptance: true,  isExtendedEmployee: false },
+  extension: { code: 'EXT', label: '雇用延長社員', isRegularEmployee: false, isSecondmentAcceptance: false, isExtendedEmployee: true  },
+  other:     { code: 'OTH', label: 'その他',       isRegularEmployee: false, isSecondmentAcceptance: false, isExtendedEmployee: false },
 }
 
 export const MOCK_JOB_LEVELS = {

@@ -45,18 +45,18 @@ function cellNum(raw: unknown[][], r: number, c: number): number {
 
 const ANCHORS = {
   companyFilters:           '会社絞込用CD',
-  transferReasons:          '申請区分(異動事由)',
+  transferReasons:          '異動事由',
   employmentTypes:          '雇用タイプCD',
   payGrades:                '給与等級CD',
   officialPositions:        '役職CD',
   workLocations:            '勤務場所CD',
-  jobFamilies:              'Job Family CD',
-  jobTypes:                 '職種CD',
+  jobFamilies:              '職種CD',
+  jobTypes:                 'Job Family CD',
   jobLevels:                '職務レベルCD',
   trainingPositions:        '業務研修ポジション',
   discretionaryWorkOptions: '裁量労働／業務研修',
   concurrentReasons:        '兼務理由',
-  demotionReasons:          '昇降格理由',
+  demotionReasons:          '降格理由',
   concurrentType:           '本務兼務区分',
 } as const
 
@@ -141,10 +141,9 @@ function parseEmploymentTypes(raw: unknown[][], col: number): EmploymentTypeEntr
   return dataRowIndicesAt(raw, col).map(r => ({
     code:                             cellStr(raw, r, col),
     label:                            cellStr(raw, r, col + 1),
-    isSecondmentAcceptance:           cellBool(raw, r, col + 2),
-    isRegularEmployee:                cellBool(raw, r, col + 3),
-    isConcurrentSecondmentAcceptance: cellBool(raw, r, col + 4),
-    isExtendedEmployee:               cellBool(raw, r, col + 5),
+    isSecondmentAcceptance: cellBool(raw, r, col + 2),
+    isRegularEmployee:      cellBool(raw, r, col + 3),
+    isExtendedEmployee:     cellBool(raw, r, col + 4),
   }))
 }
 
@@ -190,13 +189,14 @@ function parseJobFamilies(raw: unknown[][], col: number): JobFamilyEntry[] {
 }
 
 function parseJobTypes(raw: unknown[][], col: number): JobTypeEntry[] {
-  // col = '職種CD'列。jobFamilyCode はその2列左（Job Family CD 参照列）
-  return dataRowIndicesAt(raw, col).map(r => ({
-    code:                  cellStr(raw, r, col),
-    label:                 cellStr(raw, r, col + 1),
-    jobFamilyCode:         cellStr(raw, r, col - 2),
-    isDiscretionaryTarget: cellBool(raw, r, col + 2),
-    compensationCategory:  cellStr(raw, r, col + 3),
+  // col = '職種CD'列 (= Job Family CD 列、テーブル左端)
+  // Sub Job Family CD は col+2、ラベルは col+3
+  return dataRowIndicesAt(raw, col + 2).map(r => ({
+    code:                  cellStr(raw, r, col + 2),
+    label:                 cellStr(raw, r, col + 3),
+    jobFamilyCode:         cellStr(raw, r, col),
+    isDiscretionaryTarget: cellBool(raw, r, col + 4),
+    compensationCategory:  cellStr(raw, r, col + 5),
   }))
 }
 

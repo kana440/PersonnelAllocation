@@ -90,13 +90,7 @@ export const FIELD_CONSTRAINTS: ValueRule[] = [
     source:  ms => ms.employmentTypes.filter(e => e.isSecondmentAcceptance).map(e => e.label),
     message: _  => '出向受入の雇用タイプは出向受入対応の雇用タイプから選択してください' },
 
-  // 兼務出向受入行: isConcurrentSecondmentAcceptance の雇用タイプに限定
-  { kind: 'constraint', field: 'employmentType',
-    when:    (row) => !!row.secondmentFromCompany && row.concurrentType === '兼務',
-    source:  ms => ms.employmentTypes.filter(e => e.isConcurrentSecondmentAcceptance).map(e => e.label),
-    message: _  => '兼務出向受入の雇用タイプは兼務出向受入対応の雇用タイプから選択してください' },
-
-  { kind: 'constraint', field: 'jobFamily',
+{ kind: 'constraint', field: 'jobFamily',
     source:  ms => ms.jobFamilies.map(e => e.label),
     message: _  => 'ジョブファミリーは有効な選択肢から選択してください' },
 

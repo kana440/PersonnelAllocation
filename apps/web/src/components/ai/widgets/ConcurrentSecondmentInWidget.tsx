@@ -22,7 +22,7 @@ export function ConcurrentSecondmentInWidget({ rowId, sfIntegrated, label, isAct
 
   const employmentTypeOptions = useMemo(() => {
     return masters.employmentTypes
-      ?.filter((e: { label: string; isConcurrentSecondmentAcceptance?: boolean }) => e.isConcurrentSecondmentAcceptance)
+      ?.filter((e: { label: string; isSecondmentAcceptance?: boolean }) => e.isSecondmentAcceptance)
       .map((e: { label: string }) => e.label) ?? []
   }, [masters])
 
