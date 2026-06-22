@@ -63,10 +63,9 @@ export class ChangeTitleOperation implements EditCommand {
       payGradeChangeSign,
     }
 
-    // 2. 旧ポジションの空席行を生成（position フィールドを引き継ぎ、person・allocation はクリア）
-    const vacantId     = nextRowId([...ctx.allocationList, updatedRow])
-    const personClears = Object.fromEntries(afterKeysByBinding('person').map(k => [k, undefined]))
-    const allocClears  = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
+    // 2. 旧ポジションの空席行を生成（position フィールドを引き継ぎ、jobInfo はクリア）
+    const vacantId       = nextRowId([...ctx.allocationList, updatedRow])
+    const jobInfoClears  = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
     const positionFields = Object.fromEntries(
       afterKeysByBinding('position').map(k => [k, row[k as keyof AllocationRow]])
     )
@@ -74,8 +73,7 @@ export class ChangeTitleOperation implements EditCommand {
       rowId:    vacantId,
       assignee: row.assignee,
       ...positionFields,
-      ...personClears,
-      ...allocClears,
+      ...jobInfoClears,
     } as AllocationRow
 
     // 3. 部下の managerPositionCode を新 positionCode に追従させる

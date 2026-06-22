@@ -3,9 +3,13 @@ import type { EditOperation } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 export interface DropIntentState {
-  fromRowId: number | null
-  personId:  string
-  toOrgId:   string
+  fromRowId:            number | null
+  personId:             string
+  toOrgId:              string
+  /** ドロップの種別 */
+  dropType:             'org' | 'person' | 'gap'
+  /** ドロップ後の上司として設定する positionCode（person/gap ドロップ時のみ） */
+  managerPositionCode?: string
 }
 
 export interface DropOpState {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { useChatStore } from '../../store/useChatStore'
-import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useSkillStore } from '../../store/skillStore'
 import { aiTools } from '../../application/aiTools'
 import { ChatSession, buildSystemPrompt, type SessionState } from '../../application/chatSession'
@@ -49,10 +48,9 @@ export function useChatHandlers({
   } = useChatStore()
 
   const buildCurrentSystemPrompt = useCallback((highlightSkills?: Skill[]) => {
-    const { scopeOrgId, afterOrganizations } = useStore.getState()
+    const { scopeOrgId, afterOrganizations, selectedOrgId } = useStore.getState()
     const { chatContextRowIds } = useChatStore.getState()
     const { activeSkills } = useSkillStore.getState()
-    const { selectedOrgId } = useCanvasLayoutStore.getState()
     const scopeOrg    = scopeOrgId    ? afterOrganizations.find(o => o.id === scopeOrgId)    : null
     const selectedOrg = selectedOrgId ? afterOrganizations.find(o => o.id === selectedOrgId) : null
     const rowCtxs  = chatContextRowIds

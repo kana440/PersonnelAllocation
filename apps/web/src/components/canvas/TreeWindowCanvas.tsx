@@ -1,147 +1,33 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
+import { useMemo, useCallback, useEffect, useState, useRef } from 'react'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
-import type { PanelDef }        from '../../store/canvasLayoutStore'
 import { useStore }             from '../../store/useStore'
 import { useOrgView }           from './OrgViewContext'
-import type { Organization }    from '@personnel/domain/schemas'
 import { TreeWindow }           from './tree'
+import { useCanvasScroll }      from './hooks/useCanvasScroll'
+import { useCanvasInteraction } from './hooks/useCanvasInteraction'
+import {
+  WINDOW_W, EST_WIN_H, CANVAS_MARGIN,
+  isStandaloneWindow, computeLayout, connectionPath, buildConnections,
+} from './treeWindowLayout'
 
-const WINDOW_W  = 288
-const EST_WIN_H = 300   // 実測値未取得時のフォールバック
-const H_GAP     = 16
-const V_GAP     = 20
-const MARGIN    = 40
-
-// ── スタンドアロン判定（再帰）────────────────────────────────────
-function isStandaloneWindow(
-  panel: PanelDef,
-  allPanels: PanelDef[],
-  orgs: Organization[],
-  ancestors = new Set<string>(),
-): boolean {
-  if (ancestors.has(panel.id)) return true
-  const org = orgs.find(o => o.id === panel.orgId)
-  if (!org?.parentId) return true
-  const parentPanel = allPanels.find(p => p.orgId === org.parentId)
-  if (!parentPanel) return true
-  const next = new Set(ancestors)
-  next.add(panel.id)
-  return parentPanel.childrenMode === 'windowed'
-    && panel.open
-    && isStandaloneWindow(parentPanel, allPanels, orgs, next)
-}
-
-// ── 整列レイアウト計算（純粋関数）────────────────────────────────
-function computeLayout(
-  standalonePanels: PanelDef[],
-  allPanels: PanelDef[],
-  orgs: Organization[],
-  panelHeights: Record<string, number>,
-): Map<string, { x: number; y: number }> {
-  const getParentPanel = (p: PanelDef): PanelDef | undefined => {
-    const org = orgs.find(o => o.id === p.orgId)
-    if (!org?.parentId) return undefined
-    return standalonePanels.find(pp => pp.orgId === org.parentId)
-  }
-
-  const getChildren = (p: PanelDef): PanelDef[] =>
-    standalonePanels.filter(c => {
-      if (c.id === p.id) return false
-      const org = orgs.find(o => o.id === c.orgId)
-      return org?.parentId === p.orgId
-    })
-
-  const getPanelH = (p: PanelDef) => panelHeights[p.id] ?? EST_WIN_H
-
-  const subtreeW = (p: PanelDef, visited = new Set<string>()): number => {
-    if (visited.has(p.id)) return WINDOW_W
-    const next = new Set(visited); next.add(p.id)
-    const children = getChildren(p)
-    if (children.length === 0) return WINDOW_W
-    const total = children.reduce((s, c, i) => s + subtreeW(c, next) + (i ? H_GAP : 0), 0)
-    return Math.max(WINDOW_W, total)
-  }
-
-  const posMap  = new Map<string, { x: number; y: number }>()
-  const visited = new Set<string>()
-
-  const layout = (p: PanelDef, x: number, y: number) => {
-    if (visited.has(p.id)) return
-    visited.add(p.id)
-    const sw     = subtreeW(p)
-    posMap.set(p.id, { x: Math.round(x + Math.max(0, (sw - WINDOW_W) / 2)), y })
-    let cx = x
-    for (const child of getChildren(p)) {
-      layout(child, cx, y + getPanelH(p) + V_GAP)
-      cx += subtreeW(child) + H_GAP
-    }
-  }
-
-  const roots = standalonePanels.filter(p => !getParentPanel(p))
-  let rootX = MARGIN
-  for (const root of roots) {
-    layout(root, rootX, MARGIN)
-    rootX += subtreeW(root) + H_GAP
-  }
-
-  void allPanels
-  return posMap
-}
-
-// ── 接続線パス生成 ─────────────────────────────────────────────────
-function connectionPath(
-  parent: PanelDef,
-  child: PanelDef,
-  panelHeights: Record<string, number>,
-  lineStyle: 'bezier' | 'polyline',
-): string {
-  const parentH = panelHeights[parent.id] ?? EST_WIN_H
-  const sx = parent.x + WINDOW_W / 2
-  const sy = parent.y + parentH          // 親パネル下中央
-  const tx = child.x  + WINDOW_W / 2
-  const ty = child.y                     // 子パネル上中央
-  const mid = (sy + ty) / 2
-  return lineStyle === 'polyline'
-    ? `M ${sx} ${sy} L ${sx} ${mid} L ${tx} ${mid} L ${tx} ${ty}`
-    : `M ${sx} ${sy} C ${sx} ${mid} ${tx} ${mid} ${tx} ${ty}`
-}
-
-// ── 接続線ペア導出 ─────────────────────────────────────────────────
-interface Connection { parentPanel: PanelDef; childPanel: PanelDef }
-
-function buildConnections(standalonePanels: PanelDef[], orgs: Organization[]): Connection[] {
-  const result: Connection[] = []
-  for (const child of standalonePanels) {
-    const org = orgs.find(o => o.id === child.orgId)
-    if (!org?.parentId) continue
-    const parent = standalonePanels.find(p => p.orgId === org.parentId)
-    if (parent) result.push({ parentPanel: parent, childPanel: child })
-  }
-  return result
-}
-
-// ── コンポーネント ────────────────────────────────────────────────
 export function TreeWindowCanvas() {
   const {
     panels, setPositions,
     autoArrange, setAutoArrange,
-    scrollToPersonId, requestScrollToPerson,
     lineStyle, setLineStyle,
     panelHeights,
-    selectedOrgId, scrollToOrgId, requestScrollToOrg,
-    clearOrgSelection,
+    triggerComparisonArrange,
+    canvasZoom, setCanvasZoom, stepCanvasZoom,
   } = useCanvasLayoutStore()
-  const { organizations, addPersonsToSelection, clearSelection } = useOrgView()
+  const selectedOrgId     = useStore(s => s.selectedOrgId)
+  const { organizations } = useOrgView()
 
-  // ── スタンドアロンパネル ──────────────────────────────────────────
+  // ── スタンドアロンパネルと表示座標 ───────────────────────────────
   const standalonePanels = useMemo(
     () => panels.filter(p => isStandaloneWindow(p, panels, organizations)),
     [panels, organizations],
   )
 
-  // ── 表示座標の決定 ──────────────────────────────────────────────
-  // autoArrange=ON → computeLayout でレンダー内に座標を確定（副作用不要）
-  // autoArrange=OFF → panel.x/y の記録済み座標を使用（手動ドラッグ可）
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
     const posMap = computeLayout(standalonePanels, panels, organizations, panelHeights)
@@ -156,177 +42,54 @@ export function TreeWindowCanvas() {
     [displayPanels, organizations],
   )
 
-  // 動的キャンバスサイズ
   const canvasWidth  = displayPanels.length === 0 ? 1200
-    : Math.max(1200, ...displayPanels.map(p => p.x + WINDOW_W + MARGIN * 2))
+    : Math.max(1200, ...displayPanels.map(p => p.x + WINDOW_W + CANVAS_MARGIN * 2))
   const canvasHeight = displayPanels.length === 0 ? 800
-    : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + MARGIN * 2))
+    : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
 
-  // ── 整列ボタン（autoArrange=OFF 時に記録済み座標を上書き） ────────
+  // ── 整列ボタン ──────────────────────────────────────────────────
   const handleArrange = useCallback(() => {
-    const posMap = computeLayout(standalonePanels, panels, organizations, panelHeights)
-    setPositions(posMap)
-  }, [standalonePanels, panels, organizations, panelHeights, setPositions])
+    setPositions(computeLayout(standalonePanels, panels, organizations, panelHeights))
+    triggerComparisonArrange()
+  }, [standalonePanels, panels, organizations, panelHeights, setPositions, triggerComparisonArrange])
 
-  // autoArrange を OFF にする瞬間に現在の計算座標を記録済み座標へ保存
-  // → OFF 後すぐに手動ドラッグできる状態にする
   const handleAutoArrangeChange = useCallback((checked: boolean) => {
-    if (!checked) {
-      const posMap = computeLayout(standalonePanels, panels, organizations, panelHeights)
-      setPositions(posMap)
-    }
+    if (!checked) setPositions(computeLayout(standalonePanels, panels, organizations, panelHeights))
     setAutoArrange(checked)
-  }, [standalonePanels, panels, organizations, panelHeights, setPositions, setAutoArrange])
+    if (checked) triggerComparisonArrange()
+  }, [standalonePanels, panels, organizations, panelHeights, setPositions, setAutoArrange, triggerComparisonArrange])
 
-  // ── キャンバスパン要求: data-personid 要素を中央にスクロール ────
-  const scrollerRef = useRef<HTMLDivElement>(null)
+  // ── スクロール（人物・組織）────────────────────────────────────
+  const { scrollerRef }                              = useCanvasScroll(displayPanels, organizations)
+  const { spaceHeld, panning, band, handleCanvasMouseDown } = useCanvasInteraction(scrollerRef)
+
+  // ── Ctrl+Wheel ズーム ─────────────────────────────────────────
+  // displayPanels.length > 0 を dep に含めることで、Excel 読込後にスクローラーが
+  // 現れたタイミングで effect を再実行し、リスナーを正しく登録する
+  const hasCanvasContent = displayPanels.length > 0
   useEffect(() => {
-    if (!scrollToPersonId || !scrollerRef.current) return
-    requestScrollToPerson(null)
-    const el = scrollerRef.current.querySelector<HTMLElement>(`[data-personid="${scrollToPersonId}"]`)
+    const el = scrollerRef.current
     if (!el) return
-    const elRect       = el.getBoundingClientRect()
-    const scrollerRect = scrollerRef.current.getBoundingClientRect()
-    scrollerRef.current.scrollBy({
-      left: elRect.left - scrollerRect.left - scrollerRect.width  / 2 + elRect.width  / 2,
-      top:  elRect.top  - scrollerRect.top  - scrollerRect.height / 2 + elRect.height / 2,
-      behavior: 'smooth',
-    })
-  }, [scrollToPersonId]) // eslint-disable-line react-hooks/exhaustive-deps
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      stepCanvasZoom(e.deltaY < 0 ? 0.1 : -0.1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [hasCanvasContent, stepCanvasZoom])
 
-  // ── キャンバスパン要求: data-panelid 要素（組織パネル）を中央にスクロール ──
+  // ── ズームプリセットドロップダウン ────────────────────────────
+  const [zoomDropdownOpen, setZoomDropdownOpen] = useState(false)
+  const zoomDropdownRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!scrollToOrgId || !scrollerRef.current) return
-    requestScrollToOrg(null)
-    const panel = displayPanels.find(p => p.orgId === scrollToOrgId)
-    if (!panel) return
-    const el = scrollerRef.current.querySelector<HTMLElement>(`[data-panelid="${panel.id}"]`)
-    if (!el) return
-    const elRect       = el.getBoundingClientRect()
-    const scrollerRect = scrollerRef.current.getBoundingClientRect()
-    // パネルが画面高より高い場合はヘッダ上揃え、そうでなければ縦中央
-    const TOP_MARGIN = 16
-    const scrollTop  = elRect.height > scrollerRect.height
-      ? elRect.top  - scrollerRect.top - TOP_MARGIN
-      : elRect.top  - scrollerRect.top - scrollerRect.height / 2 + elRect.height / 2
-    scrollerRef.current.scrollBy({
-      left: elRect.left - scrollerRect.left - scrollerRect.width  / 2 + elRect.width  / 2,
-      top:  scrollTop,
-      behavior: 'smooth',
-    })
-  }, [scrollToOrgId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── ESC キーで組織・人物選択をクリア ───────────────────────────────
-  const clearPersonSelection = useStore(s => s.clearPersonSelection)
-  useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      clearOrgSelection()
-      clearPersonSelection()
+    if (!zoomDropdownOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!zoomDropdownRef.current?.contains(e.target as Node)) setZoomDropdownOpen(false)
     }
-    document.addEventListener('keydown', onEsc)
-    return () => document.removeEventListener('keydown', onEsc)
-  }, [clearOrgSelection, clearPersonSelection])
-
-  // ── Space キー保持状態 ────────────────────────────────────────────
-  const [spaceHeld, setSpaceHeld] = useState(false)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== ' ') return
-      const t = e.target as HTMLElement
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
-      if (e.type === 'keydown') { e.preventDefault(); setSpaceHeld(true) }
-      else { setSpaceHeld(false) }
-    }
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('keyup',   onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('keyup',   onKey)
-    }
-  }, [])
-
-  // ── Space+drag パン ───────────────────────────────────────────────
-  const [panning, setPanning] = useState(false)
-  const panningRef = useRef(false)
-  const panOrigin  = useRef({ mx: 0, my: 0, sl: 0, st: 0 })
-
-  useEffect(() => {
-    if (!panning) return
-    const onMove = (e: MouseEvent) => {
-      if (!scrollerRef.current) return
-      scrollerRef.current.scrollLeft = panOrigin.current.sl - (e.clientX - panOrigin.current.mx)
-      scrollerRef.current.scrollTop  = panOrigin.current.st - (e.clientY - panOrigin.current.my)
-    }
-    const onUp = () => { panningRef.current = false; setPanning(false) }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup',   onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup',   onUp)
-    }
-  }, [panning])
-
-  // ── ラバーバンド選択 ──────────────────────────────────────────────
-  type BandRect = { x1: number; y1: number; x2: number; y2: number }
-  const [band,    setBand] = useState<BandRect | null>(null)
-  const bandRef            = useRef<BandRect | null>(null)
-
-  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-window]')) return
-    e.preventDefault()
-    if (spaceHeld) {
-      panningRef.current = true
-      setPanning(true)
-      panOrigin.current = {
-        mx: e.clientX, my: e.clientY,
-        sl: scrollerRef.current?.scrollLeft ?? 0,
-        st: scrollerRef.current?.scrollTop  ?? 0,
-      }
-      return
-    }
-    const r = { x1: e.clientX, y1: e.clientY, x2: e.clientX, y2: e.clientY }
-    bandRef.current = r
-    setBand(r)
-  }, [spaceHeld])
-
-  useEffect(() => {
-    if (!band) return
-    const onMove = (e: MouseEvent) => {
-      const r = { ...bandRef.current!, x2: e.clientX, y2: e.clientY }
-      bandRef.current = r
-      setBand(r)
-    }
-    const onUp = () => {
-      const rb = bandRef.current
-      if (rb) {
-        const left = Math.min(rb.x1, rb.x2), right  = Math.max(rb.x1, rb.x2)
-        const top  = Math.min(rb.y1, rb.y2), bottom = Math.max(rb.y1, rb.y2)
-        if (right - left > 4 || bottom - top > 4) {
-          const ids = new Set<string>()
-          document.querySelectorAll<HTMLElement>('[data-personid]:not([data-personid=""])').forEach(el => {
-            const r = el.getBoundingClientRect()
-            if (r.left < right && r.right > left && r.top < bottom && r.bottom > top) {
-              const pid = el.getAttribute('data-personid')
-              if (pid) ids.add(pid)
-            }
-          })
-          if (ids.size > 0) { clearSelection(); addPersonsToSelection(ids) }
-        } else {
-          clearSelection()
-          clearOrgSelection()
-        }
-      }
-      bandRef.current = null
-      setBand(null)
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup',   onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup',   onUp)
-    }
-  }, [band !== null, addPersonsToSelection, clearSelection]) // eslint-disable-line react-hooks/exhaustive-deps
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [zoomDropdownOpen])
 
   if (displayPanels.length === 0) {
     return (
@@ -364,6 +127,73 @@ export function TreeWindowCanvas() {
           }`}
           title={lineStyle === 'bezier' ? 'ベジエ曲線（クリックで折れ線に切替）' : '折れ線（クリックでベジエに切替）'}
         >{lineStyle === 'bezier' ? '〜 曲線' : '⌐ 折れ線'}</button>
+
+        {/* ── ズームコントロール ── */}
+        <div ref={zoomDropdownRef} className="relative flex items-stretch border border-gray-300 rounded bg-white shadow-sm divide-x divide-gray-200">
+          {/* 縮小ボタン（虫眼鏡−） */}
+          <button
+            onClick={() => stepCanvasZoom(-0.1)}
+            disabled={canvasZoom <= 0.25}
+            className="flex items-center justify-center w-7 h-[26px] text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-l transition-colors"
+            title="縮小 (Ctrl+スクロール)"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="5.8" cy="5.8" r="4" />
+              <line x1="9" y1="9" x2="13" y2="13" />
+              <line x1="3.5" y1="5.8" x2="8.1" y2="5.8" />
+            </svg>
+          </button>
+
+          {/* ズームレベル表示（クリックでプリセット選択） */}
+          <button
+            onClick={() => setZoomDropdownOpen(v => !v)}
+            className="flex items-center gap-0.5 px-1.5 h-[26px] text-[11px] text-gray-700 hover:bg-gray-50 tabular-nums min-w-[44px] justify-center transition-colors"
+            title="ズームレベルを選択（クリック）"
+          >
+            {Math.round(canvasZoom * 100)}%
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" className="text-gray-400 mt-px flex-shrink-0">
+              <path d="M1 2.5 L4 5.5 L7 2.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          {/* 拡大ボタン（虫眼鏡+） */}
+          <button
+            onClick={() => stepCanvasZoom(0.1)}
+            disabled={canvasZoom >= 2.0}
+            className="flex items-center justify-center w-7 h-[26px] text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed rounded-r transition-colors"
+            title="拡大 (Ctrl+スクロール)"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="5.8" cy="5.8" r="4" />
+              <line x1="9" y1="9" x2="13" y2="13" />
+              <line x1="3.5" y1="5.8" x2="8.1" y2="5.8" />
+              <line x1="5.8" y1="3.5" x2="5.8" y2="8.1" />
+            </svg>
+          </button>
+
+          {/* プリセットドロップダウン */}
+          {zoomDropdownOpen && (
+            <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg py-1 z-50 min-w-[80px]">
+              {[25, 50, 75, 100, 125, 150, 175, 200].map(pct => (
+                <button
+                  key={pct}
+                  onClick={() => { setCanvasZoom(pct / 100); setZoomDropdownOpen(false) }}
+                  className={`w-full text-left px-3 py-1 text-[12px] tabular-nums transition-colors hover:bg-gray-50 ${
+                    Math.round(canvasZoom * 100) === pct ? 'font-semibold text-blue-600' : 'text-gray-700'
+                  }`}
+                >
+                  {pct}%
+                </button>
+              ))}
+              <div className="border-t border-gray-100 mt-1 pt-1">
+                <button
+                  onClick={() => { setCanvasZoom(1); setZoomDropdownOpen(false) }}
+                  className="w-full text-left px-3 py-1 text-[12px] text-gray-500 hover:bg-gray-50 transition-colors"
+                >リセット</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {band && (
@@ -389,36 +219,45 @@ export function TreeWindowCanvas() {
         onMouseDown={handleCanvasMouseDown}
         onContextMenu={e => { if (e.ctrlKey || e.metaKey) e.preventDefault() }}
       >
-        <div className="relative" style={{ width: canvasWidth, height: canvasHeight }}>
-
-          {/* SVG 接続線レイヤー */}
-          <svg
-            className="absolute inset-0 pointer-events-none"
-            width={canvasWidth} height={canvasHeight}
-            style={{ zIndex: 0 }}
+        {/* ズームラッパー: スクロール可能領域をズーム後サイズに合わせる */}
+        <div style={{ width: canvasWidth * canvasZoom, height: canvasHeight * canvasZoom, position: 'relative' }}>
+          <div
+            style={{
+              width: canvasWidth, height: canvasHeight,
+              position: 'absolute', top: 0, left: 0,
+              transformOrigin: 'top left',
+              transform: `scale(${canvasZoom})`,
+            }}
           >
-            {connections.map(({ parentPanel, childPanel }) => (
-              <path
-                key={`${parentPanel.id}-${childPanel.id}`}
-                d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
-                fill="none"
-                stroke="#93a3b8"
-                strokeWidth="1.5"
-                strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
-              />
-            ))}
-          </svg>
 
-          {/* スタンドアロンウィンドウ群（displayPanels の座標を使用） */}
-          {displayPanels.map(panel => (
-            <div
-              key={panel.id}
-              className="absolute"
-              style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+            {/* SVG 接続線レイヤー */}
+            <svg
+              className="absolute inset-0 pointer-events-none"
+              width={canvasWidth} height={canvasHeight}
+              style={{ zIndex: 0 }}
             >
-              <TreeWindow panel={panel} isSelected={selectedOrgId === panel.orgId} />
-            </div>
-          ))}
+              {connections.map(({ parentPanel, childPanel }) => (
+                <path
+                  key={`${parentPanel.id}-${childPanel.id}`}
+                  d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
+                  fill="none"
+                  stroke="#93a3b8"
+                  strokeWidth="1.5"
+                  strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
+                />
+              ))}
+            </svg>
+
+            {displayPanels.map(panel => (
+              <div
+                key={panel.id}
+                className="absolute"
+                style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+              >
+                <TreeWindow panel={panel} isSelected={selectedOrgId === panel.orgId} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

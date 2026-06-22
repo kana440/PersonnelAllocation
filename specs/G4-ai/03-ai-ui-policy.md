@@ -68,6 +68,56 @@ AIは「発見」「説明」「条件付き一括処理」を担当する。UI�
 
 ---
 
+## AI ↔ UI 双方向ブリッジ
+
+AIはドメインデータの変更だけでなく、UIの操作フォームと連携できる。
+
+### ストア構成
+
+```
+uiCommandStore（AI → UI、一方通行キュー）
+  dispatch({ type: 'openOperation', rowId, operationId, prefill })
+  → PersonOperationPanel が subscribe して操作フォームを開く
+
+formStateStore（フォーム ↔ AI、双方向）
+  publish({ rowId, operationId, values })  ← フォームが変更されるたびに公開
+  snapshot                                 ← AI が ui_get_form_state で読む
+  suggestField(field, value)               ← AI が ui_suggest_form_field で書く
+  pendingSuggestion                        ← フォームが subscribe して handleChange に流す
+```
+
+### AIとフォームの協調フロー
+
+```
+1. ユーザー「〇〇さんの昇格フォームを開いて」
+2. AI → findPersons で rowId 取得
+3. AI → ui_open_operation（operationId: 'Promotion', prefill: { ... }）
+   → uiCommandStore に dispatch
+   → PersonOperationPanel がフォームを開き、prefill 値を初期入力
+4. フォームが formStateStore に現在値を公開
+5. ユーザー「どのバンドを選べばいい？」
+6. AI → ui_get_form_state → bandRecommendations.oneStep を回答
+7. AI → ui_suggest_form_field（field: 'positionBand', value: 'M5'）
+   → formStateStore.suggestField() → フォームの handleChange に流れる
+   → onFieldChange の連動導出（band → payGrade 等）が正しく走る
+8. ユーザーが残りを確認して送信
+```
+
+### AIが使えるUIツール（navigate kind — Fast Path で使用可能）
+
+| ツール | 用途 |
+|---|---|
+| `ui_show_person` | 氏名・IDで検索してキャンバス上にフォーカス |
+| `ui_focus_row` | rowId で直接フォーカス |
+| `ui_open_operation` | 操作フォームを開いて値を事前入力 |
+| `ui_get_form_state` | フォームの現在状態（入力値・推奨選択肢）を読む |
+| `ui_suggest_form_field` | フォームの特定フィールドに値をセット |
+
+> これらはUIの表示・操作補助のみ。ドメインデータは変更しない。
+> ユーザーが最終的にフォームを確認して送信することで、通常の Operation モデル経由の変更が行われる。
+
+---
+
 ## アーキテクチャ上の制約
 
 - **AIはOperationモデルを経由しない直接変更をしない**
@@ -81,29 +131,11 @@ AIは「発見」「説明」「条件付き一括処理」を担当する。UI�
 | 優先事項 | 状態 | 備考 |
 |---|---|---|
 | Operation モデルの充実（FIELD_METADATA・FieldBinding） | ✅ 完了 | `allocationRow.ts` |
-| 自部門スコープ UI（scopeOrgId / スコープ別エクスポート） | ✅ 完了 | `useStore.ts` |
-| AI チャット UI（シナリオ 8種） | ✅ 完了 | `scenarios/` |
-| AI への Operation 注入（agentRunner + Tool Use） | ✅ 実装済み | Claude API 接続待ち |
+| AI チャット UI（Fast Path / Structured Path） | ✅ 完了 | `agentRunner.ts` |
+| AI への Operation 注入（agentRunner + Tool Use） | ✅ 実装済み | `toolRegistry.ts` |
+| UI ナビゲーションツール（navigate kind） | ✅ 完了 | `ui_*` プレフィックス |
+| AI ↔ フォーム双方向ブリッジ | ✅ 完了 | `uiCommandStore` / `formStateStore` |
 | AI によるポジション操作（assign / unassign 等） | 🚧 **未対応** | `aiTools` に未公開 |
-
-## AI-Position 対応ギャップ
-
-ポジション概念（空席・アサイン・解除）が導入されたが、**AI は現在ポジション操作を実行できない**。
-
-```
-現状:
-  UI  → useStore → HRApplicationService.createVacantPosition()  ← AI 不可
-  UI  → useStore → HRApplicationService.assignPersonToVacantPosition()  ← AI 不可
-
-あるべき姿（Step 1 完了後）:
-  AI  → aiTools.createVacantPosition()  → HRApplicationService
-  AI  → aiTools.assignToPosition()      → HRApplicationService
-  UI  → useStore                        → HRApplicationService  （変更なし）
-```
-
-この対称性の欠如により「〇〇部門に空席を作って」「△△さんをその席に配属して」という
-自然言語操作が AI に依頼できない。
-→ [next-steps](./06-next-steps.md) Step 1 で対応予定。
 
 ---
 

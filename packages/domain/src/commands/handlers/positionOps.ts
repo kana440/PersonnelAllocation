@@ -62,12 +62,10 @@ export class RemovePositionOperation implements EditCommand {
     if (row.userId) {
       // 在席中: ポジション行を削除し、人を未アサイン行に残す
       const positionClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-      const allocClears    = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
       const unassignedRow: AllocationRow = {
         ...row,
         rowId: nextRowId(ctx.allocationList),
         ...positionClears,
-        ...allocClears,
       }
       return {
         updatedList: [...ctx.allocationList.filter(r => r.rowId !== this.rowId), unassignedRow],
@@ -101,16 +99,14 @@ export class UnassignPersonFromPositionOperation implements EditCommand {
   apply(ctx: DomainContext): OperationResult {
     const row = ctx.allocationList.find(r => r.rowId === this.occupiedRowId)!
 
-    const personClears   = Object.fromEntries(afterKeysByBinding('person').map(k => [k, undefined]))
+    const jobInfoClears  = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
     const positionClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const allocClears    = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
 
-    const vacantRow: AllocationRow = { ...row, userId: undefined, ...personClears, ...allocClears }
+    const vacantRow: AllocationRow = { ...row, userId: undefined, ...jobInfoClears }
     const unassignedRow: AllocationRow = {
       ...row,
       rowId: nextRowId([...ctx.allocationList, vacantRow]),
       ...positionClears,
-      ...allocClears,
     }
 
     const hasOtherRowInOrg = ctx.allocationList.some(
@@ -182,8 +178,7 @@ export class AssignPersonToPositionOperation implements EditCommand {
     const personRow = ctx.allocationList.find(r => r.userId === this.personSfId && !r.concurrentType)
                    ?? ctx.allocationList.find(r => r.userId === this.personSfId)
 
-    const allocClears  = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
-    const personClears = Object.fromEntries(afterKeysByBinding('person').map(k => [k, undefined]))
+    const jobInfoClears = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
     const label = `配属: ${personRow ? (personRow.lastName ?? '') + (personRow.firstName ?? '') : this.personSfId}`
 
     if (!personRow) {
@@ -206,8 +201,7 @@ export class AssignPersonToPositionOperation implements EditCommand {
       rowId:  vacantRow.rowId,
       userId: this.personSfId,
       ...positionAndBothFields,
-      ...allocClears,
-      // managerName は allocation 扱いで消えるため、positionCode の上司を再導出
+      // managerName は position バインディングのため positionAndBothFields に含まれるが、最新値で上書き
       managerName: deriveManagerName(
         vacantRow.managerPositionCode as string | undefined,
         ctx.allocationList,
@@ -231,8 +225,7 @@ export class AssignPersonToPositionOperation implements EditCommand {
     const vacatedPersonRow: AllocationRow = {
       ...personRow,
       userId: undefined,
-      ...personClears,
-      ...allocClears,
+      ...jobInfoClears,
     }
     return {
       updatedList: ctx.allocationList.map(r => {

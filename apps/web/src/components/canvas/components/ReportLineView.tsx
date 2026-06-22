@@ -19,8 +19,8 @@ interface ReportLineViewProps {
   afterOrgByCode:              Map<string, Organization>
   organizations:               Organization[]
   persons:                     Person[]
-  selectedPersonId:            string | null
-  selectPerson:                (id: string) => void
+  selectedCardRowId:           number | null
+  selectCard:                  (rowId: number | null) => void
   saveRow:                     (rowId: number, changes: AfterValues) => void
   handlePersonDoubleClick:     (id: string) => void
   handlePersonContextMenu:     (e: React.MouseEvent, id: string) => void
@@ -34,7 +34,7 @@ interface ReportLineViewProps {
 
 export function ReportLineView({
   allocationList, personBySfId, afterOrgByCode, organizations, persons,
-  selectedPersonId, selectPerson, saveRow,
+  selectedCardRowId, selectCard, saveRow,
   handlePersonDoubleClick, handlePersonContextMenu,
   reportLineRootId, setReportLineRootId, rlRootManagerId,
   expandedNodes, setExpandedNodes, isReportLineInternalSelect,
@@ -185,7 +185,7 @@ export function ReportLineView({
             }}
             onClick={() => {
               isReportLineInternalSelect.current = true
-              selectPerson(personId)
+              selectCard(sr.row.rowId)
               if (personId === reportLineRootId && rlRootManagerId) {
                 setReportLineRootId(rlRootManagerId)
                 setExpandedNodes(prev => new Set([...prev, rlRootManagerId]))
@@ -196,7 +196,7 @@ export function ReportLineView({
             className={`flex items-center gap-2 pl-3 pr-2.5 py-1 rounded-r border-l-4 bg-white text-xs transition-all hover:shadow-sm cursor-grab active:cursor-grabbing whitespace-nowrap ${color.line} ${
               dragOverPersonId === personId
                 ? 'shadow-md outline outline-2 outline-green-400'
-                : selectedPersonId === personId
+                : selectedCardRowId === sr.row.rowId
                 ? 'outline outline-2 outline-yellow-400'
                 : 'shadow-sm'
             }`}

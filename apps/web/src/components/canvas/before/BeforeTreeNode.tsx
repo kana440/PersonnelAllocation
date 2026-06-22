@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
-import { useBeforeOrgView, beforeSubtreeRowCount, beforeHasAnyRows } from './BeforeOrgViewContext'
+import { useBeforeOrgView } from './BeforeOrgViewContext'
 import { BeforeRowCard } from './BeforeRowCard'
+import { buildPositionDepthList, subtreeRowCount, hasAnyRows } from '../panel/helpers'
 import type { Organization } from '@personnel/domain/schemas'
 
 interface Props {
@@ -19,8 +21,13 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
 
   const org       = beforeOrganizations.find(o => o.id === orgId)
   const rows      = beforeRowsByOrgId.get(orgId) ?? []
+  const depthList = useMemo(
+    () => buildPositionDepthList(rows, r => r.prevPositionCode, r => r.prevManagerPositionCode),
+    [rows],
+  )
+  const hasRowsFn = (id: string) => beforeRowsByOrgId.has(id)
   const childOrgs = beforeOrganizations.filter(
-    o => o.parentId === orgId && beforeHasAnyRows(o.id, beforeOrganizations, beforeRowsByOrgId),
+    o => o.parentId === orgId && hasAnyRows(o.id, beforeOrganizations, hasRowsFn),
   )
 
   if (!org) return null
@@ -36,7 +43,7 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
           const isOpen     = childPanel?.open ?? false
 
           if (!isOpen) {
-            const count = beforeSubtreeRowCount(child.id, beforeOrganizations, beforeRowsByOrgId)
+            const count = subtreeRowCount(child.id, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
             return (
               <BeforeChildChip
                 key={child.id}
@@ -49,7 +56,7 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
           }
 
           if (childrenMode === 'windowed') {
-            const count = beforeSubtreeRowCount(child.id, beforeOrganizations, beforeRowsByOrgId)
+            const count = subtreeRowCount(child.id, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
             return (
               <BeforeChildChip
                 key={child.id}
@@ -78,8 +85,8 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
 
   const body = (
     <div className={!isRoot ? 'pl-3 border-l border-gray-100 ml-2' : undefined}>
-      {rows.map(row => (
-        <BeforeRowCard key={row.rowId} row={row} orgId={orgId} />
+      {depthList.map(({ row, depth }) => (
+        <BeforeRowCard key={row.rowId} row={row} orgId={orgId} depth={depth} />
       ))}
       {childSection}
     </div>
@@ -142,7 +149,7 @@ function BeforeInlineSection({
   onCollapse:   () => void
 }) {
   const { beforeOrganizations, beforeRowsByOrgId } = useBeforeOrgView()
-  const count = beforeSubtreeRowCount(child.id, beforeOrganizations, beforeRowsByOrgId)
+  const count = subtreeRowCount(child.id, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
 
   return (
     <div className="rounded border border-gray-200">

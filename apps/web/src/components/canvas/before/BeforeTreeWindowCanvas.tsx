@@ -1,106 +1,45 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
-import type { PanelDef } from '../../../store/canvasLayoutStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
-import { useStore } from '../../../store/useStore'
-import { useScopedStore } from '../../../store/useScopedStore'
-import type { Organization, Person } from '@personnel/domain/schemas'
-import { BeforeTreeWindow } from './BeforeTreeWindow'
-import { BeforeOrgViewContext, beforeSubtreeRowCount } from './BeforeOrgViewContext'
+import { useStore }             from '../../../store/useStore'
+import { useScopedStore }       from '../../../store/useScopedStore'
+import type { Person }          from '@personnel/domain/schemas'
+import { BeforeTreeWindow }     from './BeforeTreeWindow'
+import { BeforeOrgViewContext } from './BeforeOrgViewContext'
+import { subtreeRowCount } from '../panel/helpers'
 import type { BeforeOrgViewContextValue } from './BeforeOrgViewContext'
+import {
+  WINDOW_W, EST_WIN_H, CANVAS_MARGIN,
+  isStandaloneWindow, computeLayout, connectionPath, buildConnections,
+} from '../treeWindowLayout'
 
-const WINDOW_W  = 288
-const TITLE_H   = 44    // 28px タイトル + 16px マッピングバッジ
-const EST_WIN_H = 300
-const H_GAP     = 16
-const V_GAP     = 20
-const MARGIN    = 40
-
-// ── スタンドアロン判定（comparisonPanels + beforeOrgs） ────────────
-function isBeforeStandalone(
-  panel: PanelDef, allPanels: PanelDef[], beforeOrgs: Organization[],
-): boolean {
-  const org = beforeOrgs.find(o => o.id === panel.orgId)
-  if (!org?.parentId) return true
-  const parentPanel = allPanels.find(p => p.orgId === org.parentId)
-  if (!parentPanel) return true
-  return parentPanel.childrenMode === 'windowed'
-    && panel.open
-    && isBeforeStandalone(parentPanel, allPanels, beforeOrgs)
-}
-
-// ── レイアウト計算 ────────────────────────────────────────────────
-function computeBeforeLayout(
-  standalone: PanelDef[], allPanels: PanelDef[], beforeOrgs: Organization[],
-): Map<string, { x: number; y: number }> {
-  const getParent = (p: PanelDef) => {
-    const org = beforeOrgs.find(o => o.id === p.orgId)
-    return org?.parentId ? standalone.find(pp => pp.orgId === org.parentId) : undefined
-  }
-  const getChildren = (p: PanelDef) =>
-    standalone.filter(c => {
-      if (c.id === p.id) return false
-      return beforeOrgs.find(o => o.id === c.orgId)?.parentId === p.orgId
-    })
-
-  const subtreeW = (p: PanelDef): number => {
-    const ch = getChildren(p)
-    if (ch.length === 0) return WINDOW_W
-    return Math.max(WINDOW_W, ch.reduce((s, c, i) => s + subtreeW(c) + (i ? H_GAP : 0), 0))
-  }
-
-  const posMap  = new Map<string, { x: number; y: number }>()
-  const visited = new Set<string>()
-  const layout  = (p: PanelDef, x: number, y: number) => {
-    if (visited.has(p.id)) return
-    visited.add(p.id)
-    const sw = subtreeW(p)
-    posMap.set(p.id, { x: Math.round(x + Math.max(0, (sw - WINDOW_W) / 2)), y })
-    let cx = x
-    for (const child of getChildren(p)) {
-      layout(child, cx, y + EST_WIN_H + V_GAP)
-      cx += subtreeW(child) + H_GAP
-    }
-  }
-
-  const roots = standalone.filter(p => !getParent(p))
-  let rootX = MARGIN
-  for (const root of roots) {
-    layout(root, rootX, MARGIN)
-    rootX += subtreeW(root) + H_GAP
-  }
-
-  void allPanels
-  return posMap
-}
-
-// ── 接続線 ────────────────────────────────────────────────────────
-function buildBeforeConnections(standalone: PanelDef[], beforeOrgs: Organization[]) {
-  const result: { parentPanel: PanelDef; childPanel: PanelDef }[] = []
-  for (const child of standalone) {
-    const org    = beforeOrgs.find(o => o.id === child.orgId)
-    const parent = org?.parentId ? standalone.find(p => p.orgId === org.parentId) : undefined
-    if (parent) result.push({ parentPanel: parent, childPanel: child })
-  }
-  return result
-}
-
-// ── コンポーネント ────────────────────────────────────────────────
 export function BeforeTreeWindowCanvas() {
   const { beforeOrganizations, afterOrganizations } = useStore()
   const { allocationList } = useScopedStore()
   const persons = useStore(s => s.persons) as Person[]
 
   const {
-    comparisonPanels, setComparisonPositions,
-    comparisonArrangeVersion, comparisonOrgMapping,
+    comparisonPanels,
+    comparisonOrgMapping,
     initComparisonPanels,
+    setComparisonOrgOpen,
+    panelHeights,
+    lineStyle,
+    canvasZoom, stepCanvasZoom,
   } = useCanvasLayoutStore()
 
-  // 比較モード開始時にパネルを初期化
+  // 比較モード開始時にパネルを初期化（ルート org のみ open:true、他は closed chip として表示）
+  // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
   useEffect(() => {
-    const ids = beforeOrganizations.filter(o => !o.isAbandoned).map(o => o.id)
-    if (ids.length > 0) initComparisonPanels(ids)
-  }, [beforeOrganizations, initComparisonPanels])
+    if (comparisonPanels.length > 0) return  // guard: 既に初期化済み
+    const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
+    const ids = viewOrgs.map(o => o.id)
+    if (ids.length === 0) return
+    const orgIdSet = new Set(ids)
+    const rootOrgIds = new Set(
+      viewOrgs.filter(o => !o.parentId || !orgIdSet.has(o.parentId)).map(o => o.id)
+    )
+    initComparisonPanels(ids, rootOrgIds)
+  }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // orgId → その org に所属していた rows (prevDepartmentCode で紐付け)
   const beforeRowsByOrgId = useMemo(() => {
@@ -115,56 +54,109 @@ export function BeforeTreeWindowCanvas() {
 
   // 選択状態（ローカル）
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const toggleSelect = useCallback((userId: string, ctrl: boolean) => {
+  const toggleSelect = useCallback((personId: string, ctrl: boolean) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
       if (ctrl) {
-        if (next.has(userId)) { next.delete(userId) } else { next.add(userId) }
+        if (next.has(personId)) { next.delete(personId) } else { next.add(personId) }
       } else {
-        return prev.has(userId) && prev.size === 1 ? new Set<string>() : new Set([userId])
+        return prev.has(personId) && prev.size === 1 ? new Set<string>() : new Set([personId])
       }
       return next
     })
   }, [])
   const clearSelect = useCallback(() => setSelectedIds(new Set()), [])
 
-  // スタンドアロンパネル
+  // スタンドアロンパネル + 位置をリアクティブに計算（panelHeights が更新されると自動再計算）
   const standalonePanels = useMemo(
-    () => comparisonPanels.filter(p => isBeforeStandalone(p, comparisonPanels, beforeOrganizations)),
+    () => comparisonPanels.filter(p => isStandaloneWindow(p, comparisonPanels, beforeOrganizations)),
     [comparisonPanels, beforeOrganizations],
   )
 
+  const displayPanels = useMemo(() => {
+    if (standalonePanels.length === 0) return standalonePanels
+    const posMap = computeLayout(standalonePanels, comparisonPanels, beforeOrganizations, panelHeights)
+    return standalonePanels.map(p => {
+      const pos = posMap.get(p.id)
+      return pos ? { ...p, ...pos } : p
+    })
+  }, [standalonePanels, comparisonPanels, beforeOrganizations, panelHeights])
+
   const connections = useMemo(
-    () => buildBeforeConnections(standalonePanels, beforeOrganizations),
-    [standalonePanels, beforeOrganizations],
+    () => buildConnections(displayPanels, beforeOrganizations),
+    [displayPanels, beforeOrganizations],
   )
 
-  // キャンバスサイズ
-  const canvasWidth  = standalonePanels.length === 0 ? 1200
-    : Math.max(1200, ...standalonePanels.map(p => p.x + WINDOW_W + MARGIN * 2))
-  const canvasHeight = standalonePanels.length === 0 ? 800
-    : Math.max(800, ...standalonePanels.map(p => p.y + EST_WIN_H + MARGIN * 2))
+  // キャンバスサイズ（実測高さを使用）
+  const canvasWidth  = displayPanels.length === 0 ? 1200
+    : Math.max(1200, ...displayPanels.map(p => p.x + WINDOW_W + CANVAS_MARGIN * 2))
+  const canvasHeight = displayPanels.length === 0 ? 800
+    : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
 
-  // 自動整列
-  const standalonePanelsRef = useRef(standalonePanels)
-  standalonePanelsRef.current = standalonePanels
-  const cPanelsRef = useRef(comparisonPanels)
-  cPanelsRef.current = comparisonPanels
-  const beforeOrgsRef = useRef(beforeOrganizations)
-  beforeOrgsRef.current = beforeOrganizations
+  // ── 選択中の行が変わったら before-canvas をスクロール ─────────────
+  const selectedCardRowId    = useStore(s => s.selectedCardRowId)
+  const selectedCardSource   = useStore(s => s.selectedCardSource)
+  const scrollToBeforeRowRequest = useCanvasLayoutStore(s => s.scrollToBeforeRowRequest)
+  const scrollerRef = useRef<HTMLDivElement>(null)
 
+  // after-canvas からの選択時: before-canvas のパネルチェーンを展開してスクロール
   useEffect(() => {
-    if (comparisonArrangeVersion === 0) return
-    const posMap = computeBeforeLayout(
-      standalonePanelsRef.current, cPanelsRef.current, beforeOrgsRef.current,
-    )
-    setComparisonPositions(posMap)
-  }, [comparisonArrangeVersion, setComparisonPositions])
+    if (!selectedCardRowId || selectedCardSource !== 'after') return
 
-  const handleArrange = useCallback(() => {
-    const posMap = computeBeforeLayout(standalonePanels, comparisonPanels, beforeOrganizations)
-    setComparisonPositions(posMap)
-  }, [standalonePanels, comparisonPanels, beforeOrganizations, setComparisonPositions])
+    // 対象 row の prevDepartmentCode からパネルチェーンを展開（祖先→ターゲット）
+    const row = allocationList.find(r => r.rowId === selectedCardRowId)
+    if (row?.prevDepartmentCode) {
+      const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
+      const targetOrg = viewOrgs.find(o => o.externalCode === row.prevDepartmentCode)
+      if (targetOrg) {
+        const orgMap = new Map(viewOrgs.map(o => [o.id, o]))
+        const curPanels = useCanvasLayoutStore.getState().comparisonPanels
+        const panelMap = new Map(curPanels.map(p => [p.orgId, p]))
+        const chain: string[] = []
+        let cur = orgMap.get(targetOrg.id)
+        while (cur) {
+          chain.unshift(cur.id)
+          cur = cur.parentId ? orgMap.get(cur.parentId) : undefined
+        }
+        for (const id of chain) {
+          const panel = panelMap.get(id)
+          if (panel && !panel.open) setComparisonOrgOpen(id, true)
+        }
+      }
+    }
+
+    // パネル展開後（次フレーム）にスクロール
+    const rowId = selectedCardRowId
+    setTimeout(() => {
+      scrollerRef.current
+        ?.querySelector<HTMLElement>(`[data-before-rowid="${rowId}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+    }, 0)
+  }, [selectedCardRowId, selectedCardSource]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // サイドバーからの選択時: パネル展開後にスクロール（seq で重複排除）
+  useEffect(() => {
+    if (!scrollToBeforeRowRequest || !scrollerRef.current) return
+    const el = scrollerRef.current.querySelector<HTMLElement>(`[data-before-rowid="${scrollToBeforeRowRequest.rowId}"]`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+  }, [scrollToBeforeRowRequest])
+
+  // ── Ctrl+Wheel ズーム（TreeWindowCanvas と共有） ─────────────────
+  // standalonePanels.length > 0 を dep に含めることで、比較モード開始後に
+  // スクローラーが現れたタイミングで effect を再実行し、リスナーを正しく登録する
+  const hasBeforeContent = standalonePanels.length > 0
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      stepCanvasZoom(e.deltaY < 0 ? 0.1 : -0.1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [hasBeforeContent, stepCanvasZoom])
 
   // ── Space キー保持状態 ────────────────────────────────────────────
   const [spaceHeld, setSpaceHeld] = useState(false)
@@ -185,7 +177,6 @@ export function BeforeTreeWindowCanvas() {
   }, [])
 
   // ── Space+drag パン ───────────────────────────────────────────────
-  const scrollerRef = useRef<HTMLDivElement>(null)
   const [panning, setPanning]  = useState(false)
   const panningRef = useRef(false)
   const panOrigin  = useRef({ mx: 0, my: 0, sl: 0, st: 0 })
@@ -194,10 +185,8 @@ export function BeforeTreeWindowCanvas() {
     if (!panning) return
     const onMove = (e: MouseEvent) => {
       if (!scrollerRef.current) return
-      const dx = e.clientX - panOrigin.current.mx
-      const dy = e.clientY - panOrigin.current.my
-      scrollerRef.current.scrollLeft = panOrigin.current.sl - dx
-      scrollerRef.current.scrollTop  = panOrigin.current.st - dy
+      scrollerRef.current.scrollLeft = panOrigin.current.sl - (e.clientX - panOrigin.current.mx)
+      scrollerRef.current.scrollTop  = panOrigin.current.st - (e.clientY - panOrigin.current.my)
     }
     const onUp = () => { panningRef.current = false; setPanning(false) }
     document.addEventListener('mousemove', onMove)
@@ -217,20 +206,16 @@ export function BeforeTreeWindowCanvas() {
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-before-window]')) return
     e.preventDefault()
-
     if (spaceHeld) {
-      // Space+drag: キャンバスをパン
       panningRef.current = true
       setPanning(true)
       panOrigin.current = {
-        mx: e.clientX,
-        my: e.clientY,
+        mx: e.clientX, my: e.clientY,
         sl: scrollerRef.current?.scrollLeft ?? 0,
         st: scrollerRef.current?.scrollTop  ?? 0,
       }
       return
     }
-
     isCtrlBand.current = e.ctrlKey || e.metaKey
     const r = { x1: e.clientX, y1: e.clientY, x2: e.clientX, y2: e.clientY }
     bandRef.current = r
@@ -301,19 +286,14 @@ export function BeforeTreeWindowCanvas() {
   return (
     <BeforeOrgViewContext.Provider value={ctxValue}>
       <div className="relative h-full">
-        {/* 整列ボタン */}
-        <div className="absolute top-2 right-3 z-10 flex items-center gap-2">
-          {selectedIds.size > 0 && (
+        {/* 選択件数オーバーレイ */}
+        {selectedIds.size > 0 && (
+          <div className="absolute top-2 right-3 z-10">
             <span className="text-[11px] text-stone-500 bg-white/80 px-2 py-0.5 rounded border border-stone-200">
               {selectedIds.size}名選択中
             </span>
-          )}
-          <button
-            onClick={handleArrange}
-            className="px-2.5 py-1 text-[11px] font-medium rounded border border-gray-300 bg-white text-gray-600 shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-colors"
-            title="組織階層に従ってウィンドウを整列"
-          >⊞ 整列</button>
-        </div>
+          </div>
+        )}
 
         {/* ラバーバンド */}
         {band && (
@@ -338,43 +318,47 @@ export function BeforeTreeWindowCanvas() {
           style={{ cursor: panning ? 'grabbing' : spaceHeld ? 'grab' : undefined }}
           onMouseDown={handleCanvasMouseDown}
         >
-          <div className="relative" style={{ width: canvasWidth, height: canvasHeight }}>
-            {/* SVG 接続線 */}
-            <svg
-              className="absolute inset-0 pointer-events-none"
-              width={canvasWidth} height={canvasHeight}
-              style={{ zIndex: 0 }}
+          {/* ズームラッパー: スクロール可能領域をズーム後サイズに合わせる */}
+          <div style={{ width: canvasWidth * canvasZoom, height: canvasHeight * canvasZoom, position: 'relative' }}>
+            <div
+              style={{
+                width: canvasWidth, height: canvasHeight,
+                position: 'absolute', top: 0, left: 0,
+                transformOrigin: 'top left',
+                transform: `scale(${canvasZoom})`,
+              }}
             >
-              {connections.map(({ parentPanel, childPanel }) => {
-                const sx  = parentPanel.x + WINDOW_W / 2
-                const sy  = parentPanel.y + TITLE_H
-                const tx  = childPanel.x  + WINDOW_W / 2
-                const ty  = childPanel.y
-                const mid = (sy + ty) / 2
-                return (
+              {/* SVG 接続線（after-canvas と同じ connectionPath を使用） */}
+              <svg
+                className="absolute inset-0 pointer-events-none"
+                width={canvasWidth} height={canvasHeight}
+                style={{ zIndex: 0 }}
+              >
+                {connections.map(({ parentPanel, childPanel }) => (
                   <path
                     key={`${parentPanel.id}-${childPanel.id}`}
-                    d={`M ${sx} ${sy} C ${sx} ${mid} ${tx} ${mid} ${tx} ${ty}`}
-                    fill="none" stroke="#b8a89a" strokeWidth="1.5" strokeDasharray="5 3"
+                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
+                    fill="none" stroke="#b8a89a" strokeWidth="1.5"
+                    strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
                   />
+                ))}
+              </svg>
+
+              {/* ウィンドウ群 */}
+              {displayPanels.map(panel => {
+                const count = subtreeRowCount(panel.orgId, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
+                if (count === 0) return null
+                return (
+                  <div
+                    key={panel.id}
+                    className="absolute"
+                    style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+                  >
+                    <BeforeTreeWindow panel={panel} />
+                  </div>
                 )
               })}
-            </svg>
-
-            {/* ウィンドウ群 */}
-            {standalonePanels.map(panel => {
-              const count = beforeSubtreeRowCount(panel.orgId, beforeOrganizations, beforeRowsByOrgId)
-              if (count === 0) return null
-              return (
-                <div
-                  key={panel.id}
-                  className="absolute"
-                  style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
-                >
-                  <BeforeTreeWindow panel={panel} />
-                </div>
-              )
-            })}
+            </div>
           </div>
         </div>
       </div>

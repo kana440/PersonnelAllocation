@@ -12,6 +12,31 @@ import type { OperationBadge } from './badge'
 export type OperationGroup = 'position' | 'jobClassification' | 'person'
 
 /**
+ * 操作の排他ロール宣言。行ごとの相互排他・取消ペアを宣言的に表現する。
+ *
+ *   lock        : この操作が行に適用されると「ロック状態」になり、他の normal/lock 操作を排他する。
+ *                 afterConstraint で after フィールドの扱いを宣言できる:
+ *                   'wipe'    : after フィールドを全てクリア（例: 変更なし・雇用延長）
+ *                   'preserve': after フィールドを before からコピー（例: 将来の用途）
+ *                   省略時    : after フィールドを自由に変更可
+ *                 isActive/isActiveThisSession は UI・AI がロック状態を検出するための述語。
+ *   lockCancel  : 指定した lock 操作のロール状態を取り消す操作。
+ *                 of: キャンセル対象の lock 操作の id を指定する。
+ *                 availableFor がセッション内取消条件、framework は isActiveThisSession を参照する。
+ *   normal      : 排他制御に参加しない通常の操作（明示的に宣言する場合）。
+ *                 lock が有効な行では自動的にブロックされる（将来の resolveAvailability で制御）。
+ */
+export type OperationRole =
+  | {
+      kind:               'lock'
+      afterConstraint?:   'wipe' | 'preserve'
+      isActive(row: AllocationRow): boolean
+      isActiveThisSession(row: AllocationRow): boolean
+    }
+  | { kind: 'lockCancel'; of: string }
+  | { kind: 'normal' }
+
+/**
  * inputs 配列内でセクション区切りを表す。フィールド定義と判別できる（kind プロパティで区別）。
  * 直前のフィールドと次のフィールドの間に見出し＋横線を描画する。
  */
@@ -21,7 +46,7 @@ export interface SectionDivider {
 }
 
 /** フィールド入力かセクション区切りかを判定するタイプガード */
-export function isSectionDivider(i: OperationInput | SectionDivider): i is SectionDivider {
+export function isSectionDivider(i: OperationInput | SectionDivider | InputRow): i is SectionDivider {
   return (i as SectionDivider).kind === 'section'
 }
 
@@ -35,6 +60,21 @@ export type FieldChangeEffect = {
   openPickerInitialOrg?: string
   suggestFieldValue?:    { field: keyof AllocationRow; value: string }
   suppressDerive?:       boolean   // true のとき deriveFieldUpdates をスキップ
+}
+
+/**
+ * inputs 配列内で複数フィールドを横並びにするグループ。
+ * 内部の OperationInput はすべて同一行に flex で配置される。
+ * 現時点では readOnly フィールドのみを想定（組織サブフィールドの表示用）。
+ */
+export interface InputRow {
+  readonly kind:   'row'
+  readonly inputs: OperationInput[]
+}
+
+/** フィールド入力かセクション区切りか横並びグループかを判定するタイプガード */
+export function isInputRow(i: OperationInput | SectionDivider | InputRow): i is InputRow {
+  return (i as InputRow).kind === 'row'
 }
 
 /**
@@ -77,9 +117,15 @@ export interface OperationInput {
    * - 静的配列: コンパイル時確定の固定リスト。AI エクスポートにそのまま含まれる。
    * - 関数: DomainContext から動的に導出（コードリスト依存など）。
    * 省略時は FIELD_CONSTRAINTS から自動導出（全操作共通のデフォルト）。
-   * 指定された場合は ComboInput を strict モードで表示し、リスト外の入力を抑止する。
+   * optionsMode で選択肢の強制度を制御する（省略時は 'restrict'）。
    */
   readonly options?: readonly string[] | ((ctx: DomainContext) => readonly string[])
+  /**
+   * 選択肢の強制度。options が指定されている場合のみ有効。
+   * - 'restrict'（デフォルト）: リスト外の入力を抑止する（strict モード）
+   * - 'suggest': リストは推奨値として先頭に表示するが、自由入力も可能（guide モード）
+   */
+  readonly optionsMode?: 'restrict' | 'suggest'
 }
 
 /**
@@ -111,6 +157,12 @@ export interface EditOperation {
   readonly suppressSideEffectWarning?: boolean
 
   /**
+   * 排他ロール宣言。省略時は通常操作（normal 相当）として扱われる。
+   * resolveAvailability() はこの宣言を参照して操作の相互排他を自動制御する（将来実装）。
+   */
+  readonly operationRole?: OperationRole
+
+  /**
    * この操作が対象行に対してメニューに表示されるかどうか。
    */
   availableFor(row: AllocationRow, masters: AllMasters): boolean
@@ -120,8 +172,8 @@ export interface EditOperation {
    */
   onOpen(row: AllocationRow, ctx: DomainContext): Partial<AllocationRow>
 
-  /** ユーザーが入力する必要があるフィールド（順序付き）。SectionDivider を挟むことでセクション区切りを定義できる */
-  readonly inputs: (OperationInput | SectionDivider)[]
+  /** ユーザーが入力する必要があるフィールド（順序付き）。SectionDivider でセクション区切り、InputRow で横並びグループを定義できる */
+  readonly inputs: (OperationInput | SectionDivider | InputRow)[]
 
   /**
    * フィールド変更時の操作固有サイドエフェクト。

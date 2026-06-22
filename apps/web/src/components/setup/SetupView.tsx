@@ -9,8 +9,11 @@ import { AfterInitWizard } from './AfterInitWizard'
 import { ModeSelectStep } from './ModeSelectStep'
 import { computeAssigneePanelOrgIds, findCommonAncestorOrgId } from './panelInit'
 
+const LOCAL_SAMPLE_FILES = ['sample.xlsm']
+
 type Phase =
   | { kind: 'idle' }
+  | { kind: 'sample-select'; files: string[] }
   | { kind: 'loading'; progress: string }
   | { kind: 'mode-select'; result: ImportedWorkbookResult }
   | { kind: 'after-init'; result: ImportedWorkbookResult; role: 'admin' | 'assignee'; assigneeName: string | null }
@@ -50,7 +53,13 @@ export function SetupView({ onReady }: Props) {
     await runImport(onProgress => importFromFile(file, onProgress))
   }
 
-  const handleSample = () => runImport(onProgress => importFromUrl('/.local/sample.xlsx', onProgress))
+  const handleSample = () => {
+    if (LOCAL_SAMPLE_FILES.length === 1) {
+      runImport(onProgress => importFromUrl(`/.local/${LOCAL_SAMPLE_FILES[0]}`, onProgress))
+    } else {
+      setPhase({ kind: 'sample-select', files: LOCAL_SAMPLE_FILES })
+    }
+  }
 
   // after-init チェックを挟む共通ヘルパー
   const proceedOrInitWizard = useCallback((
@@ -136,6 +145,13 @@ export function SetupView({ onReady }: Props) {
             onHelp={() => setShowHelp(true)}
           />
         )}
+        {phase.kind === 'sample-select' && (
+          <SampleSelectView
+            files={phase.files}
+            onSelect={file => runImport(onProgress => importFromUrl(`/.local/${file}`, onProgress))}
+            onBack={() => setPhase({ kind: 'idle' })}
+          />
+        )}
         {phase.kind === 'loading' && <LoadingView progress={phase.progress} />}
         {phase.kind === 'mode-select' && (
           <ModeSelectStep
@@ -155,6 +171,40 @@ export function SetupView({ onReady }: Props) {
           <ErrorView message={phase.message} onBack={() => setPhase({ kind: 'idle' })} />
         )}
       </div>
+    </div>
+  )
+}
+
+// ── サンプルファイル選択 ─────────────────────────────────────────────────
+
+function SampleSelectView({ files, onSelect, onBack }: {
+  files: string[]
+  onSelect: (file: string) => void
+  onBack: () => void
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-bold text-gray-800">サンプルファイルを選択</h2>
+        <p className="mt-1 text-sm text-gray-500">.local フォルダ内のファイルを選択してください。</p>
+      </div>
+      <div className="space-y-2">
+        {files.map(file => (
+          <button
+            key={file}
+            onClick={() => onSelect(file)}
+            className="w-full text-left px-4 py-3 text-sm text-gray-700 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-colors"
+          >
+            {file}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={onBack}
+        className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        ← 戻る
+      </button>
     </div>
   )
 }

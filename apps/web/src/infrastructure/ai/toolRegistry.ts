@@ -7,6 +7,11 @@
 //
 // confirm ツールの実際の実行は AgentRunner の onConfirm コールバック経由で行われ、
 // ユーザーが承認した場合のみ executeOnApprove が呼ばれる。
+//
+// ツール名プレフィックス規約:
+//   ui_*       : UIナビゲーション専用（表示位置の変更のみ・ドメインデータは変更しない）
+//   propose_*  : ドメイン変更操作（execute / confirm）
+//   find* / get* : 読み取り系（read / render）
 
 // toolRegistry — LLMプロトコルアダプター。
 //
@@ -17,12 +22,16 @@
 import type { ChatWidget, PersonDiff, PersonInfo } from '../../application/aiTypes'
 import { aiTools } from '../../application/aiTools'
 import { appService } from '../../application/HRApplicationService'
+import { useStore } from '../../store/useStore'
+import { useUICommandStore } from '../../store/uiCommandStore'
+import { useFormStateStore } from '../../store/formStateStore'
 import * as P from './proposalBuilders'
 import {
   bindOperation,
   secondmentOutReleaseSFDef,
   concurrentSecondmentOutSFDef,
   employmentTransferDef,
+  ALL_EDIT_OPERATIONS,
 } from '@personnel/domain/commands/defs'
 import { CompoundCommand } from '@personnel/domain/commands/handlers/compoundCommand'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
@@ -128,7 +137,18 @@ export interface ExecuteEntry {
   execute(args: Record<string, unknown>): unknown
 }
 
-export type ToolEntry = ReadEntry | RenderEntry | ConfirmEntry | ExecuteEntry
+/**
+ * navigate kind: UIナビゲーション専用。
+ * ドメインデータを変更しないため Fast Path でも安全に実行できる。
+ * キャンバスのスクロール・フォーカス・ハイライトなど表示操作に使う。
+ */
+export interface NavigateEntry {
+  kind: 'navigate'
+  definition: ToolDefinition
+  execute(args: Record<string, unknown>): unknown
+}
+
+export type ToolEntry = ReadEntry | RenderEntry | ConfirmEntry | ExecuteEntry | NavigateEntry
 
 // ── Tool entries ──────────────────────────────────────────────────────────────
 
@@ -354,13 +374,15 @@ const TOOL_ENTRIES: ToolEntry[] = [
   },
 
   // ── Read: getFieldOptions ────────────────────────────────────────────────
+  // フォームが開いている場合は formStateStore のドラフト値をマージして選択肢を計算する。
+  // これにより「フォームで employmentType を変えた直後の band 選択肢」が正しく返る。
   {
     kind: 'read',
     definition: {
       type: 'function',
       function: {
         name:        'getFieldOptions',
-        description: '指定した行・フィールドに入力できる有効な選択肢を返す。フィールドの値を変更する前に必ずこれで確認し、リスト外の値を設定しないこと。F1/F2/F3 の雇用タイプ制約も自動反映される。',
+        description: '指定した行・フィールドに入力できる有効な選択肢を返す。フィールドの値を変更する前に必ずこれで確認し、リスト外の値を設定しないこと。F1/F2/F3 の雇用タイプ制約も自動反映される。フォームが開いている場合は入力中の値を考慮した選択肢を返す。',
         parameters: {
           type: 'object',
           required: ['rowId', 'field'],
@@ -371,7 +393,33 @@ const TOOL_ENTRIES: ToolEntry[] = [
         },
       },
     },
-    execute: args => ({ options: aiTools.getFieldOptions(args.rowId as number, args.field as string) }),
+    execute: args => {
+      const rowId       = args.rowId as number
+      const field       = args.field as string
+      const formSnap    = useFormStateStore.getState().snapshot
+      const draftValues = formSnap?.rowId === rowId ? formSnap.values : undefined
+      const rawOptions  = aiTools.getFieldOptions(rowId, field, draftValues)
+
+      // Promotion/Demotion フォームで positionBand を問い合わせた場合、
+      // UI が1段階フィルタ（BandStepFilter デフォルト）している推奨値を付加する
+      if (formSnap?.rowId === rowId && field === 'positionBand') {
+        const opId = formSnap.operationId
+        if (opId === 'Promotion' || opId === 'Demotion') {
+          const info = aiTools.getPromotionBandInfo(rowId)
+          if ('oneLevelUp' in info) {
+            const recommended = opId === 'Promotion' ? info.oneLevelUp : info.oneLevelDown
+            return {
+              options:            rawOptions,
+              recommendedOptions: recommended,
+              currentBand:        info.currentPositionBand,
+              note:               `${opId === 'Promotion' ? '昇格' : '降格'}フォームのUIデフォルトは1段階${opId === 'Promotion' ? '上' : '下'}。通常は recommendedOptions から選択する。`,
+            }
+          }
+        }
+      }
+
+      return { options: rawOptions }
+    },
   },
 
   // ── Read: getPromotionBandInfo ───────────────────────────────────────────
@@ -1169,6 +1217,250 @@ const TOOL_ENTRIES: ToolEntry[] = [
       )
     },
   },
+
+  // ── UI Navigate: ui_open_operation ───────────────────────────────────────
+  // 指定行の操作フォームを開き、既知の値を prefill する。
+  // ユーザーが残りを入力して通常通り送信する（AI は送信しない）。
+  // getFieldOptions(rowId, field) で有効な選択肢を確認してから prefill するとよい。
+  {
+    kind: 'navigate',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_open_operation',
+        description:
+          '指定した人物の操作フォームを開き、AIが把握している値を事前入力する。' +
+          'UIの表示のみ変更・データは変更しない。ユーザーが残りを入力して送信する。' +
+          '「昇格フォームを開いて」「異動画面を出して」のようなリクエストに使う。' +
+          'findPersons で rowId を確認した後に使うこと。' +
+          'operationId の一覧: Promotion / Demotion / TitleChange / OrgTransfer / OrgRestructure / ' +
+          'LeaveOfAbsence / LeaveOfAbsenceCancel / ReturnFromLeave / ' +
+          'EmploymentTypeChange / JobTypeChange / ManagerChange / ' +
+          'SecondmentOutSF / SecondmentOutNonSF / SecondmentInSF / SecondmentInNonSF / ' +
+          'EmploymentTransfer / NoChange 等。',
+        parameters: {
+          type: 'object',
+          required: ['rowId', 'operationId'],
+          properties: {
+            rowId: {
+              type: 'number',
+              description: '対象行の rowId（findPersons の positions[].rowId）',
+            },
+            operationId: {
+              type: 'string',
+              description: '開く操作の ID（上記一覧から選択）',
+            },
+            prefill: {
+              type: 'object',
+              description: '事前入力する AllocationRow フィールドと値のマップ。getFieldOptions で有効な値を確認してから渡すこと。',
+              additionalProperties: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    execute: (args) => {
+      const rowId       = args.rowId       as number
+      const operationId = args.operationId as string
+      const prefill     = args.prefill     as Record<string, string> | undefined
+
+      const def = ALL_EDIT_OPERATIONS.find(d => d.id === operationId)
+      if (!def) {
+        const ids = ALL_EDIT_OPERATIONS.map(d => d.id).join(', ')
+        return { ok: false, message: `操作 '${operationId}' が見つかりません。有効な ID: ${ids}` }
+      }
+
+      const store = useStore.getState()
+      if (store.operationPanelRowId !== rowId) store.enterOperationPanel(rowId)
+
+      useUICommandStore.getState().dispatch({ type: 'openOperation', rowId, operationId, prefill })
+
+      return {
+        ok: true,
+        message: `${def.label ?? operationId} フォームを開きました。ユーザーの入力と送信を待っています。`,
+        operationId,
+        rowId,
+        prefillKeys: prefill ? Object.keys(prefill) : [],
+      }
+    },
+  },
+
+  // ── Read: ui_get_form_state ───────────────────────────────────────────────
+  // 現在開いているフォームの状態を読む（AI → フォーム の逆方向）。
+  // getFieldOptions(rowId, field) と組み合わせると「今フォームで選べる値」が分かる。
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_get_form_state',
+        description:
+          '現在開いている操作フォームの状態（操作種別・入力中の値）を返す。' +
+          'フォームが開いていない場合は open: false を返す。' +
+          '「今何が入力されていますか？」「どの操作フォームが開いていますか？」に使う。' +
+          'フォームを開くには ui_open_operation を先に呼ぶこと。' +
+          '入力中フィールドの有効な選択肢は getFieldOptions(rowId, field) で取得できる。',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    execute: () => {
+      const snapshot = useFormStateStore.getState().snapshot
+      if (!snapshot) return { open: false }
+
+      // Promotion/Demotion フォームの場合、フォームUIが提示する推奨バンドを付加する
+      // （UIは BandStepFilter でデフォルト1段階フィルタをかけている）
+      if (snapshot.operationId === 'Promotion' || snapshot.operationId === 'Demotion') {
+        const info = aiTools.getPromotionBandInfo(snapshot.rowId)
+        if ('oneLevelUp' in info) {
+          const dir = snapshot.operationId === 'Promotion' ? 'up' : 'down'
+          return {
+            open: true,
+            ...snapshot,
+            bandRecommendations: {
+              current:           info.currentPositionBand,
+              oneStep:           dir === 'up' ? info.oneLevelUp   : info.oneLevelDown,
+              twoStep:           dir === 'up' ? info.twoLevelsUp  : [],
+              uiDefaultFilter:   'oneStep',
+              note:              `UIのデフォルト表示は1段階${dir === 'up' ? '上' : '下'}（oneStep）。特段の理由がなければ oneStep から選ぶ。`,
+            },
+          }
+        }
+      }
+
+      return { open: true, ...snapshot }
+    },
+  },
+
+  // ── UI Navigate: ui_suggest_form_field ───────────────────────────────────
+  // 開いているフォームに値をサジェストする。
+  // フォーム内部の handleChange を通すため onFieldChange 連動導出が正しく動く。
+  {
+    kind: 'navigate',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_suggest_form_field',
+        description:
+          '開いている操作フォームの特定フィールドに値を設定する。' +
+          'UIの表示のみ変更・データは変更しない。フォームの送信はユーザーが行う。' +
+          '事前に ui_get_form_state でフォームが開いていることを確認し、' +
+          'getFieldOptions(rowId, field) で有効な値を確認してから使うこと。' +
+          '値を設定すると onFieldChange の連動導出（バンド→給与等級 など）も自動で走る。',
+        parameters: {
+          type: 'object',
+          required: ['field', 'value'],
+          properties: {
+            field: {
+              type: 'string',
+              description: '設定するフィールド名（AllocationRow のキー）',
+            },
+            value: {
+              type: 'string',
+              description: '設定する値（空文字でフィールドをクリア）',
+            },
+          },
+        },
+      },
+    },
+    execute: (args) => {
+      const snapshot = useFormStateStore.getState().snapshot
+      if (!snapshot) return { ok: false, message: 'フォームが開いていません。先に ui_open_operation を呼んでください。' }
+
+      const field = args.field as keyof AllocationRow
+      const value = args.value as string
+      useFormStateStore.getState().suggestField(field, value)
+      return { ok: true, field, value, message: `${field} に "${value}" を設定しました` }
+    },
+  },
+
+  // ── UI Navigate: ui_show_person ──────────────────────────────────────────
+  // 「ユーザーが画面で確認したい」という意図専用のナビゲーションツール。
+  // 内部で findPersons 相当の検索 + フォーカスを1ステップで行う。
+  // findPersons はAIがデータを取得する用途（操作前の確認等）に残す。
+  {
+    kind: 'navigate',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_show_person',
+        description:
+          '人物を検索してキャンバス上にフォーカスする（検索+表示を1ステップで実行）。' +
+          'UIの表示位置を移動するのみで、データは一切変更しない。' +
+          '「〇〇さんを見せて」「〇〇さんの場所を画面で確認したい」のようなリクエストに使う。' +
+          '人物データを取得したいだけなら findPersons を使うこと。' +
+          '複数人ヒットした場合は最初の1件にフォーカスし、件数を返す。',
+        parameters: {
+          type: 'object',
+          properties: {
+            name:            { type: 'string', description: '氏名（部分一致）' },
+            userId:          { type: 'string', description: 'SF Person ID（部分一致）' },
+            groupEmployeeId: { type: 'string', description: 'グループ社員ID（部分一致）' },
+            employeeNumber:  { type: 'string', description: '社員番号（部分一致）' },
+          },
+        },
+      },
+    },
+    execute: (args) => {
+      const results = aiTools.findPersons(args as {
+        name?: string; userId?: string; groupEmployeeId?: string; employeeNumber?: string
+      })
+      if (results.length === 0) return { ok: false, message: '該当する人物が見つかりません' }
+
+      const target  = results[0]
+      const rowId   = target.positions[0]?.rowId
+      if (rowId === undefined) return { ok: false, message: `${target.name} の行が特定できません` }
+
+      const store   = useStore.getState()
+      const person  = store.persons.find(p => p.sfPersonId === target.userId)
+      if (person) {
+        store.selectPersonAndFocusOrg(person.id)
+      } else {
+        store.selectCard(rowId)
+      }
+
+      const extra = results.length > 1 ? `（他 ${results.length - 1} 件ヒット）` : ''
+      return { ok: true, message: `${target.name} にフォーカスしました${extra}`, rowId }
+    },
+  },
+
+  // ── UI Navigate: ui_focus_row ─────────────────────────────────────────────
+  // rowId が既に分かっているときの低レベルフォーカス。
+  // 通常は ui_show_person を使う。他のツール結果から rowId を受け取った場合に使う。
+  {
+    kind: 'navigate',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_focus_row',
+        description:
+          'rowId を指定してキャンバス上の人物カードにフォーカスする。' +
+          'UIの表示位置を移動するのみで、データは一切変更しない。' +
+          'rowId が既に判明している場合に使う。名前で検索してフォーカスするなら ui_show_person を使うこと。',
+        parameters: {
+          type: 'object',
+          required: ['rowId'],
+          properties: {
+            rowId: { type: 'number', description: 'フォーカス対象の rowId（findPersons の positions[].rowId）' },
+          },
+        },
+      },
+    },
+    execute: (args) => {
+      const rowId   = args.rowId as number
+      const store   = useStore.getState()
+      const row     = store.allocationList.find(r => r.rowId === rowId)
+      if (!row) return { ok: false, message: `rowId ${rowId} が見つかりません` }
+
+      const name    = [row.lastName, row.firstName].filter(Boolean).join(' ')
+      const person  = store.persons.find(p => p.sfPersonId === row.userId)
+      if (person) {
+        store.selectPersonAndFocusOrg(person.id)
+      } else {
+        store.selectCard(rowId)
+      }
+      return { ok: true, message: `${name} にフォーカスしました` }
+    },
+  },
 ]
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -1187,10 +1479,10 @@ export const toolRegistry = {
     return TOOL_ENTRIES.map(e => e.definition)
   },
 
-  /** Fast Path で公開する安全なツール定義（read / render のみ）。 */
+  /** Fast Path で公開する安全なツール定義（read / render / navigate）。 */
   getSafeDefinitions(): ToolDefinition[] {
     return TOOL_ENTRIES
-      .filter(e => e.kind === 'read' || e.kind === 'render')
+      .filter(e => e.kind === 'read' || e.kind === 'render' || e.kind === 'navigate')
       .map(e => e.definition)
   },
 
@@ -1216,16 +1508,16 @@ export const toolRegistry = {
     }
   },
 
-  /** read / execute ツール用の便利メソッド（AgentRunner が内部で使う）。 */
+  /** read / execute / navigate ツール用の便利メソッド（AgentRunner が内部で使う）。 */
   execute(call: ToolCall): ToolResult {
     const entry = entryMap.get(call.function.name)
     const args  = parseArgs(call.function.arguments)
     let result: unknown
     try {
-      if (entry?.kind === 'read' || entry?.kind === 'execute') {
+      if (entry?.kind === 'read' || entry?.kind === 'execute' || entry?.kind === 'navigate') {
         result = entry.execute(args)
       } else {
-        result = { error: `'${call.function.name}' は read/execute ツールではありません` }
+        result = { error: `'${call.function.name}' は read/execute/navigate ツールではありません` }
       }
     } catch (e) {
       result = { error: String(e) }

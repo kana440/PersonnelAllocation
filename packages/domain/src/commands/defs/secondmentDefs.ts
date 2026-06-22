@@ -6,6 +6,7 @@ import { afterKeysByBinding, nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { isRegularEmployee, isSecondmentAcceptance, wasSecondedOut, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany } from '../helpers'
 import type { AllMasters } from '../../masters/aggregate'
+import { TR } from '../../transferReasonLabels'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -18,6 +19,12 @@ export const secondmentOutSFDef: EditOperation = {
   label:      '本務出向（SF統合先）',
   group:      'person',
   badge: 'secondment',
+
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => !!(row.secondmentToCompany as string | undefined),
+    isActiveThisSession: (row) => !!(row.secondmentToCompany as string | undefined) && !(row.prevSecondmentToCompany as string | undefined),
+  },
 
   availableFor: (row, ms) =>
     isRegularEmployee(row, ms) && isMainAssignment(row) && !wasSecondedOut(row),
@@ -66,6 +73,12 @@ export const secondmentOutNonSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => !!(row.secondmentToCompany as string | undefined),
+    isActiveThisSession: (row) => !!(row.secondmentToCompany as string | undefined) && !(row.prevSecondmentToCompany as string | undefined),
+  },
+
   availableFor: (row, ms) =>
     isRegularEmployee(row, ms) && isMainAssignment(row) && !wasSecondedOut(row),
 
@@ -113,6 +126,12 @@ export const secondmentInSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => !!(row.secondmentFromCompany as string | undefined),
+    isActiveThisSession: (row) => !!(row.secondmentFromCompany as string | undefined) && !(row.prevSecondmentFromCompany as string | undefined),
+  },
+
   availableFor: (row, ms) =>
     !isSecondmentAcceptance(row, ms) && isMainAssignment(row) && !wasSecondedIn(row),
 
@@ -158,6 +177,12 @@ export const secondmentInNonSFDef: EditOperation = {
   label:      '本務出向受入（SF非統合先）',
   group:      'person',
   badge: 'secondment',
+
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => !!(row.secondmentFromCompany as string | undefined),
+    isActiveThisSession: (row) => !!(row.secondmentFromCompany as string | undefined) && !(row.prevSecondmentFromCompany as string | undefined),
+  },
 
   availableFor: (row, ms) =>
     !isSecondmentAcceptance(row, ms) && isMainAssignment(row) && !wasSecondedIn(row),
@@ -489,13 +514,11 @@ export const concurrentSecondmentOutSFDef: EditOperation = {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
     const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
 
     const newRow: AllocationRow = {
       ...src,
       ...posClears,
-      ...allocClears,
       ...orgSub,
       rowId:                   newRowId,
       positionCode:            `_pos_${newRowId}`,
@@ -554,14 +577,12 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
     const deptCode = (values.departmentCode as string | undefined) ?? ''
     const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
 
     const newRow: AllocationRow = {
       ...src,
       ...posClears,
-      ...allocClears,
       ...orgSub,
       rowId:                   newRowId,
       positionCode:            `_pos_${newRowId}`,
@@ -621,13 +642,11 @@ export const concurrentSecondmentInSFDef: EditOperation = {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
     const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
 
     const newRow: AllocationRow = {
       ...src,
       ...posClears,
-      ...allocClears,
       ...orgSub,
       rowId:                         newRowId,
       positionCode:                  `_pos_${newRowId}`,
@@ -688,13 +707,11 @@ export const concurrentSecondmentInNonSFDef: EditOperation = {
     const src = ctx.allocationList.find(r => r.rowId === rowId)!
     const newRowId = nextRowId(ctx.allocationList)
     const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
     const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
 
     const newRow: AllocationRow = {
       ...src,
       ...posClears,
-      ...allocClears,
       ...orgSub,
       rowId:                         newRowId,
       positionCode:                  `_pos_${newRowId}`,
@@ -812,7 +829,7 @@ const inReleaseInputs = [
 ] as const
 
 const inReleaseInitial = () => ({
-  transferReason: '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+  transferReason: TR.CONCURRENT_OR_SECONDMENT_IN_RELEASE,
 })
 
 // ── 本務出向受入解除（SF導入先） ──────────────────────────────────────────────
@@ -1019,7 +1036,8 @@ const cancelDescription = 'このセッションで追加した出向受入を�
 export const secondmentInCancelSFDef: EditOperation = {
   id: 'SecondmentInCancelSF', label: '本務出向受入取消（SF導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) => isMainAssignment(row) && isCancelAvailableSF(row, ms),
+  operationRole: { kind: 'lockCancel', of: 'SecondmentInSF' },
+  availableFor: (row) => isMainAssignment(row),
   description: cancelDescription,
   suppressSideEffectWarning: true,
   inputs: [
@@ -1051,7 +1069,8 @@ export const secondmentInCancelSFDef: EditOperation = {
 export const secondmentInCancelNonSFDef: EditOperation = {
   id: 'SecondmentInCancelNonSF', label: '本務出向受入取消（SF未導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) => isMainAssignment(row) && isCancelAvailableNonSF(row, ms),
+  operationRole: { kind: 'lockCancel', of: 'SecondmentInNonSF' },
+  availableFor: (row) => isMainAssignment(row),
   description: cancelDescription,
   suppressSideEffectWarning: true,
   inputs: [

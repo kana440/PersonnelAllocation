@@ -3,6 +3,7 @@ import type { Organization } from '@personnel/domain/schemas'
 import type { Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
+import type { DropIntentState } from './hooks/useDropIntent'
 
 export interface DragData {
   dragType?:       'person' | 'position'
@@ -39,6 +40,13 @@ export interface OrgViewContextValue {
   highlightedOrgId:         string | null
   dragOverVacantRowId:      number | null
   setDragOverVacantRowId:   (id: number | null) => void
+  /** 人物カードの上にドラッグ中の rowId */
+  dropPersonRowId:          number | null
+  setDropPersonRowId:       (v: number | null) => void
+  /** カード間ギャップにドラッグ中: ギャップの直上カードの rowId */
+  dropGapBelowRowId:        number | null
+  setDropGapBelowRowId:     (v: number | null) => void
+  openDropIntent:           (state: DropIntentState) => void
   handleDragOver:           (e: React.DragEvent, orgId: string) => void
   handleDragLeave:          () => void
   handleDrop:               (e: React.DragEvent, orgId: string) => void
@@ -50,11 +58,11 @@ export interface OrgViewContextValue {
   setConfirmDialog:         (d: { message: string; onConfirm: () => void } | null) => void
   isSelectMode:             boolean
   selectedPersonIds:        Set<string>
-  handlePersonClick:        (personId: string, panelId: string, mods: { ctrl: boolean; shift: boolean }) => void
+  handlePersonClick:        (personId: string, panelId: string, mods: { ctrl: boolean; shift: boolean }, rowId?: number) => void
   addPersonsToSelection:    (ids: Set<string>) => void
   clearSelection:           () => void
-  selectedPersonId:         string | null
-  selectPerson:             (id: string) => void
+  selectedCardRowId:        number | null
+  selectCard:               (rowId: number | null) => void
   isHistoryPreviewMode:         boolean
   handlePersonDoubleClick:      (id: string) => void
   handleRowDoubleClick:         (e: React.MouseEvent, rowId: number) => void

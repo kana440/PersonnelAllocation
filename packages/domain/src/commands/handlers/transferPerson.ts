@@ -41,8 +41,7 @@ export class TransferPersonOperation implements EditCommand {
     const targetPosSet = new Set(targetRows.map(r => r.positionCode).filter(Boolean))
     const topRow       = targetRows.find(r => !r.managerPositionCode || !targetPosSet.has(r.managerPositionCode))
 
-    const allocClears = Object.fromEntries(afterKeysByBinding('allocation').map(k => [k, undefined]))
-    const newRowId    = nextRowId(ctx.allocationList)
+    const newRowId = nextRowId(ctx.allocationList)
 
     const newManagerPositionCode = this.overrideFields?.managerPositionCode !== undefined
       ? (this.overrideFields.managerPositionCode as string | undefined)
@@ -54,8 +53,6 @@ export class TransferPersonOperation implements EditCommand {
       departmentCode:      targetCode,
       ...deriveOrgSubFields(targetCode, ctx.masters),
       managerPositionCode: newManagerPositionCode,
-      ...allocClears,
-      // managerName は allocClears で一度消えるため、positionCode 確定後に再セット
       managerName:         deriveManagerName(newManagerPositionCode, ctx.allocationList),
       ...(this.overrideFields ?? {}),
     }
@@ -70,12 +67,11 @@ export class TransferPersonOperation implements EditCommand {
       updatedList = [...ctx.allocationList.filter(r => r.rowId !== this.sourceRowId), newRow]
     } else {
       // Vacate the old position (clear person fields)
-      const personClears = Object.fromEntries(afterKeysByBinding('person').map(k => [k, undefined]))
+      const jobInfoClears = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
       const vacantSource: AllocationRow = {
         ...sourceRow,
         userId: undefined,
-        ...personClears,
-        ...allocClears,
+        ...jobInfoClears,
       }
       updatedList = [
         ...ctx.allocationList.map(r => r.rowId === this.sourceRowId ? vacantSource : r),

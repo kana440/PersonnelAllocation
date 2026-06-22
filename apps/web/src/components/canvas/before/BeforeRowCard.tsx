@@ -1,23 +1,30 @@
+import type { Person }        from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { Person } from '@personnel/domain/schemas'
-import { useBeforeOrgView } from './BeforeOrgViewContext'
+import { useStore }           from '../../../store/useStore'
+import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
+import { useBeforeOrgView }   from './BeforeOrgViewContext'
+import { getBeforePositionTitle, getEmpBorderClass } from '../panel/helpers'
 
 interface Props {
-  row:   AllocationRow
-  orgId: string  // この行が属する before-org の id
+  row:    AllocationRow
+  orgId:  string
+  depth?: number
 }
 
-export function BeforeRowCard({ row, orgId }: Props) {
+export function BeforeRowCard({ row, orgId, depth = 0 }: Props) {
   const {
     persons, afterOrganizations, beforeOrganizations,
     comparisonOrgMapping, selectedIds, toggleSelect,
   } = useBeforeOrgView()
 
-  const person     = persons.find((p: Person) => p.sfPersonId === row.userId)
-  const name       = person?.name ?? row.userId ?? '（空席）'
-  const isSelected = !!row.userId && selectedIds.has(row.userId)
+  const masters           = useStore(s => s.masters)
+  const selectedCardRowId = useStore(s => s.selectedCardRowId)
+  const selectCard        = useStore(s => s.selectCard)
+  const { requestScrollToRow } = useCanvasLayoutStore()
 
-  // 移動先の判定
+  const person  = persons.find((p: Person) => p.sfPersonId === row.userId)
+  const isVacant = !person
+
   const beforeOrg      = beforeOrganizations.find(o => o.id === orgId)
   const mappedAfterId  = comparisonOrgMapping[orgId]
   const mappedAfterOrg = mappedAfterId ? afterOrganizations.find(o => o.id === mappedAfterId) : null
@@ -25,7 +32,23 @@ export function BeforeRowCard({ row, orgId }: Props) {
   const toMapped       = !stayed && !!mappedAfterOrg && row.departmentCode === mappedAfterOrg.externalCode
   const destOrg        = !stayed ? afterOrganizations.find(o => o.externalCode === row.departmentCode) : null
 
-  // stayed → 濃いグレー「在」 / toMapped → 薄いグレー「→」 / elsewhere → オレンジ「→」
+  const isSingleSelected = selectedCardRowId === row.rowId
+  const isMultiSelected  = !!person && selectedIds.has(person.id)
+
+  const posTitle  = getBeforePositionTitle(row)
+  const empBorder = getEmpBorderClass(row, masters.employmentTypes)
+
+  const bgClass = isSingleSelected ? 'bg-yellow-50'
+    : isMultiSelected               ? 'bg-blue-50'
+    : isVacant                      ? 'bg-gray-50'
+    : 'bg-white'
+
+  const borderColorClass = isSingleSelected
+    ? 'border-yellow-400 ring-1 ring-yellow-300'
+    : isMultiSelected
+      ? 'border-blue-300 ring-1 ring-blue-200'
+      : 'border-gray-200'
+
   const badgeCls = stayed
     ? 'bg-gray-200 text-gray-600'
     : toMapped
@@ -33,21 +56,48 @@ export function BeforeRowCard({ row, orgId }: Props) {
       : 'bg-orange-100 text-orange-600'
 
   return (
+    <div data-before-rowid={row.rowId} style={depth ? { paddingLeft: `${depth * 12}px` } : undefined}>
     <div
-      data-before-personid={row.userId ?? ''}
-      className={`flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer transition-colors
-        ${isSelected ? 'bg-blue-50 ring-1 ring-blue-300' : 'hover:bg-amber-50/60'}`}
-      onClick={e => row.userId && toggleSelect(row.userId, e.ctrlKey || e.metaKey)}
+      className={`my-0.5 px-2 py-1 text-xs rounded border border-l-4 shadow-sm select-none min-w-0 cursor-pointer
+        ${empBorder} ${borderColorClass} ${bgClass}`}
+      onClick={e => {
+        if (e.ctrlKey || e.metaKey) {
+          if (person) toggleSelect(person.id, true)
+        } else {
+          selectCard(row.rowId, 'before')
+          requestScrollToRow(row.rowId)
+        }
+      }}
     >
-      <span className={`flex-shrink-0 text-[8px] font-bold px-0.5 rounded ${badgeCls}`}>
-        {stayed ? '在' : '→'}
-      </span>
-      <span className="flex-1 text-[10px] text-gray-800 truncate">{name}</span>
-      {!stayed && destOrg && (
-        <span className={`text-[9px] truncate flex-shrink-0 max-w-[65px] ${toMapped ? 'text-gray-400' : 'text-orange-500'}`}>
-          {destOrg.name}
-        </span>
+      {/* 1行目: 氏名 + 在/→ バッジ */}
+      <div className="flex items-center gap-1 min-w-0">
+        {isVacant ? (
+          <span className="italic truncate flex-1 text-gray-400">（空席）</span>
+        ) : (
+          <span className="font-semibold text-gray-800 truncate flex-1 leading-tight">{person!.name}</span>
+        )}
+        {!isVacant && (
+          <span className={`flex-shrink-0 text-[8px] font-bold px-0.5 rounded ${badgeCls}`}>
+            {stayed ? '在' : '→'}
+          </span>
+        )}
+      </div>
+
+      {/* 2行目: ポジション + 雇用タイプ + 移動先組織 */}
+      {!isVacant && (posTitle || row.prevEmploymentType || !stayed) && (
+        <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+          {posTitle && <span className="text-gray-600 truncate flex-1">{posTitle}</span>}
+          {row.prevEmploymentType && (
+            <span className="flex-shrink-0 text-[9px] text-gray-400 truncate max-w-[4rem]">{row.prevEmploymentType}</span>
+          )}
+          {!stayed && destOrg && (
+            <span className={`flex-shrink-0 text-[9px] truncate max-w-[60px] ${toMapped ? 'text-gray-400' : 'text-orange-500'}`}>
+              {destOrg.name}
+            </span>
+          )}
+        </div>
       )}
+    </div>
     </div>
   )
 }

@@ -3,6 +3,9 @@ export const TR = {
   // 個別対応系（人操作）
   LEAVE_AND_RETURN:  '【個別対応】4/1付休職・復職',
   TRANSFER:          '【個別】4/1付移籍',
+  // 個別対応系（雇用）
+  EMPLOYMENT_EXTENSION_PROCEDURE: '【個別対応】3月末雇用延長手続対象者（新規・更新）',
+  EMPLOYMENT_TYPE_CHANGE_PROCEDURE: '【個別対応】従業員区分変更（社員⇔社員B・嘱託など）',
   // 対応なし系
   TERMINATION: '【対応なし】3月末までに退職／解任済み',
   NO_CHANGE:   '【対応なし】変更なし',
@@ -10,6 +13,10 @@ export const TR = {
   ORG_TRANSFER:    '社内異動',
   ORG_RESTRUCTURE: '組織改変',
   MANAGER_CHANGE:  '上司変更',
+  // 分掌移動（組織改変に伴う異動事由）
+  DIV_TRANSFER:            '分掌移動',
+  DIV_TRANSFER_REFORM:     '分掌移動（改組）',
+  DIV_TRANSFER_RESTRUCTURE: '分掌移動（組改）',
 
   CONCURRENT:     '兼務追加',
   // 職務分類

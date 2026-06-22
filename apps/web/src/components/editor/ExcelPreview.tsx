@@ -64,7 +64,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
   }, [])
 
   // クリック選択・ダブルクリック編集
-  const { persons, selectedPersonId, selectedRowId, selectRow, enterOperationPanel, selectPersonAndFocusOrg } = store
+  const { persons, selectedCardRowId, selectedRowId, selectRow, enterOperationPanel, selectPersonAndFocusOrg } = store
 
   // ── 右クリックコンテキストメニュー ──────────────────────────
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
@@ -104,13 +104,13 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
     }, [])
   }, [rows, searchTerm, searchCols])
 
-  // selectedPersonId / selectedRowId が変わったらその行へジャンプ
+  // selectedCardRowId が変わったらその行へジャンプ
   useEffect(() => {
-    if (!store.selectedPersonId) return
-    const idx = filteredRows.findIndex(r => r.userId && `p_${r.userId}` === store.selectedPersonId)
+    if (selectedCardRowId === null) return
+    const idx = filteredRows.findIndex(r => r.rowId === selectedCardRowId)
     if (idx >= 0) scrollToRowIdx(idx)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.selectedPersonId])
+  }, [selectedCardRowId])
 
   useEffect(() => {
     if (store.selectedRowId === null) return
@@ -334,7 +334,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
               const isCurrent = isMatch && matchIndices[safeMatchIdx] === i
 
               const matchedPerson = row.userId ? persons.find(p => p.sfPersonId === row.userId) : undefined
-              const isPersonSelected = matchedPerson && selectedPersonId === matchedPerson.id
+              const isPersonSelected = selectedCardRowId === row.rowId
               const isRowSelected    = selectedRowId === row.rowId
 
               const baseBg = isRowSelected

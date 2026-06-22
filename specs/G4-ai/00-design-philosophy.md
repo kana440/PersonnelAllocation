@@ -66,15 +66,23 @@ aiTools.ts へのルーティングと、LLM が解釈できる形式への変�
 
 ---
 
-## 3. ツール種別（3-kind タクソノミー）
+## 3. ツール種別（5-kind タクソノミー）
 
 `agentRunner.ts` が参照する実行プロトコルの分類。
 
-| kind | 副作用 | 戻り値 | ユーザー確認 |
-|---|---|---|---|
-| `read` | なし | JSON（LLM に返す） | 不要 |
-| `render` | なし | `{ summary, widget }`（widget は UI に表示） | 不要 |
-| `confirm` | あり（ドメイン変更） | ユーザー承認後に結果 | 必須 |
+| kind | 副作用 | 戻り値 | ユーザー確認 | Fast Path |
+|---|---|---|---|---|
+| `read` | なし | JSON（LLM に返す） | 不要 | ✅ |
+| `render` | なし | `{ summary, widget }`（widget は UI に表示） | 不要 | ✅ |
+| `navigate` | UI 状態のみ（ドメイン変更なし） | JSON（LLM に返す） | 不要 | ✅ |
+| `execute` | あり（ドメイン変更・即時） | JSON（LLM に返す） | 不要 | ❌ |
+| `confirm` | あり（ドメイン変更） | ユーザー承認後に結果 | 必須 | ❌ |
+
+### `navigate` の位置づけ
+
+UIの表示状態（フォーカス・フォームの開閉・フォーム入力値）を変更するが、
+ドメインデータ（`allocationList`）には触れない。
+Fast Path で安全に使用でき、`ui_` プレフィックスで命名する。
 
 ### `render` の位置づけ
 
@@ -90,10 +98,12 @@ aiTools.ts へのルーティングと、LLM が解釈できる形式への変�
 ```
 1. aiTools.ts にビジネスロジックのメソッドを追加する
 2. toolRegistry.ts に ToolEntry を追加し、aiTools のメソッドを呼ぶ
-3. read/render/confirm のどれかを選択する
+3. read / render / navigate / execute / confirm のどれかを選択する
    - 状態を読むだけ → read
    - 状態を読んで Widget も返す → render
-   - 状態を変更する → confirm（ユーザー確認付き）
+   - UI の表示を変えるだけ（ドメイン変更なし）→ navigate（ui_ prefix）
+   - 状態を即時変更（確認不要） → execute
+   - 状態を変更するがユーザー確認が必要 → confirm
 ```
 
 ### ❌ やってはいけないこと

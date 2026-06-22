@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useOrgView } from '../OrgViewContext'
+import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { subtreeRowCount, hasAnyRows } from './helpers'
 import { RowCard } from './RowCard'
 import type { PersonStatus } from '../comparison/types'
@@ -31,20 +32,24 @@ export function OrgSection({
   comparisonByRowId,
 }: OrgSectionProps) {
   const { organizations, positionTreeByOrgId } = useOrgView()
+  const showVacantPositions = useCanvasLayoutStore(s => s.showVacantPositions)
   const [open, setOpen] = useState(true)
 
-  const entries    = positionTreeByOrgId.get(orgId) ?? []
+  const allEntries = positionTreeByOrgId.get(orgId) ?? []
+  const entries    = showVacantPositions
+    ? allEntries
+    : allEntries.filter(e => !e.row.positionCode || !!e.row.userId)
+  const hasRowsFn  = (id: string) => positionTreeByOrgId.has(id)
   const childOrgs  = organizations.filter(
-    o => o.parentId === orgId && hasAnyRows(o.id, organizations, positionTreeByOrgId),
+    o => o.parentId === orgId && hasAnyRows(o.id, organizations, hasRowsFn),
   )
   const org        = organizations.find(o => o.id === orgId)
-  const totalCount = subtreeRowCount(orgId, organizations, positionTreeByOrgId)
+  const totalCount = subtreeRowCount(orgId, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
 
-  if (entries.length === 0 && childOrgs.length === 0) return null
+  if (allEntries.length === 0 && childOrgs.length === 0) return null
 
   return (
     <div>
-      {/* 子組織のセクションヘッダ（ルートは OrgPanel のヘッダが代わる） */}
       {!isRoot && org && (
         <button
           onClick={() => setOpen(v => !v)}
@@ -56,7 +61,6 @@ export function OrgSection({
         </button>
       )}
 
-      {/* 直接メンバー + 子組織セクション */}
       {(isRoot || open) && (
         <div className={!isRoot ? 'pl-2 border-l border-gray-100 ml-1' : undefined}>
           {entries.map(entry => {

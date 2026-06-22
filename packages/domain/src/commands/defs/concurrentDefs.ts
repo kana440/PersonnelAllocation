@@ -5,6 +5,7 @@ import type { AllocationRow } from '../../allocationRow'
 import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { isMainAssignment } from '../helpers'
+import { TR } from '../../transferReasonLabels'
 
 function inputName(values: Partial<AllocationRow>): string {
   return [values.lastName, values.firstName].filter(Boolean).join(' ') || '（氏名未入力）'
@@ -229,7 +230,7 @@ export const concurrentReleaseDef: EditOperation = {
   ],
 
   onOpen: () => ({
-    transferReason: '社内兼務解除、兼務出向解除、出向受入・兼務出向受入解除',
+    transferReason: TR.CONCURRENT_OR_SECONDMENT_IN_RELEASE,
   }),
 
   onValidate(ctx, rowId, _values) {

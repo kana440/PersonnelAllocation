@@ -34,4 +34,9 @@ export const TOOL_LABELS: Record<string, string> = {
   propose_secondment_to_concurrent:'本務出向→兼務出向変換',
   propose_secondment_transfer:     '出向先転籍',
   propose_demotion:                '降格',
+  ui_open_operation:               'フォームを開く',
+  ui_get_form_state:               'フォーム状態確認',
+  ui_suggest_form_field:           'フォーム値を設定',
+  ui_show_person:                  '画面フォーカス',
+  ui_focus_row:                    '画面フォーカス',
 }

@@ -9,17 +9,18 @@ export type AllocationRow = AllocationList & {
 }
 
 // ── FieldBinding ──────────────────────────────────────────────────────────────
-// 各フィールドがポジション・人・配属のどれに属するかを示す。
+// 各フィールドがポジション・人のどれに属するかを示す。
 // 操作時（移動・削除・紐付け解除）のコピー/リセット挙動を決定する。
 //
-//   position   : ポジション連動。席ごと移動、ポジション削除でblank
-//   person     : 人連動。人と一緒に移動、人削除でblank
-//   both       : 両方連動。どちらが動いても追従
-//   allocation : 紐付け属性。ポジション↔人の解除でリセット（blank）
-//   meta       : トランザクションメタ。行固有、操作間でコピーしない
+//   position : ポジション連動。席ごと移動、ポジション削除でblank
+//   person   : 人連動。人と一緒に移動、人削除でblank
+//   both     : 両方連動。どちらが動いても追従
+//
+// ※ meta 扱いのフィールド（transferReason / memo / promotionSign 等）は
+//   FIELD_METADATA に含めない。操作ハンドラーが個別にクリアする。
 //
 // 詳細: docs/09-position-person-domain.md
-export type FieldBinding = 'position' | 'person' | 'both' | 'allocation' | 'meta'
+export type FieldBinding = 'position' | 'jobInfo' | 'both'
 
 export interface FieldMeta {
   readonly after:   keyof AllocationList
@@ -35,7 +36,6 @@ export interface FieldMeta {
 export const FIELD_METADATA: ReadonlyArray<FieldMeta> = [
   // ── position ────────────────────────────────────────────────────────────────
   { after: 'positionCode',               before: 'prevPositionCode',               binding: 'position' },
-  { after: 'departmentCode',             before: 'prevDepartmentCode',             binding: 'both'     }, // 組織はポジションにも人にも属する
   { after: 'officialPositionCode',       before: 'prevOfficialPositionCode',       binding: 'position' },
   { after: 'localJobTitle',              before: 'prevLocalJobTitle',              binding: 'position' },
   { after: 'managerPositionCode',        before: 'prevManagerPositionCode',        binding: 'position' },
@@ -43,32 +43,35 @@ export const FIELD_METADATA: ReadonlyArray<FieldMeta> = [
   { after: 'positionUnionFlag',          before: 'prevPositionUnionFlag',          binding: 'position' },
   { after: 'positionDiscretionaryWorkFlag', before: 'prevPositionDiscretionaryWorkFlag', binding: 'position' },
   { after: 'trainingPositionFlag',       before: 'prevTrainingPositionFlag',       binding: 'position' },
-  { after: 'jobFamily',                  before: 'prevJobFamily',                  binding: 'position' },
-  { after: 'jobType',                    before: 'prevJobType',                    binding: 'position' },
-  { after: 'businessUnit',              before: 'prevBusinessUnit',               binding: 'position' },
-  { after: 'division',                   before: 'prevDivision',                   binding: 'position' },
-  { after: 'subDivision',               before: 'prevSubDivision',               binding: 'position' },
-  { after: 'group',                      before: 'prevGroup',                      binding: 'position' },
-  { after: 'team',                       before: 'prevTeam',                       binding: 'position' },
-  { after: 'location',                   before: 'prevLocation',                   binding: 'position' },
-  { after: 'costCenter',                 before: 'prevCostCenter',                 binding: 'position' },
+
+  // ── both ──────────────────────────────────────────────────────────────────
+  { after: 'jobFamily',                  before: 'prevJobFamily',                  binding: 'both' },
+  { after: 'jobType',                    before: 'prevJobType',                    binding: 'both' },
+  { after: 'departmentCode',             before: 'prevDepartmentCode',             binding: 'both'     }, // 組織はポジションにも人にも属する
+  { after: 'businessUnit',              before: 'prevBusinessUnit',               binding: 'both' },
+  { after: 'division',                   before: 'prevDivision',                   binding: 'both' },
+  { after: 'subDivision',               before: 'prevSubDivision',               binding: 'both' },
+  { after: 'group',                      before: 'prevGroup',                      binding: 'both' },
+  { after: 'team',                       before: 'prevTeam',                       binding: 'both' },
+  { after: 'location',                   before: 'prevLocation',                   binding: 'both' },
+  { after: 'costCenter',                 before: 'prevCostCenter',                 binding: 'both' },
 
   // ── person ──────────────────────────────────────────────────────────────────
-  { after: 'employmentType',             before: 'prevEmploymentType',             binding: 'person' },
-  { after: 'band',                       before: 'prevBand',                       binding: 'person' },
-  { after: 'payGrade',                   before: 'prevPayGrade',                   binding: 'person' },
-  { after: 'unionFlag',                  before: 'prevUnionFlag',                  binding: 'person' },
-  { after: 'discretionaryWorkFlag',      before: 'prevDiscretionaryWorkFlag',      binding: 'person' },
-  { after: 'nonUnionAgreementFlag',      before: 'prevNonUnionAgreementFlag',      binding: 'person' },
-  { after: 'leaveOfAbsenceSign',                  before: 'prevLeaveOfAbsenceSign',                  binding: 'person' },
+  { after: 'employmentType',             before: 'prevEmploymentType',             binding: 'jobInfo' },
+  { after: 'band',                       before: 'prevBand',                       binding: 'jobInfo' },
+  { after: 'payGrade',                   before: 'prevPayGrade',                   binding: 'jobInfo' },
+  { after: 'unionFlag',                  before: 'prevUnionFlag',                  binding: 'jobInfo' },
+  { after: 'discretionaryWorkFlag',      before: 'prevDiscretionaryWorkFlag',      binding: 'jobInfo' },
+  { after: 'nonUnionAgreementFlag',      before: 'prevNonUnionAgreementFlag',      binding: 'jobInfo' },
+  { after: 'leaveOfAbsenceSign',                  before: 'prevLeaveOfAbsenceSign',                  binding: 'jobInfo' },
 
   // ── allocation ──────────────────────────────────────────────────────────────
-  { after: 'concurrentType',             before: 'prevConcurrentType',             binding: 'allocation' },
-  { after: 'concurrentReason',           before: 'prevConcurrentReason',           binding: 'allocation' },
-  { after: 'secondmentFromCompany',      before: 'prevSecondmentFromCompany',      binding: 'allocation' },
-  { after: 'secondmentFromEmployeeNumber', before: 'prevSecondmentFromEmployeeNumber', binding: 'allocation' },
-  { after: 'secondmentToCompany',        before: 'prevSecondmentToCompany',        binding: 'allocation' },
-  { after: 'managerName',                before: 'prevManagerName',                binding: 'allocation' },
+  { after: 'concurrentType',             before: 'prevConcurrentType',             binding: 'jobInfo' },
+  { after: 'concurrentReason',           before: 'prevConcurrentReason',           binding: 'jobInfo' },
+  { after: 'secondmentFromCompany',      before: 'prevSecondmentFromCompany',      binding: 'jobInfo' },
+  { after: 'secondmentFromEmployeeNumber', before: 'prevSecondmentFromEmployeeNumber', binding: 'jobInfo' },
+  { after: 'secondmentToCompany',        before: 'prevSecondmentToCompany',        binding: 'jobInfo' },
+  { after: 'managerName',                before: 'prevManagerName',                binding: 'position' },
 ] as const satisfies ReadonlyArray<FieldMeta>
 
 // ── ヘルパー ──────────────────────────────────────────────────────────────────

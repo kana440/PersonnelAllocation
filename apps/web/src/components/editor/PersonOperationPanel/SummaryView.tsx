@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { rowDiff, type AllocationRow } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
-import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS } from '@personnel/domain/commands/defs/index'
+import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS, resolveAvailability } from '@personnel/domain/commands/defs/index'
 import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 import { useUnavailableOperationDisplay } from '../../../hooks/useFieldStrictness'
 import type { PanelView } from './types'
@@ -84,11 +84,14 @@ const SECTIONS: { label: string; ops: SectionEntry[] }[] = [
   {
     label: '在籍・退職',
     ops: [
-      { id: 'LeaveOfAbsence',       shortLabel: '休職' },
-      { id: 'LeaveOfAbsenceCancel', shortLabel: '休職取消', cancel: true },
-      { id: 'ReturnFromLeave',      shortLabel: '復職' },
-      { id: 'EmploymentTransfer',   shortLabel: '移籍' },
-      { id: 'NoChange',             shortLabel: '変更なし' },
+      { id: 'LeaveOfAbsence',            shortLabel: '休職' },
+      { id: 'LeaveOfAbsenceCancel',     shortLabel: '休職取消',  cancel: true },
+      { id: 'ReturnFromLeave',          shortLabel: '復職' },
+      { id: 'ReturnFromLeaveCancel',    shortLabel: '復職取消',  cancel: true },
+      { id: 'EmploymentTransfer',       shortLabel: '移籍' },
+      { id: 'EmploymentTransferCancel', shortLabel: '移籍取消',  cancel: true },
+      { id: 'NoChange',                 shortLabel: '変更なし' },
+      { id: 'NoChangeCancel',           shortLabel: '変更なし\n取消',  cancel: true },
     ],
   },
 ]
@@ -108,6 +111,7 @@ interface Props {
 export function SummaryView({ row, onSelect }: Props) {
   const { masters, afterOrganizations, allocationList } = useStore()
   const unavailableDisplay = useUnavailableOperationDisplay()
+
 
   const diffs   = useMemo(() => rowDiff(row), [row])
   const orgName = afterOrganizations.find(
@@ -173,7 +177,7 @@ export function SummaryView({ row, onSelect }: Props) {
             // EditOperation
             const def = editOpById.get(entry.id)
             if (!def) return []
-            const available = def.availableFor(row, masters)
+            const available = resolveAvailability(def, row, masters)
             if (!available && unavailableDisplay === 'hide') return []
             return [{
               key:        def.id,

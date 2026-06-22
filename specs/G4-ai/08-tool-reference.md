@@ -2,17 +2,155 @@
 
 > このドキュメントは現在の実装と一致する確定済みツール仕様。
 > 設計変更があったら必ずここを更新する。
-> 古い仕様は `01-tools-spec.md` を参照（削除予定）。
 
 ---
 
 ## ツール分類
 
-| kind | 動作 | 副作用 |
-|---|---|---|
-| `read` | 即時実行、結果を LLM に返す | なし |
-| `render` | ウィジェットを UI に表示、サマリーを LLM に返す | UI 表示のみ |
-| `confirm` | DryRun → 確認UI → 承認後に実行 | ドメイン状態変更 |
+| kind | 動作 | 副作用 | Fast Path |
+|---|---|---|---|
+| `read` | 即時実行、結果を LLM に返す | なし | ✅ |
+| `render` | ウィジェットを UI に表示、サマリーを LLM に返す | UI 表示のみ | ✅ |
+| `navigate` | UI の表示状態を変更、結果を LLM に返す | UI 状態のみ（ドメインデータ変更なし） | ✅ |
+| `execute` | 即時実行（ドメイン変更） | ドメイン状態変更 | ❌ |
+| `confirm` | DryRun → 確認UI → 承認後に実行 | ドメイン状態変更 | ❌ |
+
+**Fast Path** は `read` / `render` / `navigate` の3種のみ公開する。
+`execute` / `confirm` は Structured Path（スキル起動後）でのみ使用可能。
+
+---
+
+## UIナビゲーションツール（navigate — `ui_` プレフィックス）
+
+> データは一切変更しない。画面表示・フォーム状態のみ操作する。
+> Fast Path でも使用可能。
+
+### `ui_show_person`（navigate）
+
+```
+引数（いずれか1つ以上）:
+  name?:            string   氏名（部分一致）
+  userId?:          string   SF Person ID（部分一致）
+  groupEmployeeId?: string   グループ社員ID（部分一致）
+  employeeNumber?:  string   社員番号（部分一致）
+
+戻り値:
+  ok:      boolean
+  message: string   "〇〇 にフォーカスしました（他N件ヒット）" など
+  rowId?:  number
+```
+
+**用途**: 「〇〇さんを見せて」→ 検索してキャンバス上でフォーカス（1ステップで完結）。
+人物データを取得したいだけなら `findPersons` を使うこと。
+
+---
+
+### `ui_focus_row`（navigate）
+
+```
+引数:
+  rowId: number   フォーカス対象の rowId（findPersons の positions[].rowId）
+
+戻り値:
+  ok:      boolean
+  message: string
+```
+
+**用途**: rowId が既に分かっているときのフォーカス。
+名前で検索してフォーカスするなら `ui_show_person` を使う。
+
+---
+
+### `ui_open_operation`（navigate）
+
+```
+引数:
+  rowId:       number             必須（対象行の rowId）
+  operationId: string             必須（操作 ID）
+  prefill?:    Record<string, string>  事前入力する AllocationRow フィールド
+
+operationId の一覧（主なもの）:
+  Promotion / Demotion / TitleChange
+  OrgTransfer / OrgRestructure
+  LeaveOfAbsence / LeaveOfAbsenceCancel / ReturnFromLeave
+  EmploymentTypeChange / JobTypeChange
+  ManagerChange
+  SecondmentOutSF / SecondmentOutNonSF / SecondmentInSF / SecondmentInNonSF
+  EmploymentTransfer / NoChange
+
+戻り値:
+  ok:          boolean
+  message:     string
+  operationId: string
+  rowId:       number
+  prefillKeys: string[]   prefill したフィールド名の一覧
+```
+
+**用途**:
+- 「昇格フォームを開いて」→ UI で操作フォームを開く
+- AI が既知の値を `prefill` で事前入力し、ユーザーが残りを入力して送信する
+- AI はフォームを送信しない（ユーザーが最終確認して送信する）
+
+**典型的な呼び出し順**:
+1. `findPersons` で `rowId` を確認
+2. `getFieldOptions(rowId, field)` で有効な選択肢を確認
+3. `ui_open_operation` でフォームを開き `prefill` を渡す
+4. ユーザーが残りを入力して送信
+
+---
+
+### `ui_get_form_state`（read）
+
+```
+引数: なし
+
+戻り値（フォームが開いていない場合）:
+  open: false
+
+戻り値（フォームが開いている場合）:
+  open:        true
+  rowId:       number
+  operationId: string
+  values:      Partial<AllocationRow>   現在の入力値（未コミット）
+
+追加フィールド（Promotion / Demotion フォームの場合のみ）:
+  bandRecommendations: {
+    current:         string    現在の positionBand
+    oneStep:         string[]  1段階変更の候補（UIのデフォルトフィルタ）
+    twoStep:         string[]  2段階変更の候補
+    uiDefaultFilter: 'oneStep'
+    note:            string
+  }
+```
+
+**用途**: 現在開いているフォームの操作種別・入力中の値を読む。
+フォームが開いていないときは `ui_open_operation` を先に呼ぶ。
+
+> **Promotion/Demotion 時の注意**: UI は `BandStepFilter` により positionBand を1段階上（または下）に絞り込んで表示する。
+> `bandRecommendations.oneStep` が UIのデフォルト推奨候補なので、通常はここから選ぶ。
+> 「どのバンドに変更すべきか」を聞かれたら `oneStep` を回答する。
+
+---
+
+### `ui_suggest_form_field`（navigate）
+
+```
+引数:
+  field: string   設定するフィールド名（AllocationRow のキー）
+  value: string   設定する値（空文字でクリア）
+
+戻り値:
+  ok:      boolean
+  field:   string
+  value:   string
+  message: string
+```
+
+**用途**: 開いているフォームのフィールドに値をセットする。
+- `onFieldChange` の連動導出（positionBand → band → payGrade など）も正しく走る
+- フォームの送信はユーザーが行う（AI は送信しない）
+- 事前に `ui_get_form_state` でフォームが開いていることを確認すること
+- 設定する値は `getFieldOptions(rowId, field)` で有効な選択肢を確認してから渡すこと
 
 ---
 
@@ -37,11 +175,14 @@
       rowId, departmentCode, orgName, localJobTitle
       positionBand, band, payGrade, officialPositionCode
       concurrentType?, leaveOfAbsenceSign?, positionCode
+      availableOps: string[]   この行で現在実行可能な操作ラベルの一覧
     }>
   }>
 ```
 
-**用途**: 人物を探して rowId を取得する。`positions[].rowId` を propose_* に渡す。
+**用途**: 人物を探して rowId を取得する。`positions[].rowId` を propose_* や ui_* に渡す。
+`availableOps` は `EditOperation.availableFor` をリアルタイム評価した結果。
+「この人に何ができますか？」→ findPersons を呼んで `availableOps` を返す。
 
 ---
 
@@ -97,10 +238,10 @@
 引数: なし
 
 戻り値:
-  totalRows:   number   全行数
-  changedRows: number   変更のある行数
-  byKind:      Array<{ code: string; label: string; count: number }>  多い順
-  errorCount:  number
+  totalRows:    number   全行数
+  changedRows:  number   変更のある行数
+  byKind:       Array<{ code: string; label: string; count: number }>  多い順
+  errorCount:   number
   warningCount: number
 ```
 
@@ -182,10 +323,20 @@
   rowId: number
   field: string   フィールドキー
 
-戻り値:
+戻り値（通常）:
   options: string[]   有効な選択肢
   required: boolean
+
+戻り値（Promotion/Demotion フォーム中に positionBand を問い合わせた場合）:
+  options:            string[]   全選択肢
+  recommendedOptions: string[]   UIのフィルタ（1段階変更）に合わせた推奨候補
+  currentBand:        string     現在の positionBand
+  note:               string     昇格/降格フォームのデフォルト挙動の説明
 ```
+
+> **注意**: `ui_get_form_state` が開いている場合、未コミットのドラフト値（フォームで選択中の値）を加味した選択肢を返す。
+> Promotion/Demotion フォームで positionBand を問い合わせると `recommendedOptions`（1段階変更候補）が付加される。
+> どのバンドにするか悩んだときは `recommendedOptions` から選ぶ。
 
 ---
 
@@ -290,6 +441,16 @@ payGrade（自動）→ promotionSign / payGradeChangeSign（自動）
 
 「〇〇さんを探して」（情報確認目的）
   → findPersons
+
+「〇〇さんを見せて」「〇〇さんの場所を教えて」
+  → ui_show_person（検索+画面フォーカスを1ステップ）
+
+「〇〇さんの昇格フォームを開いて」
+  → findPersons → ui_open_operation（operationId: 'Promotion'）
+  ※ prefill に positionBand 等を渡すと事前入力される
+
+「今フォームに何を入力すれば？」「次は何を選べばいい？」
+  → ui_get_form_state → getFieldOptions（推奨選択肢付きで返る）
 
 「〇〇さんをB部門に異動させて」
   → propose_transfer（findPersons 不要。name フィルタで直接指定）

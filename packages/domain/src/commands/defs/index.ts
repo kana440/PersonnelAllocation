@@ -12,8 +12,8 @@
  *   2. ここの再エクスポートに追加
  */
 
-export type { EditOperation, OperationDef, OperationGroup, OperationInput, SectionDivider, FieldChangeEffect } from './types'
-export { isSectionDivider } from './types'
+export type { EditOperation, OperationDef, OperationGroup, OperationRole, OperationInput, InputRow, SectionDivider, FieldChangeEffect } from './types'
+export { isSectionDivider, isInputRow } from './types'
 export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
 
@@ -24,7 +24,7 @@ export { promotionDef, demotionDef, titleChangeDef } from './promotionDefs'
 export { jobTypeChangeDef, employmentExtensionDef } from './employmentTypeDefs'
 
 // ── 組織への異動 ──────────────────────────────────────────────────────────────
-export { orgTransferDef, orgRestructureDef, managerChangeDef } from './orgTransferDefs'
+export { orgTransferDef, orgRestructureDef } from './orgTransferDefs'
 
 // ── 兼務 ─────────────────────────────────────────────────────────────────────
 export { concurrentAddDef, concurrentAddNewDef, concurrentAddCancelDef, concurrentReleaseDef } from './concurrentDefs'
@@ -44,14 +44,15 @@ export {
 } from './secondmentDefs'
 
 // ── 在籍・退職 ────────────────────────────────────────────────────────────────
-export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employmentTransferDef, noChangeDef } from './personDefs'
+export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employmentTransferDef, noChangeDef, noChangeCancelDef } from './personDefs'
 
-// ── ポジション追加 ────────────────────────────────────────────────────────────
-export { addEmptyPositionDef } from './positionAddDef'
+// ── 上司変更・ポジション追加 ─────────────────────────────────────────────────
+export { managerChangeDef, addEmptyPositionDef } from './positionAddDef'
 
 import type { EditOperation } from './types'
 import type { EditCommand, DomainContext } from '../types'
 import type { AllocationRow } from '../../allocationRow'
+import type { AllMasters } from '../../masters/aggregate'
 import { DEFS as promotion }       from './promotionDefs'
 import { DEFS as employmentType }  from './employmentTypeDefs'
 import { DEFS as orgTransfer }     from './orgTransferDefs'
@@ -76,6 +77,31 @@ export const ALL_OPERATION_DEFS = ALL_EDIT_OPERATIONS
 // ── 複数行操作 ────────────────────────────────────────────────────────────────
 export type { MultiRowOperationDef, MultiRowFormSection } from './multiRowTypes'
 export { ALL_MULTI_ROW_OPERATION_DEFS, nonSFSecondmentOutDef } from './multiRowDefs'
+
+/**
+ * `operationRole` を考慮した availableFor 判定。
+ *
+ * lockCancel: 対応する lock の isActiveThisSession が true のときだけ表示。
+ * lock 含む通常操作: いずれかの lock が active なら全てブロック。
+ */
+export function resolveAvailability(
+  def:     EditOperation,
+  row:     AllocationRow,
+  masters: AllMasters,
+): boolean {
+  if (!def.availableFor(row, masters)) return false
+
+  const activeLock = ALL_EDIT_OPERATIONS.find(
+    d => d.operationRole?.kind === 'lock' && d.operationRole.isActiveThisSession(row),
+  )
+
+  if (def.operationRole?.kind === 'lockCancel') {
+    return activeLock?.id === def.operationRole.of
+  }
+
+  return !activeLock
+}
+
 
 /**
  * EditOperation にパラメータを束縛して EditCommand を生成する。

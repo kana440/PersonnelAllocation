@@ -46,9 +46,10 @@ function rootOrgId(orgId: string, map: Map<string, Organization>): string {
 
 // 編集モードに入る前のビュー状態スナップショット
 export interface PreviousViewState {
-  viewLabel:        string        // 戻るボタンのラベル（例: '組織図'）
-  focusedOrgId:     string | null
-  selectedPersonId: string | null
+  viewLabel:          string        // 戻るボタンのラベル（例: '組織図'）
+  focusedOrgId:       string | null
+  selectedPersonId:   string | null
+  selectedCardRowId:  number | null
 }
 
 // ── UI 専用状態 ───────────────────────────────────────────────────
@@ -59,7 +60,11 @@ interface UIState {
   workspaceMode:        'empty' | 'org' | 'person'
   focusedOrgId:         string | null
   beforeFocusedOrgId:   string | null
-  selectedPersonId:     string | null
+  /** キャンバスでハイライト中の組織 ID。人物選択と排他。canvasLayoutStore から移動 */
+  selectedOrgId:        string | null
+  selectedPersonId:     string | null   // ExcelPreview・EditViewCore・マルチ選択 seed 用（UUID）
+  selectedCardRowId:    number | null   // キャンバスカード・サイドバーのハイライトキー（rowId）
+  selectedCardSource:   'before' | 'after' | null  // どちらのキャンバスで選択されたか
   selectedRowId:        number | null   // 編集対象の AllocationRow
   personPickupViewMode: 'before' | 'after'
   memberPanelOrgId:     string | null
@@ -126,8 +131,15 @@ interface Actions {
   setOverviewViewMode:     (mode: 'before' | 'after') => void
   focusOrg:                (orgId: string) => void
   focusBefore:             (orgId: string) => void
+  /** 組織を選択しキャンバス中央へのスクロールを要求する。人物選択をクリアする */
+  selectOrg:               (orgId: string) => void
+  clearOrgSelection:       () => void
   selectPerson:            (personId: string) => void
+  /** キャンバスカード・サイドバーの rowId ベースのハイライトキーをセット */
+  selectCard:              (rowId: number | null, source?: 'before' | 'after') => void
   clearPersonSelection:    () => void
+  /** 人物・組織両方の選択を一括クリアする（ESC / 背景クリック用） */
+  clearAllSelection:       () => void
   setPersonPickupViewMode: (mode: 'before' | 'after') => void
   setMemberPanelOrgId:     (orgId: string | null) => void
 
@@ -178,7 +190,10 @@ export const useStore = create<AppState>()((set, get) => {
     workspaceMode:        'org',
     focusedOrgId:         null,
     beforeFocusedOrgId:   null,
+    selectedOrgId:        null,
     selectedPersonId:     null,
+    selectedCardRowId:    null,
+    selectedCardSource:   null,
     selectedRowId:        null,
     personPickupViewMode: 'before',
     memberPanelOrgId:     null,
@@ -204,7 +219,7 @@ export const useStore = create<AppState>()((set, get) => {
         masters:           result.masters,
       })
       await save(result.masters)
-      set({ isLoading: false, selectedPersonId: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
+      set({ isLoading: false, selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
       // 新しいデータが読み込まれたらパネルをリセットして関連組織を自動追加
       const { clearPanels, initPanels } = await import('../store/canvasLayoutStore').then(m => ({
         clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
@@ -272,20 +287,21 @@ export const useStore = create<AppState>()((set, get) => {
 
     reset: () => {
       appService.reset()
-      set({ selectedPersonId: null, selectedRowId: null, focusedOrgId: null, isLoading: false, expandedChipIds: new Set() })
+      set({ selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, isLoading: false, expandedChipIds: new Set() })
       import('../store/canvasLayoutStore').then(m => m.useCanvasLayoutStore.getState().clearPanels())
     },
 
     enterOperationPanel: (rowId, initialView = 'summary') => {
-      const { allocationList, persons, focusedOrgId, selectedPersonId, mainCanvasMode } = get()
+      const { allocationList, persons, focusedOrgId, selectedPersonId, selectedCardRowId, mainCanvasMode } = get()
       const row    = allocationList.find(r => r.rowId === rowId)
       if (!row) return
       const person = persons.find(p => p.sfPersonId === row.userId)
       set({
         operationPanelRowId:       rowId,
         operationPanelInitialView: initialView,
-        previousViewState:         { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId },
+        previousViewState:         { viewLabel: mainCanvasMode, focusedOrgId, selectedPersonId, selectedCardRowId },
         selectedRowId:             rowId,
+        selectedCardRowId:         rowId,
         selectedPersonId:          person?.id ?? selectedPersonId,
       })
     },
@@ -296,6 +312,7 @@ export const useStore = create<AppState>()((set, get) => {
         operationPanelRowId:       null,
         operationPanelInitialView: 'summary',
         selectedRowId:             null,
+        selectedCardRowId:         previousViewState?.selectedCardRowId ?? null,
         focusedOrgId:              previousViewState?.focusedOrgId ?? null,
         selectedPersonId:          previousViewState?.selectedPersonId ?? null,
         previousViewState:         null,
@@ -314,7 +331,7 @@ export const useStore = create<AppState>()((set, get) => {
     selectPersonAndFocusOrg: (personId) => {
       const { afterOrganizations, persons, allocationList, focusedOrgId, expandedChipIds } = get()
       const person = persons.find(p => p.id === personId)
-      if (!person) { set({ selectedPersonId: personId, workspaceMode: 'org' }); return }
+      if (!person) { set({ selectedPersonId: personId, selectedCardRowId: null, workspaceMode: 'org' }); return }
 
       const row = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
                ?? allocationList.find(r => r.userId === person.sfPersonId)
@@ -324,7 +341,7 @@ export const useStore = create<AppState>()((set, get) => {
       const orgById  = buildIdMap(afterOrganizations)
       const orgByExt = new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
       const personOrg = orgByExt.get(deptCode) ?? orgById.get(deptCode)
-      if (!personOrg) { set({ selectedPersonId: personId, workspaceMode: 'org' }); return }
+      if (!personOrg) { set({ selectedPersonId: personId, selectedCardRowId: row?.rowId ?? null, workspaceMode: 'org' }); return }
 
       const newExpanded = new Set(expandedChipIds)
       let newFocusedOrgId = focusedOrgId
@@ -336,7 +353,7 @@ export const useStore = create<AppState>()((set, get) => {
         for (const id of pathBetween(newFocusedOrgId, personOrg.id, orgById)) newExpanded.add(id)
       }
 
-      set({ selectedPersonId: personId, workspaceMode: 'org', focusedOrgId: newFocusedOrgId, expandedChipIds: newExpanded })
+      set({ selectedPersonId: personId, selectedCardRowId: row?.rowId ?? null, workspaceMode: 'org', focusedOrgId: newFocusedOrgId, expandedChipIds: newExpanded })
     },
 
     setScopeOrgId: (id) => {
@@ -414,11 +431,21 @@ export const useStore = create<AppState>()((set, get) => {
     setOverviewViewMode:     (mode) => set({ overviewViewMode: mode }),
     focusOrg:                (orgId) => set({ focusedOrgId: orgId, workspaceMode: 'org' }),
     focusBefore:             (orgId) => set({ beforeFocusedOrgId: orgId }),
-    selectPerson:            (personId) => {
-      useCanvasLayoutStore.getState().clearOrgSelection()
-      set({ selectedPersonId: personId, workspaceMode: 'person' })
+    selectOrg: (orgId) => {
+      set({ selectedOrgId: orgId, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null })
+      useCanvasLayoutStore.getState().requestScrollToOrg(orgId)
     },
-    clearPersonSelection:    () => set({ selectedPersonId: null, selectedRowId: null }),
+    clearOrgSelection: () => set({ selectedOrgId: null }),
+    selectPerson: (personId) => {
+      set({ selectedPersonId: personId, selectedOrgId: null, workspaceMode: 'person' })
+    },
+    selectCard: (rowId, source) => {
+      if (rowId === null) { set({ selectedCardRowId: null, selectedCardSource: null }); return }
+      if (source !== undefined) set({ selectedCardRowId: rowId, selectedCardSource: source })
+      else set({ selectedCardRowId: rowId })
+    },
+    clearPersonSelection:    () => set({ selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null }),
+    clearAllSelection:       () => set({ selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null }),
     setPersonPickupViewMode: (mode) => set({ personPickupViewMode: mode }),
     setMemberPanelOrgId:     (orgId) => set({ memberPanelOrgId: orgId }),
   }

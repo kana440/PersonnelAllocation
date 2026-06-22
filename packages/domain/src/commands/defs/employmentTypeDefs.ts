@@ -2,7 +2,8 @@
 import type { EditOperation } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { isRegularEmployee, isSecondmentAcceptance, isExtendedEmployeeTarget } from '../helpers'
+import { isRegularEmployee, isExtendedEmployeeTarget } from '../helpers'
+import { TR } from '../../transferReasonLabels'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -32,15 +33,15 @@ export const jobTypeChangeDef: EditOperation = {
   id:         'JobTypeChange',
   label:      '職種変更',
   group:      'jobClassification',
-  badge: 'jobChange',
+  badge:      'jobChange',
 
   description: 'ジョブファミリー・ジョブタイプを変更します。給与等級の変更が発生する場合は、適切な給与等級を選択してください。',
 
-  availableFor: (row, ms) => !isSecondmentAcceptance(row, ms),
+  availableFor: () => true,
 
   inputs: [
     { field: 'transferReason', required: false,
-      options: ['分掌移動'] },
+      options: [TR.DIV_TRANSFER], optionsMode: 'suggest' },
 
     { field: 'memo',           required: false },
     { kind: 'section', label: 'ジョブタイプ情報' },
@@ -50,11 +51,11 @@ export const jobTypeChangeDef: EditOperation = {
   ],
 
   onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
+    transferReason: row.transferReason ?? TR.DIV_TRANSFER as string | undefined,
     jobFamily:      row.jobFamily      as string | undefined,
     jobType:        row.jobType        as string | undefined,
     payGrade:       row.payGrade       as string | undefined,
-    memo:           row.memo           as string | undefined,
+    memo:           row.memo           ?? '職種変更' as string | undefined,
   }),
 
   onValidate(ctx, rowId, _values) {
@@ -62,6 +63,8 @@ export const jobTypeChangeDef: EditOperation = {
       return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
+
+  // ToDo: 給与等級変更を伴う場合はポジション新設が必要（→ 昇格・降格の同名 ToDo と共通課題）。
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
@@ -79,9 +82,16 @@ export const employmentExtensionDef: EditOperation = {
   id:         'EmploymentExtension',
   label:      '雇用延長',
   group:      'jobClassification',
-  badge: 'jobChange',
+  badge:      'jobChange',
 
   description: '３月末に雇用延長する対象者については、当個別に雇用延長登録いたします。申請書上は申請区分を入力いただき、他の入力項目は空欄にしてください。',
+
+  operationRole: {
+    kind:                'lock',
+    afterConstraint:     'wipe',
+    isActive:            (row) => row.transferReason === TR.EMPLOYMENT_EXTENSION_PROCEDURE,
+    isActiveThisSession: (row) => row.transferReason === TR.EMPLOYMENT_EXTENSION_PROCEDURE,
+  },
 
   availableFor: (row, ms) => isExtendedEmployeeTarget(row, ms) || isRegularEmployee(row, ms),
 
@@ -91,7 +101,7 @@ export const employmentExtensionDef: EditOperation = {
   ],
 
   onOpen: (row) => ({
-    transferReason: '【個別対応】3月末雇用延長手続対象者（新規・更新）' as string | undefined,
+    transferReason: TR.EMPLOYMENT_EXTENSION_PROCEDURE as string | undefined,
     memo:           row.memo as string | undefined,
   }),
 
@@ -125,7 +135,7 @@ export const employmentTypeChangeDef: EditOperation = {
   id:         'EmploymentTypeChange',
   label:      '雇用タイプ変更',
   group:      'jobClassification',
-  badge: 'jobChange',
+  badge:      'jobChange',
 
   availableFor: (row) => !!row.userId,
 
@@ -137,7 +147,7 @@ export const employmentTypeChangeDef: EditOperation = {
   ],
 
   onOpen: (row) => ({
-    transferReason: '【個別対応】従業員区分変更（社員⇔社員B・嘱託など）' as string | undefined,
+    transferReason: TR.EMPLOYMENT_TYPE_CHANGE_PROCEDURE as string | undefined,
     memo:           row.memo           as string | undefined,
     employmentType: row.employmentType as string | undefined,
   }),

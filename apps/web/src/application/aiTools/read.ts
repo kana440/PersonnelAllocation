@@ -4,7 +4,7 @@ import type { Person, Organization } from '@personnel/domain/schemas'
 import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
-import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS } from '@personnel/domain/commands/defs'
+import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS, resolveAvailability } from '@personnel/domain/commands/defs'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/choices'
 import { computeBandStepDiff, getBandsByStep } from '@personnel/domain/derivation'
@@ -32,7 +32,7 @@ export function createReadMethods(service: HRApplicationService) {
     subtreeOrgCode?:  string   // この org 以下のメンバーを取得（配下の組織も含む）
     filter?:          Record<string, string>
   }): PersonResult[] {
-    const { allocationList, afterOrganizations } = service.getSnapshot()
+    const { allocationList, afterOrganizations, masters } = service.getSnapshot()
 
     // subtreeOrgCode が指定された場合、配下 org の orgCode セットを構築
     let subtreeCodes: Set<string> | null = null
@@ -90,6 +90,9 @@ export function createReadMethods(service: HRApplicationService) {
       const positions = rows.map(r => {
         const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)?.name
         const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.prevDepartmentCode)?.name
+        const availableOps = ALL_EDIT_OPERATIONS
+          .filter(def => resolveAvailability(def, r, masters))
+          .map(def => def.label)
         return {
           rowId:                  r.rowId,
           departmentCode:         r.departmentCode,
@@ -106,6 +109,7 @@ export function createReadMethods(service: HRApplicationService) {
           prevConcurrentType:     r.prevConcurrentType,
           prevSecondmentToCompany:   r.prevSecondmentToCompany   || undefined,
           prevSecondmentFromCompany: r.prevSecondmentFromCompany || undefined,
+          availableOps,
         }
       })
 
@@ -172,7 +176,7 @@ export function createReadMethods(service: HRApplicationService) {
     const changeKinds = [...changes.patterns].map(p => EDIT_PATTERN_META[p]?.label ?? p)
 
     const availableOps = ALL_EDIT_OPERATIONS
-      .filter(def => def.availableFor(row, masters))
+      .filter(def => resolveAvailability(def, row, masters))
       .map(def => def.label)
 
     return {
@@ -200,11 +204,13 @@ export function createReadMethods(service: HRApplicationService) {
    * 指定行の現在の状態に基づき、フィールドの有効な選択肢を返す。
    * VALUE_RULES の条件付きルールが自動適用される。自己修復時の値確認に使う。
    */
-  function getFieldOptions(rowId: number, field: string): string[] {
+  function getFieldOptions(rowId: number, field: string, draftValues?: Partial<AllocationRow>): string[] {
     const snap = service.getSnapshot()
     const row  = snap.allocationList.find(r => r.rowId === rowId)
     if (!row) return []
-    return getFieldOptionsFromDomain(field, row, snap.masters, row.jobFamily as string | undefined)
+    // フォームで未コミットの値がある場合はそれをマージして選択肢を計算する
+    const contextRow = draftValues ? { ...row, ...draftValues } : row
+    return getFieldOptionsFromDomain(field, contextRow, snap.masters, contextRow.jobFamily as string | undefined)
   }
 
   function findVacantPositions(query: { orgCode?: string; subtreeOrgCode?: string } = {}): VacantPositionResult[] {

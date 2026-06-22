@@ -67,6 +67,21 @@ band / payGrade は指定不要（自動導出される）。
 - 2段階以上の昇格の場合、確認UIのラベルに「N段階変更」の注意が自動表示される
 - ユーザーが band や payGrade を手動上書きしている場合、その値が使われる
 
+## UIフォームを使ったインタラクティブフロー（代替手順）
+
+ユーザーが「フォームで確認しながら進めたい」場合は、`propose_promotion` の代わりに昇格フォームを開いて誘導する。
+
+```
+1. findPersons で rowId を確認
+2. getPromotionBandInfo で推奨バンド（oneLevelUp）を確認
+3. ui_open_operation（operationId: 'Promotion', prefill: { positionBand: '推奨バンド' }）
+   → フォームが開き、バンドが事前入力された状態になる
+4. ユーザーが役職コード等を確認・入力して送信
+```
+
+このフローは「AI が全て決定する」より「ユーザーが最終確認する」感覚で進めたい場合に適している。
+フォームが開いたら ui_get_form_state で入力状態を読み取り、追加のアドバイスができる。
+
 ## 注意
 
 - `propose_promotion` は findPersons の事前呼び出し不要。フィルタ（name / subtreeOrgCode）でも指定できる

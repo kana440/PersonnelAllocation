@@ -18,6 +18,14 @@ export function useOrgDrag({
   const [dragOverOrgId,       setDragOverOrgId]       = useState<string | null>(null)
   const [highlightedOrgId,    setHighlightedOrgId]    = useState<string | null>(null)
   const [dragOverVacantRowId, setDragOverVacantRowId] = useState<number | null>(null)
+  const [dropPersonRowId,     setDropPersonRowId]     = useState<number | null>(null)
+  const [dropGapBelowRowId,   setDropGapBelowRowId]   = useState<number | null>(null)
+
+  const clearAllDropTargets = () => {
+    setDragOverOrgId(null)
+    setDropPersonRowId(null)
+    setDropGapBelowRowId(null)
+  }
 
   const handleDragOver = (e: React.DragEvent, orgId: string) => {
     if (!e.dataTransfer.types.includes('application/json')) return
@@ -62,6 +70,9 @@ export function useOrgDrag({
     dragOverOrgId, setDragOverOrgId,
     highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
+    dropPersonRowId, setDropPersonRowId,
+    dropGapBelowRowId, setDropGapBelowRowId,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
+    clearAllDropTargets,
   }
 }

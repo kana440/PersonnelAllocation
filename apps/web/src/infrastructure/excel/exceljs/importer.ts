@@ -130,6 +130,10 @@ export async function importFromUrl(url: string, onProgress?: ProgressCallback):
   onProgress?.('Excelを解析中...')
   await tick()
   const buffer = await res.arrayBuffer()
+  const magic = new Uint8Array(buffer, 0, 2)
+  if (magic[0] !== 0x50 || magic[1] !== 0x4B) {
+    throw new Error(`ファイルが見つかりません: ${url}`)
+  }
   setLastWorkbook(buffer, url.split('/').pop() ?? 'import.xlsx')
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer)

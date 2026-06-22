@@ -4,6 +4,7 @@ import { subtreeRowCount, hasAnyRows } from '../panel/helpers'
 import { RowCard }              from '../panel/RowCard'
 import { AddRowDropdown }       from '../AddRowDropdown'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
+import { useStore }             from '../../../store/useStore'
 import type { Organization }    from '@personnel/domain/schemas'
 
 interface TreeNodeProps {
@@ -22,23 +23,32 @@ interface TreeNodeProps {
   onOrgExpand?:     (id: string) => void   // チップクリック   → 展開
 }
 
+/** 子組織がこの件数を超えたら折りたたむ */
+const CHILD_COLLAPSE_THRESHOLD = 6
+/** 折りたたみ時に表示する件数 */
+const CHILD_SHOW_COUNT = 5
+
 export function TreeNode({
   orgId, panelId, onNavigate, isRoot,
   collapsedOrgs, onOrgCollapse, onOrgExpand,
 }: TreeNodeProps) {
   const { organizations, positionTreeByOrgId } = useOrgView()
-  const { panels, setOrgOpen, addPanel, selectedOrgId, selectOrg } = useCanvasLayoutStore()
+  const { panels, setOrgOpen, addPanel } = useCanvasLayoutStore()
+  const selectedOrgId = useStore(s => s.selectedOrgId)
+  const selectOrg     = useStore(s => s.selectOrg)
 
   // TreeWindow から collapsedOrgs が渡されない場合のローカルフォールバック
   // （空セット = 全部デフォルト展開）
   const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(() => new Set())
+  // 子組織リストの「もっと見る」状態
+  const [showAllChildren, setShowAllChildren] = useState(false)
 
   const panel        = panels.find(p => p.id === panelId)
   const childrenMode = panel?.childrenMode ?? 'inline'
 
   const entries   = positionTreeByOrgId.get(orgId) ?? []
   const childOrgs = organizations.filter(
-    o => o.parentId === orgId && hasAnyRows(o.id, organizations, positionTreeByOrgId),
+    o => o.parentId === orgId && hasAnyRows(o.id, organizations, id => positionTreeByOrgId.has(id)),
   )
   const org = organizations.find(o => o.id === orgId)
 
@@ -49,16 +59,22 @@ export function TreeNode({
   let childSection: React.ReactNode = null
 
   if (childOrgs.length > 0) {
+    const needsCollapse   = childOrgs.length > CHILD_COLLAPSE_THRESHOLD
+    const visibleChildren = needsCollapse && !showAllChildren
+      ? childOrgs.slice(0, CHILD_SHOW_COUNT)
+      : childOrgs
+    const hiddenCount = childOrgs.length - visibleChildren.length
+
     childSection = (
       <div className="mt-1 pt-1 border-t border-gray-100 space-y-0.5">
-        {childOrgs.map(child => {
+        {visibleChildren.map(child => {
           const childPanel = panels.find(p => p.orgId === child.id)
           const isOpen     = childPanel?.open ?? false
 
           // ── 展開（windowed）モード ──────────────────────────────
           if (childrenMode === 'windowed') {
             if (isOpen) {
-              const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
+              const count = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
               return (
                 <ChildChip
                   key={child.id}
@@ -69,7 +85,7 @@ export function TreeNode({
                 />
               )
             }
-            const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
+            const count = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
             return (
               <ChildChip
                 key={child.id}
@@ -109,7 +125,7 @@ export function TreeNode({
             )
           }
 
-          const count = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
+          const count = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
           return (
             <ChildChip
               key={child.id}
@@ -124,6 +140,26 @@ export function TreeNode({
             />
           )
         })}
+
+        {/* 子組織が多いとき: もっと見る / 折りたたむ */}
+        {needsCollapse && !showAllChildren && (
+          <button
+            onClick={() => setShowAllChildren(true)}
+            className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-[8px]">▶</span>
+            他 {hiddenCount} 件（全 {childOrgs.length} 件）
+          </button>
+        )}
+        {needsCollapse && showAllChildren && (
+          <button
+            onClick={() => setShowAllChildren(false)}
+            className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-[8px]">▲</span>
+            折りたたむ
+          </button>
+        )}
       </div>
     )
   }
@@ -212,11 +248,12 @@ function InlineOrgSection({
     organizations, positionTreeByOrgId,
     handleDragOver, handleDragLeave, handleDrop, dragOverOrgId,
   } = useOrgView()
-  const count      = subtreeRowCount(child.id, organizations, positionTreeByOrgId)
+  const count      = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
   const isDragOver = dragOverOrgId === child.id
 
   return (
     <div
+      data-orgsectionid={child.id}
       className={`rounded border transition-colors ${
         isDragOver    ? 'border-blue-300 bg-blue-50/40' :
         isSelected    ? 'border-blue-400 ring-1 ring-blue-200' :

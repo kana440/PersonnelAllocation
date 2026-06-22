@@ -41,7 +41,7 @@ export function OrgOperationView() {
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
-    selectedPersonId, selectPerson, saveRow,
+    selectedPersonId, selectPerson, selectedCardRowId, selectCard, saveRow,
     operationPanelRowId, enterOperationPanel,
     assignPersonToVacantPosition,
     assigneeWarnings,
@@ -76,15 +76,16 @@ export function OrgOperationView() {
   selectedPersonIdRef.current = selectedPersonId
 
   // ── Hooks ──────────────────────────────────────────────────────
-  const handleSelectPerson = useCallback((personId: string) => {
+  const handleSelectPerson = useCallback((personId: string, rowId?: number) => {
     selectPerson(personId)
+    selectCard(rowId ?? null, 'after')
     const p = persons.find(q => q.id === personId)
     if (p?.sfPersonId) {
       const rows = allocationList.filter(r => r.userId === p.sfPersonId)
       const primary = rows.find(r => !r.concurrentType) ?? rows[0]
       if (primary) useChatStore.getState().setChatContext([primary.rowId])
     }
-  }, [selectPerson, persons, allocationList])
+  }, [selectPerson, selectCard, persons, allocationList])
 
   const {
     dropIntentState, setDropIntentState,
@@ -95,10 +96,14 @@ export function OrgOperationView() {
   const {
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
+    dropPersonRowId, setDropPersonRowId,
+    dropGapBelowRowId, setDropGapBelowRowId,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
+    clearAllDropTargets,
   } = useOrgDrag({
     organizations, persons, saveRow, assignPersonToVacantPosition,
-    openPersonMoveDialog: (fromRowId, personId, toOrgId) => setDropIntentState({ fromRowId, personId, toOrgId }),
+    openPersonMoveDialog: (fromRowId, personId, toOrgId) =>
+      setDropIntentState({ fromRowId, personId, toOrgId, dropType: 'org' }),
   })
 
   const { bulkMoveSourceId, setBulkMoveSourceId, handleBulkMoveConfirm } = useBulkMove({
@@ -156,7 +161,7 @@ export function OrgOperationView() {
 
   const clearSelection = useCallback(() => {
     setSelectedPersonIds(new Set())
-    useStore.setState({ selectedPersonId: null })
+    useStore.setState({ selectedPersonId: null, selectedCardRowId: null })
   }, [])
 
   const exitSelectMode = clearSelection
@@ -168,6 +173,7 @@ export function OrgOperationView() {
   const handlePersonClick = useCallback((
     personId: string, panelId: string,
     { ctrl, shift }: { ctrl: boolean; shift: boolean },
+    rowId?: number,
   ) => {
     if (ctrl) {
       setSelectedPersonIds(prev => {
@@ -199,7 +205,7 @@ export function OrgOperationView() {
       }
     } else {
       setSelectedPersonIds(new Set())
-      handleSelectPerson(personId)
+      handleSelectPerson(personId, rowId)
       lastClickRef.current = { personId, panelId }
     }
   }, [handleSelectPerson])
@@ -249,6 +255,9 @@ export function OrgOperationView() {
     organizations, positionTreeByOrgId, afterMembersByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
+    dropPersonRowId, setDropPersonRowId,
+    dropGapBelowRowId, setDropGapBelowRowId,
+    openDropIntent:       isHistoryPreviewMode ? () => {} : (state) => setDropIntentState(state),
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition:    isHistoryPreviewMode ? () => {} : handleAddPosition,
     handleSecondmentIn:   isHistoryPreviewMode ? () => {} : handleSecondmentIn,
@@ -257,7 +266,7 @@ export function OrgOperationView() {
     setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
     isSelectMode, selectedPersonIds,
     handlePersonClick, addPersonsToSelection, clearSelection,
-    selectedPersonId, selectPerson: handleSelectPerson,
+    selectedCardRowId, selectCard,
     isHistoryPreviewMode,
     handlePersonDoubleClick, handleRowDoubleClick,
     handleDropPositionOnPosition, handleReorderRow,
@@ -267,7 +276,7 @@ export function OrgOperationView() {
 
   return (
     <OrgViewContext.Provider value={ctxValue}>
-      <div className="flex flex-col h-full overflow-hidden" onDragEnd={() => setDragOverOrgId(null)}>
+      <div className="flex flex-col h-full overflow-hidden" onDragEnd={clearAllDropTargets}>
 
         {/* Header */}
         <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2">

@@ -27,7 +27,8 @@ npm-debug.log*
 *.tsbuildinfo
 
 # Sample data (contains real data — do not commit)
-public/.local/
+apps/web/public/.local/*
+!apps/web/public/.local/README.txt
 
 # ローカル DB（PGlite はディレクトリ、SQLite はファイル）
 apps/server/data/pglite/

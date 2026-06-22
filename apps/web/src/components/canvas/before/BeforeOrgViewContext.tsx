@@ -23,21 +23,3 @@ export function useBeforeOrgView(): BeforeOrgViewContextValue {
   return ctx
 }
 
-export function beforeSubtreeRowCount(
-  orgId:      string,
-  beforeOrgs: Organization[],
-  byOrgId:    Map<string, AllocationRow[]>,
-): number {
-  const own      = (byOrgId.get(orgId) ?? []).length
-  const children = beforeOrgs.filter(o => o.parentId === orgId)
-  return own + children.reduce((acc, c) => acc + beforeSubtreeRowCount(c.id, beforeOrgs, byOrgId), 0)
-}
-
-export function beforeHasAnyRows(
-  orgId:      string,
-  beforeOrgs: Organization[],
-  byOrgId:    Map<string, AllocationRow[]>,
-): boolean {
-  if (byOrgId.has(orgId)) return true
-  return beforeOrgs.filter(o => o.parentId === orgId).some(c => beforeHasAnyRows(c.id, beforeOrgs, byOrgId))
-}

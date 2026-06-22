@@ -1,31 +1,11 @@
 import { useOrgView }            from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
-import type { AllocationRow }    from '@personnel/domain/allocationRow'
 import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { useStore }              from '../../../store/useStore'
 import { CanvasFieldDiff }       from '../components/CanvasFieldDiff'
 import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
-
-const isInternalPosCode = (s?: string) => !s || s.startsWith('_pos_')
-
-const getPositionTitle = (row: AllocationRow): string =>
-  row.localJobTitle ??
-  row.officialPositionCode ??
-  (isInternalPosCode(row.positionCode) ? undefined : row.positionCode) ??
-  ''
-
-function getEmpBorderClass(
-  row:      AllocationRow,
-  empTypes: Array<{ label: string; isRegularEmployee: boolean; isSecondmentAcceptance: boolean }>,
-): string {
-  if (!row.userId) return 'border-l-gray-200'
-  const entry = empTypes.find(e => e.label === row.employmentType)
-  if (!entry) return row.employmentType ? 'border-l-amber-400' : 'border-l-gray-300'
-  if (entry.isRegularEmployee)      return 'border-l-blue-500'
-  if (entry.isSecondmentAcceptance) return 'border-l-teal-500'
-  return 'border-l-amber-400'
-}
+import { isInternalPosCode, getPositionTitle, getEmpBorderClass } from './helpers'
 
 const DEST_BADGE_COLORS = [
   'bg-blue-100 text-blue-700',
@@ -42,7 +22,7 @@ export interface RowCardProps {
   entry:               PositionEntry
   orgId:               string
   panelId:             string
-  colorIndex?:         number   // 後方互換のため残存、未使用
+  colorIndex?:         number
   comparisonStatus?:   'same' | 'probable-same' | 'other'
   comparisonOrgName?:  string
   comparisonColorIdx?: number
@@ -54,37 +34,87 @@ export function RowCard({
 }: RowCardProps) {
   const { row, person, depth, activePatterns } = entry
   const {
-    isSelectMode, selectedPersonIds, selectedPersonId,
+    isSelectMode, selectedPersonIds, selectedCardRowId,
     handlePersonClick,
     handleRowDoubleClick,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDropOnVacantSlot,
     isHistoryPreviewMode,
+    dropPersonRowId, setDropPersonRowId,
+    dropGapBelowRowId, setDropGapBelowRowId,
+    setDragOverOrgId,
+    openDropIntent,
+    positionTreeByOrgId,
   } = useOrgView()
 
   const displayFields = useCanvasDisplayStore(s => s.displayFields)
-  const masters     = useStore(s => s.masters)
+  const masters       = useStore(s => s.masters)
 
-  const isVacant     = !person
-  const isConcurrent = row.concurrentType === '兼務'
-  const isOnLeave    = !!row.leaveOfAbsenceSign
-  const isSelected   = !isVacant && (
-    isSelectMode ? selectedPersonIds.has(person!.id) : selectedPersonId === person!.id
+  const clearDropTargets = () => {
+    setDropPersonRowId(null)
+    setDropGapBelowRowId(null)
+    setDragOverOrgId(null)
+  }
+
+  const computeGapManager = (): string | undefined => {
+    const entries = positionTreeByOrgId.get(orgId) ?? []
+    const idx = entries.findIndex(e => e.row.rowId === row.rowId)
+    const next = idx >= 0 ? entries[idx + 1] : undefined
+    // 次カードが現カードより深い = 現カードのサブツリーに挿入 → 現カードが上司
+    // それ以外（同depth・浅い・末尾）= 現カードと同じチーム → 現カードの上司を引き継ぐ
+    return (next && next.depth > entry.depth)
+      ? (row.positionCode ?? undefined)
+      : (row.managerPositionCode ?? undefined)
+  }
+
+  const handleDropAsGap = (data: DragData) => {
+    if (!data.personId) return
+    clearDropTargets()
+    openDropIntent({
+      fromRowId:           data.fromRowId ?? null,
+      personId:            data.personId,
+      toOrgId:             orgId,
+      dropType:            'gap',
+      managerPositionCode: computeGapManager(),
+    })
+  }
+
+  const handleDropAsPerson = (data: DragData) => {
+    if (!data.personId || data.personId === person?.id) return
+    clearDropTargets()
+    openDropIntent({
+      fromRowId:           data.fromRowId ?? null,
+      personId:            data.personId,
+      toOrgId:             orgId,
+      dropType:            'person',
+      managerPositionCode: row.positionCode ?? undefined,
+    })
+  }
+
+  const isVacant           = !person
+  const isConcurrent       = row.concurrentType === '兼務'
+  const isOnLeave          = !!row.leaveOfAbsenceSign
+  const isSelected         = !isVacant && (
+    isSelectMode ? selectedPersonIds.has(person!.id) : selectedCardRowId === row.rowId
   )
-  const isDropTarget = isVacant && dragOverVacantRowId === row.rowId
-  const posTitle     = getPositionTitle(row)
-  const empBorder    = getEmpBorderClass(row, masters.employmentTypes)
-  const draggable    = !isSelectMode && !isVacant && !isHistoryPreviewMode
+  const isDropTarget       = isVacant && dragOverVacantRowId === row.rowId
+  const isPersonDropTarget = !isVacant && !isSelectMode && dropPersonRowId   === row.rowId
+  const isGapDropTarget    = !isVacant && !isSelectMode && dropGapBelowRowId === row.rowId
+  const posTitle           = getPositionTitle(row)
+  const empBorder          = getEmpBorderClass(row, masters.employmentTypes)
+  const draggable          = !isSelectMode && !isVacant && !isHistoryPreviewMode
 
   const bgClass =
-    isSelected   ? 'bg-yellow-50' :
-    isDropTarget ? 'bg-blue-50'   :
-    isVacant     ? 'bg-gray-50'   :
-    isConcurrent ? 'bg-purple-50' : 'bg-white'
+    isSelected         ? 'bg-yellow-50' :
+    isPersonDropTarget ? 'bg-green-50'  :
+    isDropTarget       ? 'bg-blue-50'   :
+    isVacant           ? 'bg-gray-50'   :
+    isConcurrent       ? 'bg-purple-50' : 'bg-white'
 
   const borderColorClass =
-    isSelected   ? 'border-yellow-400 ring-1 ring-yellow-300' :
-    isDropTarget ? 'border-blue-300' : 'border-gray-200'
+    isSelected         ? 'border-yellow-400 ring-1 ring-yellow-300' :
+    isPersonDropTarget ? 'border-green-400 ring-2 ring-green-200'   :
+    isDropTarget       ? 'border-blue-300' : 'border-gray-200'
 
   const cursorClass =
     isHistoryPreviewMode      ? 'cursor-default' :
@@ -100,7 +130,8 @@ export function RowCard({
     <div style={{ paddingLeft: `${depth * 12}px` }}>
       <div
         data-personid={!isVacant ? (person?.id ?? '') : ''}
-        className={`my-0.5 px-2 py-1 text-xs rounded border border-l-4 shadow-sm select-none min-w-0
+        data-rowid={!isVacant ? row.rowId : ''}
+        className={`relative my-0.5 px-2 py-1 text-xs rounded border border-l-4 shadow-sm select-none min-w-0
           ${empBorder} ${isVacant || isOnLeave ? 'border-dashed' : ''}
           ${borderColorClass} ${bgClass} ${cursorClass}`}
         draggable={draggable}
@@ -116,7 +147,7 @@ export function RowCard({
         } : undefined}
         onClick={e => {
           if (isVacant || isHistoryPreviewMode) return
-          handlePersonClick(person!.id, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey })
+          handlePersonClick(person!.id, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }, row.rowId)
         }}
         onContextMenu={e => {
           if ((e.ctrlKey || e.metaKey) && !isVacant && !isHistoryPreviewMode) {
@@ -127,16 +158,53 @@ export function RowCard({
         onDoubleClick={e => {
           if (!isSelectMode && !isHistoryPreviewMode) handleRowDoubleClick(e, row.rowId)
         }}
-        onDragOver={isVacant ? e => {
-          if (!e.dataTransfer.types.includes('application/json')) return
-          e.preventDefault(); e.stopPropagation()
-          setDragOverVacantRowId(row.rowId)
-        } : undefined}
-        onDragLeave={isVacant ? () => setDragOverVacantRowId(null) : undefined}
-        onDrop={isVacant ? e => {
-          setDragOverVacantRowId(null)
-          handleDropOnVacantSlot(e, row.rowId)
-        } : undefined}
+        onDragOver={
+          isVacant ? e => {
+            if (!e.dataTransfer.types.includes('application/json')) return
+            e.preventDefault(); e.stopPropagation()
+            setDragOverVacantRowId(row.rowId)
+          } :
+          !isSelectMode && !isHistoryPreviewMode ? e => {
+            if (!e.dataTransfer.types.includes('application/json')) return
+            e.preventDefault(); e.stopPropagation()
+            setDragOverOrgId(null)
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            if ((e.clientY - rect.top) / rect.height > 0.65) {
+              setDropPersonRowId(null)
+              setDropGapBelowRowId(row.rowId)
+            } else {
+              setDropPersonRowId(row.rowId)
+              setDropGapBelowRowId(null)
+            }
+          } : undefined
+        }
+        onDragLeave={
+          isVacant ? () => setDragOverVacantRowId(null) :
+          !isSelectMode && !isHistoryPreviewMode ? e => {
+            if (!(e.currentTarget as Element).contains(e.relatedTarget as Node)) {
+              setDropPersonRowId(null)
+              setDropGapBelowRowId(null)
+            }
+          } : undefined
+        }
+        onDrop={
+          isVacant ? e => {
+            setDragOverVacantRowId(null)
+            handleDropOnVacantSlot(e, row.rowId)
+          } :
+          !isSelectMode && !isHistoryPreviewMode ? e => {
+            e.preventDefault(); e.stopPropagation()
+            let data: DragData
+            try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+            if (!data.personId) return
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            if ((e.clientY - rect.top) / rect.height > 0.65) {
+              handleDropAsGap(data)
+            } else {
+              handleDropAsPerson(data)
+            }
+          } : undefined
+        }
       >
         {/* 1行目: [兼] 氏名 社員ID 変更バッジ */}
         <div className="flex items-center gap-1 min-w-0">
@@ -189,6 +257,31 @@ export function RowCard({
           <div className={`text-[9px] mt-0.5 ${isDropTarget ? 'text-blue-500' : 'text-gray-300'}`}>
             {isDropTarget ? 'ここにドロップ' : '← ドロップして配属'}
           </div>
+        )}
+
+        {/* ギャップゾーン: カード下端に破線インジケーター（absolute, pointer-events:auto） */}
+        {isGapDropTarget && (
+          <div
+            className="absolute left-0 right-0 z-20"
+            style={{
+              top:          'calc(100% + 2px)',
+              height:       '15px',
+              border:       '1.5px dashed #3b82f6',
+              borderRadius: '3px',
+              background:   'rgba(239,246,255,0.85)',
+              cursor:       'copy',
+            }}
+            onDragOver={e => {
+              if (!e.dataTransfer.types.includes('application/json')) return
+              e.preventDefault()
+            }}
+            onDrop={e => {
+              e.preventDefault(); e.stopPropagation()
+              let data: DragData
+              try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+              handleDropAsGap(data)
+            }}
+          />
         )}
 
         {/* 3行目 (在籍時): カスタム項目 + 比較先バッジ */}

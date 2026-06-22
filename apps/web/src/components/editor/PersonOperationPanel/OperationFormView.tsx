@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useFormStateStore } from '../../../store/formStateStore'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { deriveFieldUpdates } from '@personnel/domain/derivation'
@@ -14,7 +15,7 @@ import { ClearFieldsConfirmModal }  from '../../common/ClearFieldsConfirmModal'
 import { PositionPickerModal }      from '../../common/PositionPickerModal'
 import { computeSideEffects, hasSideEffects, type SideEffectSummary } from './operationPreview'
 import type { EditOperation, OperationInput } from '@personnel/domain/commands/defs/index'
-import { bindOperation, isSectionDivider } from '@personnel/domain/commands/defs/index'
+import { bindOperation, isSectionDivider, isInputRow } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { FIELD_METADATA } from '@personnel/domain/allocationRow'
 import { OrgSearchDialog } from '../OrgSearchDialog'
@@ -57,7 +58,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const draftRow = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
 
   const fieldInputs = useMemo(
-    () => def.inputs.filter((i): i is OperationInput => !isSectionDivider(i)),
+    () => def.inputs.filter((i): i is OperationInput => !isSectionDivider(i) && !isInputRow(i)),
     [def.inputs]
   )
 
@@ -95,6 +96,23 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
       }
     }
   }
+
+  // フォーム → AI: 値が変わるたびに formStateStore に公開する
+  useEffect(() => {
+    useFormStateStore.getState().publish({ rowId: row.rowId, operationId: def.id, values })
+  }, [values, row.rowId, def.id])
+
+  // アンマウント時にフォーム状態をクリア
+  useEffect(() => () => useFormStateStore.getState().clear(), [])
+
+  // AI → フォーム: pendingSuggestion を handleChange に流して連動導出を維持する
+  const pendingSuggestion = useFormStateStore(s => s.pendingSuggestion)
+  useEffect(() => {
+    if (!pendingSuggestion) return
+    handleChange(pendingSuggestion.field, pendingSuggestion.value)
+    useFormStateStore.getState().clearSuggestion()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSuggestion])
 
   const issues = useMemo(
     () => validateRow({ row: draftRow, afterOrganizations, masters, allocationList })
@@ -189,7 +207,28 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               )
             }
 
-            const { field, required, label, stepFilter, readOnly, picker, positionFilter, inputType, indicator, options: inputOptions } = item
+            // ── 横並びグループ（readOnly フィールド用） ────────────────────────
+            if (isInputRow(item)) {
+              return (
+                <div key={`row-${idx}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${item.inputs.length}, 1fr)` }}>
+                  {item.inputs.map(inp => {
+                    const fk  = inp.field as string
+                    const lbl = (inp.label ?? ALLOCATION_LIST_LABEL_MAP[fk]?.ja ?? fk).replace(/_新$/, '')
+                    const val = (values[inp.field] as string | undefined) ?? ''
+                    return (
+                      <div key={fk}>
+                        <label className="text-xs font-medium text-gray-600 block mb-1">{lbl}</label>
+                        <div className="text-xs bg-gray-50 border border-gray-200 rounded px-2 py-[5px] min-h-[30px] text-gray-500 select-none truncate">
+                          {val || <span className="text-gray-300">—</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+
+            const { field, required, label, stepFilter, readOnly, picker, positionFilter, inputType, indicator, options: inputOptions, optionsMode } = item
             if (indicator) return null
 
             const fieldKey     = field as string
@@ -357,7 +396,9 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
                     onChange={v => handleChange(field, v)}
                     options={filteredValid}
                     invalidOptions={invalid}
-                    strictness={resolvedOptions ? 'strict' : resolveFieldStrictness(fieldKey, {})}
+                    strictness={resolvedOptions
+                      ? (optionsMode === 'suggest' ? 'guide' : 'strict')
+                      : resolveFieldStrictness(fieldKey, {})}
                     hasIssue={hasIssue}
                     modified={isChanged}
                   />

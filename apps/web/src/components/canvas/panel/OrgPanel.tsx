@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useOrgView } from '../OrgViewContext'
+import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { subtreeRowCount } from './helpers'
 import { OrgSection } from './OrgSection'
 import { NewRowOperationModal } from './NewRowOperationModal'
@@ -33,10 +34,12 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
   } = useOrgView()
 
+  const { showVacantPositions, toggleShowVacantPositions } = useCanvasLayoutStore()
+
   const org = organizations.find(o => o.id === orgId)
   if (!org) return null
 
-  const totalCount   = subtreeRowCount(orgId, organizations, positionTreeByOrgId)
+  const totalCount   = subtreeRowCount(orgId, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
   const isDropTarget = dragOverOrgId === orgId
 
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -67,6 +70,17 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
       <div className="flex-shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-xl flex items-center gap-2">
         <span className="flex-1 text-xs font-semibold text-gray-800 truncate">{org.name}</span>
         <span className="text-[10px] text-gray-400 flex-shrink-0">({totalCount}名)</span>
+
+        {/* 空席ポジション表示トグル */}
+        <button
+          onClick={toggleShowVacantPositions}
+          className={`w-5 h-5 rounded flex items-center justify-center text-xs transition-colors ${
+            showVacantPositions
+              ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
+              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+          }`}
+          title={showVacantPositions ? '空席ポジションを非表示' : '空席ポジションを表示'}
+        >□</button>
 
         {/* 行追加ドロップダウン */}
         {orgCode && (

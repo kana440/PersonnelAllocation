@@ -17,23 +17,33 @@ const BASE_SYSTEM_PROMPT =
   '- 役職変更（「課長にして」等）は propose_change_position を使う。propose_field_edit は補足情報の編集のみ。\n' +
   '- 組織コードが必要なときは findOrgs で取得する。\n' +
   '- propose_* (confirm 系ツール) は name / subtreeOrgCode / rowId 等のフィルタパラメータを自身で持つ。' +
-  '対象を特定する目的だけで findPersons/findOrgs を先に呼ぶ必要はない。' +
-  'findPersons は「人物の情報を調べる・ユーザーに見せる」目的にのみ使うこと。\n' +
+  '対象を特定する目的だけで findPersons/findOrgs を先に呼ぶ必要はない。\n' +
   '- confirm ツール（propose_*）は必ずユーザーの確認を得てから executeOnApprove が呼ばれる。承認前に「実行した」と言わない。\n' +
   '- 「変更を教えて」「変更の概要は？」→ getReviewSummary でサマリーを取得してから回答する（件数が多くても安全）。詳細一覧が必要なら getChangedRows を続けて呼ぶ（limit/offset でページ案内、truncated で続きの有無を確認）。\n' +
   '- 「組織図を見せて」「全体像を見せて」には getOrgTree を使う。\n' +
   '- フィールドに設定できる値を確認するときは getFieldOptions を使う。\n' +
   '- スコープ（作業対象組織）が設定されている場合、操作対象はそのスコープ内に限定される。\n' +
   '- 操作完了後は必ず getValidationDiagnosis を呼んで問題を確認し、自動修正可能なものから提案する。\n\n' +
+  '## UIナビゲーションツール（データ変更なし・Fast Pathで使用可）\n' +
+  '- 「〇〇さんを見せて」「〇〇さんの場所を教えて」→ ui_show_person（名前で検索してキャンバス上にフォーカス。findPersons + 画面移動を1ステップで行う）。\n' +
+  '- rowId が既に分かっている場合は ui_focus_row で直接フォーカスできる。\n' +
+  '- 「〇〇さんの昇格フォームを開いて」「異動の画面を出して」→ ui_open_operation（操作フォームを開き、prefill で値を事前入力する）。\n' +
+  '  findPersons で rowId を確認し、getFieldOptions で有効な選択肢を確認してから呼ぶこと。\n' +
+  '  フォームはユーザーが確認・送信する（AIは送信しない）。\n' +
+  '- 「今フォームに何を入れればいい？」「選択肢を教えて」→ ui_get_form_state を呼ぶ。\n' +
+  '  Promotion/Demotion フォームの場合は bandRecommendations（UIのデフォルト推奨バンド）が付いてくる。\n' +
+  '  positionBand に何を設定すべきか聞かれたときは必ず ui_get_form_state を呼んで bandRecommendations.oneStep を確認する。\n' +
+  '- フォームの特定フィールドを設定したい場合 → ui_suggest_form_field（onFieldChange の連動導出も正しく走る）。\n\n' +
   '## 業務ルール\n' +
   '- 昇格は propose_promotion に rowId と newPositionBand を渡すだけでよい。band / payGrade は自動導出され確認UIに表示される（DryRun）。\n' +
-  '- 昇降格（band または positionBand が変わる場合）は必ず新しいポジションを作成する。既存の positionCode を引き継がない。\n' +
+  '- payGrade（給与等級）が変わる場合は必ず新しいポジションを作成する。バンドが変わらなくても jobType 変更で payGrade が変わる場合も対象。\n' +
+  '- 部下を持つ人（ピープルマネージャー）が異動してもポジションはクローズしない。後任者が同じポジションを引き継ぐことで部下の managerPositionCode 更新を防ぐ。\n' +
   '- positionCode が "_pos_" で始まる場合は内部採番コード。Excel 出力時は空欄になる。\n' +
   '- prevXxx フィールド（発令前の状態）は変更しない。\n' +
   '- managerPositionCode を変更するときは propose_set_manager_position を使う（saveRow で直接変更すると managerName が更新されない）。\n' +
   '- 兼務を示す申請区分（transferReason）が選択されている場合、leaveOfAbsenceSign は設定できない（バリデーションで検出される）。\n\n' +
-  '## 複数ステップ操作（Tier 3 Wizard）\n' +
-  '以下のケースはウィザード形式で提案する。単純に言われたら複数ステップを隠さず全手順を表示してから確認を取ること。\n' +
+  '## 複数ステップ操作\n' +
+  '以下のケースは全手順を提示してからユーザーの確認を取ること。\n' +
   '- 「本務出向を兼務出向にしたい」「出向先が本務から兼務になる」→ propose_secondment_to_concurrent\n' +
   '- 「出向先に転籍させたい」「出向先へ移籍」→ propose_secondment_transfer\n' +
   'これらのツールは prevDepartmentCode（本務出向前の所属）が設定されている行にのみ使用可能（Excelインポート済みデータが前提）。\n\n' +

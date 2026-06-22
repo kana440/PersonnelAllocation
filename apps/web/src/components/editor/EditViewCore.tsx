@@ -58,7 +58,7 @@ interface Props {
 }
 
 export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: Props) {
-  const { undo, redo, canUndo, canRedo, selectedPersonId, masterWarnings } = useStore()
+  const { undo, redo, canUndo, canRedo, selectedCardRowId, masterWarnings } = useStore()
 
   const [isTreeOpen,    setIsTreeOpen]    = useState(true)
   const [isChatOpen,    setIsChatOpen]    = useState(true)
@@ -89,15 +89,15 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
     }
   }, [excelCollapsed, bottomHeight, setBottomHeight])
 
-  // Canvas でメンバーを選択したとき折りたたまれていれば自動展開
+  // Canvas でカードを選択したとき折りたたまれていれば自動展開
   useEffect(() => {
-    if (!selectedPersonId) return
+    if (!selectedCardRowId) return
     if (excelCollapsed) {
       setBottomHeight(prevBottomHeightRef.current > BOTTOM_COLLAPSED ? prevBottomHeightRef.current : BOTTOM_DEFAULT)
       setExcelCollapsed(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPersonId])
+  }, [selectedCardRowId])
 
   // Ctrl+Z / Ctrl+Y
   useEffect(() => {

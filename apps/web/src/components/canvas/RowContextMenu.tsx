@@ -2,7 +2,7 @@ import { detectPatterns }       from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META }    from '@personnel/domain/patterns/editPattern'
 import type { EditPattern }     from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow }   from '@personnel/domain/allocationRow'
-import { ALL_EDIT_OPERATIONS }  from '@personnel/domain/commands/defs/index'
+import { ALL_EDIT_OPERATIONS, resolveAvailability }  from '@personnel/domain/commands/defs/index'
 import { useStore }             from '../../store/useStore'
 import { OPERATION_BADGE_COLORS } from '../../config/badgeColors'
 
@@ -102,7 +102,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
     const opId = PATTERN_OP_ID[p]
     if (!opId) return true
     const def = OP_BY_ID.get(opId)
-    return def ? def.availableFor(row, masters) : true
+    return def ? resolveAvailability(def, row, masters) : true
   }
 
   const name         = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'

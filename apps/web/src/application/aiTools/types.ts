@@ -46,6 +46,8 @@ export interface PersonPosition {
   prevConcurrentType?: string
   prevSecondmentToCompany?:   string
   prevSecondmentFromCompany?: string
+  // この行に対して現在実行可能な操作ラベルの一覧（EditOperation.availableFor に基づく）
+  availableOps?: string[]
 }
 
 /** findPersons の戻り値。1人1エントリ、兼務は positions[] に複数。 */
