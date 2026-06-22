@@ -105,13 +105,13 @@ export const concurrentAddNewDef: EditOperation = {
 
   inputs: [
     { field: 'transferReason',   required: false },
+    { field: 'departmentCode',   required: true,  label: '兼務先組織', picker: 'org' },
+    { field: 'userId',           required: false, label: '本務者を検索（任意）', picker: 'person' },
     { field: 'lastName',         required: true  },
     { field: 'firstName',        required: true  },
     { field: 'groupEmployeeId',  required: false },
     { field: 'employeeNumber',   required: false },
-    { field: 'userId',           required: false },
     { field: 'employmentType',   required: false },
-    { field: 'departmentCode',   required: true,  label: '兼務先組織', picker: 'org' },
     { field: 'jobFamily',        required: false },
     { field: 'jobType',          required: false },
     { field: 'positionBand',     required: false },

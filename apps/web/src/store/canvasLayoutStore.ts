@@ -63,8 +63,6 @@ interface CanvasLayoutState {
   scrollToOrgId:      string | null
   requestScrollToOrg: (orgId: string | null) => void
 
-  /** Excel 読み込み時: ルート組織のみパネルを作成 */
-  initPanels:         (orgs: { id: string; parentId?: string | null }[], memberOrgIds?: Set<string>) => void
   addPanel:           (orgId: string, options?: { childrenMode?: ChildrenMode; collapsedOrgIds?: string[] }) => void
   setCollapsedOrgIds: (panelId: string, ids: string[]) => void
   removePanel:        (panelId: string) => void
@@ -162,20 +160,6 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   // ── キャンバススクロール要求（組織パネル）──────────────────────
   scrollToOrgId: null,
   requestScrollToOrg: (orgId) => set({ scrollToOrgId: orgId }),
-
-  initPanels: (orgs, _memberOrgIds?) => {
-    const orgIds   = new Set(orgs.map(o => o.id))
-    const rootOrgs = orgs.filter(o => !o.parentId || !orgIds.has(o.parentId))
-    const panels: PanelDef[] = rootOrgs.map((org, i) =>
-      makePanelDef(
-        org.id,
-        { x: 40 + (i % 5) * (WINDOW_W + WINDOW_GAP), y: 40 + Math.floor(i / 5) * 420 },
-        true,
-        'windowed',
-      )
-    )
-    set({ panels })
-  },
 
   addPanel: (orgId, options?) => {
     const existing = get().panels.find(p => p.orgId === orgId)

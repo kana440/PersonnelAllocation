@@ -220,26 +220,11 @@ export const useStore = create<AppState>()((set, get) => {
       })
       await save(result.masters)
       set({ isLoading: false, selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
-      // 新しいデータが読み込まれたらパネルをリセットして関連組織を自動追加
-      const { clearPanels, initPanels } = await import('../store/canvasLayoutStore').then(m => ({
+      // パネルをリセット（SetupView でモード別に再構築する）
+      const { clearPanels } = await import('../store/canvasLayoutStore').then(m => ({
         clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
-        initPanels:  m.useCanvasLayoutStore.getState().initPanels,
       }))
       clearPanels()
-      // メンバー（userId あり）が属する組織 ID を収集して initPanels に渡す
-      // → メンバーがいる組織とその祖先のみパネルを生成し、空の枝を初期表示から除外
-      const orgByCode = new Map(
-        result.afterOrganizations
-          .filter(o => o.externalCode)
-          .map(o => [o.externalCode!, o])
-      )
-      const memberOrgIds = new Set<string>()
-      for (const row of result.allocationList) {
-        if (!row.userId || !row.departmentCode) continue
-        const org = orgByCode.get(row.departmentCode)
-        if (org) memberOrgIds.add(org.id)
-      }
-      initPanels(result.afterOrganizations, memberOrgIds.size > 0 ? memberOrgIds : undefined)
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),

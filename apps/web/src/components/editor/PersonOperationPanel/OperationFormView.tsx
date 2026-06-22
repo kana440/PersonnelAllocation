@@ -20,6 +20,7 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { FIELD_METADATA } from '@personnel/domain/allocationRow'
 import { OrgSearchDialog } from '../OrgSearchDialog'
 import { BandStepFilter, filterBandsByStep } from './BandStepFilter'
+import { PersonPickerDialog } from './PersonPickerDialog'
 import type { StepMode } from './BandStepFilter'
 
 interface Props {
@@ -59,6 +60,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const [posPickerField,      setPosPickerField]      = useState<keyof AllocationRow | null>(null)
   const [posPickerFilter,     setPosPickerFilter]     = useState<((r: AllocationRow) => boolean) | undefined>(undefined)
   const [posPickerInitialOrg, setPosPickerInitialOrg] = useState<string | undefined>(undefined)
+  const [showPersonPicker,    setShowPersonPicker]    = useState(false)
 
   const draftRow = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
 
@@ -369,6 +371,37 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               )
             }
 
+            // ── 人物 picker ───────────────────────────────────────────────────
+            if (picker === 'person') {
+              const nameDisplay = (() => {
+                const ln = (values.lastName  as string | undefined) ?? ''
+                const fn = (values.firstName as string | undefined) ?? ''
+                return [ln, fn].filter(Boolean).join(' ')
+              })()
+              return (
+                <div key={fieldKey}>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    {fieldLabel}{required && <span className="text-red-400 ml-0.5">*</span>}
+                  </label>
+                  <div className="flex gap-1">
+                    <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} modified={isChanged} />
+                    <button
+                      onClick={() => setShowPersonPicker(true)}
+                      className="px-2 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
+                      title="人物を検索"
+                    >🔍</button>
+                  </div>
+                  {nameDisplay && <p className="text-[10px] text-blue-600 mt-0.5 truncate">{nameDisplay}</p>}
+                  {diffLine}
+                  {fieldIssues.map((issue, i) => (
+                    <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
+                      {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
+                    </p>
+                  ))}
+                </div>
+              )
+            }
+
             // ── 組織 picker ───────────────────────────────────────────────────
             if (picker === 'org') {
               const orgName = afterOrganizations.find(
@@ -458,6 +491,27 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
             className="flex-1 text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >実行</button>
         </div>
+
+        {showPersonPicker && (
+          <PersonPickerDialog
+            defaultOrgCode={(values.departmentCode ?? row.departmentCode) as string | undefined}
+            allocationList={allocationList}
+            afterOrganizations={afterOrganizations}
+            onSelect={(p) => {
+              setValues(prev => ({
+                ...prev,
+                userId:          p.userId,
+                lastName:        p.lastName        ?? prev.lastName,
+                firstName:       p.firstName       ?? prev.firstName,
+                groupEmployeeId: p.groupEmployeeId ?? prev.groupEmployeeId,
+                employeeNumber:  p.employeeNumber  ?? prev.employeeNumber,
+                employmentType:  p.employmentType  ?? prev.employmentType,
+              }))
+              setShowPersonPicker(false)
+            }}
+            onClose={() => setShowPersonPicker(false)}
+          />
+        )}
 
         {orgPickerField && (
           <OrgSearchDialog

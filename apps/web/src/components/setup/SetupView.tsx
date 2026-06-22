@@ -7,7 +7,7 @@ import { isUninitializedRow } from '../../application/setup/afterInit'
 import { SetupHelp } from './SetupHelp'
 import { AfterInitWizard } from './AfterInitWizard'
 import { ModeSelectStep } from './ModeSelectStep'
-import { computeAssigneePanelOrgIds, findCommonAncestorOrgId } from './panelInit'
+import { getRootOrgIds, getAssigneeOrgIds } from './panelInit'
 
 const LOCAL_SAMPLE_FILES = ['sample.xlsm']
 
@@ -85,12 +85,12 @@ export function SetupView({ onReady }: Props) {
     if (needsInit) return
     await tick()
     await loadExcelData(result)
-    // 管理者モード: 人が存在する最上位共通組織をフォーカス
-    const commonOrgId = findCommonAncestorOrgId(result.allocationList, result.afterOrganizations)
-    if (commonOrgId) focusOrg(commonOrgId)
+    // 管理者モード: ルート組織パネルのみ表示（閉じたまま）
+    const { addPanel: addP } = useCanvasLayoutStore.getState()
+    getRootOrgIds(result.afterOrganizations).forEach(id => addP(id))
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()
-  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, focusOrg, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, onReady])
 
   // 担当者として開く（AssigneeSelectStep からの選択確定）
   const handleAssigneeSelect = useCallback(async (assigneeName: string) => {
@@ -102,9 +102,10 @@ export function SetupView({ onReady }: Props) {
     if (needsInit) return
     await tick()
     await loadExcelData(result)
-    // 担当者モード: 担当組織を人数降順で最大8件パネル自動追加
-    const orgIds = computeAssigneePanelOrgIds(result.allocationList, result.afterOrganizations, resolvedName)
+    // 担当者モード: 全組織を辿れるようルートパネルを追加し、担当者のメンバーがいる組織も個別展開
     const { addPanel } = useCanvasLayoutStore.getState()
+    getRootOrgIds(result.afterOrganizations).forEach(id => addPanel(id))
+    const orgIds = getAssigneeOrgIds(result.allocationList, result.afterOrganizations, resolvedName)
     orgIds.forEach(orgId => addPanel(orgId))
     if (orgIds.length > 0) focusOrg(orgIds[0])
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
@@ -118,14 +119,12 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: `データ適用中... (${modifiedResult.allocationRowCount.toLocaleString()} 行)` })
     await tick()
     await loadExcelData(modifiedResult)
+    const { addPanel } = useCanvasLayoutStore.getState()
+    getRootOrgIds(modifiedResult.afterOrganizations).forEach(id => addPanel(id))
     if (role === 'assignee') {
-      const orgIds = computeAssigneePanelOrgIds(modifiedResult.allocationList, modifiedResult.afterOrganizations, assigneeName)
-      const { addPanel } = useCanvasLayoutStore.getState()
+      const orgIds = getAssigneeOrgIds(modifiedResult.allocationList, modifiedResult.afterOrganizations, assigneeName)
       orgIds.forEach(orgId => addPanel(orgId))
       if (orgIds.length > 0) focusOrg(orgIds[0])
-    } else {
-      const commonOrgId = findCommonAncestorOrgId(modifiedResult.allocationList, modifiedResult.afterOrganizations)
-      if (commonOrgId) focusOrg(commonOrgId)
     }
     setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
     onReady()

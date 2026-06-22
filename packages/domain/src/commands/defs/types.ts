@@ -122,8 +122,11 @@ export interface OperationInput {
    * 専用ピッカーダイアログの種別。省略時は ComboInput。
    *   'org'      : 組織検索ダイアログ（departmentCode など組織コードを選ぶフィールドに付与）
    *   'position' : ポジション選択ダイアログ（managerPositionCode など positionCode を選ぶフィールドに付与）
+   *   'person'   : 人物検索ダイアログ（userId を選ぶフィールドに付与）
+   *               選択時に userId・lastName・firstName・groupEmployeeId・employeeNumber・employmentType を一括セット。
+   *               デフォルトはフォームの departmentCode と同組織・親組織に絞り込み、横断トグルで全組織検索可。
    */
-  readonly picker?: 'org' | 'position'
+  readonly picker?: 'org' | 'position' | 'person'
   /**
    * picker: 'position' のとき候補行を絞り込む述語。省略時は全ポジション行が候補。
    * カリー化により外側でコスト高な計算（配下列挙など）を1回だけ行い、内側を高速にする。
