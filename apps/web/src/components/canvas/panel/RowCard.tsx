@@ -47,7 +47,8 @@ export function RowCard({
     positionTreeByOrgId,
   } = useOrgView()
 
-  const displayFields = useCanvasDisplayStore(s => s.displayFields)
+  const displayFields    = useCanvasDisplayStore(s => s.displayFields)
+  const hiddenBadgeTypes = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
   const masters       = useStore(s => s.masters)
 
   const clearDropTargets = () => {
@@ -227,7 +228,7 @@ export function RowCard({
               <div className="flex-1" />
             </>
           )}
-          {[...activePatterns].map(p => {
+          {[...activePatterns].filter(p => !hiddenBadgeTypes.includes(EDIT_PATTERN_META[p].badge)).map(p => {
             const meta = EDIT_PATTERN_META[p]
             return (
               <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none ${OPERATION_BADGE_COLORS[meta.badge]}`}>

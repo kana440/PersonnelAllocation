@@ -4,6 +4,8 @@ import type { FieldStrictness } from '@personnel/domain/optionStrictness'
 interface Props {
   value:           string
   onChange:        (v: string) => void
+  /** blur・Enter・リスト選択完了時に呼ばれる（onChange とは別に確定タイミングを通知する） */
+  onCommit?:       (v: string) => void
   options:         string[]
   /** 条件に合致しないが表示するオプション（下段に表示） */
   invalidOptions?: string[]
@@ -20,7 +22,7 @@ interface Props {
   modified?:       boolean
 }
 
-export function ComboInput({ value, onChange, options, invalidOptions = [], strictness = 'guide', placeholder, disabled, className, hasIssue, modified }: Props) {
+export function ComboInput({ value, onChange, onCommit, options, invalidOptions = [], strictness = 'guide', placeholder, disabled, className, hasIssue, modified }: Props) {
   const [open,  setOpen]  = useState(false)
   const [input, setInput] = useState(value)
   // true = ユーザーが文字入力した → options を絞り込む
@@ -66,6 +68,7 @@ export function ComboInput({ value, onChange, options, invalidOptions = [], stri
     setInput(v)
     setTyped(false)
     onChange(v)
+    onCommit?.(v)
     setOpen(false)
   }
 
@@ -98,12 +101,13 @@ export function ComboInput({ value, onChange, options, invalidOptions = [], stri
         onBlur={() => {
           setTimeout(() => {
             onChange(input)
+            onCommit?.(input)
             setTyped(false)
             setOpen(false)
           }, 150)
         }}
         onKeyDown={e => {
-          if (e.key === 'Enter')  { onChange(input); setTyped(false); setOpen(false) }
+          if (e.key === 'Enter')  { onChange(input); onCommit?.(input); setTyped(false); setOpen(false) }
           if (e.key === 'Escape') { setInput(value); setTyped(false); setOpen(false) }
         }}
       />

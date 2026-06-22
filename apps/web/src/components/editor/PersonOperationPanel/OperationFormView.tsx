@@ -79,15 +79,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
       ...(effects?.setValues ?? {}),
     }))
 
-    if (effects?.suggestFieldValue && !titleSuggest) {
-      const { field: suggestField, value: suggestVal } = effects.suggestFieldValue
-      const targetInput = fieldInputs.find(i => i.field === suggestField)
-      const currentTargetVal = (values[suggestField] as string | undefined) ?? ''
-      if (targetInput && suggestVal !== currentTargetVal) {
-        const fieldLabel = targetInput.label ?? ALLOCATION_LIST_LABEL_MAP[suggestField as string]?.ja ?? suggestField as string
-        setTitleSuggest({ field: suggestField, fieldLabel, value: suggestVal })
-      }
-    }
+    // suggestFieldValue は入力確定時（onCommit）のみ処理する → handleCommit 参照
 
     if (effects?.openPickerFor) {
       const targetInput = fieldInputs.find(i => i.field === effects.openPickerFor)
@@ -99,6 +91,19 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
       } else if (targetInput?.picker === 'org') {
         setOrgPickerField(effects.openPickerFor as string)
       }
+    }
+  }
+
+  // 入力確定時（blur / Enter / リスト選択）に suggestFieldValue を処理する
+  const handleCommit = (field: keyof AllocationRow, value: string) => {
+    const effects = def.onFieldChange?.[field]?.(value, ctx)
+    if (!effects?.suggestFieldValue || titleSuggest) return
+    const { field: suggestField, value: suggestVal } = effects.suggestFieldValue
+    const targetInput = fieldInputs.find(i => i.field === suggestField)
+    const currentTargetVal = (values[suggestField] as string | undefined) ?? ''
+    if (targetInput && suggestVal !== currentTargetVal) {
+      const fieldLabel = targetInput.label ?? ALLOCATION_LIST_LABEL_MAP[suggestField as string]?.ja ?? suggestField as string
+      setTitleSuggest({ field: suggestField, fieldLabel, value: suggestVal })
     }
   }
 
@@ -419,6 +424,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
                   <ComboInput
                     value={currentVal}
                     onChange={v => handleChange(field, v)}
+                    onCommit={v => handleCommit(field, v)}
                     options={filteredValid}
                     invalidOptions={invalid}
                     strictness={resolvedOptions

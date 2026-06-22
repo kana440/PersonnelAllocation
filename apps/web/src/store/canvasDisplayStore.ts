@@ -3,9 +3,10 @@ import type { FieldStrictness, UnavailableOperationDisplay } from '@personnel/do
 import { DEFAULT_UNAVAILABLE_OPERATION_DISPLAY } from '@personnel/domain/optionStrictness'
 import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
-const STORAGE_KEY                 = 'canvas_display_fields'
-const STRICTNESS_STORAGE_KEY      = 'field_strictness_overrides'
+const STORAGE_KEY                    = 'canvas_display_fields'
+const STRICTNESS_STORAGE_KEY         = 'field_strictness_overrides'
 const UNAVAIL_OP_DISPLAY_STORAGE_KEY = 'unavailable_operation_display'
+const HIDDEN_BADGE_TYPES_STORAGE_KEY = 'canvas_hidden_badge_types'
 
 export interface CanvasField {
   key:   string
@@ -69,6 +70,16 @@ function loadUnavailableOperationDisplay(): UnavailableOperationDisplay {
   return DEFAULT_UNAVAILABLE_OPERATION_DISPLAY
 }
 
+function loadHiddenBadgeTypes(): string[] {
+  try {
+    const raw = localStorage.getItem(HIDDEN_BADGE_TYPES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (Array.isArray(parsed) && parsed.every(x => typeof x === 'string')) return parsed as string[]
+  } catch { /* ignore */ }
+  return []
+}
+
 interface CanvasDisplayState {
   displayFields:                string[]
   setDisplayFields:             (fields: string[]) => void
@@ -76,6 +87,8 @@ interface CanvasDisplayState {
   setFieldStrictness:           (field: string, value: FieldStrictness | undefined) => void
   unavailableOperationDisplay:  UnavailableOperationDisplay
   setUnavailableOperationDisplay: (value: UnavailableOperationDisplay) => void
+  hiddenBadgeTypes:             string[]
+  setHiddenBadgeTypes:          (types: string[]) => void
 }
 
 export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
@@ -98,5 +111,10 @@ export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
   setUnavailableOperationDisplay: (value) => {
     localStorage.setItem(UNAVAIL_OP_DISPLAY_STORAGE_KEY, value)
     set({ unavailableOperationDisplay: value })
+  },
+  hiddenBadgeTypes: loadHiddenBadgeTypes(),
+  setHiddenBadgeTypes: (types) => {
+    localStorage.setItem(HIDDEN_BADGE_TYPES_STORAGE_KEY, JSON.stringify(types))
+    set({ hiddenBadgeTypes: types })
   },
 }))
