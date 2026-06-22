@@ -1,5 +1,6 @@
 // 上司変更・ポジション追加
 import type { EditOperation } from './types'
+import { AVAILABLE, unavailable } from './types'
 import { ok, fail }           from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { nextRowId }          from '../../allocationRow'
@@ -19,7 +20,8 @@ export const managerChangeDef: EditOperation = {
   group:      'position',
   badge:      'transfer',
 
-  availableFor: (row) => !!row.positionCode,
+  availableFor: (row) =>
+    row.positionCode ? AVAILABLE : unavailable('ポジションコードが設定されていない行には設定できません'),
 
   inputs: [
     { field: 'transferReason', required: false },
@@ -80,7 +82,7 @@ export const addEmptyPositionDef: EditOperation = {
   suppressSideEffectWarning: true,
 
   // 組織パネルボタンからのみ起動。行メニューには表示しない
-  availableFor: () => false,
+  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
     { field: 'positionCode',   required: false, label: 'ポジション番号（自動採番・変更可）' },

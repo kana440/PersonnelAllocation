@@ -1,5 +1,6 @@
 // 出向操作 — 本務出向/受入・兼務出向/受入・それぞれの解除（SF統合・非統合）
 import type { EditOperation } from './types'
+import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
@@ -26,8 +27,12 @@ export const secondmentOutSFDef: EditOperation = {
     isActiveThisSession: (row) => !!(row.secondmentToCompany as string | undefined) && !(row.prevSecondmentToCompany as string | undefined),
   },
 
-  availableFor: (row, ms) =>
-    isRegularEmployee(row, ms) && isMainAssignment(row) && !wasSecondedOut(row),
+  availableFor(row, ms) {
+    if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
+    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    if (wasSecondedOut(row))         return unavailable('すでに出向中のため設定できません')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',      required: true  },
@@ -79,8 +84,12 @@ export const secondmentOutNonSFDef: EditOperation = {
     isActiveThisSession: (row) => !!(row.secondmentToCompany as string | undefined) && !(row.prevSecondmentToCompany as string | undefined),
   },
 
-  availableFor: (row, ms) =>
-    isRegularEmployee(row, ms) && isMainAssignment(row) && !wasSecondedOut(row),
+  availableFor(row, ms) {
+    if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
+    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    if (wasSecondedOut(row))         return unavailable('すでに出向中のため設定できません')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',      required: true  },
@@ -132,8 +141,12 @@ export const secondmentInSFDef: EditOperation = {
     isActiveThisSession: (row) => !!(row.secondmentFromCompany as string | undefined) && !(row.prevSecondmentFromCompany as string | undefined),
   },
 
-  availableFor: (row, ms) =>
-    !isSecondmentAcceptance(row, ms) && isMainAssignment(row) && !wasSecondedIn(row),
+  availableFor(row, ms) {
+    if (isSecondmentAcceptance(row, ms)) return unavailable('出向受入対象の雇用タイプは対象外です')
+    if (!isMainAssignment(row))          return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    if (wasSecondedIn(row))              return unavailable('すでに出向受入中のため設定できません')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -184,8 +197,12 @@ export const secondmentInNonSFDef: EditOperation = {
     isActiveThisSession: (row) => !!(row.secondmentFromCompany as string | undefined) && !(row.prevSecondmentFromCompany as string | undefined),
   },
 
-  availableFor: (row, ms) =>
-    !isSecondmentAcceptance(row, ms) && isMainAssignment(row) && !wasSecondedIn(row),
+  availableFor(row, ms) {
+    if (isSecondmentAcceptance(row, ms)) return unavailable('出向受入対象の雇用タイプは対象外です')
+    if (!isMainAssignment(row))          return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    if (wasSecondedIn(row))              return unavailable('すでに出向受入中のため設定できません')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -230,7 +247,7 @@ export const secondmentInNewSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: () => false, // 組織パネルボタンからのみ起動
+  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -293,7 +310,7 @@ export const secondmentInNewNonSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: () => false,
+  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -355,7 +372,7 @@ export const concurrentSecondmentInNewSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: () => false,
+  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -420,7 +437,7 @@ export const concurrentSecondmentInNewNonSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: () => false,
+  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -484,8 +501,11 @@ export const concurrentSecondmentOutSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: (row, ms) =>
-    isRegularEmployee(row, ms) && isMainAssignment(row),
+  availableFor(row, ms) {
+    if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
+    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',      required: false },
@@ -548,8 +568,11 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: (row, ms) =>
-    isRegularEmployee(row, ms) && isMainAssignment(row),
+  availableFor(row, ms) {
+    if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
+    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',      required: false },
@@ -612,7 +635,8 @@ export const concurrentSecondmentInSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: (row) => isMainAssignment(row),
+  availableFor: (row) =>
+    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -677,7 +701,8 @@ export const concurrentSecondmentInNonSFDef: EditOperation = {
   group:      'person',
   badge: 'secondment',
 
-  availableFor: (row) => isMainAssignment(row),
+  availableFor: (row) =>
+    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
 
   inputs: [
     { field: 'transferReason',               required: false },
@@ -748,9 +773,13 @@ const outReleaseInputs = [
 export const secondmentOutReleaseSFDef: EditOperation = {
   id: 'SecondmentOutReleaseSF', label: '本務出向解除（SF導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    wasSecondedOut(row) && isMainAssignment(row) &&
-    isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (!wasSecondedOut(row))    return unavailable('出向中でないため解除できません')
+    if (!isMainAssignment(row))  return unavailable('本務行のみ対象です')
+    if (!isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, ms))
+                                 return unavailable('SF未導入先の出向解除は「SF未導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...outReleaseInputs],
   onOpen: (row) => ({
     transferReason: row.transferReason      as string | undefined,
@@ -787,9 +816,13 @@ export const secondmentOutReleaseSFDef: EditOperation = {
 export const secondmentOutReleaseNonSFDef: EditOperation = {
   id: 'SecondmentOutReleaseNonSF', label: '本務出向解除（SF未導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    wasSecondedOut(row) && isMainAssignment(row) &&
-    !isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (!wasSecondedOut(row))    return unavailable('出向中でないため解除できません')
+    if (!isMainAssignment(row))  return unavailable('本務行のみ対象です')
+    if (isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, ms))
+                                 return unavailable('SF導入先の出向解除は「SF導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...outReleaseInputs],
   onOpen: (row) => ({
     transferReason: row.transferReason      as string | undefined,
@@ -837,9 +870,13 @@ const inReleaseInitial = () => ({
 export const secondmentInReleaseSFDef: EditOperation = {
   id: 'SecondmentInReleaseSF', label: '本務出向受入解除（SF導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    wasSecondedIn(row) && prevWasSecondmentIn(row, ms) &&
-    isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (!wasSecondedIn(row))          return unavailable('出向受入中でないため解除できません')
+    if (!prevWasSecondmentIn(row, ms)) return unavailable('インポート前から出向受入でない行は対象外です')
+    if (!isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, ms))
+                                       return unavailable('SF未導入先の出向受入解除は「SF未導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
@@ -874,9 +911,13 @@ export const secondmentInReleaseSFDef: EditOperation = {
 export const secondmentInReleaseNonSFDef: EditOperation = {
   id: 'SecondmentInReleaseNonSF', label: '本務出向受入解除（SF未導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    wasSecondedIn(row) && prevWasSecondmentIn(row, ms) &&
-    !isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (!wasSecondedIn(row))           return unavailable('出向受入中でないため解除できません')
+    if (!prevWasSecondmentIn(row, ms)) return unavailable('インポート前から出向受入でない行は対象外です')
+    if (isSFIntegratedCompany(row.prevSecondmentFromCompany as string | undefined, ms))
+                                       return unavailable('SF導入先の出向受入解除は「SF導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
@@ -911,9 +952,13 @@ export const secondmentInReleaseNonSFDef: EditOperation = {
 export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
   id: 'ConcurrentSecondmentOutReleaseSF', label: '兼務出向解除（SF導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    row.concurrentType === '兼務' && !!row.secondmentToCompany &&
-    isSFIntegratedCompany(row.secondmentToCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (row.concurrentType !== '兼務') return unavailable('兼務行のみ対象です')
+    if (!row.secondmentToCompany)      return unavailable('出向先が設定されていない兼務行は対象外です')
+    if (!isSFIntegratedCompany(row.secondmentToCompany as string | undefined, ms))
+                                       return unavailable('SF未導入先の兼務出向解除は「SF未導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
@@ -939,9 +984,13 @@ export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
 export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentOutReleaseNonSF', label: '兼務出向解除（SF未導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    row.concurrentType === '兼務' && !!row.secondmentToCompany &&
-    !isSFIntegratedCompany(row.secondmentToCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (row.concurrentType !== '兼務') return unavailable('兼務行のみ対象です')
+    if (!row.secondmentToCompany)      return unavailable('出向先が設定されていない兼務行は対象外です')
+    if (isSFIntegratedCompany(row.secondmentToCompany as string | undefined, ms))
+                                       return unavailable('SF導入先の兼務出向解除は「SF導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
@@ -967,9 +1016,13 @@ export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
 export const concurrentSecondmentInReleaseSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInReleaseSF', label: '兼務出向受入解除（SF導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    row.concurrentType === '兼務' && !!row.secondmentFromCompany &&
-    isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (row.concurrentType !== '兼務') return unavailable('兼務行のみ対象です')
+    if (!row.secondmentFromCompany)    return unavailable('出向受入元が設定されていない兼務行は対象外です')
+    if (!isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, ms))
+                                       return unavailable('SF未導入先の兼務出向受入解除は「SF未導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
@@ -996,9 +1049,13 @@ export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInReleaseNonSF',
   label: '兼務出向受入解除（SF未導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) =>
-    row.concurrentType === '兼務' && !!row.secondmentFromCompany &&
-    !isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, ms),
+  availableFor(row, ms) {
+    if (row.concurrentType !== '兼務') return unavailable('兼務行のみ対象です')
+    if (!row.secondmentFromCompany)    return unavailable('出向受入元が設定されていない兼務行は対象外です')
+    if (isSFIntegratedCompany(row.secondmentFromCompany as string | undefined, ms))
+                                       return unavailable('SF導入先の兼務出向受入解除は「SF導入先」操作を使用してください')
+    return AVAILABLE
+  },
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
@@ -1037,7 +1094,8 @@ export const secondmentInCancelSFDef: EditOperation = {
   id: 'SecondmentInCancelSF', label: '本務出向受入取消（SF導入先）',
   group: 'person', badge: 'negative',
   operationRole: { kind: 'lockCancel', of: 'SecondmentInSF' },
-  availableFor: (row) => isMainAssignment(row),
+  availableFor: (row) =>
+    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
   description: cancelDescription,
   suppressSideEffectWarning: true,
   inputs: [
@@ -1070,7 +1128,8 @@ export const secondmentInCancelNonSFDef: EditOperation = {
   id: 'SecondmentInCancelNonSF', label: '本務出向受入取消（SF未導入先）',
   group: 'person', badge: 'negative',
   operationRole: { kind: 'lockCancel', of: 'SecondmentInNonSF' },
-  availableFor: (row) => isMainAssignment(row),
+  availableFor: (row) =>
+    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
   description: cancelDescription,
   suppressSideEffectWarning: true,
   inputs: [
@@ -1104,7 +1163,11 @@ const concurrentCancelDescription = 'このセッションで追加した兼務�
 export const concurrentSecondmentInCancelSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInCancelSF', label: '兼務出向受入取消（SF導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) => row.concurrentType === '兼務' && isCancelAvailableSF(row, ms),
+  availableFor(row, ms) {
+    if (row.concurrentType !== '兼務') return unavailable('兼務行のみ対象です')
+    if (!isCancelAvailableSF(row, ms)) return unavailable('このセッションで追加したSF導入先の兼務出向受入行のみ取消できます')
+    return AVAILABLE
+  },
   description: concurrentCancelDescription,
   suppressSideEffectWarning: true,
   inputs: [
@@ -1136,7 +1199,11 @@ export const concurrentSecondmentInCancelSFDef: EditOperation = {
 export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInCancelNonSF', label: '兼務出向受入取消（SF未導入先）',
   group: 'person', badge: 'negative',
-  availableFor: (row, ms) => row.concurrentType === '兼務' && isCancelAvailableNonSF(row, ms),
+  availableFor(row, ms) {
+    if (row.concurrentType !== '兼務')    return unavailable('兼務行のみ対象です')
+    if (!isCancelAvailableNonSF(row, ms)) return unavailable('このセッションで追加したSF未導入先の兼務出向受入行のみ取消できます')
+    return AVAILABLE
+  },
   description: concurrentCancelDescription,
   suppressSideEffectWarning: true,
   inputs: [

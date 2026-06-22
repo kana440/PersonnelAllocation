@@ -4,6 +4,23 @@ import type { DomainContext, ValidationResult, OperationResult } from '../types'
 import type { OperationBadge } from './badge'
 
 /**
+ * availableFor の戻り値型。
+ * 利用可能なときは `{ available: true }`、不可のときは理由文字列を持つ。
+ * UI tooltip・AI ツールのデバッグ情報に使用する。
+ */
+export type AvailabilityResult =
+  | { available: true }
+  | { available: false; reason: string }
+
+/** availableFor で「利用可能」を返す定数 */
+export const AVAILABLE: AvailabilityResult = { available: true }
+
+/** availableFor で「利用不可 + 理由」を返すヘルパー */
+export function unavailable(reason: string): AvailabilityResult {
+  return { available: false, reason }
+}
+
+/**
  * 操作の概念グループ。UI でのメニュー分類・説明文に使用する。
  *   position        : ポジション操作（組織・上司・兼務など、席に関する変更）
  *   jobClassification: 職務情報操作（バンド・役職・ジョブタイプなど、任用条件の変更）
@@ -164,8 +181,9 @@ export interface EditOperation {
 
   /**
    * この操作が対象行に対してメニューに表示されるかどうか。
+   * 不可の場合は reason で理由を返す（UI tooltip・AI ツールに利用）。
    */
-  availableFor(row: AllocationRow, masters: AllMasters): boolean
+  availableFor(row: AllocationRow, masters: AllMasters): AvailabilityResult
 
   /**
    * 操作選択時の初期フィールド値を計算する（プレビュー用・UndoStack 非対象）。

@@ -359,6 +359,26 @@ const TOOL_ENTRIES: ToolEntry[] = [
     execute: args => aiTools.findVacantPositions(args as { orgCode?: string; subtreeOrgCode?: string }),
   },
 
+  // ── Read: getOperationStatus ─────────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'getOperationStatus',
+        description: '指定行に対するすべての操作の可否状態を返す。available（実行可）と unavailable（実行不可）に分類し、unavailable には reason（理由）を含む。「なぜ〇〇ができないか」「この行でできることは何か」といった確認に使う。',
+        parameters: {
+          type: 'object',
+          properties: {
+            rowId: { type: 'number', description: '対象行の rowId（findPersons で取得）' },
+          },
+          required: ['rowId'],
+        },
+      },
+    },
+    execute: args => aiTools.getOperationStatus(args.rowId as number),
+  },
+
   // ── Read: getValidationDiagnosis ─────────────────────────────────────────
   {
     kind: 'read',

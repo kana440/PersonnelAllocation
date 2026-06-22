@@ -21,8 +21,7 @@ export function NewRowOperationModal({ def, orgCode, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-[200] bg-black/30 flex items-center justify-center select-text"
-      onClick={onClose}
-      onMouseDown={e => e.stopPropagation()}
+      onMouseDown={e => { e.stopPropagation(); if (e.target === e.currentTarget) onClose() }}
     >
       <div
         className="bg-white rounded-xl shadow-2xl border border-gray-200 w-[520px] max-h-[90vh] overflow-y-auto"

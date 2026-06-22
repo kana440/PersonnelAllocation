@@ -1,5 +1,6 @@
 // 人操作 — 休職・復職・移籍・変更なし
 import type { EditOperation } from './types'
+import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { FIELD_METADATA } from '../../allocationRow'
@@ -26,7 +27,11 @@ export const leaveOfAbsenceDef: EditOperation = {
     isActiveThisSession: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
   },
 
-  availableFor: (row) => !!row.userId && !row.prevLeaveOfAbsenceSign,
+  availableFor(row) {
+    if (!row.userId)                return unavailable('担当者が配属されていない行には設定できません')
+    if (row.prevLeaveOfAbsenceSign) return unavailable('インポート前から休職中のため設定できません（復職操作を使用してください）')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',     required: true,  readOnly: true, options: [TR.LEAVE_AND_RETURN] },
@@ -78,7 +83,7 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
 
   operationRole: { kind: 'lockCancel', of: 'LeaveOfAbsence' },
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     { field: 'transferReason',     required: false, readOnly: true },
@@ -132,7 +137,8 @@ export const returnFromLeaveDef: EditOperation = {
     isActiveThisSession: (row) => !row.leaveOfAbsenceSign && !!row.prevLeaveOfAbsenceSign,
   },
 
-  availableFor: (row) => !!row.leaveOfAbsenceSign,
+  availableFor: (row) =>
+    row.leaveOfAbsenceSign ? AVAILABLE : unavailable('現在休職中でないため復職できません'),
 
   inputs: [
     { field: 'transferReason',     required: false, readOnly: true, options: [] },
@@ -183,7 +189,7 @@ export const returnFromLeaveCancelDef: EditOperation = {
 
   operationRole: { kind: 'lockCancel', of: 'ReturnFromLeave' },
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     { field: 'leaveOfAbsenceSign', required: false, readOnly: true, inputType: 'checkbox', label: '休職フラグ（復元）' },
@@ -237,7 +243,10 @@ export const employmentTransferDef: EditOperation = {
     isActiveThisSession: (row) => row.transferReason === TR.TRANSFER,
   },
 
-  availableFor: (row) => row.transferReason !== TR.ORG_TRANSFER,
+  availableFor: (row) =>
+    row.transferReason !== TR.ORG_TRANSFER
+      ? AVAILABLE
+      : unavailable('組織移管（ORG_TRANSFER）が設定されている行には適用できません'),
 
   inputs: [
     { field: 'transferReason',       required: true,  readOnly: true, options: [TR.TRANSFER] },
@@ -312,7 +321,7 @@ export const employmentTransferCancelDef: EditOperation = {
 
   operationRole: { kind: 'lockCancel', of: 'EmploymentTransfer' },
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     { field: 'transferReason', required: false, readOnly: true },
@@ -363,7 +372,7 @@ export const noChangeDef: EditOperation = {
     isActiveThisSession: (row) => row.transferReason === TR.NO_CHANGE,
   },
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     { field: 'transferReason', required: true,  readOnly: true },
@@ -422,7 +431,7 @@ export const noChangeCancelDef: EditOperation = {
 
   operationRole: { kind: 'lockCancel', of: 'NoChange' },
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     { field: 'transferReason', required: false, readOnly: true },

@@ -1,5 +1,6 @@
 // 兼務 — 社内兼務追加・解除
 import type { EditOperation } from './types'
+import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { nextRowId } from '../../allocationRow'
@@ -19,12 +20,18 @@ export const concurrentAddDef: EditOperation = {
   group:      'position',
   badge: 'concurrent',
 
-  availableFor: (row) => !!row.userId && isMainAssignment(row),
+  availableFor(row) {
+    if (!row.userId)            return unavailable('担当者が配属されていない行には設定できません')
+    if (!isMainAssignment(row)) return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    return AVAILABLE
+  },
 
   inputs: [
-    { field: 'transferReason',   required: false },
+    { field: 'transferReason',   required: false, options: [TR.SECONDMENT_IN] },
+    { field: 'concurrentReason', required: false },
     { field: 'lastName',         required: true  },
     { field: 'firstName',        required: true  },
+    { field: 'userId',           required: false },
     { field: 'groupEmployeeId',  required: false, readOnly: true },
     { field: 'employeeNumber',   required: false, readOnly: true },
     { field: 'employmentType',   required: false, readOnly: true },
@@ -34,12 +41,11 @@ export const concurrentAddDef: EditOperation = {
     { field: 'positionBand',     required: false },
     { field: 'band',             required: false },
     { field: 'payGrade',         required: false },
-    { field: 'concurrentReason', required: false },
     { field: 'memo',             required: false },
   ],
 
   onOpen: (row) => ({
-    transferReason:  row.transferReason,
+    transferReason:  TR.SECONDMENT_IN,
     lastName:        row.lastName,
     firstName:       row.firstName,
     groupEmployeeId: row.groupEmployeeId,
@@ -95,7 +101,7 @@ export const concurrentAddNewDef: EditOperation = {
   badge: 'concurrent',
 
   // 組織パネルボタンからのみ起動。行メニューには表示しない
-  availableFor: () => false,
+  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
     { field: 'transferReason',   required: false },
@@ -164,11 +170,13 @@ export const concurrentAddCancelDef: EditOperation = {
   suppressSideEffectWarning: true,
 
   // prevConcurrentType が空 = このセッションで追加した行
-  availableFor: (row) =>
-    row.concurrentType === '兼務' &&
-    !row.prevConcurrentType &&
-    !row.secondmentToCompany &&
-    !row.secondmentFromCompany,
+  availableFor(row) {
+    if (row.concurrentType !== '兼務')  return unavailable('兼務行のみ対象です')
+    if (row.prevConcurrentType)         return unavailable('インポート前から存在する兼務行は取消できません（解除操作を使用してください）')
+    if (row.secondmentToCompany)        return unavailable('出向兼務行は出向解除操作を使用してください')
+    if (row.secondmentFromCompany)      return unavailable('出向兼務受入行は出向解除操作を使用してください')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'lastName',         required: false, readOnly: true },
@@ -218,11 +226,13 @@ export const concurrentReleaseDef: EditOperation = {
 
   // prevConcurrentType = '兼務' → インポート時から兼務として存在していた行のみ対象
   // セッション内追加分は ConcurrentAddCancel で対処する
-  availableFor: (row) =>
-    row.concurrentType === '兼務' &&
-    !!row.prevConcurrentType &&
-    !row.secondmentToCompany &&
-    !row.secondmentFromCompany,
+  availableFor(row) {
+    if (row.concurrentType !== '兼務')  return unavailable('兼務行のみ対象です')
+    if (!row.prevConcurrentType)        return unavailable('このセッションで追加した兼務行は「社内兼務追加取消」を使用してください')
+    if (row.secondmentToCompany)        return unavailable('出向兼務行は出向解除操作を使用してください')
+    if (row.secondmentFromCompany)      return unavailable('出向兼務受入行は出向解除操作を使用してください')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason', required: true, readOnly: true },

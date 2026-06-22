@@ -36,11 +36,16 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
     () => ({ allocationList, afterOrganizations, masters }),
     [allocationList, afterOrganizations, masters]
   )
-  const initialValues = useMemo(
-    () => ({ ...def.onOpen(row, ctx), ...(overrideInitial ?? {}) }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [def, row, ctx, overrideInitial],
-  )
+  const initialValues = useMemo(() => {
+    const base     = def.onOpen(row, ctx)
+    const override = overrideInitial ?? {}
+    // overrideInitial に含まれるフィールドから連動導出（managerPositionCode → managerName 等）を伝播させる
+    const derived  = Object.keys(override).length > 0
+      ? deriveFieldUpdates(override, { ...row, ...base } as AllocationRow, masters, allocationList)
+      : {}
+    return { ...base, ...override, ...derived }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [def, row, ctx, overrideInitial])
 
   const [values,         setValues]         = useState<Partial<AllocationRow>>(() => ({ ...initialValues }))
   const [orgPickerField, setOrgPickerField] = useState<string | null>(null)
@@ -116,8 +121,17 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
 
   const issues = useMemo(
     () => validateRow({ row: draftRow, afterOrganizations, masters, allocationList })
-      .filter(i => fieldInputs.some(inp => inp.field === i.field && !inp.readOnly)),
-    [draftRow, afterOrganizations, masters, allocationList, fieldInputs]
+      .filter(i => {
+        const inp = fieldInputs.find(f => f.field === i.field && !f.readOnly)
+        if (!inp) return false
+        // required: false のフィールドは値が空のときのエラーを除外（操作定義が空を許容している）
+        if (inp.required === false) {
+          const val = (values[inp.field] as string | undefined) ?? ''
+          if (!val) return false
+        }
+        return true
+      }),
+    [draftRow, afterOrganizations, masters, allocationList, fieldInputs, values]
   )
 
   const needsNewPosition = (): boolean => {
@@ -212,15 +226,21 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               return (
                 <div key={`row-${idx}`} className="grid gap-2" style={{ gridTemplateColumns: `repeat(${item.inputs.length}, 1fr)` }}>
                   {item.inputs.map(inp => {
-                    const fk  = inp.field as string
-                    const lbl = (inp.label ?? ALLOCATION_LIST_LABEL_MAP[fk]?.ja ?? fk).replace(/_新$/, '')
-                    const val = (values[inp.field] as string | undefined) ?? ''
+                    const fk      = inp.field as string
+                    const lbl     = (inp.label ?? ALLOCATION_LIST_LABEL_MAP[fk]?.ja ?? fk).replace(/_新$/, '')
+                    const val     = (values[inp.field] as string | undefined) ?? ''
+                    const prevFk  = `prev${fk.charAt(0).toUpperCase()}${fk.slice(1)}`
+                    const prevVal = (row[prevFk as keyof AllocationRow] as string | undefined) ?? ''
+                    const changed = FIELDS_WITH_PREV.has(fk) && !!prevVal && val !== prevVal
                     return (
                       <div key={fk}>
                         <label className="text-xs font-medium text-gray-600 block mb-1">{lbl}</label>
-                        <div className="text-xs bg-gray-50 border border-gray-200 rounded px-2 py-[5px] min-h-[30px] text-gray-500 select-none truncate">
+                        <div className={`text-xs bg-gray-50 border rounded px-2 py-[5px] min-h-[30px] text-gray-500 select-none truncate ${changed ? 'border-amber-400' : 'border-gray-200'}`}>
                           {val || <span className="text-gray-300">—</span>}
                         </div>
+                        {changed && (
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate">前: {prevVal}</p>
+                        )}
                       </div>
                     )
                   })}
@@ -304,6 +324,10 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
 
             // ── ポジション picker ──────────────────────────────────────────────
             if (picker === 'position') {
+              const posRow      = currentVal ? allocationList.find(r => r.positionCode === currentVal && !!r.userId) : undefined
+              const posPersonName = posRow
+                ? ([posRow.lastName, posRow.firstName].filter(Boolean).join(' ') || undefined)
+                : undefined
               return (
                 <div key={fieldKey}>
                   <label className="text-xs font-medium text-gray-600 block mb-1">
@@ -329,6 +353,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
                     </div>
                     {prevBox}
                   </div>
+                  {posPersonName && <p className="text-[10px] text-blue-600 mt-0.5 truncate">{posPersonName}</p>}
                   {diffLine}
                   {fieldIssues.map((issue, i) => (
                     <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>

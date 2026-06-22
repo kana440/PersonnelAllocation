@@ -42,12 +42,11 @@ export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選�
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={onClose}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
         className="bg-white rounded-xl shadow-xl flex flex-col overflow-hidden"
         style={{ width: 440, height: '72vh' }}
-        onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-sm font-semibold text-gray-800">{title}</h2>

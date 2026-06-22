@@ -5,7 +5,10 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 export interface DropIntentState {
   fromRowId:            number | null
   personId:             string
+  /** ドロップ先の組織 ID */
   toOrgId:              string
+  /** ドラッグ元の組織 ID（person/gap ドロップ時のみ）*/
+  fromOrgId?:           string
   /** ドロップの種別 */
   dropType:             'org' | 'person' | 'gap'
   /** ドロップ後の上司として設定する positionCode（person/gap ドロップ時のみ） */

@@ -10,12 +10,25 @@ function detectBandChangeKind(row: AllocationRow, ctx: DetectContext): 'promotio
   const posBandChanged = (row.prevPositionBand ?? '') !== (row.positionBand ?? '')
   if (!bandChanged && !posBandChanged) return null
 
-  const prevLevel  = parseBandLevel(row.prevBand as string | undefined)
-  const afterLevel = parseBandLevel(row.band as string | undefined)
+  if (bandChanged) {
+    const prevLevel  = parseBandLevel(row.prevBand as string | undefined)
+    const afterLevel = parseBandLevel(row.band as string | undefined)
 
-  if (bandChanged && prevLevel !== null && afterLevel !== null) {
-    if (afterLevel > prevLevel) return 'promotion'
-    if (afterLevel < prevLevel) return 'demotion'
+    if (prevLevel !== null && afterLevel !== null) {
+      if (afterLevel > prevLevel) return 'promotion'
+      if (afterLevel < prevLevel) return 'demotion'
+      return 'titleChange'
+    }
+
+    // parseBandLevel が null を返す場合（数値なしバンドコード）は
+    // positionBand と同じく jobLevels.promotionDemotionWarningLevel で判定する
+    const jlwm = new Map(ctx.masters.jobLevels.map(e => [e.code, e.promotionDemotionWarningLevel]))
+    const prev  = jlwm.get((row.prevBand as string | undefined) ?? '')
+    const after = jlwm.get((row.band     as string | undefined) ?? '')
+    if (prev !== undefined && after !== undefined) {
+      if (after > prev) return 'promotion'
+      if (after < prev) return 'demotion'
+    }
     return 'titleChange'
   }
 

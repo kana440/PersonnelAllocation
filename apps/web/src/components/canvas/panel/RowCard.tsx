@@ -68,12 +68,13 @@ export function RowCard({
   }
 
   const handleDropAsGap = (data: DragData) => {
-    if (!data.personId) return
+    if (!data.personId || data.personId === person?.id) return
     clearDropTargets()
     openDropIntent({
       fromRowId:           data.fromRowId ?? null,
       personId:            data.personId,
       toOrgId:             orgId,
+      fromOrgId:           data.fromOrgId,
       dropType:            'gap',
       managerPositionCode: computeGapManager(),
     })
@@ -86,6 +87,7 @@ export function RowCard({
       fromRowId:           data.fromRowId ?? null,
       personId:            data.personId,
       toOrgId:             orgId,
+      fromOrgId:           data.fromOrgId,
       dropType:            'person',
       managerPositionCode: row.positionCode ?? undefined,
     })
@@ -206,7 +208,7 @@ export function RowCard({
           } : undefined
         }
       >
-        {/* 1行目: [兼] 氏名 社員ID 変更バッジ */}
+        {/* 1行目: [兼] 氏名 社員ID [spacer] 変更バッジ右詰め */}
         <div className="flex items-center gap-1 min-w-0">
           {isConcurrent && (
             <span className="flex-shrink-0 text-[9px] font-bold bg-purple-100 text-purple-600 px-0.5 py-0.5 rounded leading-none">兼</span>
@@ -216,10 +218,14 @@ export function RowCard({
               {posTitle || '（空席）'}
             </span>
           ) : (
-            <span className="font-semibold text-gray-800 truncate flex-1 leading-tight">{person!.name}</span>
-          )}
-          {!isVacant && row.groupEmployeeId && (
-            <span className="flex-shrink-0 text-[9px] text-gray-300 font-mono">{row.groupEmployeeId}</span>
+            <>
+              <span className="font-semibold text-gray-800 truncate leading-tight min-w-0">{person!.name}</span>
+              {row.groupEmployeeId && (
+                <span className="flex-shrink-0 text-[9px] text-gray-300 font-mono">{row.groupEmployeeId}</span>
+              )}
+              {/* spacer: 残りスペースを吸収してバッジを右端へ */}
+              <div className="flex-1" />
+            </>
           )}
           {[...activePatterns].map(p => {
             const meta = EDIT_PATTERN_META[p]
@@ -230,7 +236,7 @@ export function RowCard({
             )
           })}
           {isSelectMode && !isVacant && (
-            <span className={`ml-auto flex-shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] font-bold ${
+            <span className={`flex-shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] font-bold ${
               isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
             }`}>{isSelected ? '✓' : ''}</span>
           )}

@@ -1,5 +1,6 @@
 // 職務内容・雇用形態 — ジョブタイプ変更・雇用延長
 import type { EditOperation } from './types'
+import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { isRegularEmployee, isExtendedEmployeeTarget } from '../helpers'
@@ -37,9 +38,12 @@ export const jobTypeChangeDef: EditOperation = {
 
   description: 'ジョブファミリー・ジョブタイプを変更します。給与等級の変更が発生する場合は、適切な給与等級を選択してください。',
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
+    // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
+    { field: 'promotionSign',      required: false, readOnly: true, inputType: 'checkbox', indicator: true },
+    { field: 'payGradeChangeSign', required: false, readOnly: true, inputType: 'checkbox', indicator: true },
     { field: 'transferReason', required: false,
       options: [TR.DIV_TRANSFER], optionsMode: 'suggest' },
 
@@ -51,11 +55,13 @@ export const jobTypeChangeDef: EditOperation = {
   ],
 
   onOpen: (row) => ({
-    transferReason: row.transferReason ?? TR.DIV_TRANSFER as string | undefined,
-    jobFamily:      row.jobFamily      as string | undefined,
-    jobType:        row.jobType        as string | undefined,
-    payGrade:       row.payGrade       as string | undefined,
-    memo:           row.memo           ?? '職種変更' as string | undefined,
+    promotionSign:      row.promotionSign      as string | undefined,
+    payGradeChangeSign: row.payGradeChangeSign as string | undefined,
+    transferReason:     row.transferReason ?? TR.DIV_TRANSFER as string | undefined,
+    jobFamily:          row.jobFamily      as string | undefined,
+    jobType:            row.jobType        as string | undefined,
+    payGrade:           row.payGrade       as string | undefined,
+    memo:               row.memo           ?? '職種変更' as string | undefined,
   }),
 
   onValidate(ctx, rowId, _values) {
@@ -93,7 +99,10 @@ export const employmentExtensionDef: EditOperation = {
     isActiveThisSession: (row) => row.transferReason === TR.EMPLOYMENT_EXTENSION_PROCEDURE,
   },
 
-  availableFor: (row, ms) => isExtendedEmployeeTarget(row, ms) || isRegularEmployee(row, ms),
+  availableFor: (row, ms) =>
+    isExtendedEmployeeTarget(row, ms) || isRegularEmployee(row, ms)
+      ? AVAILABLE
+      : unavailable('雇用延長の対象者または正社員のみ対象です'),
 
   inputs: [
     { field: 'transferReason', required: true, readOnly: true },
@@ -137,7 +146,8 @@ export const employmentTypeChangeDef: EditOperation = {
   group:      'jobClassification',
   badge:      'jobChange',
 
-  availableFor: (row) => !!row.userId,
+  availableFor: (row) =>
+    row.userId ? AVAILABLE : unavailable('担当者が配属されていない行には設定できません'),
 
   inputs: [
     { field: 'transferReason', required: true, readOnly: true },

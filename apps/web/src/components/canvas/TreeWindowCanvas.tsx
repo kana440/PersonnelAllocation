@@ -103,7 +103,7 @@ export function TreeWindowCanvas() {
     <div className="relative h-full">
       {/* ツールバー（右上固定） */}
       <div className="absolute top-2 right-3 z-10 flex items-center gap-2">
-        <label className="flex items-center gap-1 cursor-pointer select-none">
+        <label className="flex items-center gap-1 cursor-pointer select-none px-2 h-[26px] border border-gray-300 bg-white rounded shadow-sm">
           <input
             type="checkbox"
             checked={autoArrange}
@@ -115,7 +115,7 @@ export function TreeWindowCanvas() {
         <button
           onClick={handleArrange}
           disabled={autoArrange}
-          className="px-2.5 py-1 text-[11px] font-medium rounded border shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-400"
+          className="px-2.5 py-1 text-[11px] font-medium rounded border shadow-sm transition-colors border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-400 disabled:text-gray-300 disabled:border-gray-200 disabled:cursor-not-allowed"
           title={autoArrange ? '自動整列 ON のとき常に整列済み' : '組織階層に従ってウィンドウを整列'}
         >⊞ 整列</button>
         <button

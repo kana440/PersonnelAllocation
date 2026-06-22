@@ -102,7 +102,7 @@ export function RowContextMenu({ x, y, row, onEditPattern, onDirectEdit, onClose
     const opId = PATTERN_OP_ID[p]
     if (!opId) return true
     const def = OP_BY_ID.get(opId)
-    return def ? resolveAvailability(def, row, masters) : true
+    return def ? resolveAvailability(def, row, masters).available : true
   }
 
   const name         = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'

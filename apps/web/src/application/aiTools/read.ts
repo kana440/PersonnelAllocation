@@ -91,7 +91,7 @@ export function createReadMethods(service: HRApplicationService) {
         const orgName     = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.departmentCode)?.name
         const prevOrgName = afterOrganizations.find(o => (o.externalCode ?? o.id) === r.prevDepartmentCode)?.name
         const availableOps = ALL_EDIT_OPERATIONS
-          .filter(def => resolveAvailability(def, r, masters))
+          .filter(def => resolveAvailability(def, r, masters).available)
           .map(def => def.label)
         return {
           rowId:                  r.rowId,
@@ -176,7 +176,7 @@ export function createReadMethods(service: HRApplicationService) {
     const changeKinds = [...changes.patterns].map(p => EDIT_PATTERN_META[p]?.label ?? p)
 
     const availableOps = ALL_EDIT_OPERATIONS
-      .filter(def => resolveAvailability(def, row, masters))
+      .filter(def => resolveAvailability(def, row, masters).available)
       .map(def => def.label)
 
     return {
@@ -445,6 +445,34 @@ export function createReadMethods(service: HRApplicationService) {
     return computeBandStepDiff(row.positionBand as string | undefined, newPositionBand, masters)
   }
 
+  /**
+   * 指定行に対するすべての操作の可否状態を返す。
+   * 利用可能なものと不可能なものを両方含み、不可の場合は reason を含む。
+   * AI のデバッグ・「なぜこの操作ができないか」確認に使う。
+   */
+  function getOperationStatus(rowId: number): {
+    available:   Array<{ id: string; label: string; group: string }>
+    unavailable: Array<{ id: string; label: string; group: string; reason: string }>
+  } | { ok: false; error: string } {
+    const { allocationList, masters } = service.getSnapshot()
+    const row = allocationList.find(r => r.rowId === rowId)
+    if (!row) return { ok: false, error: `行が見つかりません (rowId: ${rowId})` }
+
+    const available:   Array<{ id: string; label: string; group: string }> = []
+    const unavailable: Array<{ id: string; label: string; group: string; reason: string }> = []
+
+    for (const def of ALL_EDIT_OPERATIONS) {
+      const result = resolveAvailability(def, row, masters)
+      if (result.available) {
+        available.push({ id: def.id, label: def.label, group: def.group })
+      } else {
+        unavailable.push({ id: def.id, label: def.label, group: def.group, reason: result.reason })
+      }
+    }
+
+    return { available, unavailable }
+  }
+
   function getAvailableMultiRowOperations(anchorRowId: number) {
     const { allocationList, masters } = service.getSnapshot()
     const anchor = allocationList.find(r => r.rowId === anchorRowId)
@@ -474,6 +502,7 @@ export function createReadMethods(service: HRApplicationService) {
     getRowContext, getFieldOptions, findVacantPositions,
     getPersonsDetail, listChangedRows, getOrgTreeData,
     getPromotionBandInfo, computePromotionStepDiff,
+    getOperationStatus,
     getAvailableMultiRowOperations,
   }
 }

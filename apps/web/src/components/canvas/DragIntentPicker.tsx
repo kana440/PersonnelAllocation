@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { orgRestructureDef, orgTransferDef } from '@personnel/domain/commands/defs/orgTransferDefs'
 import { concurrentAddDef } from '@personnel/domain/commands/defs/concurrentDefs'
+import { managerChangeDef } from '@personnel/domain/commands/defs/positionAddDef'
 import type { EditOperation } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { afterKeysByBinding } from '@personnel/domain/allocationRow'
@@ -17,7 +18,8 @@ interface Props {
   onCancel:        () => void
 }
 
-const INTENTS = [
+// ── 異なる組織への異動インテント ──────────────────────────────────────────────
+const TRANSFER_INTENTS = [
   {
     def:   orgRestructureDef,
     title: '組織改正による異動',
@@ -47,6 +49,28 @@ const INTENTS = [
   },
 ] as const
 
+// ── 同一組織内のインテント ────────────────────────────────────────────────────
+const SAME_ORG_INTENTS = [
+  {
+    def:   managerChangeDef,
+    title: '上司変更',
+    desc:  'この組織内でレポートラインを変更します。',
+    border: 'border-green-200 hover:border-green-400 hover:bg-green-50',
+    badge:  'bg-green-100 text-green-700',
+    icon:   '🔗',
+    usePrimaryOnly: false,
+  },
+  {
+    def:   concurrentAddDef,
+    title: '兼務追加',
+    desc:  '本務を維持したまま、この組織に兼務を追加する。本務行をベースに兼務行が新たに作成されます。',
+    border: 'border-cyan-200 hover:border-cyan-400 hover:bg-cyan-50',
+    badge:  'bg-cyan-100 text-cyan-700',
+    icon:   '📋',
+    usePrimaryOnly: true,
+  },
+] as const
+
 /** 移動後に元ポジションを空席行として残すラッパー */
 function wrapWithLeaveVacant(baseDef: EditOperation): EditOperation {
   return {
@@ -59,22 +83,18 @@ function wrapWithLeaveVacant(baseDef: EditOperation): EditOperation {
         return baseDef.onSubmit(ctx, rowId, values)
       }
 
-      // ベース操作実行（departmentCode・managerPositionCode などを更新）
       const baseResult = baseDef.onSubmit(ctx, rowId, values)
 
-      // 空席行と人の新ポジションコード用 ID を確保
       const maxId = baseResult.updatedList.length === 0
         ? 0
         : Math.max(...baseResult.updatedList.map(r => r.rowId))
       const vacantRowId = maxId + 1
       const newPosCode  = `_pos_${maxId + 2}`
 
-      // 人の行に新しい positionCode を付与（旧コードは空席行へ）
       const updatedWithNewPos = baseResult.updatedList.map(r =>
         r.rowId === rowId ? { ...r, positionCode: newPosCode } : r
       )
 
-      // 空席行を生成（旧 position / both フィールドを引き継ぎ）
       const positionFields = Object.fromEntries(
         afterKeysByBinding('position').map(k => [k, row[k as keyof AllocationRow]])
       )
@@ -83,8 +103,8 @@ function wrapWithLeaveVacant(baseDef: EditOperation): EditOperation {
       )
       const vacantRow = {
         rowId: vacantRowId,
-        ...bothFields,      // 旧 departmentCode・組織階層
-        ...positionFields,  // 旧 positionCode・localJobTitle・managerPositionCode など
+        ...bothFields,
+        ...positionFields,
       } as AllocationRow
 
       return {
@@ -101,6 +121,9 @@ export function DragIntentPicker({ state, allocationList, persons, allOrgs, onPi
   const toOrgCode  = toOrg?.externalCode ?? ''
   const personName = person?.name ?? '—'
   const toOrgName  = toOrg?.name   ?? '—'
+
+  // 同一組織かどうかを判定（fromOrgId が渡された場合のみ）
+  const isSameOrg = !!state.fromOrgId && state.fromOrgId === state.toOrgId
 
   // person/gap ドロップ時の上司を特定（表示用）
   const managerRow    = state.managerPositionCode
@@ -124,8 +147,8 @@ export function DragIntentPicker({ state, allocationList, persons, allOrgs, onPi
         ?? null
   }, [state, allocationList, person])
 
-  // 元ポジションを持つ場合のみ空席チェックボックスを表示
-  const hasPosition   = !!sourceRow?.positionCode
+  // 元ポジションを持つ場合のみ空席チェックボックスを表示（異組織移動時のみ）
+  const hasPosition = !!sourceRow?.positionCode
 
   // prev データで部下の有無を判定
   const prevPosCode      = (sourceRow?.prevPositionCode as string | undefined) ?? null
@@ -148,26 +171,37 @@ export function DragIntentPicker({ state, allocationList, persons, allOrgs, onPi
         ?? null
   }
 
-  const handlePick = (intent: typeof INTENTS[number]) => {
+  const handlePick = (intent: { def: EditOperation; usePrimaryOnly: boolean }) => {
     const row = findSourceRow(intent.usePrimaryOnly)
     if (!row) return
     const mgrOverride = state.managerPositionCode !== undefined
       ? { managerPositionCode: state.managerPositionCode }
       : {}
 
-    // 兼務追加以外で空席チェックが ON かつポジションがある場合はラップ
-    const def = (!intent.usePrimaryOnly && leavePositionVacant && !!row.positionCode)
+    // 異組織移動 + 空席チェック ON のときラップ
+    const def = (!isSameOrg && !intent.usePrimaryOnly && leavePositionVacant && !!row.positionCode)
       ? wrapWithLeaveVacant(intent.def)
       : intent.def
 
     onPick(def, row, { departmentCode: toOrgCode, ...mgrOverride })
   }
 
+  // ドロップ後の上司が現在と同じ（レポートライン変更なし）か判定
+  const isSameManager = isSameOrg
+    && state.managerPositionCode !== undefined
+    && state.managerPositionCode === (sourceRow?.managerPositionCode as string | undefined)
+
+  // 同一組織か異組織かでインテントセットを切り替え。同一マネージャーへの変更なら上司変更は不要なので除外
+  const sameOrgIntents = isSameManager
+    ? SAME_ORG_INTENTS.filter(i => i.def.id !== managerChangeDef.id)
+    : SAME_ORG_INTENTS
+  const intents = isSameOrg ? sameOrgIntents : TRANSFER_INTENTS
+  const gridCols = !isSameOrg ? 'grid-cols-3' : isSameManager ? 'grid-cols-1' : 'grid-cols-2'
+
   return createPortal(
     <div
       className="fixed inset-0 z-[200] bg-black/30 flex items-center justify-center select-text"
-      onClick={onCancel}
-      onMouseDown={e => e.stopPropagation()}
+      onMouseDown={e => { e.stopPropagation(); if (e.target === e.currentTarget) onCancel() }}
     >
       <div
         className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full mx-4"
@@ -177,9 +211,11 @@ export function DragIntentPicker({ state, allocationList, persons, allOrgs, onPi
         <div className="mb-5 text-center">
           <p className="text-sm font-semibold text-gray-800">
             <span className="text-blue-600">{personName}</span>
-            {' '}を{' '}
-            <span className="text-indigo-600">{toOrgName}</span>
-            {' '}へ
+            {isSameOrg ? (
+              <> の <span className="text-indigo-600">{toOrgName}</span> 内での操作</>
+            ) : (
+              <> を <span className="text-indigo-600">{toOrgName}</span> へ</>
+            )}
           </p>
           <p className="text-xs text-gray-500 mt-1">操作の種別を選択してください</p>
         </div>
@@ -194,8 +230,8 @@ export function DragIntentPicker({ state, allocationList, persons, allOrgs, onPi
           </div>
         )}
 
-        {/* 元ポジションを空席として残すチェックボックス */}
-        {hasPosition && (
+        {/* 元ポジションを空席として残すチェックボックス（異組織移動時のみ） */}
+        {!isSameOrg && hasPosition && (
           <div className={`mb-4 px-3 py-2.5 rounded-lg border text-xs ${
             hasSubordinates
               ? 'bg-amber-50 border-amber-200 text-amber-800'
@@ -218,15 +254,15 @@ export function DragIntentPicker({ state, allocationList, persons, allOrgs, onPi
                     <span className="font-semibold">元のポジションを空席として残す（推奨）</span>
                   </>
                 ) : (
-                  '元のポジションを空席として残す（同じ組織・上司に別の人を当てる予定がある場合にチェック）'
+                  '元のポジションを空席として残す（組織改変・業務異動のみ。兼務追加には影響しません）'
                 )}
               </span>
             </label>
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-3">
-          {INTENTS.map((intent) => (
+        <div className={`grid gap-3 ${gridCols}`}>
+          {intents.map((intent) => (
             <button
               key={intent.def.id}
               onClick={() => handlePick(intent)}

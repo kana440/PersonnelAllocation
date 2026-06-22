@@ -12,8 +12,8 @@
  *   2. ここの再エクスポートに追加
  */
 
-export type { EditOperation, OperationDef, OperationGroup, OperationRole, OperationInput, InputRow, SectionDivider, FieldChangeEffect } from './types'
-export { isSectionDivider, isInputRow } from './types'
+export type { EditOperation, OperationDef, OperationGroup, OperationRole, OperationInput, InputRow, SectionDivider, FieldChangeEffect, AvailabilityResult } from './types'
+export { isSectionDivider, isInputRow, AVAILABLE, unavailable } from './types'
 export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
 
@@ -49,7 +49,8 @@ export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employm
 // ── 上司変更・ポジション追加 ─────────────────────────────────────────────────
 export { managerChangeDef, addEmptyPositionDef } from './positionAddDef'
 
-import type { EditOperation } from './types'
+import type { EditOperation, AvailabilityResult } from './types'
+import { AVAILABLE } from './types'
 import type { EditCommand, DomainContext } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import type { AllMasters } from '../../masters/aggregate'
@@ -80,6 +81,7 @@ export { ALL_MULTI_ROW_OPERATION_DEFS, nonSFSecondmentOutDef } from './multiRowD
 
 /**
  * `operationRole` を考慮した availableFor 判定。
+ * 不可の場合は reason で理由を返す（UI tooltip・AI デバッグ用）。
  *
  * lockCancel: 対応する lock の isActiveThisSession が true のときだけ表示。
  * lock 含む通常操作: いずれかの lock が active なら全てブロック。
@@ -88,18 +90,24 @@ export function resolveAvailability(
   def:     EditOperation,
   row:     AllocationRow,
   masters: AllMasters,
-): boolean {
-  if (!def.availableFor(row, masters)) return false
+): AvailabilityResult {
+  const forResult = def.availableFor(row, masters)
+  if (!forResult.available) return forResult
 
   const activeLock = ALL_EDIT_OPERATIONS.find(
     d => d.operationRole?.kind === 'lock' && d.operationRole.isActiveThisSession(row),
   )
 
   if (def.operationRole?.kind === 'lockCancel') {
-    return activeLock?.id === def.operationRole.of
+    if (activeLock?.id === def.operationRole.of) return AVAILABLE
+    return { available: false, reason: `${def.operationRole.of} がセッション内で有効でないため取消できません` }
   }
 
-  return !activeLock
+  if (activeLock) {
+    return { available: false, reason: `「${activeLock.label}」が設定中のため他の操作はできません` }
+  }
+
+  return AVAILABLE
 }
 
 

@@ -6,7 +6,7 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({ message, onConfirm, onCancel }: ConfirmDialogProps) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={onCancel}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onMouseDown={e => { if (e.target === e.currentTarget) onCancel() }}>
       <div className="bg-white rounded-xl shadow-2xl w-80 p-5 flex flex-col gap-4" onClick={e => e.stopPropagation()}>
         <div className="text-sm font-bold text-gray-800">確認</div>
         <div className="text-xs text-gray-600 leading-relaxed whitespace-pre-line">{message}</div>

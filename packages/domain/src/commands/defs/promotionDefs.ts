@@ -1,5 +1,6 @@
 // 昇降格・役職変更 — 昇格・降格・役職変更
 import type { EditOperation } from './types'
+import { AVAILABLE } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { DirectEditOperation } from '../handlers/directEdit'
@@ -25,7 +26,7 @@ export const promotionDef: EditOperation = {
   badge:       'positive',
   suppressSideEffectWarning: true,
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
@@ -99,7 +100,7 @@ export const demotionDef: EditOperation = {
   badge:       'negative',
   suppressSideEffectWarning: true,
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
@@ -172,7 +173,7 @@ export const titleChangeDef: EditOperation = {
   group:       'jobClassification',
   badge:       'jobChange',
 
-  availableFor: () => true,
+  availableFor: () => AVAILABLE,
 
   inputs: [
     { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_REFORM, TR.DIV_TRANSFER], optionsMode: 'suggest' },
