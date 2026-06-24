@@ -15,30 +15,63 @@ export const nonSFSecondmentOutDef: MultiRowOperationDef = {
   description: '出向元行を出向箱に移動し、SF未導入会社の受入行を新規作成します。',
   badge:       'secondment',
 
-  availableFor: (anchor, ms, _allRows) => canCreateNonSFSecondmentPair(anchor, ms),
+  availableFor: (anchor, ms, allRows) => canCreateNonSFSecondmentPair(anchor, ms, allRows),
 
   sections: [
     {
-      label: '出向元（既存行を更新）',
+      label:  '出向元（既存行を更新）',
+      notice: '申請区分（本務出向）・本務兼務区分（出向箱）・役職（出向者）は自動設定されます。',
       inputs: [
         { field: 'secondmentToCompany', required: true },
         { field: 'departmentCode',      required: false, label: '出向箱の組織', picker: 'org' },
-        { field: 'transferReason',      required: false },
         { field: 'employmentType',      required: false, label: '雇用タイプ（出向後）' },
         { field: 'memo',                required: false },
       ],
+      initialValues: (anchor) => {
+        const vals: Record<string, string> = {}
+        if (anchor.secondmentToCompany) vals.secondmentToCompany = anchor.secondmentToCompany as string
+        if (anchor.departmentCode)      vals.departmentCode      = anchor.departmentCode      as string
+        if (anchor.employmentType)      vals.employmentType      = anchor.employmentType      as string
+        if (anchor.memo)                vals.memo                = anchor.memo                as string
+        return vals
+      },
     },
     {
-      label:    '出向受入（新規行を作成）',
+      label:    '出向受入（新規 or 更新）',
       isNewRow: true,
-      notice:   '氏名・社員番号・グループ社員IDは出向元行から自動コピーされます。',
+      notice:   '氏名・社員番号・グループ社員IDは出向元行から自動コピーされます。申請区分（本務出向）・本務兼務区分（本務）は自動設定されます。SF外出向先のダミーポジション・組織コードを設定してください。',
       inputs: [
-        { field: 'departmentCode',               required: true,  label: '受入先組織', picker: 'org' },
-        { field: 'employmentType',               required: false, label: '雇用タイプ（受入）' },
+        { field: 'departmentCode',               required: true,  label: '受入先組織（SF外会社の組織）', picker: 'org' },
+        { field: 'employmentType',               required: true,  label: '雇用タイプ（出向受入）',
+          options: (ctx) => ctx.masters.employmentTypes.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
+        { field: 'positionCode',                 required: false, label: 'ポジションコード（会社別固定コード）' },
+        { field: 'jobFamily',                    required: false, label: 'ジョブファミリー（ダミー）' },
+        { field: 'jobType',                      required: false, label: 'ジョブタイプ（ダミー）' },
         { field: 'secondmentFromEmployeeNumber', required: false, label: '出向元社員番号（任意）' },
         { field: 'band',                         required: false, label: 'バンド（任意）' },
         { field: 'memo',                         required: false },
       ],
+      initialValues: (anchor, allRows) => {
+        // 再編集時: ペアの受入行（secondmentFromCompany == 出向先会社、prev なし）から値をプリフィル
+        const company = anchor.secondmentToCompany as string | undefined
+        if (!company) return {}
+        const receiving = allRows.find(r =>
+          r.rowId !== anchor.rowId &&
+          (r.secondmentFromCompany as string | undefined) === company &&
+          !(r.prevSecondmentFromCompany as string | undefined),
+        )
+        if (!receiving) return {}
+        const vals: Record<string, string> = {}
+        if (receiving.departmentCode)               vals.departmentCode               = receiving.departmentCode               as string
+        if (receiving.employmentType)               vals.employmentType               = receiving.employmentType               as string
+        if (receiving.positionCode)                 vals.positionCode                 = receiving.positionCode                 as string
+        if (receiving.jobFamily)                    vals.jobFamily                    = receiving.jobFamily                    as string
+        if (receiving.jobType)                      vals.jobType                      = receiving.jobType                      as string
+        if (receiving.secondmentFromEmployeeNumber) vals.secondmentFromEmployeeNumber = receiving.secondmentFromEmployeeNumber as string
+        if (receiving.band)                         vals.band                         = receiving.band                         as string
+        if (receiving.memo)                         vals.memo                         = receiving.memo                         as string
+        return vals
+      },
     },
   ],
 
@@ -50,7 +83,6 @@ export const nonSFSecondmentOutDef: MultiRowOperationDef = {
       {
         secondmentToCompany: src.secondmentToCompany ?? '',
         departmentCode:      src.departmentCode  || undefined,
-        transferReason:      src.transferReason  || undefined,
         employmentType:      src.employmentType  || undefined,
         memo:                src.memo            || undefined,
       },
@@ -58,6 +90,9 @@ export const nonSFSecondmentOutDef: MultiRowOperationDef = {
         departmentCode:               recv.departmentCode ?? '',
         employmentType:               recv.employmentType               || undefined,
         secondmentFromEmployeeNumber: recv.secondmentFromEmployeeNumber || undefined,
+        positionCode:                 recv.positionCode                 || undefined,
+        jobFamily:                    recv.jobFamily                    || undefined,
+        jobType:                      recv.jobType                      || undefined,
         band:                         recv.band                         || undefined,
         memo:                         recv.memo                         || undefined,
       },

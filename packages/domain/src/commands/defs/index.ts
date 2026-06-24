@@ -17,6 +17,7 @@ export { isSectionDivider, isInputRow, AVAILABLE, unavailable } from './types'
 export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
 export { preserve } from './afterConstraintHelpers'
+export { withLeavePositionVacant, countSubordinates } from './positionVacant'
 
 // ── 昇降格・役職変更 ──────────────────────────────────────────────────────────
 export { promotionDef, demotionDef, titleChangeDef } from './promotionDefs'
@@ -33,15 +34,15 @@ export { concurrentAddDef, concurrentAddNewDef, concurrentAddCancelDef, concurre
 // ── 出向 ─────────────────────────────────────────────────────────────────────
 export {
   secondmentOutSFDef, secondmentOutNonSFDef,
-  secondmentInSFDef,  secondmentInNonSFDef,
-  secondmentInNewSFDef, secondmentInNewNonSFDef,
-  concurrentSecondmentOutSFDef,    concurrentSecondmentOutNonSFDef,
-  concurrentSecondmentInSFDef,     concurrentSecondmentInNonSFDef,
-  concurrentSecondmentInNewSFDef,  concurrentSecondmentInNewNonSFDef,
+  secondmentInNewDef,
+  concurrentSecondmentOutNonSFDef,
+  concurrentSecondmentInNewDef,
   secondmentOutReleaseSFDef,       secondmentOutReleaseNonSFDef,
   secondmentInReleaseSFDef,        secondmentInReleaseNonSFDef,
   concurrentSecondmentOutReleaseSFDef, concurrentSecondmentOutReleaseNonSFDef,
   concurrentSecondmentInReleaseSFDef,  concurrentSecondmentInReleaseNonSFDef,
+  secondmentInCancelDef,
+  concurrentSecondmentInCancelDef,
 } from './secondmentDefs'
 
 // ── 在籍・退職 ────────────────────────────────────────────────────────────────
@@ -105,6 +106,8 @@ export function resolveAvailability(
   }
 
   if (activeLock) {
+    // 同一操作（同じ def.id）はロック中でも再編集可。preserve 系は availableFor が既設定状態を弾くため自然に取消専用になる。
+    if (def.id === activeLock.id) return AVAILABLE
     return { available: false, reason: `「${activeLock.label}」が設定中のため他の操作はできません` }
   }
 

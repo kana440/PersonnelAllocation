@@ -5,11 +5,12 @@ import type { Person, Organization } from '@personnel/domain/schemas'
 
 interface OrgNodeCtx {
   viewOrgs:             Organization[]
-  afterMembersByOrgId:  Map<string, Array<{ row: AllocationRow; person: Person }>>
+  afterMembersByOrgId:  Map<string, Array<{ row: AllocationRow; person: Person | null }>>
   subtreeCountByOrgId:  Map<string, number>
   beforeOrgs:           Organization[]
   expandedOrgIds:       Set<string>
   selectedCardRowId:    number | null
+  showVacantPositions:  boolean
   toggleOrg:            (id: string) => void
   onOrgClick:           (orgId: string) => void
   onPersonClick:        (rowId: number, orgId: string) => void
@@ -24,7 +25,7 @@ export const OrgNodeProvider = OrgNodeCtx.Provider
 export function OrgTreeNode({ org, depth }: { org: Organization; depth: number }) {
   const {
     viewOrgs, afterMembersByOrgId, subtreeCountByOrgId,
-    expandedOrgIds, selectedCardRowId, toggleOrg, onOrgClick, onPersonClick,
+    expandedOrgIds, selectedCardRowId, showVacantPositions, toggleOrg, onOrgClick, onPersonClick,
     onPersonDoubleClick, onPersonContextMenu, onPersonDragStart,
   } = useContext(OrgNodeCtx)
 
@@ -62,6 +63,32 @@ export function OrgTreeNode({ org, depth }: { org: Organization; depth: number }
       {isExpanded && (
         <>
           {directPeople.map(({ row, person }) => {
+            // ── 空席ポジション ────────────────────────────────────────────
+            if (!person) {
+              if (!showVacantPositions) return null
+              const isSelected = selectedCardRowId === row.rowId
+              const posLabel   = row.positionCode?.startsWith('_pos_') ? '' : (row.positionCode ?? '')
+              return (
+                <div
+                  key={row.rowId}
+                  data-sidebar-rowid={row.rowId}
+                  style={{ paddingLeft: personIndent }}
+                  className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer ${
+                    isSelected ? 'bg-yellow-50' : 'hover:bg-gray-50'
+                  }`}
+                  onClick={() => onPersonClick(row.rowId, org.id)}
+                >
+                  <span className="text-[10px] text-gray-300 flex-shrink-0">□</span>
+                  <span className={`text-xs flex-1 truncate italic ${isSelected ? 'font-semibold text-gray-500' : 'text-gray-400'}`}>
+                    空席
+                  </span>
+                  {posLabel && <span className="text-[10px] text-gray-300 flex-shrink-0 truncate max-w-[60px]">{posLabel}</span>}
+                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />}
+                </div>
+              )
+            }
+
+            // ── 在席者 ────────────────────────────────────────────────────
             const isPersonSelected  = selectedCardRowId === row.rowId
             const isConcurrent      = row.concurrentType === '兼務'
             const subtitle          = row.localJobTitle || row.officialPositionCode || ''

@@ -158,6 +158,13 @@ export interface OperationInput {
    * 例: 組織コード変更で勤務場所がマスタと不一致のとき。
    */
   readonly warningFn?: (ctx: DomainContext, values: Partial<AllocationRow>) => string | undefined
+  /**
+   * このフィールドを表示するかどうかを動的に決定する述語。
+   * false を返すとフォームからこのフィールドが非表示になる。
+   * values: 現在のフォーム入力値。masters: コードリスト（SF判定など用途）。
+   * 省略時は常に表示。
+   */
+  readonly visibleWhen?: (values: Partial<AllocationRow>, masters: AllMasters) => boolean
 }
 
 /**
@@ -187,6 +194,13 @@ export interface EditOperation {
    * 昇格サイン等の自動付与など、副作用が操作名から自明な場合に設定する。
    */
   readonly suppressSideEffectWarning?: boolean
+
+  /**
+   * true のとき、対象行に部下がいる場合に「元ポジションを空席として残す」チェックボックスを UI に表示する。
+   * チェック ON のとき UI 側が withLeavePositionVacant(def) でラップして実行する。
+   * ドラッグ（DragIntentPicker）と通常 Edit（OperationFormView）で共用。
+   */
+  readonly supportsLeaveVacant?: true
 
   /**
    * 排他ロール宣言。省略時は通常操作（normal 相当）として扱われる。

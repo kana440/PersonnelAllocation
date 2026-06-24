@@ -4,5 +4,7 @@ import type { MultiRowOperationDef } from '@personnel/domain/commands/defs/index
 export type PanelView =
   | 'summary'
   | 'directEdit'
-  | { def:          EditOperation;       rowId: number }
-  | { multiRowDef:  MultiRowOperationDef; rowId: number }
+  | { def:         EditOperation;        rowId: number }
+  | { multiRowDef: MultiRowOperationDef; rowId: number; overrideSectionVals?: Partial<Record<string, string>>[] }
+  | { chooser:     'secondmentOut';             rowId: number }
+  | { chooser:     'concurrentSecondmentOut';   rowId: number }

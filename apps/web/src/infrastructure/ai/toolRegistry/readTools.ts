@@ -336,4 +336,36 @@ export const READ_TOOLS: ReadEntry[] = [
     },
     execute: () => aiTools.getUnassignedPositions(),
   },
+
+  // ── diagnose_person_changes ────────────────────────────────────────────────
+  {
+    kind: 'read',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'diagnose_person_changes',
+        description:
+          '指定した行（rowId）について、インポートデータとの差分から検出した変更パターンと、' +
+          '対応する EditOperation の availableFor / onValidate の状態を照合して報告する。\n' +
+          '\n' +
+          '主な用途:\n' +
+          '- availableFor ギャップの検出: パターンが検出されているのに関連 Command が全て disabled → 条件漏れ疑い\n' +
+          '- onValidate 失敗の検出: available なのに validate が通らない → データ不整合かロジック問題\n' +
+          '- Command 未実装の検出: 変更パターンに対応する EditOperation がまだ存在しない\n' +
+          '- 現在利用可能な全操作の確認: allAvailableOps で実際にボタンが有効な操作を網羅確認\n' +
+          '\n' +
+          '返却値の summary.availForGaps が空でない場合は availableFor 条件の見直しを提案する。\n' +
+          'summary.commandGaps が空でない場合は対応 EditOperation の実装が必要な可能性を報告する。\n' +
+          'summary.validateFails がある場合はデータの整合性問題またはロジックのバグを疑う。',
+        parameters: {
+          type: 'object',
+          required: ['rowId'],
+          properties: {
+            rowId: { type: 'number', description: '診断対象行の rowId（findPersons の positions[].rowId）' },
+          },
+        },
+      },
+    },
+    execute: args => aiTools.diagnosePersonChanges(args.rowId as number),
+  },
 ]

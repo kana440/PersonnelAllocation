@@ -5,7 +5,7 @@ import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
-import { isRegularEmployee, isSecondmentAcceptance, wasSecondedOut, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany } from '../helpers'
+import { isRegularEmployee, wasSecondedOut, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany, findSecondmentOrgCode, findReturnOrgCode } from '../helpers'
 import type { AllMasters } from '../../masters/aggregate'
 import { TR } from '../../transferReasonLabels'
 
@@ -16,54 +16,88 @@ function personName(row: AllocationRow): string {
 // ── 本務出向（SF統合先） ──────────────────────────────────────────────────────
 
 export const secondmentOutSFDef: EditOperation = {
-  id:         'SecondmentOutSF',
-  label:      '本務出向（SF統合先）',
-  group:      'person',
-  badge: 'secondment',
+  id:                  'SecondmentOutSF',
+  label:               '本務出向（SF統合先）',
+  group:               'person',
+  badge:               'secondment',
+  supportsLeaveVacant: true,
 
   operationRole: {
     kind:                'lock',
-    isActive:            (row) => !!(row.secondmentToCompany as string | undefined),
-    isActiveThisSession: (row) => !!(row.secondmentToCompany as string | undefined) && !(row.prevSecondmentToCompany as string | undefined),
+    isActive:            (row) => row.concurrentType === '出向箱',
+    isActiveThisSession: (row) => row.concurrentType === '出向箱' && row.prevConcurrentType !== '出向箱',
   },
 
   availableFor(row, ms) {
     if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
-    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
-    if (wasSecondedOut(row))         return unavailable('すでに出向中のため設定できません')
+    // このセッションで設定した出向箱は再編集可（セッション内 lock の再実行）
+    const isThisSessionSecondedOut = row.concurrentType === '出向箱' && row.prevConcurrentType !== '出向箱'
+    if (!isThisSessionSecondedOut && !isMainAssignment(row))
+      return unavailable('本務行のみ対象です（兼務行・出向箱には設定できません）')
+    if (wasSecondedOut(row) && !isThisSessionSecondedOut)
+      return unavailable('すでに出向中のため設定できません')
     return AVAILABLE
   },
 
   inputs: [
-    { field: 'transferReason',      required: true  },
+    // ── ユーザー入力 ───────────────────────────────────────────
     { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF統合）' },
-    { field: 'departmentCode',      required: true,  label: '出向先組織コード' },
-    { field: 'employmentType',      required: true,  label: '雇用タイプ（出向）' },
+    { field: 'departmentCode',      required: false, label: '出向先組織コード', picker: 'org' },
     { field: 'memo',                required: false },
+    // ── 自動設定（readOnly プレビュー）──────────────────────────
+    { kind: 'section', label: '自動設定される項目' },
+    { field: 'transferReason',       required: false, readOnly: true, label: '申請区分' },
+    { field: 'concurrentType',       required: false, readOnly: true, label: '本務兼務区分' },
+    { field: 'officialPositionCode', required: false, readOnly: true, label: '役職' },
+    { field: 'localJobTitle',        required: false, readOnly: true, label: 'フリータイトル' },
+    { field: 'location',             required: false, readOnly: true, label: '勤務場所' },
   ],
 
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
+  onOpen: (row, ctx) => ({
+    secondmentToCompany:  row.secondmentToCompany as string | undefined,
+    departmentCode:       findSecondmentOrgCode(
+      row.departmentCode as string ?? '',
+      ctx.afterOrganizations,
+      ctx.masters,
+    ),
+    memo:                 row.memo as string | undefined,
+    // 自動セットプレビュー
+    transferReason:       TR.SECONDMENT_OUT,
+    concurrentType:       '出向箱',
+    officialPositionCode: '出向者',
+    localJobTitle:        undefined,
+    location:             '出向',
   }),
 
   onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)                      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId)               return fail('人が配属されていない行に本務出向を設定できません')
-    if (row.concurrentType === '兼務') return fail('兼務行には本務出向を設定できません')
+    if (!row)                        return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!row.userId)                 return fail('人が配属されていない行に本務出向を設定できません')
+    if (!isMainAssignment(row))      return fail('本務行のみ対象です')
     if (!values.secondmentToCompany) return fail('出向先会社は必須です')
-    if (!values.departmentCode)      return fail('出向先組織コードは必須です')
     return ok()
   },
 
   onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
+    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+    const deptCode = values.departmentCode as string | undefined
+    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
     return {
       updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId ? { ...r, ...fields, ...orgSub } : r
+        r.rowId === rowId
+          ? {
+              ...r,
+              secondmentToCompany:  values.secondmentToCompany as string,
+              departmentCode:       deptCode,
+              ...orgSub,
+              transferReason:       TR.SECONDMENT_OUT,
+              concurrentType:       '出向箱',
+              officialPositionCode: '出向者',
+              localJobTitle:        undefined,
+              location:             '出向',
+              memo:                 values.memo as string | undefined,
+            }
+          : r
       ),
       label: `本務出向: ${personName(row)} → ${values.secondmentToCompany as string}`,
     }
@@ -73,269 +107,144 @@ export const secondmentOutSFDef: EditOperation = {
 // ── 本務出向（SF非統合先） ────────────────────────────────────────────────────
 
 export const secondmentOutNonSFDef: EditOperation = {
-  id:         'SecondmentOutNonSF',
-  label:      '本務出向（SF非統合先）',
-  group:      'person',
-  badge: 'secondment',
+  id:                  'SecondmentOutNonSF',
+  label:               '本務出向（SF非統合先）',
+  group:               'person',
+  badge:               'secondment',
+  supportsLeaveVacant: true,
 
   operationRole: {
     kind:                'lock',
-    isActive:            (row) => !!(row.secondmentToCompany as string | undefined),
-    isActiveThisSession: (row) => !!(row.secondmentToCompany as string | undefined) && !(row.prevSecondmentToCompany as string | undefined),
+    isActive:            (row) => row.concurrentType === '出向箱',
+    isActiveThisSession: (row) => row.concurrentType === '出向箱' && row.prevConcurrentType !== '出向箱',
   },
 
   availableFor(row, ms) {
     if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
-    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
-    if (wasSecondedOut(row))         return unavailable('すでに出向中のため設定できません')
+    const isThisSessionSecondedOut = row.concurrentType === '出向箱' && row.prevConcurrentType !== '出向箱'
+    if (!isThisSessionSecondedOut && !isMainAssignment(row))
+      return unavailable('本務行のみ対象です（兼務行・出向箱には設定できません）')
+    if (wasSecondedOut(row) && !isThisSessionSecondedOut)
+      return unavailable('すでに出向中のため設定できません')
     return AVAILABLE
   },
 
   inputs: [
-    { field: 'transferReason',      required: true  },
+    // ── ユーザー入力 ───────────────────────────────────────────
     { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF非統合）' },
-    { field: 'departmentCode',      required: false, label: '出向先組織コード（任意）' },
-    { field: 'employmentType',      required: true,  label: '雇用タイプ（出向）' },
+    { field: 'departmentCode',      required: false, label: '出向先組織コード（任意）', picker: 'org' },
     { field: 'memo',                required: false },
+    // ── 自動設定（readOnly プレビュー）──────────────────────────
+    { kind: 'section', label: '自動設定される項目' },
+    { field: 'transferReason',       required: false, readOnly: true, label: '申請区分' },
+    { field: 'concurrentType',       required: false, readOnly: true, label: '本務兼務区分' },
+    { field: 'officialPositionCode', required: false, readOnly: true, label: '役職' },
+    { field: 'localJobTitle',        required: false, readOnly: true, label: 'フリータイトル' },
+    { field: 'location',             required: false, readOnly: true, label: '勤務場所' },
   ],
 
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
+  onOpen: (row, ctx) => ({
+    secondmentToCompany:  row.secondmentToCompany as string | undefined,
+    departmentCode:       findSecondmentOrgCode(
+      row.departmentCode as string ?? '',
+      ctx.afterOrganizations,
+      ctx.masters,
+    ),
+    memo:                 row.memo as string | undefined,
+    // 自動セットプレビュー
+    transferReason:       TR.SECONDMENT_OUT,
+    concurrentType:       '出向箱',
+    officialPositionCode: '出向者',
+    localJobTitle:        undefined,
+    location:             '出向',
   }),
 
   onValidate(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)                      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId)               return fail('人が配属されていない行に本務出向を設定できません')
-    if (row.concurrentType === '兼務') return fail('兼務行には本務出向を設定できません')
+    if (!row)                        return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!row.userId)                 return fail('人が配属されていない行に本務出向を設定できません')
+    if (!isMainAssignment(row))      return fail('本務行のみ対象です')
     if (!values.secondmentToCompany) return fail('出向先会社は必須です')
     return ok()
   },
 
   onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = (values.departmentCode as string | undefined) ?? ''
-    const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
+    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+    const deptCode = values.departmentCode as string | undefined
+    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
     return {
       updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId ? { ...r, ...fields, ...orgSub } : r
+        r.rowId === rowId
+          ? {
+              ...r,
+              secondmentToCompany:  values.secondmentToCompany as string,
+              departmentCode:       deptCode,
+              ...orgSub,
+              transferReason:       TR.SECONDMENT_OUT,
+              concurrentType:       '出向箱',
+              officialPositionCode: '出向者',
+              localJobTitle:        undefined,
+              location:             '出向',
+              memo:                 values.memo as string | undefined,
+            }
+          : r
       ),
       label: `本務出向: ${personName(row)} → ${values.secondmentToCompany as string}`,
     }
   },
 }
 
-// ── 本務出向受入（SF統合先） ──────────────────────────────────────────────────
 
-export const secondmentInSFDef: EditOperation = {
-  id:         'SecondmentInSF',
-  label:      '本務出向受入（SF統合先）',
-  group:      'person',
-  badge: 'secondment',
+// ── 本務出向受入 新規（SF統合・SF外共通：組織ボタンから） ────────────────────────
+// SF統合先・SF外問わず受入側の入力は同一。出向元の管理は出向元のシステムが担う。
 
-  operationRole: {
-    kind:                'lock',
-    isActive:            (row) => !!(row.secondmentFromCompany as string | undefined),
-    isActiveThisSession: (row) => !!(row.secondmentFromCompany as string | undefined) && !(row.prevSecondmentFromCompany as string | undefined),
-  },
-
-  availableFor(row, ms) {
-    if (isSecondmentAcceptance(row, ms)) return unavailable('出向受入対象の雇用タイプは対象外です')
-    if (!isMainAssignment(row))          return unavailable('本務行のみ対象です（兼務行には設定できません）')
-    if (wasSecondedIn(row))              return unavailable('すでに出向受入中のため設定できません')
-    return AVAILABLE
-  },
-
-  inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: true,  label: '出向元社員番号' },
-    { field: 'departmentCode',               required: true,  label: '受入先組織コード' },
-    { field: 'employmentType',               required: true,  label: '雇用タイプ（出向受入）' },
-    { field: 'memo',                         required: false },
-  ],
-
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
-  }),
-
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string | undefined
-    const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId ? { ...r, ...fields, ...orgSub } : r
-      ),
-      label: `本務出向受入: ${personName(row)} ← ${values.secondmentFromCompany as string ?? ''}`,
-    }
-  },
-}
-
-// ── 本務出向受入（SF非統合先） ────────────────────────────────────────────────
-
-export const secondmentInNonSFDef: EditOperation = {
-  id:         'SecondmentInNonSF',
-  label:      '本務出向受入（SF非統合先）',
-  group:      'person',
-  badge: 'secondment',
-
-  operationRole: {
-    kind:                'lock',
-    isActive:            (row) => !!(row.secondmentFromCompany as string | undefined),
-    isActiveThisSession: (row) => !!(row.secondmentFromCompany as string | undefined) && !(row.prevSecondmentFromCompany as string | undefined),
-  },
-
-  availableFor(row, ms) {
-    if (isSecondmentAcceptance(row, ms)) return unavailable('出向受入対象の雇用タイプは対象外です')
-    if (!isMainAssignment(row))          return unavailable('本務行のみ対象です（兼務行には設定できません）')
-    if (wasSecondedIn(row))              return unavailable('すでに出向受入中のため設定できません')
-    return AVAILABLE
-  },
-
-  inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF非統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: false, label: '出向元社員番号（任意）' },
-    { field: 'departmentCode',               required: true,  label: '受入先組織コード' },
-    { field: 'employmentType',               required: true,  label: '雇用タイプ（出向受入）' },
-    { field: 'memo',                         required: false },
-  ],
-
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
-  }),
-
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string | undefined
-    const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId ? { ...r, ...fields, ...orgSub } : r
-      ),
-      label: `本務出向受入: ${personName(row)} ← ${values.secondmentFromCompany as string ?? ''}`,
-    }
-  },
-}
-
-// ── 本務出向受入 新規（SF統合先：組織ボタンから） ──────────────────────────────
-
-export const secondmentInNewSFDef: EditOperation = {
-  id:         'SecondmentInNewSF',
-  label:      '本務出向受入 新規（SF）',
+export const secondmentInNewDef: EditOperation = {
+  id:         'SecondmentInNew',
+  label:      '本務出向受入 新規',
   group:      'person',
   badge: 'secondment',
 
   availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'lastName',                     required: true  },
-    { field: 'firstName',                    required: true  },
+    // ── 人物情報 ────────────────────────────────────────────────
+    { field: 'userId',                       required: false, picker: 'person' },
     { field: 'groupEmployeeId',              required: false },
     { field: 'employeeNumber',               required: false },
-    { field: 'userId',                       required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: true,  label: '出向元社員番号' },
-    { field: 'departmentCode',               required: true,  label: '受入先組織コード', picker: 'org' },
-    { field: 'employmentType',               required: false, label: '雇用タイプ（出向受入）' },
-    { field: 'positionBand',                 required: false },
-    { field: 'band',                         required: false },
-    { field: 'payGrade',                     required: false },
-    { field: 'memo',                         required: false },
-  ],
-
-  onOpen: (row) => ({ departmentCode: row.departmentCode }),
-
-  onValidate(_ctx, _rowId, values) {
-    if (!values.lastName)                     return fail('姓は必須です')
-    if (!values.firstName)                    return fail('名は必須です')
-    if (!values.secondmentFromCompany)        return fail('出向元会社は必須です')
-    if (!values.secondmentFromEmployeeNumber) return fail('出向元社員番号は必須です')
-    if (!values.departmentCode)               return fail('受入先組織コードは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, _rowId, values) {
-    const newRowId = nextRowId(ctx.allocationList)
-    const orgSub   = values.departmentCode
-      ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-      : {}
-    const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
-    const name     = [values.lastName, values.firstName].filter(Boolean).join(' ')
-
-    const newRow: AllocationRow = {
-      ...orgSub,
-      ...formVals,
-      rowId:                newRowId,
-      positionCode:         `_pos_${newRowId}`,
-      departmentCode:       (values.departmentCode as string) || '',
-      trainingPositionFlag: '0',
-      userId:               (values.userId as string | undefined) || undefined,
-    } as AllocationRow
-
-    return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `本務出向受入（新規）: ${name} ← ${values.secondmentFromCompany as string ?? ''}`,
-    }
-  },
-}
-
-// ── 本務出向受入 新規（SF非統合先：組織ボタンから） ────────────────────────────
-
-export const secondmentInNewNonSFDef: EditOperation = {
-  id:         'SecondmentInNewNonSF',
-  label:      '本務出向受入 新規（非SF）',
-  group:      'person',
-  badge: 'secondment',
-
-  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
-
-  inputs: [
-    { field: 'transferReason',               required: false },
     { field: 'lastName',                     required: true  },
     { field: 'firstName',                    required: true  },
-    { field: 'groupEmployeeId',              required: false },
-    { field: 'employeeNumber',               required: false },
-    { field: 'userId',                       required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF非統合）' },
+    // ── 出向元情報 ──────────────────────────────────────────────
+    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社' },
     { field: 'secondmentFromEmployeeNumber', required: false, label: '出向元社員番号（任意）' },
+    // ── 受入先情報 ──────────────────────────────────────────────
     { field: 'departmentCode',               required: true,  label: '受入先組織コード', picker: 'org' },
-    { field: 'employmentType',               required: false, label: '雇用タイプ（出向受入）' },
+    { field: 'employmentType',               required: true,  label: '雇用タイプ（出向受入）',
+      options: (ctx) => ctx.masters.employmentTypes.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
+    // ── 職務情報 ────────────────────────────────────────────────
     { field: 'positionBand',                 required: false },
-    { field: 'band',                         required: false },
-    { field: 'payGrade',                     required: false },
+    { field: 'band',                         required: false,
+      options: (ctx) => ctx.masters.jobLevels.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
+    { field: 'payGrade',                     required: false,
+      options: (ctx) => ctx.masters.payGrades.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
     { field: 'memo',                         required: false },
+    // ── 自動設定（readOnly プレビュー）──────────────────────────
+    { kind: 'section', label: '自動設定される項目' },
+    { field: 'transferReason', required: false, readOnly: true, label: '申請区分' },
+    { field: 'concurrentType', required: false, readOnly: true, label: '本務兼務区分' },
   ],
 
-  onOpen: (row) => ({ departmentCode: row.departmentCode }),
+  onOpen: (row) => ({
+    departmentCode: row.departmentCode,
+    transferReason: TR.SECONDMENT_IN,
+    concurrentType: '本務',
+  }),
 
   onValidate(_ctx, _rowId, values) {
     if (!values.lastName)              return fail('姓は必須です')
     if (!values.firstName)             return fail('名は必須です')
     if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
     if (!values.departmentCode)        return fail('受入先組織コードは必須です')
+    if (!values.employmentType)        return fail('雇用タイプは必須です')
     return ok()
   },
 
@@ -353,6 +262,8 @@ export const secondmentInNewNonSFDef: EditOperation = {
       rowId:                newRowId,
       positionCode:         `_pos_${newRowId}`,
       departmentCode:       (values.departmentCode as string) || '',
+      concurrentType:       '本務',
+      transferReason:       TR.SECONDMENT_IN,
       trainingPositionFlag: '0',
       userId:               (values.userId as string | undefined) || undefined,
     } as AllocationRow
@@ -364,42 +275,58 @@ export const secondmentInNewNonSFDef: EditOperation = {
   },
 }
 
-// ── 兼務出向受入 新規（SF統合先：組織ボタンから） ──────────────────────────────
+// ── 兼務出向受入 新規（SF統合・SF外共通：組織ボタンから） ────────────────────────
+// SF統合先・SF外問わず受入側の入力は同一。出向元の管理は出向元のシステムが担う。
 
-export const concurrentSecondmentInNewSFDef: EditOperation = {
-  id:         'ConcurrentSecondmentInNewSF',
-  label:      '兼務出向受入 新規（SF）',
+export const concurrentSecondmentInNewDef: EditOperation = {
+  id:         'ConcurrentSecondmentInNew',
+  label:      '兼務出向受入 新規',
   group:      'person',
   badge: 'secondment',
 
   availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
 
   inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'lastName',                     required: true  },
-    { field: 'firstName',                    required: true  },
+    // ── 人物情報 ────────────────────────────────────────────────
+    { field: 'userId',                       required: false, picker: 'person' },
     { field: 'groupEmployeeId',              required: false },
     { field: 'employeeNumber',               required: false },
-    { field: 'userId',                       required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: true,  label: '出向元社員番号' },
+    { field: 'lastName',                     required: true  },
+    { field: 'firstName',                    required: true  },
+    // ── 出向元情報 ──────────────────────────────────────────────
+    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社' },
+    { field: 'secondmentFromEmployeeNumber', required: false, label: '出向元社員番号（任意）' },
+    // ── 受入先情報 ──────────────────────────────────────────────
     { field: 'departmentCode',               required: true,  label: '受入先組織コード', picker: 'org' },
-    { field: 'employmentType',               required: false, label: '雇用タイプ（出向受入）' },
+    { field: 'employmentType',               required: true,  label: '雇用タイプ（出向受入）',
+      options: (ctx) => ctx.masters.employmentTypes.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
+    { field: 'concurrentReason',             required: true  },
+    // ── 職務情報 ────────────────────────────────────────────────
     { field: 'positionBand',                 required: false },
-    { field: 'band',                         required: false },
-    { field: 'payGrade',                     required: false },
-    { field: 'concurrentReason',             required: false },
+    { field: 'band',                         required: false,
+      options: (ctx) => ctx.masters.jobLevels.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
+    { field: 'payGrade',                     required: false,
+      options: (ctx) => ctx.masters.payGrades.filter(e => e.isSecondmentAcceptance).map(e => e.label) },
     { field: 'memo',                         required: false },
+    // ── 自動設定（readOnly プレビュー）──────────────────────────
+    { kind: 'section', label: '自動設定される項目' },
+    { field: 'transferReason', required: false, readOnly: true, label: '申請区分' },
+    { field: 'concurrentType', required: false, readOnly: true, label: '本務兼務区分' },
   ],
 
-  onOpen: (row) => ({ departmentCode: row.departmentCode }),
+  onOpen: (row) => ({
+    departmentCode: row.departmentCode,
+    transferReason: TR.CONCURRENT_SECONDMENT_IN,
+    concurrentType: '兼務',
+  }),
 
   onValidate(_ctx, _rowId, values) {
-    if (!values.lastName)                     return fail('姓は必須です')
-    if (!values.firstName)                    return fail('名は必須です')
-    if (!values.secondmentFromCompany)        return fail('出向元会社は必須です')
-    if (!values.secondmentFromEmployeeNumber) return fail('出向元社員番号は必須です')
-    if (!values.departmentCode)               return fail('受入先組織コードは必須です')
+    if (!values.lastName)              return fail('姓は必須です')
+    if (!values.firstName)             return fail('名は必須です')
+    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
+    if (!values.departmentCode)        return fail('受入先組織コードは必須です')
+    if (!values.employmentType)        return fail('雇用タイプは必須です')
+    if (!values.concurrentReason)      return fail('兼務理由は必須です')
     return ok()
   },
 
@@ -418,6 +345,7 @@ export const concurrentSecondmentInNewSFDef: EditOperation = {
       positionCode:         `_pos_${newRowId}`,
       departmentCode:       (values.departmentCode as string) || '',
       concurrentType:       '兼務',
+      transferReason:       TR.CONCURRENT_SECONDMENT_IN,
       trainingPositionFlag: '0',
       userId:               (values.userId as string | undefined) || undefined,
     } as AllocationRow
@@ -429,138 +357,8 @@ export const concurrentSecondmentInNewSFDef: EditOperation = {
   },
 }
 
-// ── 兼務出向受入 新規（SF非統合先：組織ボタンから） ────────────────────────────
-
-export const concurrentSecondmentInNewNonSFDef: EditOperation = {
-  id:         'ConcurrentSecondmentInNewNonSF',
-  label:      '兼務出向受入 新規（非SF）',
-  group:      'person',
-  badge: 'secondment',
-
-  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
-
-  inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'lastName',                     required: true  },
-    { field: 'firstName',                    required: true  },
-    { field: 'groupEmployeeId',              required: false },
-    { field: 'employeeNumber',               required: false },
-    { field: 'userId',                       required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF非統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: false, label: '出向元社員番号（任意）' },
-    { field: 'departmentCode',               required: true,  label: '受入先組織コード', picker: 'org' },
-    { field: 'employmentType',               required: false, label: '雇用タイプ（出向受入）' },
-    { field: 'positionBand',                 required: false },
-    { field: 'band',                         required: false },
-    { field: 'payGrade',                     required: false },
-    { field: 'concurrentReason',             required: false },
-    { field: 'memo',                         required: false },
-  ],
-
-  onOpen: (row) => ({ departmentCode: row.departmentCode }),
-
-  onValidate(_ctx, _rowId, values) {
-    if (!values.lastName)              return fail('姓は必須です')
-    if (!values.firstName)             return fail('名は必須です')
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    if (!values.departmentCode)        return fail('受入先組織コードは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, _rowId, values) {
-    const newRowId = nextRowId(ctx.allocationList)
-    const orgSub   = values.departmentCode
-      ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-      : {}
-    const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
-    const name     = [values.lastName, values.firstName].filter(Boolean).join(' ')
-
-    const newRow: AllocationRow = {
-      ...orgSub,
-      ...formVals,
-      rowId:                newRowId,
-      positionCode:         `_pos_${newRowId}`,
-      departmentCode:       (values.departmentCode as string) || '',
-      concurrentType:       '兼務',
-      trainingPositionFlag: '0',
-      userId:               (values.userId as string | undefined) || undefined,
-    } as AllocationRow
-
-    return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `兼務出向受入（新規）: ${name} ← ${values.secondmentFromCompany as string ?? ''}`,
-    }
-  },
-}
-
-// ── 兼務出向（SF統合先） ──────────────────────────────────────────────────────
-
-export const concurrentSecondmentOutSFDef: EditOperation = {
-  id:         'ConcurrentSecondmentOutSF',
-  label:      '兼務出向（SF統合先）',
-  group:      'person',
-  badge: 'secondment',
-
-  availableFor(row, ms) {
-    if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
-    if (!isMainAssignment(row))      return unavailable('本務行のみ対象です（兼務行には設定できません）')
-    return AVAILABLE
-  },
-
-  inputs: [
-    { field: 'transferReason',      required: false },
-    { field: 'secondmentToCompany', required: true,  label: '出向先会社（SF統合）' },
-    { field: 'departmentCode',      required: true,  label: '出向先組織コード' },
-    { field: 'concurrentReason',    required: false },
-    { field: 'memo',                required: false },
-  ],
-
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
-  }),
-
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId) return fail('人が配属されていない行に兼務出向を追加できません')
-    if (row.concurrentType === '兼務') return fail('兼務行には兼務出向を追加できません')
-    if (!values.secondmentToCompany) return fail('出向先会社は必須です')
-    if (!values.departmentCode)      return fail('出向先組織コードは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const src = ctx.allocationList.find(r => r.rowId === rowId)!
-    const newRowId = nextRowId(ctx.allocationList)
-    const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-
-    const newRow: AllocationRow = {
-      ...src,
-      ...posClears,
-      ...orgSub,
-      rowId:                   newRowId,
-      positionCode:            `_pos_${newRowId}`,
-      departmentCode:          values.departmentCode as string,
-      concurrentType:          '兼務',
-      concurrentReason:        values.concurrentReason as string | undefined,
-      secondmentToCompany:     values.secondmentToCompany as string,
-      memo:                    values.memo as string | undefined,
-      prevDepartmentCode:      undefined,
-      prevPositionCode:        undefined,
-      prevConcurrentType:      undefined,
-      prevSecondmentToCompany: undefined,
-    } as AllocationRow
-
-    return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `兼務出向追加: ${personName(src)} → ${values.secondmentToCompany as string}`,
-    }
-  },
-}
-
-// ── 兼務出向（SF非統合先） ────────────────────────────────────────────────────
+// ── 兼務出向（SF非統合先のみ） ────────────────────────────────────────────────
+// SF統合先への兼務出向はSFが管理するためツール操作不要。SF外のみ対応。
 
 export const concurrentSecondmentOutNonSFDef: EditOperation = {
   id:         'ConcurrentSecondmentOutNonSF',
@@ -627,188 +425,93 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
   },
 }
 
-// ── 兼務出向受入（SF統合先） ──────────────────────────────────────────────────
 
-export const concurrentSecondmentInSFDef: EditOperation = {
-  id:         'ConcurrentSecondmentInSF',
-  label:      '兼務出向受入（SF統合先）',
-  group:      'person',
-  badge: 'secondment',
-
-  availableFor: (row) =>
-    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
-
-  inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: true,  label: '出向元社員番号' },
-    { field: 'departmentCode',               required: true,  label: '受入先組織コード' },
-    { field: 'concurrentReason',             required: false },
-    { field: 'memo',                         required: false },
-  ],
-
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
-  }),
-
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId) return fail('人が配属されていない行に兼務出向受入を追加できません')
-    if (row.concurrentType === '兼務') return fail('兼務行には兼務出向受入を追加できません')
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    if (!values.departmentCode)        return fail('受入先組織コードは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const src = ctx.allocationList.find(r => r.rowId === rowId)!
-    const newRowId = nextRowId(ctx.allocationList)
-    const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-
-    const newRow: AllocationRow = {
-      ...src,
-      ...posClears,
-      ...orgSub,
-      rowId:                         newRowId,
-      positionCode:                  `_pos_${newRowId}`,
-      departmentCode:                values.departmentCode as string,
-      concurrentType:                '兼務',
-      concurrentReason:              values.concurrentReason as string | undefined,
-      secondmentFromCompany:         values.secondmentFromCompany as string,
-      secondmentFromEmployeeNumber:  values.secondmentFromEmployeeNumber as string | undefined,
-      memo:                          values.memo as string | undefined,
-      prevDepartmentCode:            undefined,
-      prevPositionCode:              undefined,
-      prevConcurrentType:            undefined,
-      prevSecondmentFromCompany:     undefined,
-    } as AllocationRow
-
-    return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `兼務出向受入追加: ${personName(src)} ← ${values.secondmentFromCompany as string}`,
-    }
-  },
-}
-
-// ── 兼務出向受入（SF非統合先） ────────────────────────────────────────────────
-
-export const concurrentSecondmentInNonSFDef: EditOperation = {
-  id:         'ConcurrentSecondmentInNonSF',
-  label:      '兼務出向受入（SF非統合先）',
-  group:      'person',
-  badge: 'secondment',
-
-  availableFor: (row) =>
-    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
-
-  inputs: [
-    { field: 'transferReason',               required: false },
-    { field: 'secondmentFromCompany',        required: true,  label: '出向元会社（SF非統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: false, label: '出向元社員番号（任意）' },
-    { field: 'departmentCode',               required: true,  label: '受入先組織コード' },
-    { field: 'concurrentReason',             required: false },
-    { field: 'memo',                         required: false },
-  ],
-
-  onOpen: (row) => ({
-    transferReason: row.transferReason as string | undefined,
-    memo:           row.memo           as string | undefined,
-  }),
-
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId) return fail('人が配属されていない行に兼務出向受入を追加できません')
-    if (row.concurrentType === '兼務') return fail('兼務行には兼務出向受入を追加できません')
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    if (!values.departmentCode)        return fail('受入先組織コードは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const src = ctx.allocationList.find(r => r.rowId === rowId)!
-    const newRowId = nextRowId(ctx.allocationList)
-    const posClears   = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const orgSub = deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-
-    const newRow: AllocationRow = {
-      ...src,
-      ...posClears,
-      ...orgSub,
-      rowId:                         newRowId,
-      positionCode:                  `_pos_${newRowId}`,
-      departmentCode:                values.departmentCode as string,
-      concurrentType:                '兼務',
-      concurrentReason:              values.concurrentReason as string | undefined,
-      secondmentFromCompany:         values.secondmentFromCompany as string,
-      secondmentFromEmployeeNumber:  values.secondmentFromEmployeeNumber as string | undefined,
-      memo:                          values.memo as string | undefined,
-      prevDepartmentCode:            undefined,
-      prevPositionCode:              undefined,
-      prevConcurrentType:            undefined,
-      prevSecondmentFromCompany:     undefined,
-    } as AllocationRow
-
-    return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `兼務出向受入追加: ${personName(src)} ← ${values.secondmentFromCompany as string}`,
-    }
-  },
-}
-
-// ── 共通ヘルパー: 解除操作の inputs ─────────────────────────────────────────
+// ── 共通ヘルパー: 本務出向解除の inputs / onOpen / onSubmit ─────────────────
 
 const outReleaseInputs = [
-  { field: 'transferReason' as const, required: false },
-  { field: 'employmentType' as const, required: true,  label: '戻り後の雇用タイプ' },
-  { field: 'departmentCode' as const, required: false, label: '戻り先組織コード（任意）' },
-  { field: 'memo'           as const, required: false },
+  // ── ユーザー入力（出向時に上書きされたため再入力が必要）──────────────────
+  { field: 'departmentCode'      as const, required: false, label: '戻り先組織コード', picker: 'org' as const },
+  { field: 'officialPositionCode' as const, required: false, label: '役職（出向前の役職に戻す）' },
+  { field: 'localJobTitle'       as const, required: false, label: 'フリータイトル（任意）' },
+  { field: 'location'            as const, required: false, label: '勤務場所' },
+  { field: 'memo'                as const, required: false },
+  // ── 自動設定（readOnly プレビュー）────────────────────────────────────────
+  { kind: 'section' as const, label: '自動設定される項目' },
+  { field: 'transferReason'      as const, required: false, readOnly: true as const, label: '申請区分' },
+  { field: 'concurrentType'      as const, required: false, readOnly: true as const, label: '本務兼務区分' },
+  { field: 'secondmentToCompany' as const, required: false, readOnly: true as const, label: '出向先会社（クリア）' },
 ] as const
+
+const outReleaseOnOpen = (row: AllocationRow, ctx: { allocationList: AllocationRow[] }) => ({
+  // 上司が動いていなければ戻り先を自動提案、それ以外は空欄で手入力
+  departmentCode:       findReturnOrgCode(row, ctx.allocationList),
+  // 役職・勤務場所は prev が出向状態（出向者/出向）の可能性が高いため空欄で手入力
+  officialPositionCode: undefined,
+  localJobTitle:        undefined,
+  location:             undefined,
+  memo:                 row.memo as string | undefined,
+  // 自動セットプレビュー
+  transferReason:       TR.SECONDMENT_OUT_RELEASE,
+  concurrentType:       '本務',
+  secondmentToCompany:  undefined,
+})
+
+const outReleaseOnSubmit = (
+  ctx: { allocationList: AllocationRow[]; masters: AllMasters },
+  rowId: number,
+  values: Record<string, unknown>,
+) => {
+  const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+  const deptCode = values.departmentCode as string | undefined
+  const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+  return {
+    updatedList: ctx.allocationList.map(r =>
+      r.rowId === rowId
+        ? {
+            ...r,
+            departmentCode:       deptCode,
+            ...orgSub,
+            officialPositionCode: values.officialPositionCode as string | undefined,
+            localJobTitle:        values.localJobTitle        as string | undefined,
+            location:             values.location             as string | undefined,
+            transferReason:       TR.SECONDMENT_OUT_RELEASE,
+            concurrentType:       '本務',
+            secondmentToCompany:  undefined,
+            memo:                 values.memo                 as string | undefined,
+          }
+        : r
+    ),
+    label: `本務出向解除: ${personName(row)}`,
+  }
+}
 
 // ── 本務出向解除（SF導入先）──────────────────────────────────────────────────
 
 export const secondmentOutReleaseSFDef: EditOperation = {
   id: 'SecondmentOutReleaseSF', label: '本務出向解除（SF導入先）',
   group: 'person', badge: 'negative',
+
   availableFor(row, ms) {
-    if (!wasSecondedOut(row))    return unavailable('出向中でないため解除できません')
-    if (!isMainAssignment(row))  return unavailable('本務行のみ対象です')
+    // prev 状態で出向中かチェック（当セッションで設定した分は Undo/取消で対応）
+    const wasSecondedPrev = (row.prevConcurrentType as string | undefined) === '出向箱'
+      || !!(row.prevSecondmentToCompany as string | undefined)
+    if (!wasSecondedPrev) return unavailable('インポート前から出向中の行のみ解除できます')
     if (!isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, ms))
-                                 return unavailable('SF未導入先の出向解除は「SF未導入先」操作を使用してください')
+      return unavailable('SF未導入先の出向解除は「SF未導入先」操作を使用してください')
     return AVAILABLE
   },
+
   inputs: [...outReleaseInputs],
-  onOpen: (row) => ({
-    transferReason: row.transferReason      as string | undefined,
-    employmentType: row.prevEmploymentType  as string | undefined,
-    memo:           row.memo               as string | undefined,
-  }),
+  onOpen: outReleaseOnOpen,
 
   onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.prevSecondmentToCompany)
-      return fail('出向先が設定されていないため出向解除できません')
+    if (!row.prevSecondmentToCompany) return fail('出向先が設定されていないため出向解除できません')
     return ok()
   },
 
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string | undefined
-    const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, ...fields, ...orgSub, secondmentToCompany: undefined }
-          : r
-      ),
-      label: `本務出向解除: ${personName(row)}`,
-    }
-  },
+  onSubmit: outReleaseOnSubmit,
 }
 
 // ── 本務出向解除（SF未導入先） ────────────────────────────────────────────────
@@ -816,42 +519,27 @@ export const secondmentOutReleaseSFDef: EditOperation = {
 export const secondmentOutReleaseNonSFDef: EditOperation = {
   id: 'SecondmentOutReleaseNonSF', label: '本務出向解除（SF未導入先）',
   group: 'person', badge: 'negative',
+
   availableFor(row, ms) {
-    if (!wasSecondedOut(row))    return unavailable('出向中でないため解除できません')
-    if (!isMainAssignment(row))  return unavailable('本務行のみ対象です')
+    const wasSecondedPrev = (row.prevConcurrentType as string | undefined) === '出向箱'
+      || !!(row.prevSecondmentToCompany as string | undefined)
+    if (!wasSecondedPrev) return unavailable('インポート前から出向中の行のみ解除できます')
     if (isSFIntegratedCompany(row.prevSecondmentToCompany as string | undefined, ms))
-                                 return unavailable('SF導入先の出向解除は「SF導入先」操作を使用してください')
+      return unavailable('SF導入先の出向解除は「SF導入先」操作を使用してください')
     return AVAILABLE
   },
+
   inputs: [...outReleaseInputs],
-  onOpen: (row) => ({
-    transferReason: row.transferReason      as string | undefined,
-    employmentType: row.prevEmploymentType  as string | undefined,
-    memo:           row.memo               as string | undefined,
-  }),
+  onOpen: outReleaseOnOpen,
 
   onValidate(ctx, rowId, _values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.prevSecondmentToCompany)
-      return fail('出向先が設定されていないため出向解除できません')
+    if (!row.prevSecondmentToCompany) return fail('出向先が設定されていないため出向解除できません')
     return ok()
   },
 
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string | undefined
-    const orgSub = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-    const fields = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, ...fields, ...orgSub, secondmentToCompany: undefined }
-          : r
-      ),
-      label: `本務出向解除: ${personName(row)}`,
-    }
-  },
+  onSubmit: outReleaseOnSubmit,
 }
 
 // ── 共通: 出向受入解除 inputs / validate / apply ─────────────────────────────
@@ -1076,67 +764,31 @@ export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
   },
 }
 
-// ── 出向受入取消（セッション内追加分・SF別） ────────────────────────────────────
-// createSecondmentInRow で追加した行を削除する（prevSecondmentFromCompany が空 = このセッションで追加）
-// SF/非SF 別に分けることで SummaryView の対応セクションに配置できる
-
-const isCancelAvailableSF = (row: AllocationRow, ms: AllMasters) =>
-  !!row.secondmentFromCompany && !row.prevSecondmentFromCompany &&
-  isSFIntegratedCompany(row.secondmentFromCompany as string, ms)
-
-const isCancelAvailableNonSF = (row: AllocationRow, ms: AllMasters) =>
-  !!row.secondmentFromCompany && !row.prevSecondmentFromCompany &&
-  !isSFIntegratedCompany(row.secondmentFromCompany as string, ms)
+// ── 出向受入取消（セッション内追加分） ──────────────────────────────────────────
+// このセッションで追加した受入行を削除する（prevSecondmentFromCompany が空 = このセッション内追加）
+// SF統合・SF外を問わず共通ロジック
 
 const cancelDescription = 'このセッションで追加した出向受入を取消します。下記の情報が削除されます。'
 
-export const secondmentInCancelSFDef: EditOperation = {
-  id: 'SecondmentInCancelSF', label: '本務出向受入取消（SF導入先）',
+export const secondmentInCancelDef: EditOperation = {
+  id: 'SecondmentInCancel', label: '本務出向受入取消',
   group: 'person', badge: 'negative',
-  operationRole: { kind: 'lockCancel', of: 'SecondmentInSF' },
-  availableFor: (row) =>
-    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
+  availableFor(row) {
+    if (!isMainAssignment(row))          return unavailable('本務行のみ対象です（兼務行には設定できません）')
+    if (!row.secondmentFromCompany)      return unavailable('出向受入が設定されていません')
+    if (row.prevSecondmentFromCompany)   return unavailable('インポート前からの出向受入は取消できません（出向受入解除を使用してください）')
+    // SF外ペアの受入行（transferReason=本務出向）は「SF外出向取り消し」で2行同時削除する
+    if ((row.transferReason as string | undefined) === TR.SECONDMENT_OUT)
+      return unavailable('SF外出向ペアの受入行です。「SF外出向取り消し」操作を使用してください')
+    return AVAILABLE
+  },
   description: cancelDescription,
   suppressSideEffectWarning: true,
   inputs: [
     { field: 'lastName',                     required: false, readOnly: true },
     { field: 'firstName',                    required: false, readOnly: true },
-    { field: 'secondmentFromCompany',        required: false, readOnly: true, label: '出向元会社（SF統合）' },
+    { field: 'secondmentFromCompany',        required: false, readOnly: true, label: '出向元会社' },
     { field: 'secondmentFromEmployeeNumber', required: false, readOnly: true, label: '出向元社員番号' },
-    { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
-    { field: 'employmentType',               required: false, readOnly: true },
-  ],
-  onOpen: (row) => ({
-    lastName:                     row.lastName,
-    firstName:                    row.firstName,
-    secondmentFromCompany:        row.secondmentFromCompany,
-    secondmentFromEmployeeNumber: row.secondmentFromEmployeeNumber,
-    departmentCode:               row.departmentCode,
-    employmentType:               row.employmentType,
-  }),
-  onValidate(ctx, rowId) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-  onSubmit(ctx, rowId) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${personName(row)}` }
-  },
-}
-
-export const secondmentInCancelNonSFDef: EditOperation = {
-  id: 'SecondmentInCancelNonSF', label: '本務出向受入取消（SF未導入先）',
-  group: 'person', badge: 'negative',
-  operationRole: { kind: 'lockCancel', of: 'SecondmentInNonSF' },
-  availableFor: (row) =>
-    isMainAssignment(row) ? AVAILABLE : unavailable('本務行のみ対象です（兼務行には設定できません）'),
-  description: cancelDescription,
-  suppressSideEffectWarning: true,
-  inputs: [
-    { field: 'lastName',                     required: false, readOnly: true },
-    { field: 'firstName',                    required: false, readOnly: true },
-    { field: 'secondmentFromCompany',        required: false, readOnly: true, label: '出向元会社（SF非統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: false, readOnly: true, label: '出向元社員番号（任意）' },
     { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
     { field: 'employmentType',               required: false, readOnly: true },
   ],
@@ -1160,12 +812,13 @@ export const secondmentInCancelNonSFDef: EditOperation = {
 
 const concurrentCancelDescription = 'このセッションで追加した兼務出向受入を取消します。下記の情報が削除されます。'
 
-export const concurrentSecondmentInCancelSFDef: EditOperation = {
-  id: 'ConcurrentSecondmentInCancelSF', label: '兼務出向受入取消（SF導入先）',
+export const concurrentSecondmentInCancelDef: EditOperation = {
+  id: 'ConcurrentSecondmentInCancel', label: '兼務出向受入取消',
   group: 'person', badge: 'negative',
-  availableFor(row, ms) {
-    if (row.concurrentType !== '兼務') return unavailable('兼務行のみ対象です')
-    if (!isCancelAvailableSF(row, ms)) return unavailable('このセッションで追加したSF導入先の兼務出向受入行のみ取消できます')
+  availableFor(row) {
+    if (row.concurrentType !== '兼務')   return unavailable('兼務行のみ対象です')
+    if (!row.secondmentFromCompany)      return unavailable('出向受入が設定されていません')
+    if (row.prevSecondmentFromCompany)   return unavailable('インポート前からの兼務出向受入は取消できません（出向受入解除を使用してください）')
     return AVAILABLE
   },
   description: concurrentCancelDescription,
@@ -1173,44 +826,8 @@ export const concurrentSecondmentInCancelSFDef: EditOperation = {
   inputs: [
     { field: 'lastName',                     required: false, readOnly: true },
     { field: 'firstName',                    required: false, readOnly: true },
-    { field: 'secondmentFromCompany',        required: false, readOnly: true, label: '出向元会社（SF統合）' },
+    { field: 'secondmentFromCompany',        required: false, readOnly: true, label: '出向元会社' },
     { field: 'secondmentFromEmployeeNumber', required: false, readOnly: true, label: '出向元社員番号' },
-    { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
-    { field: 'concurrentReason',             required: false, readOnly: true },
-  ],
-  onOpen: (row) => ({
-    lastName:                     row.lastName,
-    firstName:                    row.firstName,
-    secondmentFromCompany:        row.secondmentFromCompany,
-    secondmentFromEmployeeNumber: row.secondmentFromEmployeeNumber,
-    departmentCode:               row.departmentCode,
-    concurrentReason:             row.concurrentReason,
-  }),
-  onValidate(ctx, rowId) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-  onSubmit(ctx, rowId) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${personName(row)}` }
-  },
-}
-
-export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
-  id: 'ConcurrentSecondmentInCancelNonSF', label: '兼務出向受入取消（SF未導入先）',
-  group: 'person', badge: 'negative',
-  availableFor(row, ms) {
-    if (row.concurrentType !== '兼務')    return unavailable('兼務行のみ対象です')
-    if (!isCancelAvailableNonSF(row, ms)) return unavailable('このセッションで追加したSF未導入先の兼務出向受入行のみ取消できます')
-    return AVAILABLE
-  },
-  description: concurrentCancelDescription,
-  suppressSideEffectWarning: true,
-  inputs: [
-    { field: 'lastName',                     required: false, readOnly: true },
-    { field: 'firstName',                    required: false, readOnly: true },
-    { field: 'secondmentFromCompany',        required: false, readOnly: true, label: '出向元会社（SF非統合）' },
-    { field: 'secondmentFromEmployeeNumber', required: false, readOnly: true, label: '出向元社員番号（任意）' },
     { field: 'departmentCode',               required: false, readOnly: true, label: '受入先組織コード' },
     { field: 'concurrentReason',             required: false, readOnly: true },
   ],
@@ -1234,15 +851,13 @@ export const concurrentSecondmentInCancelNonSFDef: EditOperation = {
 
 export const DEFS: EditOperation[] = [
   secondmentOutSFDef,              secondmentOutNonSFDef,
-  secondmentInSFDef,               secondmentInNonSFDef,
-  secondmentInNewSFDef,            secondmentInNewNonSFDef,
-  concurrentSecondmentOutSFDef,    concurrentSecondmentOutNonSFDef,
-  concurrentSecondmentInSFDef,     concurrentSecondmentInNonSFDef,
-  concurrentSecondmentInNewSFDef,  concurrentSecondmentInNewNonSFDef,
+  secondmentInNewDef,                              // 旧SF/非SF統合
+  concurrentSecondmentOutNonSFDef,                 // SF統合先への兼務出向はSFが管理するため不要
+  concurrentSecondmentInNewDef,                    // 旧SF/非SF統合
   secondmentOutReleaseSFDef,       secondmentOutReleaseNonSFDef,
   secondmentInReleaseSFDef,        secondmentInReleaseNonSFDef,
   concurrentSecondmentOutReleaseSFDef, concurrentSecondmentOutReleaseNonSFDef,
   concurrentSecondmentInReleaseSFDef,  concurrentSecondmentInReleaseNonSFDef,
-  secondmentInCancelSFDef,             secondmentInCancelNonSFDef,
-  concurrentSecondmentInCancelSFDef,   concurrentSecondmentInCancelNonSFDef,
+  secondmentInCancelDef,                           // 旧SF/非SF統合・operationRole修正
+  concurrentSecondmentInCancelDef,                 // 同上
 ]

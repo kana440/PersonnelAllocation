@@ -5,6 +5,7 @@ import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { isRegularEmployee, wasSecondedOut, isMainAssignment, wasSecondedIn } from '../helpers'
 import type { AllMasters } from '../../masters/aggregate'
+import { TR } from '../../transferReasonLabels'
 
 export interface NonSFSecondmentSourceChanges {
   secondmentToCompany: string    // 出向先会社（必須）
@@ -19,12 +20,36 @@ export interface NonSFSecondmentReceivingFields {
   employmentType?:               string
   secondmentFromEmployeeNumber?: string
   band?:                         string
+  // SF外特殊ルール: 出向先会社ごとの固定コード（同会社への出向者は同番号を使用）
+  positionCode?:                 string
+  // SF外特殊ルール: ジョブ情報はダミー値を設定
+  jobFamily?:                    string
+  jobType?:                      string
   memo?:                         string
 }
 
-/** SF外出向ペア作成条件 */
-export function canCreateNonSFSecondmentPair(row: AllocationRow, ms: AllMasters): boolean {
-  return isRegularEmployee(row, ms) && isMainAssignment(row) && !wasSecondedOut(row)
+/** SF外出向ペア作成条件（再編集: SF外ペアの出向元行として設定済みの出向箱行も許可） */
+export function canCreateNonSFSecondmentPair(
+  row:     AllocationRow,
+  ms:      AllMasters,
+  allRows?: AllocationRow[],
+): boolean {
+  if (!isRegularEmployee(row, ms)) return false
+  // 通常ケース: 本務行で未出向
+  if (isMainAssignment(row) && !wasSecondedOut(row)) return true
+  // 再編集ケース: このセッションで出向箱になり、対応する受入行が存在する（SF外ペア確定）
+  if (allRows && (row.concurrentType as string | undefined) === '出向箱'
+      && !(row.prevConcurrentType as string | undefined)) {
+    const company = row.secondmentToCompany as string | undefined
+    if (company) {
+      return allRows.some(r =>
+        r.rowId !== row.rowId &&
+        (r.secondmentFromCompany as string | undefined) === company &&
+        !(r.prevSecondmentFromCompany as string | undefined),
+      )
+    }
+  }
+  return false
 }
 
 /** SF外出向取り消し条件（出向元行 or 出向受入行のどちらからでも判定） */
@@ -124,41 +149,75 @@ export class NonSFSecondmentPairCommand implements EditCommand {
       : {}
     const updatedSource: AllocationRow = {
       ...sourceRow,
-      secondmentToCompany: this.source.secondmentToCompany,
+      secondmentToCompany:  this.source.secondmentToCompany,
+      concurrentType:       '出向箱',
+      transferReason:       this.source.transferReason ?? TR.SECONDMENT_OUT,
+      officialPositionCode: '出向者',
+      localJobTitle:        undefined,
+      location:             '出向',
       ...(this.source.departmentCode ? { departmentCode: this.source.departmentCode, ...srcOrgSub } : {}),
-      ...(this.source.transferReason ? { transferReason: this.source.transferReason } : {}),
       ...(this.source.employmentType ? { employmentType: this.source.employmentType } : {}),
       ...(this.source.memo           ? { memo: this.source.memo }           : {}),
     }
 
-    // 出向受入行の新規作成
-    const newRowId   = nextRowId(ctx.allocationList)
+    // 3行目防止: 再編集時はペアの受入行を検出して更新（新規作成しない）
+    // 検出条件: groupEmployeeId 一致 + secondmentFromCompany === 出向先会社 + セッション内追加分（prev なし）
+    const existingReceivingRow = ctx.allocationList.find(r =>
+      r.rowId !== this.sourceRowId &&
+      (r.secondmentFromCompany as string | undefined) === this.source.secondmentToCompany &&
+      !(r.prevSecondmentFromCompany as string | undefined) &&
+      (sourceRow.groupEmployeeId
+        ? (r.groupEmployeeId as string | undefined) === (sourceRow.groupEmployeeId as string | undefined)
+        : (r.userId as string | undefined) === (sourceRow.userId as string | undefined)),
+    )
+
     const recvOrgSub = deriveOrgSubFields(this.receiving.departmentCode, ctx.masters)
-    const receivingRow: AllocationRow = {
-      rowId:                         newRowId,
-      positionCode:                  `_pos_${newRowId}`,
-      userId:                        sourceRow.userId,
-      employeeNumber:                sourceRow.employeeNumber,
-      lastName:                      sourceRow.lastName,
-      firstName:                     sourceRow.firstName,
-      groupEmployeeId:               sourceRow.groupEmployeeId,
-      departmentCode:                this.receiving.departmentCode,
+    const receivingBase: Partial<AllocationRow> = {
+      positionCode:         this.receiving.positionCode ?? existingReceivingRow?.positionCode ?? `_pos_${nextRowId(ctx.allocationList)}`,
+      userId:               sourceRow.userId,
+      employeeNumber:       sourceRow.employeeNumber,
+      lastName:             sourceRow.lastName,
+      firstName:            sourceRow.firstName,
+      groupEmployeeId:      sourceRow.groupEmployeeId,
+      departmentCode:       this.receiving.departmentCode,
       ...recvOrgSub,
-      secondmentFromCompany:         this.source.secondmentToCompany,
+      secondmentFromCompany: this.source.secondmentToCompany,
+      transferReason:        TR.SECONDMENT_OUT,
+      concurrentType:        '本務',
+      trainingPositionFlag:  '0',
       ...(this.receiving.secondmentFromEmployeeNumber
         ? { secondmentFromEmployeeNumber: this.receiving.secondmentFromEmployeeNumber }
         : {}),
       ...(this.receiving.employmentType ? { employmentType: this.receiving.employmentType } : {}),
-      ...(this.receiving.band           ? { band: this.receiving.band }           : {}),
-      ...(this.receiving.memo           ? { memo: this.receiving.memo }           : {}),
-      trainingPositionFlag: '0',
-    } as AllocationRow
+      ...(this.receiving.band           ? { band:      this.receiving.band }     : {}),
+      ...(this.receiving.jobFamily      ? { jobFamily: this.receiving.jobFamily } : {}),
+      ...(this.receiving.jobType        ? { jobType:   this.receiving.jobType }   : {}),
+      ...(this.receiving.memo           ? { memo:      this.receiving.memo }      : {}),
+    }
+
+    let updatedList: AllocationRow[]
+    if (existingReceivingRow) {
+      // 再編集: 既存受入行を更新
+      updatedList = ctx.allocationList
+        .map(r => r.rowId === this.sourceRowId   ? updatedSource : r)
+        .map(r => r.rowId === existingReceivingRow.rowId
+          ? { ...existingReceivingRow, ...receivingBase } as AllocationRow
+          : r)
+    } else {
+      // 新規: 受入行を追加
+      const newRowId = nextRowId(ctx.allocationList)
+      const newReceivingRow: AllocationRow = {
+        rowId: newRowId,
+        ...receivingBase,
+      } as AllocationRow
+      updatedList = [
+        ...ctx.allocationList.map(r => r.rowId === this.sourceRowId ? updatedSource : r),
+        newReceivingRow,
+      ]
+    }
 
     return {
-      updatedList: [
-        ...ctx.allocationList.map(r => r.rowId === this.sourceRowId ? updatedSource : r),
-        receivingRow,
-      ],
+      updatedList,
       label: `SF外出向: ${name} → ${this.source.secondmentToCompany}`,
     }
   }

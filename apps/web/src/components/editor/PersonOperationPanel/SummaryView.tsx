@@ -16,6 +16,7 @@ import type { PanelView } from './types'
 type SectionEntry =
   | { id:         string; shortLabel: string; cancel?: boolean }
   | { multiRowId: string; shortLabel: string; cancel?: boolean }
+  | { chooser:    'secondmentOut' | 'concurrentSecondmentOut'; shortLabel: string }
 
 type Section =
   | { label: string; ops: SectionEntry[] }
@@ -78,32 +79,28 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    label: '出向・出向解除（SF導入会社）',
+    label: '本務出向',
     ops: [
-      { id: 'SecondmentOutSF',                   shortLabel: 'SF導入\n本務出向' },
-      { id: 'SecondmentOutReleaseSF',             shortLabel: 'SF導入\n本務出向解除' },
-      { id: 'SecondmentInReleaseSF',             shortLabel: 'SF導入\n本務受入解除' },
-      { id: 'SecondmentInCancelSF',              shortLabel: 'SF導入\n本務受入取消', cancel: true },
-      { id: 'ConcurrentSecondmentOutSF',         shortLabel: 'SF導入\n兼務出向' },
-      { id: 'ConcurrentSecondmentOutReleaseSF',  shortLabel: 'SF導入\n兼務出向解除' },
-      { id: 'ConcurrentSecondmentInReleaseSF',   shortLabel: 'SF導入\n兼務受入解除' },
-      { id: 'ConcurrentSecondmentInCancelSF',    shortLabel: 'SF導入\n兼務受入取消', cancel: true },
+      // chooser: 出向先会社を入力 → SF判定 → SF用フォーム or SF外2行フォームへルーティング
+      { chooser: 'secondmentOut',              shortLabel: '本務出向' },
+      { id: 'SecondmentOutReleaseSF',          shortLabel: 'SF\n本務出向解除' },
+      { id: 'SecondmentOutReleaseNonSF',       shortLabel: 'SF外\n本務出向解除' },
+      { multiRowId: 'NonSFSecondmentRelease',  shortLabel: 'SF外\n出向解除' },
+      { multiRowId: 'NonSFSecondmentCancel',   shortLabel: 'SF外出向\n取消', cancel: true },
+      { id: 'SecondmentInReleaseSF',           shortLabel: 'SF\n本務受入解除' },
+      { id: 'SecondmentInReleaseNonSF',        shortLabel: 'SF外\n本務受入解除' },
+      { id: 'SecondmentInCancel',              shortLabel: '本務受入\n取消', cancel: true },
     ],
   },
   {
-    label: '出向・出向解除（SF未導入会社）',
+    label: '兼務出向',
     ops: [
-      // 本務出向・解除・取り消しは MultiRowOperationDef（複数行操作）
-      { multiRowId: 'NonSFSecondmentOut',     shortLabel: 'SF未導入\n本務出向' },
-      { multiRowId: 'NonSFSecondmentRelease', shortLabel: 'SF未導入\n本務出向解除' },
-      { multiRowId: 'NonSFSecondmentCancel',  shortLabel: 'SF外出向\n取消', cancel: true },
-      // 受入側の解除・取消（単一行操作。出向元がない場合など）
-      { id: 'SecondmentInReleaseNonSF',            shortLabel: 'SF未導入\n本務受入解除' },
-      { id: 'SecondmentInCancelNonSF',             shortLabel: 'SF未導入\n本務受入取消', cancel: true },
-      { id: 'ConcurrentSecondmentOutNonSF',        shortLabel: 'SF未導入\n兼務出向' },
-      { id: 'ConcurrentSecondmentOutReleaseNonSF', shortLabel: 'SF未導入\n兼務出向解除' },
-      { id: 'ConcurrentSecondmentInReleaseNonSF',  shortLabel: 'SF未導入\n兼務受入解除' },
-      { id: 'ConcurrentSecondmentInCancelNonSF',   shortLabel: 'SF未導入\n兼務受入取消', cancel: true },
+      { chooser: 'concurrentSecondmentOut',          shortLabel: '兼務出向' },
+      { id: 'ConcurrentSecondmentOutReleaseSF',     shortLabel: 'SF\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentOutReleaseNonSF',  shortLabel: 'SF外\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseSF',      shortLabel: 'SF\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInReleaseNonSF',   shortLabel: 'SF外\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInCancel',         shortLabel: '兼務受入\n取消', cancel: true },
     ],
   },
 ]
@@ -188,6 +185,18 @@ export function SummaryView({ row, onSelect }: Props) {
           // ── 通常セクション ────────────────────────────────────────────────
           const { label, ops } = section
           const items = ops.flatMap((entry): { key: string; shortLabel: string; cancel: boolean; available: boolean; unavailableReason?: string; onPress: () => void; badgeColor?: string }[] => {
+            // ── chooser エントリ（本務出向ルーティング）──────────────────────
+            if ('chooser' in entry) {
+              return [{
+                key:        `chooser-${entry.chooser}`,
+                shortLabel: entry.shortLabel,
+                cancel:     false,
+                available:  true,
+                onPress:    () => onSelect({ chooser: entry.chooser, rowId: row.rowId }),
+                badgeColor: OPERATION_BADGE_COLORS['secondment'],
+              }]
+            }
+
             const cancel = !!entry.cancel
 
             if ('multiRowId' in entry) {

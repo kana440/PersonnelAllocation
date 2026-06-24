@@ -5,6 +5,7 @@ import { useOrgTreeState } from './hooks/useOrgTreeState'
 import { useCanvasPanelNav } from './hooks/useCanvasPanelNav'
 import { useSidebarMemberData } from './hooks/useSidebarMemberData'
 import { OrgTreeNode, OrgNodeProvider } from './OrgTreeNode'
+import { UnmappedOrgSection } from './UnmappedOrgSection'
 
 export function OrgSearchSidebar() {
   const { selectedPersonId, selectPerson, selectedCardRowId, selectCard, enterOperationPanel } = useScopedStore()
@@ -106,7 +107,7 @@ export function OrgSearchSidebar() {
 
   const orgNodeCtx = {
     viewOrgs, afterMembersByOrgId, subtreeCountByOrgId, beforeOrgs,
-    expandedOrgIds, selectedCardRowId,
+    expandedOrgIds, selectedCardRowId, showVacantPositions,
     toggleOrg,
     onOrgClick:          handleOrgClick,
     onPersonClick:       handlePersonClick,
@@ -201,6 +202,9 @@ export function OrgSearchSidebar() {
               })
             })()}
           </OrgNodeProvider>
+
+          {/* 旧組織（未割当）— departmentCode が新マスタに存在しない行 */}
+          <UnmappedOrgSection />
 
           {/* 所属なし */}
           {(() => {

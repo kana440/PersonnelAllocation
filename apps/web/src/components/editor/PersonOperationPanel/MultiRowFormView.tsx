@@ -11,16 +11,28 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 const PREV_BOX = 'text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded px-2 py-[5px] min-h-[30px] break-all'
 
 interface Props {
-  def:    MultiRowOperationDef
-  anchor: AllocationRow
-  onBack: () => void
+  def:                 MultiRowOperationDef
+  anchor:              AllocationRow
+  onBack:              () => void
+  /** 各セクションの初期値を上書きする（ルーティング経由で company 等を渡す場合に使用） */
+  overrideSectionVals?: Partial<Record<string, string>>[]
 }
 
-export function MultiRowFormView({ def, anchor, onBack }: Props) {
+export function MultiRowFormView({ def, anchor, onBack, overrideSectionVals }: Props) {
   const { allocationList, afterOrganizations, masters } = useStore()
 
   const [sectionValues, setSectionValues] = useState<Record<string, string>[]>(
-    () => def.sections.map(() => ({}))
+    () => def.sections.map((section, i): Record<string, string> => {
+      const base: Record<string, string> = section.initialValues
+        ? section.initialValues(anchor, allocationList)
+        : {}
+      const overrides = overrideSectionVals?.[i] ?? {}
+      const merged: Record<string, string> = { ...base }
+      for (const [k, v] of Object.entries(overrides)) {
+        if (v !== undefined) merged[k] = v
+      }
+      return merged
+    })
   )
   const [orgPicker,   setOrgPicker]   = useState<{ sectionIdx: number; field: string } | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)

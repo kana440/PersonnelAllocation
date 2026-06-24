@@ -13,11 +13,13 @@
 //   tools.findPersons({ name: '田中' })
 
 import { HRApplicationService, appService } from '../HRApplicationService'
-import { createReadMethods }   from './read'
-import { createWriteMethods }  from './write'
-import { createReviewMethods } from './review'
+import { createReadMethods }     from './read'
+import { createWriteMethods }    from './write'
+import { createReviewMethods }   from './review'
+import { createDiagnoseMethods } from './diagnose'
 
 export type { VacantPositionResult, AIOperationResult, PersonSearchResult, PersonResult, PersonRowDetail } from './types'
+export type { DiagnosePersonChangesResult, PatternDiagnosis }                                            from './diagnose'
 export { buildOrgTree } from './orgTree'
 
 export function createAITools(service: HRApplicationService) {
@@ -25,6 +27,7 @@ export function createAITools(service: HRApplicationService) {
     ...createReadMethods(service),
     ...createWriteMethods(service),
     ...createReviewMethods(service),
+    ...createDiagnoseMethods(service),
   }
 }
 

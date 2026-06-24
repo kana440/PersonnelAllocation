@@ -160,8 +160,8 @@ function MasterSummaryRow({ result }: { result: ImportedWorkbookResult }) {
         )}
         {result.columnWarnings.length > 0 && (
           <div className="mt-1 space-y-0.5">
-            {result.columnWarnings.map((w, i) => (
-              <p key={i} className="text-amber-600 text-xs">
+            {result.columnWarnings.map(w => (
+              <p key={`${w.sheet}-${w.message}`} className="text-amber-600 text-xs">
                 ⚠ [{w.sheet}] {w.message}
               </p>
             ))}

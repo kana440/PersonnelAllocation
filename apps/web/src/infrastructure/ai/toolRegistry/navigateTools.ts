@@ -31,12 +31,18 @@ export const NAVIGATE_TOOLS: Array<ReadEntry | NavigateEntry> = [
           '指定した人物の操作フォームを開き、AIが把握している値を事前入力する。' +
           'UIの表示のみ変更・データは変更しない。ユーザーが残りを入力して送信する。' +
           '「昇格フォームを開いて」「異動画面を出して」のようなリクエストに使う。' +
-          'findPersons で rowId を確認した後に使うこと。' +
-          'operationId の一覧: Promotion / Demotion / TitleChange / OrgTransfer / OrgRestructure / ' +
-          'LeaveOfAbsence / LeaveOfAbsenceCancel / ReturnFromLeave / ' +
-          'EmploymentTypeChange / JobTypeChange / ManagerChange / ' +
-          'SecondmentOutSF / SecondmentOutNonSF / SecondmentInSF / SecondmentInNonSF / ' +
-          'EmploymentTransfer / NoChange 等。',
+          'findPersons で rowId と availableOps を確認した後に使うこと（availableOps にない ID はエラーになる）。' +
+          '\n' +
+          '昇降格・役職変更: Promotion（昇格）/ Demotion（降格）/ TitleChange（役職変更）/ MpTrackSwitch（M職P職切替）\n' +
+          '雇用形態: JobTypeChange（ジョブタイプ変更）/ EmploymentExtension（雇用延長）/ EmploymentTypeChange（雇用タイプ変更）\n' +
+          '組織異動: OrgTransfer（社内異動）/ OrgRestructure（組織改変）/ ManagerChange（上司変更）\n' +
+          '兼務: ConcurrentAdd（兼務追加コピー）/ ConcurrentRelease（兼務解除）/ ConcurrentAddCancel（兼務追加取消）\n' +
+          '在籍・退職: LeaveOfAbsence（休職）/ LeaveOfAbsenceCancel（休職取消）/ ReturnFromLeave（復職）/ ReturnFromLeaveCancel（復職取消）/ EmploymentTransfer（移籍）/ EmploymentTransferCancel（移籍取消）/ NoChange（変更なし）/ NoChangeCancel（変更なし取消）\n' +
+          '出向設定: SecondmentOutSF（本務出向・SF統合先）/ SecondmentOutNonSF（本務出向・SF外）/ ConcurrentSecondmentOutNonSF（兼務出向・SF外）\n' +
+          '出向解除: SecondmentOutReleaseSF / SecondmentOutReleaseNonSF / SecondmentInReleaseSF / SecondmentInReleaseNonSF\n' +
+          '出向解除（兼務）: ConcurrentSecondmentOutReleaseSF / ConcurrentSecondmentOutReleaseNonSF / ConcurrentSecondmentInReleaseSF / ConcurrentSecondmentInReleaseNonSF\n' +
+          '出向受入取消: SecondmentInCancel / ConcurrentSecondmentInCancel\n' +
+          '※ 組織パネルボタン専用（直接開けない）: ConcurrentAddNew / SecondmentInNew / ConcurrentSecondmentInNew / AddEmptyPosition',
         parameters: {
           type: 'object',
           required: ['rowId', 'operationId'],

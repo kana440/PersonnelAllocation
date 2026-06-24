@@ -4,9 +4,7 @@ import { appService } from '../../application/HRApplicationService'
 import { useStore } from '../../store/useStore'
 import { EditViewCore, HeaderButton } from '../editor/EditViewCore'
 import { RowDelegationModal } from './RowDelegationModal'
-import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { Organization } from '@personnel/domain/schemas'
-import { EMPTY_MASTERS, type AllMasters } from '@personnel/domain/masters/aggregate'
+import { EMPTY_MASTERS } from '@personnel/domain/masters/aggregate'
 import type { AuthUser } from '../../infrastructure/api/authApi'
 
 interface Props {
@@ -46,21 +44,21 @@ export function SubmissionEditView({ submission, user, onBack, onLogout }: Props
           adminApi.submissions.getRows(submission.id),
           adminApi.rounds.getMasters(submission.roundId ?? '', submission.companyId ?? ''),
         ])
-        setStatus(sub.status as SubmissionStatus)
+        setStatus(sub.status)
         setRevisionComment(sub.revisionComment)
 
         const hasMasters = (masters.beforeOrganizations.length > 0 || masters.afterOrganizations.length > 0)
         if (hasMasters) {
           // 組織マスタあり: フル状態で初期化（キャンバスが動く）
           appService.loadExcelData({
-            allocationList:      rows as AllocationRow[],
-            beforeOrganizations: masters.beforeOrganizations as Organization[],
-            afterOrganizations:  masters.afterOrganizations  as Organization[],
-            masters:           { ...EMPTY_MASTERS, ...(masters.masters as Partial<AllMasters>) },
+            allocationList:      rows,
+            beforeOrganizations: masters.beforeOrganizations,
+            afterOrganizations:  masters.afterOrganizations,
+            masters:             { ...EMPTY_MASTERS, ...masters.masters },
           })
         } else {
           // マスタ未登録（Revision ベースの申請回）: 行のみ差し替え
-          appService.loadRowsOnly(rows as AllocationRow[])
+          appService.loadRowsOnly(rows)
         }
       } finally {
         setLoading(false)

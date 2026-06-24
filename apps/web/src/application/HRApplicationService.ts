@@ -192,6 +192,34 @@ export class HRApplicationService {
     return { ok: true }
   }
 
+  // ── 複数コマンドを1 Undo エントリとして実行 ─────────────────────
+  executeBatch(label: string, commands: EditCommand[]): ValidationResult {
+    if (this.isPreviewMode) return fail('プレビュー中は編集できません')
+    if (commands.length === 0) return { ok: true }
+
+    const beforeList = this.allocationList
+    const beforeOrgs = this.afterOrganizations
+
+    let list = this.allocationList
+    let orgs = this.afterOrganizations
+
+    for (const cmd of commands) {
+      const ctx = { allocationList: list, afterOrganizations: orgs, masters: this.masters }
+      const vr = cmd.validate(ctx)
+      if (!vr.ok) return vr
+      const result = cmd.apply(ctx)
+      list = result.updatedList
+      orgs = result.updatedOrgs ?? orgs
+    }
+
+    const patch = this.undoStack.computePatch(beforeList, list, beforeOrgs, orgs)
+    this.undoStack.push({ ...patch, label })
+    this.allocationList     = list
+    this.afterOrganizations = orgs
+    this.emit()
+    return { ok: true }
+  }
+
   // ── 行の直接編集（Undo なし・プレビュー/AI 内部用）────────────
   editRow(rowId: number, changes: AfterValues): void {
     if (this.isPreviewMode) return

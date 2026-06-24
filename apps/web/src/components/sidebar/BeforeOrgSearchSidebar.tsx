@@ -141,6 +141,7 @@ export function BeforeOrgSearchSidebar() {
     beforeOrgs: beforeOrganizations, // 同一リスト → isNewOrg = false（「新」バッジ非表示）
     expandedOrgIds,
     selectedCardRowId,
+    showVacantPositions: false,
     toggleOrg,
     onOrgClick:          handleOrgClick,
     onPersonClick:       handlePersonClick,

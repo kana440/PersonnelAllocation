@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
+import { ModalShell } from '../../common/ModalShell'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 interface Props {
@@ -51,8 +52,8 @@ export function VacantPositionDialog({ rowId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[70vh]">
+    <ModalShell onClose={onClose} maxWidth="max-w-md">
+      <div className="flex flex-col max-h-[70vh]">
         <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
           <p className="text-sm font-semibold text-gray-700">空きポジションへ異動</p>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -115,6 +116,6 @@ export function VacantPositionDialog({ rowId, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }

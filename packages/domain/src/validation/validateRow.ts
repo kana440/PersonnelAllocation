@@ -35,7 +35,7 @@ export function validateRow(
     ...runFilteredByEmployment(row, masters, overrides),
     ...runDataExistence(row, orgs, masters, overrides),
     ...(allocationList.length > 0 ? runExclusivity(row, allocationList) : []),
-    ...runGlobalConsistency(row, masters, changes),
+    ...runGlobalConsistency(row, masters, changes, allocationList, orgs),
   ]
 }
 

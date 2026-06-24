@@ -7,7 +7,7 @@ import type { DropIntentState } from './hooks/useDropIntent'
 
 export interface DragData {
   dragType?:       'person' | 'position'
-  personId:        string
+  personId?:       string   // position ドラッグ時は空席のため undefined
   fromOrgId:       string
   fromCompanyId:   string
   affiliationType: 'primary' | 'concurrent'

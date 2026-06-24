@@ -19,7 +19,6 @@ import * as P                       from '../proposalBuilders'
 import {
   bindOperation,
   secondmentOutReleaseSFDef,
-  concurrentSecondmentOutSFDef,
   employmentTransferDef,
 } from '@personnel/domain/commands/defs'
 import { CompoundCommand } from '@personnel/domain/commands/handlers/compoundCommand'
@@ -515,49 +514,73 @@ export const OPERATION_TOOLS: Array<ConfirmEntry | ExecuteEntry> = [
     execute: args => aiTools.executeConcurrentRelease(args.rowId as number),
   },
 
-  // ── propose_secondment_to_concurrent ──────────────────────────────────────
-  // Tier 3 wizard: 本務出向 → 兼務出向変換（2ステップ）
+  // ── propose_org_restructure ───────────────────────────────────────────────
+  // 組織コード変更（組改）を一括適用する。
+  // executeOrgRestructure は write.ts に実装済み。rowIds 省略時は fromDeptCode の全行が対象。
   {
-    kind: 'confirm',
+    kind: 'execute',
     definition: {
       type: 'function',
       function: {
-        name: 'propose_secondment_to_concurrent',
-        description: '本務出向中の従業員を兼務出向に変換することをウィザード形式でユーザーに提案する。「出向解除 → 兼務出向追加」の2ステップを透過的に見せる。ピン留め行または findPersons で rowId を確認すること。prevDepartmentCode（元の所属）が設定されていない場合は失敗する。',
+        name: 'propose_org_restructure',
+        description:
+          '組織コード変更（組改）を指定した行に適用する（即時実行）。' +
+          '組織の廃止・統廃合・名称変更などで departmentCode が変わる場合に使う。' +
+          'rowIds を省略すると fromDeptCode に属する全行が対象になる。' +
+          '勤務場所・コストセンターは各行の現在値を引き継ぐ（変更しない）。' +
+          '実行前に findOrgs で fromDeptCode / toDeptCode を確認すること。',
         parameters: {
           type: 'object',
-          required: ['rowId'],
+          required: ['fromDeptCode', 'toDeptCode'],
           properties: {
-            rowId:            { type: 'number', description: '本務出向中の行の rowId' },
-            concurrentReason: { type: 'string', description: '兼務理由（任意）' },
+            fromDeptCode:   { type: 'string', description: '変更前の組織コード（externalCode）' },
+            toDeptCode:     { type: 'string', description: '変更後の組織コード（externalCode）' },
+            rowIds:         { type: 'array', items: { type: 'number' }, description: '対象行を絞る場合の rowId 配列（省略時は fromDeptCode 全行）' },
+            transferReason: { type: 'string', description: '異動事由（省略時はデフォルト値）' },
+            memo:           { type: 'string', description: 'メモ（任意）' },
           },
         },
       },
     },
-    buildProposal:    args => P.buildSecondmentToConcurrentProposal(args.rowId as number, args.concurrentReason as string | undefined),
-    executeOnApprove: args => {
-      const rowId = args.rowId as number
-      const { allocationList } = appService.getSnapshot()
-      const row = allocationList.find(r => r.rowId === rowId)
-      if (!row?.secondmentToCompany) return { ok: false, error: '本務出向が設定されていません' }
-      if (!row.prevDepartmentCode)   return { ok: false, error: '元の所属組織 (prevDepartmentCode) が特定できません' }
-
-      const secondmentToCompany = row.secondmentToCompany
-      const secondmentDeptCode  = row.departmentCode!
-      const homeDeptCode        = row.prevDepartmentCode
-
-      return aiTools.executeOperation(new CompoundCommand(
-        [
-          bindOperation(secondmentOutReleaseSFDef, rowId, { departmentCode: homeDeptCode }),
-          bindOperation(concurrentSecondmentOutSFDef, rowId, {
-            secondmentToCompany,
-            departmentCode:   secondmentDeptCode,
-            concurrentReason: args.concurrentReason as string | undefined,
-          }),
-        ],
-        `本務出向→兼務出向: ${[row.lastName, row.firstName].filter(Boolean).join(' ')}`,
-      ))
+    execute: args => {
+      const result = aiTools.executeOrgRestructure({
+        fromDeptCode:    args.fromDeptCode    as string,
+        toDeptCode:      args.toDeptCode      as string,
+        rowIds:          args.rowIds          as number[] | undefined,
+        transferReason:  args.transferReason  as string | undefined,
+        memo:            args.memo            as string | undefined,
+      })
+      return result
     },
+  },
+
+  // ── propose_job_type_change ────────────────────────────────────────────────
+  {
+    kind: 'execute',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'propose_job_type_change',
+        description:
+          '職種（ジョブファミリー・ジョブタイプ）を変更する（即時実行）。' +
+          'jobType × band → payGrade の自動導出が走るため、バンドが変わらなくても給与等級が変わる場合がある。' +
+          'payGrade が変わるときは別途ポジション変更が必要になる（実行後に postValidation で確認される）。' +
+          '実行前に getFieldOptions で jobFamily / jobType の有効値を確認すること。',
+        parameters: {
+          type: 'object',
+          required: ['rowId'],
+          properties: {
+            rowId:     { type: 'number', description: '対象行の rowId（findPersons の positions[].rowId）' },
+            jobFamily: { type: 'string', description: '新しいジョブファミリー（省略時は変更なし）' },
+            jobType:   { type: 'string', description: '新しいジョブタイプ（省略時は変更なし）' },
+          },
+        },
+      },
+    },
+    execute: args => aiTools.executeJobTypeChange(args.rowId as number, {
+      jobFamily: args.jobFamily as string | undefined,
+      jobType:   args.jobType   as string | undefined,
+    }),
   },
 
   // ── propose_secondment_transfer ────────────────────────────────────────────
@@ -639,80 +662,4 @@ export const OPERATION_TOOLS: Array<ConfirmEntry | ExecuteEntry> = [
     }),
   },
 
-  // ── propose_secondment_in ──────────────────────────────────────────────────
-  {
-    kind: 'confirm',
-    definition: {
-      type: 'function',
-      function: {
-        name:        'propose_secondment_in',
-        description: '指定した行に本務出向受入を設定することをユーザーに提案し、確認を得てから実行する。出向元会社・社員番号・受入先組織・雇用タイプを確認UIで入力させる。sfIntegrated=true の場合は社員番号が必須（SF統合先）。実行前に findPersons で rowId を確認すること。',
-        parameters: {
-          type: 'object',
-          required: ['rowId'],
-          properties: {
-            rowId:        { type: 'number',  description: '本務出向受入対象の rowId（findPersons の positions[].rowId）' },
-            sfIntegrated: { type: 'boolean', description: 'SF統合先かどうか（デフォルト false）' },
-          },
-        },
-      },
-    },
-    buildProposal: args => P.buildSecondmentInProposal(
-      args.rowId as number,
-      (args.sfIntegrated as boolean | undefined) ?? false,
-    ),
-    executeOnApprove: (args, userInputs) => {
-      if (!userInputs?.secondmentFromCompany || !userInputs?.departmentCode || !userInputs?.employmentType)
-        return { ok: false, errors: [{ message: '出向元会社・受入先組織・雇用タイプは必須です' }] }
-      return aiTools.executeSecondmentIn(
-        args.rowId as number,
-        (args.sfIntegrated as boolean | undefined) ?? false,
-        {
-          secondmentFromCompany:        userInputs.secondmentFromCompany,
-          secondmentFromEmployeeNumber: userInputs.secondmentFromEmployeeNumber,
-          departmentCode:               userInputs.departmentCode,
-          employmentType:               userInputs.employmentType,
-        },
-      )
-    },
-  },
-
-  // ── propose_concurrent_secondment_in ──────────────────────────────────────
-  {
-    kind: 'confirm',
-    definition: {
-      type: 'function',
-      function: {
-        name:        'propose_concurrent_secondment_in',
-        description: '指定した行に兼務出向受入を設定することをユーザーに提案し、確認を得てから実行する。新規兼務行を作成する。出向元会社・社員番号・出向先組織・雇用タイプを確認UIで入力させる。実行前に findPersons で rowId を確認すること。',
-        parameters: {
-          type: 'object',
-          required: ['rowId'],
-          properties: {
-            rowId:        { type: 'number',  description: '兼務出向受入対象の rowId（本務行）（findPersons の positions[].rowId）' },
-            sfIntegrated: { type: 'boolean', description: 'SF統合先かどうか（デフォルト false）' },
-          },
-        },
-      },
-    },
-    buildProposal: args => P.buildConcurrentSecondmentInProposal(
-      args.rowId as number,
-      (args.sfIntegrated as boolean | undefined) ?? false,
-    ),
-    executeOnApprove: (args, userInputs) => {
-      if (!userInputs?.secondmentFromCompany || !userInputs?.departmentCode || !userInputs?.employmentType)
-        return { ok: false, errors: [{ message: '出向元会社・出向先組織・雇用タイプは必須です' }] }
-      return aiTools.executeConcurrentSecondmentIn(
-        args.rowId as number,
-        (args.sfIntegrated as boolean | undefined) ?? false,
-        {
-          secondmentFromCompany:        userInputs.secondmentFromCompany,
-          secondmentFromEmployeeNumber: userInputs.secondmentFromEmployeeNumber,
-          departmentCode:               userInputs.departmentCode,
-          employmentType:               userInputs.employmentType,
-          concurrentReason:             userInputs.concurrentReason,
-        },
-      )
-    },
-  },
 ]

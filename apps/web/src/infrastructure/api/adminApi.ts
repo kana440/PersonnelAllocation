@@ -1,6 +1,9 @@
 // 管理画面用 API クライアント
 // X-User-Id ヘッダーでユーザーを識別する（デモ用スタブ認証）
 import type { RowChangeSummary } from '@personnel/domain/diffMerge'
+import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { Organization }  from '@personnel/domain/schemas'
+import type { AllMasters }    from '@personnel/domain/masters/aggregate'
 
 const ADMIN_BASE = 'http://localhost:3000/api/admin'
 const API_BASE   = 'http://localhost:3000/api'
@@ -93,9 +96,9 @@ export interface CreateRoundBody {
 }
 
 export interface RoundMasters {
-  beforeOrganizations: unknown[]
-  afterOrganizations:  unknown[]
-  masters:           unknown
+  beforeOrganizations: Organization[]
+  afterOrganizations:  Organization[]
+  masters:             Partial<AllMasters>
 }
 
 // ── Submission ───────────────────────────────────────────────────────────────
@@ -227,7 +230,7 @@ export const adminApi = {
     get:             (id: string)                        => api<ApiSubmission>(`/submissions/${id}`),
     create:          (body: CreateSubmissionBody)        =>
       api<{ id: string }>('/submissions', { method: 'POST', body: JSON.stringify(body) }),
-    getRows:         (id: string)                        => api<unknown[]>(`/submissions/${id}/rows`),
+    getRows:         (id: string)                        => api<AllocationRow[]>(`/submissions/${id}/rows`),
     getChildren:     (id: string)                        => api<ApiSubmission[]>(`/submissions/${id}/children`),
     putRows:         (id: string, rows: unknown[])       =>
       api<{ saved: number }>(`/submissions/${id}/rows`, { method: 'PUT', body: JSON.stringify(rows) }),

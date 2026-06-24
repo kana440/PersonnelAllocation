@@ -170,6 +170,24 @@ export const FIELD_METADATA: ReadonlyArray<{
 - 行数は変わらない
 - 人も一緒に移動する
 
+**空席ポジションのドラッグ対応**（`isVacant && !!positionCode`）:
+- `positionCode` がある空席行もドラッグ可能（カーソル: `cursor-grab`）
+- **別組織パネルにドロップ** → 操作4と同じ（`departmentCode` 変更）
+- **別のポジションカードにドロップ** → `SetPositionManagerOperation`（`managerPositionCode` 変更）でレポートライン調整
+  - ドラッグデータは `dragType: 'position'` + `fromRowId` で識別
+  - 在籍カード上にドロップした場合も同じく `handleDropPositionOnPosition` が処理
+
+---
+
+### 操作4b: ポジションのレポートライン変更（カード間ドロップ）
+
+空席・在籍問わずポジションコードを持つ行を、別のポジションカードにドロップすると上司ポジションを変更できる。
+
+| ドラッグ元 | ドロップ先 | 処理 |
+|---|---|---|
+| 空席カード（`dragType: 'position'`） | 任意のカード | ドロップ先カードの `positionCode` をドラッグ元行の `managerPositionCode` に設定 |
+| 在籍カード（`dragType: 'person'`） | 別の在籍カード（上端 35%） | 従来の人の移動フロー（`DragIntentPicker`） |
+
 ---
 
 ### 操作5a: ポジション削除

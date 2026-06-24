@@ -113,8 +113,8 @@ export function DiffReviewView({ submission, onBack }: Props) {
         ) : (
           <div className="space-y-3 max-w-4xl mx-auto">
             {children.map(child => {
-              const statusColor = STATUS_COLORS[child.status as SubmissionStatus] ?? 'bg-gray-100 text-gray-600'
-              const statusLabel = STATUS_LABELS[child.status as SubmissionStatus] ?? child.status
+              const statusColor = STATUS_COLORS[child.status] ?? 'bg-gray-100 text-gray-600'
+              const statusLabel = STATUS_LABELS[child.status] ?? child.status
               const expanded    = expandedIds.has(child.id)
               const hasDiffs    = child.diffs.length > 0
 

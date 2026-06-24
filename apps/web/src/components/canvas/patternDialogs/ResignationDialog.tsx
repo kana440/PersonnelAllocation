@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
+import { ModalShell } from '../../common/ModalShell'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
@@ -43,8 +44,7 @@ export function ResignationDialog({ rowId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+    <ModalShell onClose={onClose}>
         <div className="px-4 py-3 border-b border-gray-200">
           <p className="text-sm font-semibold text-gray-700">退職を設定</p>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -58,8 +58,8 @@ export function ResignationDialog({ rowId, onClose }: Props) {
             <div className="border border-gray-200 rounded px-2 py-1 text-xs text-gray-500 bg-gray-50">
               {defaultReason}
             </div>
-            {issues.filter(i => i.field === 'transferReason').map((issue, i) => (
-              <div key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
+            {issues.filter(i => i.field === 'transferReason').map(issue => (
+              <div key={`${issue.field}-${issue.message}`} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
                 {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
               </div>
             ))}
@@ -74,8 +74,8 @@ export function ResignationDialog({ rowId, onClose }: Props) {
               className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 resize-none"
               placeholder="退職に関する補足情報（任意）"
             />
-            {issues.filter(i => i.field === 'memo').map((issue, i) => (
-              <div key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
+            {issues.filter(i => i.field === 'memo').map(issue => (
+              <div key={`${issue.field}-${issue.message}`} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
                 {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
               </div>
             ))}
@@ -96,7 +96,6 @@ export function ResignationDialog({ rowId, onClose }: Props) {
               className="text-xs px-4 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
           >保存</button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

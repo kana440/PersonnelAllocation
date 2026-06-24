@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef } from 'react'
+import { useClickOutside } from '../../../hooks/useClickOutside'
 import { useOrgView } from '../OrgViewContext'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { subtreeRowCount } from './helpers'
@@ -6,19 +7,25 @@ import { OrgSection } from './OrgSection'
 import { NewRowOperationModal } from './NewRowOperationModal'
 import {
   concurrentAddNewDef,
-  secondmentInNewSFDef,
-  secondmentInNewNonSFDef,
-  concurrentSecondmentInNewSFDef,
-  concurrentSecondmentInNewNonSFDef,
+  secondmentInNewDef,
+  concurrentSecondmentInNewDef,
 } from '@personnel/domain/commands/defs'
 import type { EditOperation } from '@personnel/domain/commands/defs'
 
-const ADD_OPS: { def: EditOperation; label: string }[] = [
-  { def: concurrentAddNewDef,              label: '社内兼務追加' },
-  { def: secondmentInNewSFDef,             label: '本務出向受入（SF統合先）' },
-  { def: secondmentInNewNonSFDef,          label: '本務出向受入（SF非統合先）' },
-  { def: concurrentSecondmentInNewSFDef,   label: '兼務出向受入（SF統合先）' },
-  { def: concurrentSecondmentInNewNonSFDef, label: '兼務出向受入（SF非統合先）' },
+type AddOpsGroup = { groupLabel: string; ops: { def: EditOperation; label: string }[] }
+
+const ADD_OP_GROUPS: AddOpsGroup[] = [
+  {
+    groupLabel: '社内追加',
+    ops: [{ def: concurrentAddNewDef, label: '社内兼務追加' }],
+  },
+  {
+    groupLabel: '出向受入',
+    ops: [
+      { def: secondmentInNewDef,           label: '本務出向受入' },
+      { def: concurrentSecondmentInNewDef, label: '兼務出向受入' },
+    ],
+  },
 ]
 
 interface OrgPanelProps {
@@ -46,14 +53,7 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
   const [activeOp, setActiveOp]         = useState<EditOperation | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!dropdownOpen) return
-    const close = (e: MouseEvent) => {
-      if (!dropdownRef.current?.contains(e.target as Node)) setDropdownOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [dropdownOpen])
+  useClickOutside([dropdownRef], () => setDropdownOpen(false), dropdownOpen)
 
   const orgCode = org.externalCode ?? ''
 
@@ -87,20 +87,28 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
           <div className="relative flex-shrink-0" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen(v => !v)}
-              className="w-5 h-5 rounded flex items-center justify-center text-gray-500 hover:bg-blue-100 hover:text-blue-700 transition-colors text-xs font-bold"
+              className="flex items-center gap-0.5 px-1.5 h-5 rounded text-[10px] font-semibold text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-colors border border-blue-200 hover:border-blue-300"
               title="行を追加"
-            >＋</button>
+            >＋ 追加</button>
             {dropdownOpen && (
               <div className="absolute right-0 top-full mt-0.5 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
-                {ADD_OPS.map(({ def, label }) => (
-                  <button
-                    key={def.id}
-                    type="button"
-                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-800 transition-colors"
-                    onClick={() => { setActiveOp(def); setDropdownOpen(false) }}
-                  >
-                    {label}
-                  </button>
+                {ADD_OP_GROUPS.map((group, gi) => (
+                  <React.Fragment key={group.groupLabel}>
+                    {gi > 0 && <div className="border-t border-gray-100 my-1" />}
+                    <div className="px-3 py-0.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wider">
+                      {group.groupLabel}
+                    </div>
+                    {group.ops.map(({ def, label }) => (
+                      <button
+                        key={def.id}
+                        type="button"
+                        className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-800 transition-colors"
+                        onClick={() => { setActiveOp(def); setDropdownOpen(false) }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </React.Fragment>
                 ))}
               </div>
             )}

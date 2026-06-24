@@ -69,39 +69,38 @@ SummaryView の UI セクション順に全操作を列挙する。
 
 ## 5. 出向・出向解除（SF導入会社）
 
+> **本務出向の起動**: 本務行メニューの「本務出向」は **SecondmentOutChooser**（出向先会社名入力・SF判定画面）を経由する。
+> SF統合先と判定された場合にのみ以下の SF フォームへ進む。詳細は `specs/G2-domain/06-secondment-rules.md#6` 参照。
+
 | ID | ラベル | 種別 | 起動元 | 状態 |
 |---|---|---|---|---|
-| `SecondmentOutSF` | 本務出向（SF統合先） | 行変更 | 本務行のメニュー | ✓ |
+| `SecondmentOutSF` | 本務出向（SF統合先） | 行変更 | 本務行メニュー「本務出向」→ SecondmentOutChooser → SF判定 | ✓ |
 | `SecondmentOutReleaseSF` | 本務出向解除（SF導入先） | 行変更 | 出向中行のメニュー | ✓ |
 | `SecondmentInSF` | 本務出向受入（SF統合先）※既存行上書き | 行変更 | 既存行のメニュー | ✓ |
 | `SecondmentInNewSF` | 本務出向受入 新規（SF） | 行追加 | 組織パネルの追加ボタン | ✓ |
 | `SecondmentInReleaseSF` | 本務出向受入解除（SF導入先） | 行変更 | 受入中行のメニュー | ✓ |
-| `SecondmentInCancelSF` | 本務出向受入取消（SF導入先） | 行削除 | 受入中行のメニュー | ✓ |
-| `ConcurrentSecondmentOutSF` | 兼務出向（SF統合先） | 行追加 | 本務行のメニュー | ✓ |
+| `SecondmentInCancel` | 本務出向受入取消（SF/SF外共通） | 行削除 | 受入中行のメニュー | ✓ |
+| `ConcurrentSecondmentOutNonSF` | 兼務出向（SF外のみ対象） | 行追加 | 本務行のメニュー | ✓ |
 | `ConcurrentSecondmentOutReleaseSF` | 兼務出向解除（SF導入先） | 行削除 | 兼務出向行のメニュー | ✓ |
-| `ConcurrentSecondmentInSF` | 兼務出向受入（SF統合先）※既存行コピー | 行追加 | 本務行のメニュー | ✓ |
-| `ConcurrentSecondmentInNewSF` | 兼務出向受入 新規（SF） | 行追加 | 組織パネルの追加ボタン | ✓ |
 | `ConcurrentSecondmentInReleaseSF` | 兼務出向受入解除（SF導入先） | 行削除 | 兼務受入行のメニュー | ✓ |
-| `ConcurrentSecondmentInCancelSF` | 兼務出向受入取消（SF導入先） | 行削除 | 兼務受入行のメニュー | ✓ |
+| `ConcurrentSecondmentInCancel` | 兼務受入取消（共通） | 行削除 | 兼務受入行のメニュー | ✓ |
 
 ---
 
 ## 6. 出向・出向解除（SF未導入会社）
 
+> **本務出向の起動**: 本務行メニューの「本務出向」は **SecondmentOutChooser** 経由。
+> SF外（未統合）と判定された場合に以下の 2行フォーム（`nonSFSecondmentOutDef`）へ進む。
+
 | ID | ラベル | 種別 | 起動元 | 状態 |
 |---|---|---|---|---|
-| `SecondmentOutNonSF` | 本務出向（SF非統合先） | 行変更 | 本務行のメニュー | ✓ |
+| `NonSFSecondmentOut`（multiRow） | 本務出向（SF外・2行） | 行変更＋行追加 | 本務行メニュー「本務出向」→ SecondmentOutChooser → SF外判定 | ✓ |
 | `SecondmentOutReleaseNonSF` | 本務出向解除（SF未導入先） | 行変更 | 出向中行のメニュー | ✓ |
 | `SecondmentInNonSF` | 本務出向受入（SF非統合先）※既存行上書き | 行変更 | 既存行のメニュー | ✓ |
 | `SecondmentInNewNonSF` | 本務出向受入 新規（非SF） | 行追加 | 組織パネルの追加ボタン | ✓ |
 | `SecondmentInReleaseNonSF` | 本務出向受入解除（SF未導入先） | 行変更 | 受入中行のメニュー | ✓ |
-| `SecondmentInCancelNonSF` | 本務出向受入取消（SF未導入先） | 行削除 | 受入中行のメニュー | ✓ |
-| `ConcurrentSecondmentOutNonSF` | 兼務出向（SF非統合先） | 行追加 | 本務行のメニュー | ✓ |
 | `ConcurrentSecondmentOutReleaseNonSF` | 兼務出向解除（SF未導入先） | 行削除 | 兼務出向行のメニュー | ✓ |
-| `ConcurrentSecondmentInNonSF` | 兼務出向受入（SF非統合先）※既存行コピー | 行追加 | 本務行のメニュー | ✓ |
-| `ConcurrentSecondmentInNewNonSF` | 兼務出向受入 新規（非SF） | 行追加 | 組織パネルの追加ボタン | ✓ |
 | `ConcurrentSecondmentInReleaseNonSF` | 兼務出向受入解除（SF未導入先） | 行削除 | 兼務受入行のメニュー | ✓ |
-| `ConcurrentSecondmentInCancelNonSF` | 兼務出向受入取消（SF未導入先） | 行削除 | 兼務受入行のメニュー | ✓ |
 
 ---
 

@@ -4,6 +4,7 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { PositionEntry, MemberEntry } from './OrgViewContext'
 import type { BulkMoveConfirmParams } from './modals/BulkMoveModal'
 import type { DropIntentState, DropOpState } from './hooks/useDropIntent'
+import { useMemo }                   from 'react'
 import { appService }                from '../../application/HRApplicationService'
 import { MoveRowsToOrgOperation }    from '@personnel/domain/commands/handlers/moveRowsToOrg'
 import { ConfirmDialog }             from './modals/ConfirmDialog'
@@ -63,6 +64,18 @@ export function CanvasModals({
   positionTreeByOrgId, afterMembersByOrgId,
   handleBulkMoveConfirm, handleIntentPick,
 }: CanvasModalsProps) {
+  const { secondmentOrgCodes, masters } = useMemo(() => {
+    const snap = appService.getSnapshot()
+    return {
+      masters:            snap.masters,
+      secondmentOrgCodes: new Set(
+        snap.masters.orgMasterEntries
+          .filter(e => e.orgCategory?.includes('出向者用組織'))
+          .map(e => e.code),
+      ),
+    }
+  }, [allAfterOrgsUnscoped])
+
   const handleMoveConfirm = (targetOrgId: string) => {
     const rowIds: number[] = []
     for (const personId of selectedPersonIds) {
@@ -151,6 +164,8 @@ export function CanvasModals({
           allocationList={allocationList}
           persons={persons}
           allOrgs={allAfterOrgsUnscoped}
+          secondmentOrgCodes={secondmentOrgCodes}
+          masters={masters}
           onPick={handleIntentPick}
           onCancel={() => setDropIntentState(null)}
         />

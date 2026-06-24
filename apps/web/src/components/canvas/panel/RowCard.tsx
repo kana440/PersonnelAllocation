@@ -39,6 +39,7 @@ export function RowCard({
     handleRowDoubleClick,
     dragOverVacantRowId, setDragOverVacantRowId,
     handleDropOnVacantSlot,
+    handleDropPositionOnPosition,
     isHistoryPreviewMode,
     dropPersonRowId, setDropPersonRowId,
     dropGapBelowRowId, setDropGapBelowRowId,
@@ -105,7 +106,9 @@ export function RowCard({
   const isGapDropTarget    = !isVacant && !isSelectMode && dropGapBelowRowId === row.rowId
   const posTitle           = getPositionTitle(row)
   const empBorder          = getEmpBorderClass(row, masters.employmentTypes)
-  const draggable          = !isSelectMode && !isVacant && !isHistoryPreviewMode
+  // 空席ポジションも positionCode があればドラッグ可（別組織への移動・レポートライン変更）
+  const draggableVacant    = isVacant && !!row.positionCode && !isSelectMode && !isHistoryPreviewMode
+  const draggable          = !isSelectMode && !isHistoryPreviewMode && (!isVacant || draggableVacant)
 
   const bgClass =
     isSelected         ? 'bg-yellow-50' :
@@ -120,9 +123,9 @@ export function RowCard({
     isDropTarget       ? 'border-blue-300' : 'border-gray-200'
 
   const cursorClass =
-    isHistoryPreviewMode      ? 'cursor-default' :
-    isSelectMode && !isVacant ? 'cursor-pointer'  :
-    !isVacant                 ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+    isHistoryPreviewMode         ? 'cursor-default' :
+    isSelectMode && !isVacant    ? 'cursor-pointer'  :
+    !isVacant || draggableVacant ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
 
   const destBadgeClass =
     comparisonStatus === 'same'          ? 'bg-gray-100 text-gray-500' :
@@ -139,13 +142,24 @@ export function RowCard({
           ${borderColorClass} ${bgClass} ${cursorClass}`}
         draggable={draggable}
         onDragStart={draggable ? e => {
-          const data: DragData = {
-            dragType: 'person', personId: person!.id,
-            fromOrgId: orgId, fromCompanyId: '',
-            affiliationType: isConcurrent ? 'concurrent' : 'primary',
-            source: 'after', fromRowId: row.rowId, rowId: row.rowId, fromPanelId: panelId,
+          if (isVacant) {
+            // 空席ポジションのドラッグ: 別組織への移動・レポートライン変更に使用
+            const data: DragData = {
+              dragType: 'position', fromOrgId: orgId, fromCompanyId: '',
+              affiliationType: 'primary',
+              fromRowId: row.rowId, rowId: row.rowId, fromPanelId: panelId,
+            }
+            e.dataTransfer.setData('application/json', JSON.stringify(data))
+            e.dataTransfer.setData('application/x-position-drag', '')
+          } else {
+            const data: DragData = {
+              dragType: 'person', personId: person!.id,
+              fromOrgId: orgId, fromCompanyId: '',
+              affiliationType: isConcurrent ? 'concurrent' : 'primary',
+              source: 'after', fromRowId: row.rowId, rowId: row.rowId, fromPanelId: panelId,
+            }
+            e.dataTransfer.setData('application/json', JSON.stringify(data))
           }
-          e.dataTransfer.setData('application/json', JSON.stringify(data))
           e.dataTransfer.effectAllowed = 'move'
         } : undefined}
         onClick={e => {
@@ -193,12 +207,25 @@ export function RowCard({
         onDrop={
           isVacant ? e => {
             setDragOverVacantRowId(null)
-            handleDropOnVacantSlot(e, row.rowId)
+            let data: DragData
+            try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+            if (data.dragType === 'position') {
+              // ポジションを空席カードの上にドロップ → レポートライン変更
+              handleDropPositionOnPosition(e, row.rowId)
+            } else {
+              // 人を空席スロットにドロップ → 担当者をアサイン
+              handleDropOnVacantSlot(e, row.rowId)
+            }
           } :
           !isSelectMode && !isHistoryPreviewMode ? e => {
             e.preventDefault(); e.stopPropagation()
             let data: DragData
             try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+            if (data.dragType === 'position') {
+              // ポジションを在席カードの上にドロップ → レポートライン変更
+              handleDropPositionOnPosition(e, row.rowId)
+              return
+            }
             if (!data.personId) return
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
             if ((e.clientY - rect.top) / rect.height > 0.65) {

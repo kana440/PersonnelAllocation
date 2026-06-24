@@ -1,30 +1,25 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { useStore } from '../../store/useStore'
-import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
-import { useChatStore } from '../../store/useChatStore'
-import { ComparisonSplitView } from './ComparisonSplitView'
+import { useState, useCallback } from 'react'
+import { useStore }           from '../../../store/useStore'
+import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
+import { ComparisonSplitView }  from '../ComparisonSplitView'
 import { SetPositionManagerOperation } from '@personnel/domain/commands/handlers/positionOps'
 import { ReorderRowOperation }         from '@personnel/domain/commands/handlers/reorderRow'
-import { appService } from '../../application/HRApplicationService'
-import { useScopedStore } from '../../store/useScopedStore'
-import { OrgTransferDialog }       from './patternDialogs/OrgTransferDialog'
-import { PromotionDialog }         from './patternDialogs/PromotionDialog'
-import { JobTypeDialog }           from './patternDialogs/JobTypeDialog'
-import { ResignationDialog }       from './patternDialogs/ResignationDialog'
-import { VacantPositionDialog }    from './patternDialogs/VacantPositionDialog'
-import { SecondmentReleaseDialog } from './patternDialogs/SecondmentReleaseDialog'
-import { SecondmentInAddModal }    from './SecondmentInAddModal'
-import type { SecondmentInValues } from './SecondmentInAddModal'
-import type { EditPattern }   from '@personnel/domain/patterns/editPattern'
-import { CanvasModals }     from './CanvasModals'
-import { TreeWindowCanvas }       from './TreeWindowCanvas'
-import { DisplayFieldCombobox }   from './components/DisplayFieldCombobox'
-import { OrgViewContext }   from './OrgViewContext'
-import type { OrgViewContextValue } from './OrgViewContext'
-import { useOrgDrag }       from './hooks/useOrgDrag'
-import { useDropIntent }    from './hooks/useDropIntent'
-import { useBulkMove }      from './hooks/useBulkMove'
-import { useOrgViewData }   from './hooks/useOrgViewData'
+import { appService }          from '../../../application/HRApplicationService'
+import { useScopedStore }      from '../../../store/useScopedStore'
+import { SecondmentInAddModal }  from '../SecondmentInAddModal'
+import type { SecondmentInValues } from '../SecondmentInAddModal'
+import type { EditPattern }    from '@personnel/domain/patterns/editPattern'
+import { CanvasModals }        from '../CanvasModals'
+import { TreeWindowCanvas }    from '../TreeWindowCanvas'
+import { DisplayFieldCombobox } from '../components/DisplayFieldCombobox'
+import { OrgViewContext }      from '../OrgViewContext'
+import type { OrgViewContextValue } from '../OrgViewContext'
+import { useOrgDrag }          from '../hooks/useOrgDrag'
+import { useDropIntent }       from '../hooks/useDropIntent'
+import { useBulkMove }         from '../hooks/useBulkMove'
+import { useOrgViewData }      from '../hooks/useOrgViewData'
+import { usePersonSelection }  from './usePersonSelection'
+import { PatternDialogs }      from './PatternDialogs'
 
 export function OrgOperationView() {
   const store = useScopedStore()
@@ -35,13 +30,11 @@ export function OrgOperationView() {
     applyHistoryPreview, cancelHistoryPreview,
     undoHistory,
   } = useStore()
-  const {
-    comparisonMode, toggleComparisonMode,
-  } = useCanvasLayoutStore()
+  const { comparisonMode, toggleComparisonMode } = useCanvasLayoutStore()
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
-    selectedPersonId, selectPerson, selectedCardRowId, selectCard, saveRow,
+    selectPerson, selectedCardRowId, selectCard, saveRow,
     operationPanelRowId, enterOperationPanel,
     assignPersonToVacantPosition,
     assigneeWarnings,
@@ -53,44 +46,26 @@ export function OrgOperationView() {
   const allocationList = (isHistoryPreviewMode && previewAllocationList)     ? previewAllocationList     : scopedAllocList
 
   const organizations = allAfterOrgs.filter(o => !o.isAbandoned)
+  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList })
 
-  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({
-    allAfterOrgs, persons, allocationList,
-  })
-
-  // ── UI state ───────────────────────────────────────────────────
-  const [confirmDialog,      setConfirmDialog]      = useState<{ message: string; onConfirm: () => void } | null>(null)
-  const [fieldPickerOpen,    setFieldPickerOpen]    = useState(false)
-  const [selectedPersonIds,  setSelectedPersonIds]  = useState<Set<string>>(new Set())
-  const [moveModalOpen,      setMoveModalOpen]      = useState(false)
-  const [bulkActionModal,    setBulkActionModal]    = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
-  const [secondmentInModal,  setSecondmentInModal]  = useState<{
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
+  const [moveModalOpen,       setMoveModalOpen]       = useState(false)
+  const [bulkActionModal,     setBulkActionModal]     = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
+  const [secondmentInModal,   setSecondmentInModal]   = useState<{
     orgId: string; orgCode: string; sfIntegrated: boolean; concurrent: boolean
   } | null>(null)
   const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
 
-  const isSelectMode = selectedPersonIds.size > 0
-  const lastClickRef        = useRef<{ personId: string; panelId: string } | null>(null)
-  const selectedPersonIdRef = useRef(selectedPersonId)
-  selectedPersonIdRef.current = selectedPersonId
-
-  // ── Hooks ──────────────────────────────────────────────────────
-  const handleSelectPerson = useCallback((personId: string, rowId?: number) => {
-    selectPerson(personId)
-    selectCard(rowId ?? null, 'after')
-    const p = persons.find(q => q.id === personId)
-    if (p?.sfPersonId) {
-      const rows = allocationList.filter(r => r.userId === p.sfPersonId)
-      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-      if (primary) useChatStore.getState().setChatContext([primary.rowId])
-    }
-  }, [selectPerson, selectCard, persons, allocationList])
-
+  // ── Hooks ─────────────────────────────────────────────────────────────────
   const {
-    dropIntentState, setDropIntentState,
-    dropOpState, setDropOpState,
-    handleIntentPick,
-  } = useDropIntent()
+    selectedPersonIds, isSelectMode,
+    handlePersonClick,
+    addPersonsToSelection, clearSelection, exitSelectMode,
+  } = usePersonSelection({ persons, allocationList, selectPerson, selectCard })
+
+  const { dropIntentState, setDropIntentState, dropOpState, setDropOpState, handleIntentPick } = useDropIntent()
 
   const {
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
@@ -109,7 +84,7 @@ export function OrgOperationView() {
     allocationList, afterOrgByCode, allAfterOrgsUnscoped,
   })
 
-  // ── Helpers ────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handlePersonDoubleClick = (personId: string) => {
     const person = persons.find(p => p.id === personId)
     if (!person?.sfPersonId) return
@@ -136,14 +111,11 @@ export function OrgOperationView() {
     let data: { dragType?: string; fromRowId?: number }
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as typeof data } catch { return }
     if (data.dragType !== 'position' || !data.fromRowId || data.fromRowId === targetRowId) return
-
     const sourceRow = allocationList.find(r => r.rowId === data.fromRowId)
     const targetRow = allocationList.find(r => r.rowId === targetRowId)
     if (!sourceRow?.positionCode || !targetRow?.positionCode) return
-
-    const mgrCodeByPosCode = new Map(
-      allocationList.filter(r => r.positionCode).map(r => [r.positionCode!, r.managerPositionCode])
-    )
+    // 循環上司チェック
+    const mgrCodeByPosCode = new Map(allocationList.filter(r => r.positionCode).map(r => [r.positionCode!, r.managerPositionCode]))
     let cur: string | undefined = targetRow.managerPositionCode
     const seen = new Set<string>()
     while (cur && !seen.has(cur)) {
@@ -157,57 +129,6 @@ export function OrgOperationView() {
     if (isHistoryPreviewMode) return
     appService.executeOperation(new ReorderRowOperation(rowId, beforeRowId))
   }
-
-  const clearSelection = useCallback(() => {
-    setSelectedPersonIds(new Set())
-    useStore.setState({ selectedPersonId: null, selectedCardRowId: null })
-  }, [])
-
-  const exitSelectMode = clearSelection
-
-  const addPersonsToSelection = useCallback((ids: Set<string>) => {
-    setSelectedPersonIds(prev => new Set([...prev, ...ids]))
-  }, [])
-
-  const handlePersonClick = useCallback((
-    personId: string, panelId: string,
-    { ctrl, shift }: { ctrl: boolean; shift: boolean },
-    rowId?: number,
-  ) => {
-    if (ctrl) {
-      setSelectedPersonIds(prev => {
-        const next = new Set(prev)
-        // 初回 Ctrl+クリック時: 単体選択中の人も引き継ぐ
-        if (prev.size === 0 && selectedPersonIdRef.current) {
-          next.add(selectedPersonIdRef.current)
-        }
-        next.has(personId) ? next.delete(personId) : next.add(personId)
-        return next
-      })
-      lastClickRef.current = { personId, panelId }
-    } else if (shift) {
-      const last     = lastClickRef.current
-      const panelEl  = document.querySelector(`[data-panelid="${panelId}"]`)
-      if (panelEl && last?.panelId === panelId) {
-        const pids = [...panelEl.querySelectorAll<HTMLElement>('[data-personid]:not([data-personid=""])')]
-          .map(el => el.getAttribute('data-personid')!)
-        const a = pids.indexOf(last.personId)
-        const b = pids.indexOf(personId)
-        if (a !== -1 && b !== -1) {
-          setSelectedPersonIds(prev => new Set([...prev, ...pids.slice(Math.min(a, b), Math.max(a, b) + 1)]))
-        } else {
-          setSelectedPersonIds(prev => new Set([...prev, personId]))
-        }
-      } else {
-        setSelectedPersonIds(prev => new Set([...prev, personId]))
-        lastClickRef.current = { personId, panelId }
-      }
-    } else {
-      setSelectedPersonIds(new Set())
-      handleSelectPerson(personId, rowId)
-      lastClickRef.current = { personId, panelId }
-    }
-  }, [handleSelectPerson])
 
   const topPositionCodeOfOrg = (orgId: string): string | undefined => {
     const rows   = allocationList.filter(r => afterOrgByCode.get(r.departmentCode ?? '')?.id === orgId && !!r.positionCode)
@@ -233,36 +154,23 @@ export function OrgOperationView() {
     enterOperationPanel(newRowId, 'directEdit')
   }
 
-  // 複数選択時にAIチャットコンテキストを連動
-  useEffect(() => {
-    if (selectedPersonIds.size === 0) return
-    const rowIds = [...selectedPersonIds].flatMap(personId => {
-      const p = persons.find(q => q.id === personId)
-      if (!p?.sfPersonId) return []
-      const rows = allocationList.filter(r => r.userId === p.sfPersonId)
-      const primary = rows.find(r => !r.concurrentType) ?? rows[0]
-      return primary ? [primary.rowId] : []
-    })
-    if (rowIds.length > 0) useChatStore.getState().setChatContext(rowIds)
-  }, [selectedPersonIds, persons, allocationList])
-
   const previewLabel = historyPreviewPosition !== null
-    ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '')
-    : ''
+    ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '') : ''
 
+  // ── Context value ─────────────────────────────────────────────────────────
   const ctxValue: OrgViewContextValue = {
     organizations, positionTreeByOrgId, afterMembersByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
     dropGapBelowRowId, setDropGapBelowRowId,
-    openDropIntent:       isHistoryPreviewMode ? () => {} : (state) => setDropIntentState(state),
+    openDropIntent:     isHistoryPreviewMode ? () => {} : (s) => setDropIntentState(s),
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
-    handleAddPosition:    isHistoryPreviewMode ? () => {} : handleAddPosition,
-    handleSecondmentIn:   isHistoryPreviewMode ? () => {} : handleSecondmentIn,
+    handleAddPosition:  isHistoryPreviewMode ? () => {} : handleAddPosition,
+    handleSecondmentIn: isHistoryPreviewMode ? () => {} : handleSecondmentIn,
     topPositionCodeOfOrg,
-    setBulkMoveSourceId:  isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
-    setConfirmDialog:     isHistoryPreviewMode ? () => {} : setConfirmDialog,
+    setBulkMoveSourceId: isHistoryPreviewMode ? () => {} : setBulkMoveSourceId,
+    setConfirmDialog:    isHistoryPreviewMode ? () => {} : setConfirmDialog,
     isSelectMode, selectedPersonIds,
     handlePersonClick, addPersonsToSelection, clearSelection,
     selectedCardRowId, selectCard,
@@ -270,14 +178,13 @@ export function OrgOperationView() {
     handlePersonDoubleClick, handleRowDoubleClick,
     handleDropPositionOnPosition, handleReorderRow,
     expandedChipIds: new Set(),
-    toggleChip:      () => {},
+    toggleChip: () => {},
   }
 
   return (
     <OrgViewContext.Provider value={ctxValue}>
       <div className="flex flex-col h-full overflow-hidden" onDragEnd={clearAllDropTargets}>
 
-        {/* Header */}
         <div className="flex-shrink-0 px-3 py-1.5 border-b border-gray-200 bg-white flex items-center gap-2">
           {comparisonMode && (
             <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">比較モード</span>
@@ -288,81 +195,45 @@ export function OrgOperationView() {
             <button
               onClick={toggleComparisonMode}
               className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
-                comparisonMode
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                comparisonMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
               }`}
-              title="旧→新の変化を組織パネルで比較表示"
             >{comparisonMode ? '比較終了' : '比較'}</button>
           </div>
         </div>
 
-        {/* Preview banner */}
         {isHistoryPreviewMode && (
           <div className="flex-shrink-0 px-3 py-1.5 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
             <span className="text-[11px] text-amber-700 flex-1 font-medium truncate">
               🔍 プレビュー（読み取り専用）{previewLabel ? ` — ${previewLabel}` : ''}
             </span>
-            <button
-              onClick={applyHistoryPreview}
-              className="flex-shrink-0 px-2.5 py-0.5 text-[10px] rounded bg-indigo-600 text-white hover:bg-indigo-700 font-medium transition-colors"
-            >この状態に戻す</button>
-            <button
-              onClick={cancelHistoryPreview}
-              className="flex-shrink-0 px-2.5 py-0.5 text-[10px] rounded bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
-            >閉じる</button>
+            <button onClick={applyHistoryPreview} className="flex-shrink-0 px-2.5 py-0.5 text-[10px] rounded bg-indigo-600 text-white hover:bg-indigo-700 font-medium transition-colors">この状態に戻す</button>
+            <button onClick={cancelHistoryPreview} className="flex-shrink-0 px-2.5 py-0.5 text-[10px] rounded bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors">閉じる</button>
           </div>
         )}
 
-        {/* Assignee mode warning banner */}
         {assigneeWarnings?.hasWarnings && (
           <div className="flex-shrink-0 px-3 py-1.5 bg-amber-50 border-b border-amber-200 flex items-center gap-3 flex-wrap">
             {assigneeWarnings.otherAssigneeCount > 0 && (
-              <span className="text-[11px] text-amber-700">
-                ⚠ {assigneeWarnings.otherAssigneeCount}行に別の担当者が設定されています（参照のみ）
-              </span>
+              <span className="text-[11px] text-amber-700">⚠ {assigneeWarnings.otherAssigneeCount}行に別の担当者が設定されています（参照のみ）</span>
             )}
             {assigneeWarnings.unassignedCount > 0 && (
-              <span className="text-[11px] text-amber-700">
-                ⚠ {assigneeWarnings.unassignedCount}行に担当者が設定されていません
-              </span>
+              <span className="text-[11px] text-amber-700">⚠ {assigneeWarnings.unassignedCount}行に担当者が設定されていません</span>
             )}
           </div>
         )}
 
-        {/* Canvas */}
         <div
           className="flex-1 overflow-hidden"
           onDragOverCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
           onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
         >
-          {comparisonMode ? (
-            <ComparisonSplitView />
-          ) : (
-            <TreeWindowCanvas />
-          )}
+          {comparisonMode ? <ComparisonSplitView /> : <TreeWindowCanvas />}
         </div>
 
-        {activePatternDialog?.pattern === 'orgTransfer' && (
-          <OrgTransferDialog       rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-        {(activePatternDialog?.pattern === 'promotion' || activePatternDialog?.pattern === 'demotion') && (
-          <PromotionDialog         rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-        {activePatternDialog?.pattern === 'jobTypeChange' && (
-          <JobTypeDialog           rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-        {activePatternDialog?.pattern === 'resignation' && (
-          <ResignationDialog       rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-        {activePatternDialog?.pattern === 'vacantPositionMove' && (
-          <VacantPositionDialog    rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-        {(activePatternDialog?.pattern === 'secondmentOutRelease' ||
-          activePatternDialog?.pattern === 'secondmentInRelease') && (
-          <SecondmentReleaseDialog rowId={activePatternDialog.rowId} onClose={() => setActivePatternDialog(null)} />
-        )}
-
+        <PatternDialogs
+          activePatternDialog={activePatternDialog}
+          onClose={() => setActivePatternDialog(null)}
+        />
 
         {secondmentInModal && (() => {
           const org = organizations.find(o => o.externalCode === secondmentInModal.orgCode || o.id === secondmentInModal.orgCode)
@@ -404,7 +275,6 @@ export function OrgOperationView() {
           handleBulkMoveConfirm={handleBulkMoveConfirm}
           handleIntentPick={handleIntentPick}
         />
-
       </div>
     </OrgViewContext.Provider>
   )

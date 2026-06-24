@@ -17,6 +17,12 @@ export interface MultiRowFormSection {
   readonly notice?:           string
   /** 'delete' セクションに表示する説明文 */
   readonly deleteDescription?: string
+  /**
+   * フォーム初期値を返す関数。
+   * 再編集時（anchor が既に操作適用済み）に現在値をプリフィルするために使用する。
+   * anchor: 操作対象行（出向元行など）。allRows: 全行リスト（ペア行検索に使用）。
+   */
+  readonly initialValues?: (anchor: AllocationRow, allRows: AllocationRow[]) => Record<string, string>
 }
 
 export interface MultiRowOperationDef {

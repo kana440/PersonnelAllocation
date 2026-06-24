@@ -85,8 +85,8 @@ function HelpTable({ rows }: { rows: [string, string][] }) {
   return (
     <table className="w-full border-collapse">
       <tbody>
-        {rows.map(([col, desc], i) => (
-          <tr key={i} className="border-b border-gray-100 last:border-0">
+        {rows.map(([col, desc]) => (
+          <tr key={col} className="border-b border-gray-100 last:border-0">
             <td className="py-1 pr-4 font-mono text-blue-600 whitespace-nowrap align-top w-28">{col}</td>
             <td className="py-1 text-gray-600">{desc}</td>
           </tr>

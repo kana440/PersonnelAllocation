@@ -3,10 +3,14 @@ import { useStore } from '../../../store/useStore'
 import { useUICommandStore } from '../../../store/uiCommandStore'
 import { useFormStateStore } from '../../../store/formStateStore'
 import { ALL_EDIT_OPERATIONS } from '@personnel/domain/commands/defs'
+import { secondmentOutSFDef, concurrentSecondmentOutNonSFDef } from '@personnel/domain/commands/defs/secondmentDefs'
+import { nonSFSecondmentOutDef } from '@personnel/domain/commands/defs/multiRowDefs'
 import { SummaryView } from './SummaryView'
 import { OperationFormView } from './OperationFormView'
 import { DirectEditView } from './DirectEditView'
 import { MultiRowFormView } from './MultiRowFormView'
+import { SecondmentOutChooser }           from './SecondmentOutChooser'
+import { ConcurrentSecondmentOutChooser } from './ConcurrentSecondmentOutChooser'
 import type { PanelView } from './types'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
@@ -15,7 +19,7 @@ interface Props {
 }
 
 export function PersonOperationPanel({ rowId }: Props) {
-  const { allocationList, operationPanelInitialView } = useStore()
+  const { allocationList, operationPanelInitialView, masters } = useStore()
   const [view,    setView]    = useState<PanelView>(() =>
     operationPanelInitialView === 'directEdit' ? 'directEdit' : 'summary'
   )
@@ -49,17 +53,60 @@ export function PersonOperationPanel({ rowId }: Props) {
   }
 
   if (view !== 'summary') {
-    if ('multiRowDef' in view) {
-      return <MultiRowFormView def={view.multiRowDef} anchor={row} onBack={handleBack} />
+    if ('chooser' in view && view.chooser === 'secondmentOut') {
+      return (
+        <SecondmentOutChooser
+          row={row}
+          masters={masters}
+          onSelectSF={(company) => {
+            setPrefill({ secondmentToCompany: company as Partial<AllocationRow>['secondmentToCompany'] })
+            setView({ def: secondmentOutSFDef, rowId })
+          }}
+          onSelectNonSF={(company) => {
+            setView({
+              multiRowDef:         nonSFSecondmentOutDef,
+              rowId,
+              overrideSectionVals: [{ secondmentToCompany: company }, {}],
+            })
+          }}
+          onBack={handleBack}
+        />
+      )
     }
-    return (
-      <OperationFormView
-        def={view.def}
-        row={row}
-        onBack={handleBack}
-        overrideInitial={prefill ?? undefined}
-      />
-    )
+    if ('chooser' in view && view.chooser === 'concurrentSecondmentOut') {
+      return (
+        <ConcurrentSecondmentOutChooser
+          row={row}
+          masters={masters}
+          onSelectNonSF={(company) => {
+            setPrefill({ secondmentToCompany: company as Partial<AllocationRow>['secondmentToCompany'] })
+            setView({ def: concurrentSecondmentOutNonSFDef, rowId })
+          }}
+          onBack={handleBack}
+        />
+      )
+    }
+    if ('multiRowDef' in view) {
+      return (
+        <MultiRowFormView
+          def={view.multiRowDef}
+          anchor={row}
+          onBack={handleBack}
+          overrideSectionVals={view.overrideSectionVals}
+        />
+      )
+    }
+    if ('def' in view) {
+      return (
+        <OperationFormView
+          def={view.def}
+          row={row}
+          onBack={handleBack}
+          overrideInitial={prefill ?? undefined}
+        />
+      )
+    }
+    return null
   }
 
   return (

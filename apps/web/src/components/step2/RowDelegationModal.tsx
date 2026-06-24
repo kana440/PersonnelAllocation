@@ -28,7 +28,7 @@ export function RowDelegationModal({ submission, onCreated, onCancel }: Props) {
 
   useEffect(() => {
     Promise.all([
-      adminApi.submissions.getRows(submission.id) as Promise<AllocationRow[]>,
+      adminApi.submissions.getRows(submission.id),
       adminApi.users.list(),
     ]).then(([r, u]) => {
       setRows(r)

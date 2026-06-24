@@ -10,8 +10,7 @@ import {
   leaveOfAbsenceDef, returnFromLeaveDef,
   concurrentAddDef, concurrentReleaseDef,
   demotionDef,
-  secondmentInSFDef, secondmentInNonSFDef,
-  concurrentSecondmentInSFDef, concurrentSecondmentInNonSFDef,
+  orgRestructureDef,
 } from '@personnel/domain/commands/defs'
 import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
 import { deriveFieldUpdates } from '@personnel/domain/derivation'
@@ -356,6 +355,68 @@ export function createWriteMethods(service: HRApplicationService) {
       : { ok: false, error: result.errors?.[0]?.message ?? 'エラー' }
   }
 
+  // ── Org restructure (組改: 組織コード変更の一括適用) ──────────────────────────
+
+  /**
+   * 組織コード変更（組改）を一括で適用する。
+   *
+   * - rowIds を省略した場合は fromDeptCode の全行を対象とする（最も多いケース、1呼び出しで完結）。
+   * - rowIds を渡す場合は「一部を除く」「特定の人だけ」などを指定する。
+   *   → AI が getPersonsByOrg で対象を確認してから rowIds を絞って呼ぶ（計2呼び出し）。
+   * - location / costCenter は各行の現在値を引き継ぐ（組改では変更しない）。
+   * - transferReason / memo は指定があれば全行に適用する。
+   */
+  function executeOrgRestructure(params: {
+    fromDeptCode:    string
+    toDeptCode:      string
+    rowIds?:         number[]
+    transferReason?: string
+    memo?:           string
+  }): {
+    appliedCount: number
+    toDeptName:   string
+    persons:      Array<{ rowId: number; name: string }>
+  } | { ok: false; error: string } {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+
+    const toOrg = afterOrganizations.find(o => (o.externalCode ?? o.id) === params.toDeptCode)
+    if (!toOrg) return { ok: false, error: `組織コード "${params.toDeptCode}" が見つかりません` }
+
+    const targetRowIds = params.rowIds
+      ?? allocationList
+          .filter(r => (r.departmentCode as string | undefined) === params.fromDeptCode)
+          .map(r => r.rowId)
+
+    if (targetRowIds.length === 0) {
+      return { ok: false, error: `組織コード "${params.fromDeptCode}" に対象行がありません` }
+    }
+
+    const persons: Array<{ rowId: number; name: string }> = []
+
+    for (const rowId of targetRowIds) {
+      const row = service.getSnapshot().allocationList.find(r => r.rowId === rowId)
+      if (!row) continue
+
+      const values: Partial<AllocationRow> = {
+        departmentCode: params.toDeptCode,
+        // location / costCenter は各行の現在値を引き継ぐ（組改では変更しない）
+        location:       row.location   as string | undefined,
+        costCenter:     row.costCenter as string | undefined,
+        ...(params.transferReason ? { transferReason: params.transferReason } : {}),
+        ...(params.memo           ? { memo:           params.memo }           : {}),
+      }
+
+      const result = service.executeOperation(bindOperation(orgRestructureDef, rowId, values))
+      if (result.ok) {
+        const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || '（空席）'
+        persons.push({ rowId, name })
+      }
+    }
+
+    if (persons.length === 0) return { ok: false, error: '適用できた行がありませんでした' }
+    return { appliedCount: persons.length, toDeptName: toOrg.name, persons }
+  }
+
   // ── Pattern operations (AI coarse-grained, same path as Web dialogs) ─────────
 
   function executeOrgTransfer(rowId: number, departmentCode: string): AIOperationResult {
@@ -483,43 +544,6 @@ export function createWriteMethods(service: HRApplicationService) {
     return { ok: true, postValidation: runPostValidation(beforeList) }
   }
 
-  // ── 出向受入 ──────────────────────────────────────────────────────────────
-
-  function executeSecondmentIn(
-    rowId:        number,
-    sfIntegrated: boolean,
-    fields: {
-      secondmentFromCompany:         string
-      secondmentFromEmployeeNumber?: string
-      departmentCode:                string
-      employmentType:                string
-    },
-  ): AIOperationResult {
-    const beforeList = service.getSnapshot().allocationList
-    const def = sfIntegrated ? secondmentInSFDef : secondmentInNonSFDef
-    const result = service.executeOperation(bindOperation(def, rowId, fields))
-    if (!result.ok) return result
-    return { ok: true, postValidation: runPostValidation(beforeList) }
-  }
-
-  function executeConcurrentSecondmentIn(
-    rowId:        number,
-    sfIntegrated: boolean,
-    fields: {
-      secondmentFromCompany:         string
-      secondmentFromEmployeeNumber?: string
-      departmentCode:                string
-      employmentType:                string
-      concurrentReason?:             string
-    },
-  ): AIOperationResult {
-    const beforeList = service.getSnapshot().allocationList
-    const def = sfIntegrated ? concurrentSecondmentInSFDef : concurrentSecondmentInNonSFDef
-    const result = service.executeOperation(bindOperation(def, rowId, fields))
-    if (!result.ok) return result
-    return { ok: true, postValidation: runPostValidation(beforeList) }
-  }
-
   // ── Utility ───────────────────────────────────────────────────────────────
 
   function formatErrors(errors: OperationError[]): string {
@@ -556,11 +580,10 @@ export function createWriteMethods(service: HRApplicationService) {
     reDeriveManagerNames, reDeriveOrgSubFields,
     executeBulkTransfer, executeFieldEdit, executeBulkSetField,
     resolveTransferRowIds, executeTransferPersons, executePromotion, executeChangePosition,
-    executeOrgTransfer, executeJobTypeChange,
+    executeOrgTransfer, executeJobTypeChange, executeOrgRestructure,
     executeResignation, executeVacantPositionMove, executeSecondmentRelease,
     executeLeaveOfAbsence, executeReturnFromLeave,
     executeConcurrentAdd, executeConcurrentRelease, executeDemotionForUser,
-    executeSecondmentIn, executeConcurrentSecondmentIn,
     formatErrors,
   }
 }

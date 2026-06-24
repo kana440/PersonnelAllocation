@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { useClickOutside } from '../../hooks/useClickOutside'
 import type { FieldStrictness } from '@personnel/domain/optionStrictness'
 
 interface Props {
@@ -48,17 +49,7 @@ export function ComboInput({ value, onChange, onCommit, options, invalidOptions 
     }
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent) => {
-      if (
-        !containerRef.current?.contains(e.target as Node) &&
-        !dropdownRef.current?.contains(e.target as Node)
-      ) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
+  useClickOutside([containerRef, dropdownRef], () => setOpen(false), open)
 
   const q = input.toLowerCase()
   const filteredValid   = typed ? options.filter(o => o.toLowerCase().includes(q))        : options

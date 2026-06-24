@@ -2,7 +2,9 @@ import type { AllocationRow } from '../allocationRow'
 import type { AllMasters } from '../masters/aggregate'
 import type { RowChanges } from '../patterns/changeDetection'
 import type { ValidationIssue } from './types'
+import type { Organization } from '../schemas'
 import { findEmpType } from '../fieldConstraints'
+import { buildFlatOrgView } from '../choices/orgTree'
 
 // G系: データ整合性チェック（エラー）
 // W系: ワーニングチェック（保存はブロックしないが確認を促す）
@@ -52,13 +54,53 @@ function checkW2_promotionDemotionWarning(row: AllocationRow, masters: AllMaster
   }]
 }
 
+/**
+ * W3: 上司のポジションコードが設定されていて、かつ上司の組織が当該行の組織の
+ * 直系上位（祖先）でも同一でもない場合にワーニング。
+ * managerPositionCode がない行はスキップ（ファイル分割など上司なし行は影響なし）。
+ */
+function checkW3_managerNotInAncestorOrg(
+  row:                AllocationRow,
+  allocationList:     AllocationRow[],
+  afterOrganizations: Organization[],
+): ValidationIssue[] {
+  const mgrPosCode = row.managerPositionCode as string | undefined
+  if (!mgrPosCode) return []
+
+  const mgrRow     = allocationList.find(r => (r.positionCode as string | undefined) === mgrPosCode)
+  const rowDeptCode = row.departmentCode     as string | undefined
+  const mgrDeptCode = mgrRow?.departmentCode as string | undefined
+
+  if (!mgrRow || !rowDeptCode || !mgrDeptCode) return []
+  if (rowDeptCode === mgrDeptCode) return []  // 同一組織はOK
+
+  const flatView = buildFlatOrgView(afterOrganizations)
+  const rowEntry  = flatView.find(e => e.orgCode === rowDeptCode)
+  if (!rowEntry) return []
+
+  // mgrDeptCode が rowDeptCode の直系上位（ancestorCodes）に含まれていれば正常
+  if (rowEntry.ancestorCodes.includes(mgrDeptCode)) return []
+
+  const mgrName = [mgrRow.lastName, mgrRow.firstName].filter(Boolean).join(' ') || mgrPosCode
+  return [{
+    field:   'managerPositionCode' as keyof AllocationRow,
+    level:   'warning',
+    message: `上司（${mgrName}）が直系上位組織以外（${mgrDeptCode}）に所属しています。組織ツリーを確認してください`,
+  }]
+}
+
 export function runGlobalConsistency(
-  row:       AllocationRow,
-  masters: AllMasters,
-  changes?:  RowChanges,
+  row:                AllocationRow,
+  masters:            AllMasters,
+  changes?:           RowChanges,
+  allocationList?:    AllocationRow[],
+  afterOrganizations?: Organization[],
 ): ValidationIssue[] {
   return [
     ...checkG1_bandChangeRequiresNewPosition(row, changes),
     ...checkW2_promotionDemotionWarning(row, masters),
+    ...(allocationList && afterOrganizations
+      ? checkW3_managerNotInAncestorOrg(row, allocationList, afterOrganizations)
+      : []),
   ]
 }

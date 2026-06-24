@@ -148,7 +148,7 @@ export function ReportLineView({
     if (!person || !sr) return null
     const color         = orgColorMap[sr.orgId] ?? ORG_PALETTE[0]
     const org           = organizations.find(o => o.id === sr.orgId)
-    const title         = sr.row.officialPositionCode
+    const title         = sr.row.localJobTitle ?? sr.row.officialPositionCode
     const band          = sr.row.positionBand ?? sr.row.band
     const directReports = directReportsMap.get(personId) ?? []
     const isExpanded    = expandedNodes.has(personId)

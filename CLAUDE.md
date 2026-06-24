@@ -137,6 +137,8 @@ Core に追加した機能は STEP2 への手動追加なしで自動継承さ�
 | `EditScenario` | `packages/domain/src/commands/scenarios.ts` | 複合操作。1件でも複数件でも同じ構造 |
 | `EditPattern` | `packages/domain/src/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
 | `EditOperation` | `packages/domain/src/commands/defs/` | メニュー条件・フォーム定義・ライフサイクル（`onOpen`/`onFieldChange`/`onValidate`/`onSubmit`） |
+| `MultiRowOperationDef` | `packages/domain/src/commands/defs/index.ts` | 2行以上を同時に操作するフォーム定義（例：SF外本務出向の出向元＋受入行2行セット） |
+| `SecondmentOutChooser` | `apps/web/src/components/editor/PersonOperationPanel/SecondmentOutChooser.tsx` | 本務出向の SF/非SF 判定ルーティングステップ（会社名入力・手動切り替え付き） |
 
 設計思想の詳細は `docs/05-operation-framework.md` を参照。
 
@@ -209,12 +211,34 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
 - 取消は `DirectEditOperation` でフィールドを `undefined` に戻すだけでよいことが多い
 - 取消定義も `DEFS` 配列と `SummaryView.tsx SECTIONS` の両方に追加すること
 
+### 排他ロック（`operationRole`）
+
+行レベルの相互排他制御。特定の操作を実行した行で他の操作をブロックする。
+
+```typescript
+// lock: 実行すると行をロック状態にする
+operationRole: {
+  kind:                'lock',
+  isActive:            (row) => !!row.leaveOfAbsenceSign,           // インポート前も含む
+  isActiveThisSession: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,  // セッション内のみ
+}
+
+// lockCancel: 対応する lock を取り消す
+operationRole: { kind: 'lockCancel', of: 'LeaveOfAbsence' }
+```
+
+**ロック中でも同一操作（同じ `def.id`）は再実行して値を修正できる。** `lockCancel` のみが取消可能。詳細は `docs/05-operation-framework.md#排他ロック` 参照。
+
 ### `EditOperation` の補足オプション
 
 ```typescript
 export const myDef: EditOperation = {
   // ...
   description: 'フォーム上部に表示する業務注意事項テキスト',
+
+  // supportsLeaveVacant: true のとき DragIntentPicker でこのカード内に
+  // 「元のポジションを空席として残す」チェックボックスを表示（orgTransferDef のみ true）
+  supportsLeaveVacant: true,
 
   inputs: [
     { field: 'transferReason', required: true, readOnly: true },
@@ -224,6 +248,26 @@ export const myDef: EditOperation = {
   ],
 }
 ```
+
+### 2行以上の操作（`MultiRowOperationDef`）
+
+複数行を同時に変更する操作（例: SF外本務出向 = 出向元行更新＋受入行新規作成）は `MultiRowOperationDef` で定義する。`EditOperation` ではなく `MULTI_ROW_DEFS` 配列に登録し、`SummaryView.tsx` の `SECTIONS` には `multiRowId` で参照する。
+
+```typescript
+// packages/domain/src/commands/defs/someOp.ts
+export const myMultiRowDef: MultiRowOperationDef = {
+  id: 'MyMultiRow',
+  label: '操作名',
+  sections: [
+    { label: '行1', inputs: [...], isNewRow: false },
+    { label: '行2（新規）', inputs: [...], isNewRow: true },
+  ],
+  createCommand: (anchorRowId, sectionValues, ctx) => new MyMultiRowCommand(anchorRowId, sectionValues),
+  availableFor: (row, ctx) => ...,
+}
+```
+
+ルーティングステップ（`SecondmentOutChooser` 等）から `MultiRowFormView` に初期値を渡す場合は `PanelView` の `overrideSectionVals` を使う（`docs/05-operation-framework.md` 参照）。
 
 ---
 

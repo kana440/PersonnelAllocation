@@ -78,14 +78,57 @@
 
 ---
 
-## 3（旧2）. 未確認ルール（確認後に追加）
+## 3. 出向の業務フロー
+
+```
+## 出向操作ルール（specs/G2-domain/06-secondment-rules.md 参照）
+
+### 人物識別フィールドと照合
+
+- groupEmployeeId（グループ社員ID）: 人物が同じなら出向元・出向先を問わず一致。人物同一性の最重要キー。
+- userId（ユーザー/社員ID）: SF統合先であっても Global Assignment により出向先で別IDが発行される。
+  - 本籍行: 7桁・8始まり多
+  - 受入行: 6桁・1始まり多（SF が新規発行）
+- employeeNumber（社員番号）: 各社固有の7桁頭ゼロ文字列。G-IDとは無関係。
+
+### レコード間の照合キー ★重要
+
+  出向元行.employeeNumber = 受入行.secondmentFromEmployeeNumber
+
+受入行を作成・確認するときは必ず上記が一致しているか確認すること。
+
+### SF統合先 vs SF外 の操作の違い
+
+本務出向:
+  SF統合先: 出向元担当が出向箱行を1行更新 → XX社担当が受入行を作成（別途）
+  SF外:     出向元担当が出向箱行更新 + 受入行を代理作成（2行セット）
+
+兼務出向:
+  SF統合先: このツールでの操作不要（SF Global Assignment が管理）
+  SF外:     出向元担当が兼務行を1行新規作成
+
+### 受入行作成時のブランク運用
+
+受入行は以下の順序で入力する。IDは後から連携できる：
+  必須・即時: 氏名、異動事由、本務兼務区分、出向元会社、出向元社員番号（★照合キー）
+  後から連携: groupEmployeeId、userId（SF発行後）、employeeNumber（相手社採番後）
+
+### UI操作の起点
+
+- 本務出向させる: SecondmentOutChooser で会社入力→SF判定→フォーム
+  - SF統合先 → operationId="SecondmentOutSF"
+  - SF外     → operationId="NonSFSecondmentOut"（2行フォーム）
+- 兼務出向させる（SF外のみ）: operationId="ConcurrentSecondmentOutNonSF"
+- 本務出向受入: operationId="SecondmentInReleaseSF" or "SecondmentInReleaseNonSF"
+- 本務出向解除（帰任）: operationId="SecondmentOutReleaseSF" or "NonSFSecondmentRelease"
+```
+
+## 4. 未確認ルール（確認後に追加）
 
 ```
 # TODO: 以下は業務確認後に追記する
 
 ## 兼務の上司参照ルール
-
-## 出向の業務フロー
 
 ## bandの有効値と意味
 ```

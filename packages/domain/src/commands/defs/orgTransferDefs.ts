@@ -3,7 +3,7 @@ import type { EditOperation } from './types'
 import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import { deriveOrgSubFields } from '../orgHelpers'
-import { deriveManagerName } from '../../derivation'
+import { deriveManagerName, isSecondmentOrg } from '../../derivation'
 import { isMainAssignment } from '../helpers'
 import type { AllocationRow } from '../../allocationRow'
 import { TR } from '../../transferReasonLabels'
@@ -17,10 +17,11 @@ function personName(row: AllocationRow): string {
 // ToDo: この別組織へ異動は部下を持たない場合のフロー。部下がいる場合は別UIが必要
 //       （移動先には人だけ移動・部下のポジションは残す・行先ポジションが事前に存在している必要がある）。
 export const orgTransferDef: EditOperation = {
-  id:         'OrgTransfer',
-  label:      '別組織へ異動',
-  group:      'position',
-  badge:      'transfer',
+  id:                  'OrgTransfer',
+  label:               '別組織へ異動',
+  group:               'position',
+  badge:               'transfer',
+  supportsLeaveVacant: true,
 
   description: '本務行の在席者を別の組織へ異動します。異動先の組織コードを選択すると関係部門〜チームが自動導出されます。勤務場所・コストセンターは自動転記しないため、マスタと異なる場合は手動で修正してください。部下がいる場合は個別対応が必要です。',
 
@@ -104,10 +105,15 @@ export const orgTransferDef: EditOperation = {
   },
 
   onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.departmentCode)
-      return fail('組織コードは必須です')
+    const row = ctx.allocationList.find(r => r.rowId === rowId)
+    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.departmentCode) return fail('組織コードは必須です')
+    const srcIsSecondment = isSecondmentOrg(row.departmentCode as string ?? '', ctx.masters)
+    const tgtIsSecondment = isSecondmentOrg(values.departmentCode as string, ctx.masters)
+    if (!srcIsSecondment && tgtIsSecondment)
+      return fail('通常組織から出向者用組織への異動は「本務出向」操作を使用してください')
+    if (srcIsSecondment && !tgtIsSecondment)
+      return fail('出向者用組織から通常組織への異動は「本務出向解除」操作を使用してください')
     return ok()
   },
 
@@ -145,10 +151,10 @@ export const orgTransferDef: EditOperation = {
 // 勤務場所・コストセンターは自動転記しない。マスタと不一致の場合は警告を表示する。
 
 export const orgRestructureDef: EditOperation = {
-  id:         'OrgRestructure',
-  label:      '組織コード変更(組改)',
-  group:      'position',
-  badge:      'transfer',
+  id:    'OrgRestructure',
+  label: '組織コード変更(組改)',
+  group: 'position',
+  badge: 'transfer',
 
   description: '組織改編（組改）に伴い、在席者の組織コードを新しいコードに付け替えます。在席者はそのまま維持され、組織コードのみ変更されます。勤務場所・コストセンターは自動転記しないため、マスタと異なる場合は手動で修正してください。',
 
@@ -217,10 +223,15 @@ export const orgRestructureDef: EditOperation = {
   },
 
   onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.departmentCode)
-      return fail('組織コードは必須です')
+    const row = ctx.allocationList.find(r => r.rowId === rowId)
+    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.departmentCode) return fail('組織コードは必須です')
+    const srcIsSecondment = isSecondmentOrg(row.departmentCode as string ?? '', ctx.masters)
+    const tgtIsSecondment = isSecondmentOrg(values.departmentCode as string, ctx.masters)
+    if (!srcIsSecondment && tgtIsSecondment)
+      return fail('通常組織から出向者用組織への変更は「本務出向」操作を使用してください')
+    if (srcIsSecondment && !tgtIsSecondment)
+      return fail('出向者用組織から通常組織への変更は「本務出向解除」操作を使用してください')
     return ok()
   },
 

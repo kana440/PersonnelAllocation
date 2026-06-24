@@ -66,17 +66,8 @@
 ```
 引数:
   rowId:       number             必須（対象行の rowId）
-  operationId: string             必須（操作 ID）
+  operationId: string             必須（操作 ID。下表参照）
   prefill?:    Record<string, string>  事前入力する AllocationRow フィールド
-
-operationId の一覧（主なもの）:
-  Promotion / Demotion / TitleChange
-  OrgTransfer / OrgRestructure
-  LeaveOfAbsence / LeaveOfAbsenceCancel / ReturnFromLeave
-  EmploymentTypeChange / JobTypeChange
-  ManagerChange
-  SecondmentOutSF / SecondmentOutNonSF / SecondmentInSF / SecondmentInNonSF
-  EmploymentTransfer / NoChange
 
 戻り値:
   ok:          boolean
@@ -86,13 +77,56 @@ operationId の一覧（主なもの）:
   prefillKeys: string[]   prefill したフィールド名の一覧
 ```
 
+**operationId 一覧**（`findPersons` の `availableOps` に含まれるものだけ開ける）:
+
+| カテゴリ | operationId | 説明 |
+|---|---|---|
+| 昇降格・役職変更 | `Promotion` | 昇格 |
+| | `Demotion` | 降格 |
+| | `TitleChange` | 役職変更（昇降格なし） |
+| | `MpTrackSwitch` | M職P職切替（読み替えバンドが同一） |
+| 雇用形態 | `JobTypeChange` | ジョブタイプ変更 |
+| | `EmploymentExtension` | 雇用延長 |
+| | `EmploymentTypeChange` | 雇用タイプ変更 |
+| 組織異動 | `OrgTransfer` | 社内異動 |
+| | `OrgRestructure` | 組織改変（改称・統廃合） |
+| | `ManagerChange` | 上司変更 |
+| 兼務 | `ConcurrentAdd` | 兼務追加（本務行からコピー） |
+| | `ConcurrentRelease` | 兼務解除 |
+| | `ConcurrentAddCancel` | 兼務追加取消 |
+| 在籍・退職 | `LeaveOfAbsence` | 休職 |
+| | `LeaveOfAbsenceCancel` | 休職取消 |
+| | `ReturnFromLeave` | 復職 |
+| | `ReturnFromLeaveCancel` | 復職取消 |
+| | `EmploymentTransfer` | 移籍 |
+| | `EmploymentTransferCancel` | 移籍取消 |
+| | `NoChange` | 変更なし（明示設定） |
+| | `NoChangeCancel` | 変更なし取消 |
+| 出向設定 | `SecondmentOutSF` | 本務出向（SF統合先） |
+| | `SecondmentOutNonSF` | 本務出向（SF非統合先） |
+| | `ConcurrentSecondmentOutNonSF` | 兼務出向（SF非統合先） |
+| 本務出向解除 | `SecondmentOutReleaseSF` | 本務出向解除（SF導入先） |
+| | `SecondmentOutReleaseNonSF` | 本務出向解除（SF未導入先） |
+| | `SecondmentInReleaseSF` | 本務出向受入解除（SF導入先） |
+| | `SecondmentInReleaseNonSF` | 本務出向受入解除（SF未導入先） |
+| | `SecondmentInCancel` | 本務出向受入取消 |
+| 兼務出向解除 | `ConcurrentSecondmentOutReleaseSF` | 兼務出向解除（SF導入先） |
+| | `ConcurrentSecondmentOutReleaseNonSF` | 兼務出向解除（SF未導入先） |
+| | `ConcurrentSecondmentInReleaseSF` | 兼務出向受入解除（SF導入先） |
+| | `ConcurrentSecondmentInReleaseNonSF` | 兼務出向受入解除（SF未導入先） |
+| | `ConcurrentSecondmentInCancel` | 兼務出向受入取消 |
+
+**組織パネルボタン専用（`ui_open_operation` で開けない）**:
+`ConcurrentAddNew` / `SecondmentInNew` / `ConcurrentSecondmentInNew` / `AddEmptyPosition`
+→ これらは `availableFor` が常に unavailable を返すため、フォームを開こうとするとエラーになる。
+
 **用途**:
 - 「昇格フォームを開いて」→ UI で操作フォームを開く
 - AI が既知の値を `prefill` で事前入力し、ユーザーが残りを入力して送信する
 - AI はフォームを送信しない（ユーザーが最終確認して送信する）
 
 **典型的な呼び出し順**:
-1. `findPersons` で `rowId` を確認
+1. `findPersons` で `rowId` と `availableOps` を確認
 2. `getFieldOptions(rowId, field)` で有効な選択肢を確認
 3. `ui_open_operation` でフォームを開き `prefill` を渡す
 4. ユーザーが残りを入力して送信

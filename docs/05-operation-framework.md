@@ -196,6 +196,102 @@ function isNoCheckReason(row: AllocationRow, ctx: DetectContext): boolean
 
 ---
 
+## MultiRowOperationDef（2行以上の複合フォーム）
+
+`EditOperation`（単一フォーム）では対応できない複数行を同時に操作するケースには `MultiRowOperationDef` を使う。
+
+```typescript
+interface MultiRowOperationDef {
+  id:               string
+  label:            string
+  description?:     string
+  affectedRowCount?: number        // フッターに「実行（N行）」と表示する行数
+  sections:         MultiRowFormSection[]
+  createCommand: (anchorRowId: number, sectionValues: Record<string, string>[], ctx: DomainContext) => EditCommand
+  availableFor:     (row: AllocationRow, ctx: DomainContext) => boolean
+}
+```
+
+**現在の使用例**: `nonSFSecondmentOutDef`（SF外 本務出向・2行セット操作）
+
+### overrideSectionVals によるルーティング渡し
+
+`SecondmentOutChooser` のように別ステップで入力した値を `MultiRowFormView` に渡す場合、
+`PanelView` の `{ multiRowDef; rowId; overrideSectionVals }` でセクション別初期値を注入できる。
+
+```typescript
+// PanelView 型（PersonOperationPanel/types.ts）
+type PanelView =
+  | 'summary'
+  | 'directEdit'
+  | { def:         EditOperation;        rowId: number }
+  | { multiRowDef: MultiRowOperationDef; rowId: number; overrideSectionVals?: Partial<Record<string, string>>[] }
+  | { chooser:     'secondmentOut';      rowId: number }   // SF判定ルーティングステップ
+```
+
+---
+
+## 排他ロック（operationRole）
+
+行レベルの操作排他制御。特定の操作が実行済みの行で、他の操作を抑止する仕組み。
+
+### ロールの種類
+
+| `kind` | 意味 |
+|---|---|
+| `lock` | この操作が実行されると行を「ロック状態」にする。他の操作をブロック |
+| `lockCancel` | 対応する `lock` を取り消す。`of` に lock 操作の `id` を指定 |
+| `normal` | 排他に参加しない（省略時も同じ） |
+
+### `lock` の宣言
+
+```typescript
+operationRole: {
+  kind:                'lock',
+  isActive:            (row) => !!row.leaveOfAbsenceSign,
+  // isActive との違い: セッション内で設定した場合のみ true（prev フィールドが空）
+  isActiveThisSession: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
+}
+```
+
+- `isActive` — インポート前からの状態も含む（「元々休職中」も検出）
+- `isActiveThisSession` — このセッション中に設定した場合のみ（`lockCancel` の表示条件に使用）
+
+### `resolveAvailability` のロジック
+
+`resolveAvailability(def, row, masters)` がメニュー表示・AI ツールの可否を判定する。
+
+```
+ロック中の行に対して:
+  → lockCancel（of === activeLock.id）         → 許可
+  → 同一操作（def.id === activeLock.id）        → 許可（ロック中でも再編集可）
+  → それ以外の全操作                             → 「〇〇が設定中のため他の操作はできません」でブロック
+```
+
+**重要**: ロックがかかっていても**同じ操作を再実行して値を修正することはできる**。例：「4/1付休職」設定後にフォームを再度開いてメモを修正するのは許可される。
+
+### 現在の lock 操作一覧
+
+| 操作 ID | ロック条件（`isActiveThisSession`） | 取消操作 |
+|---|---|---|
+| `LeaveOfAbsence` | `leaveOfAbsenceSign && !prevLeaveOfAbsenceSign` | `LeaveOfAbsenceCancel` |
+| `ReturnFromLeave` | `!leaveOfAbsenceSign && prevLeaveOfAbsenceSign` | `ReturnFromLeaveCancel` |
+| `EmploymentTransfer` | `transferReason === 移籍 && !prevTransferReason` | `EmploymentTransferCancel` |
+| `NoChange` | `transferReason === 変更なし && !prevTransferReason` | `NoChangeCancel` |
+| `EmploymentExtension` | 雇用延長フラグ条件 | — |
+
+---
+
+## EditOperation の補足フラグ
+
+| フラグ | 型 | 意味 |
+|---|---|---|
+| `supportsLeaveVacant` | `boolean \| undefined` | `true` のとき DragIntentPicker でこのカードに「元のポジションを空席として残す」チェックボックスを表示する（現在 `orgTransferDef` のみ `true`） |
+| `description` | `string \| undefined` | フォーム上部に表示する業務注意事項テキスト |
+| `inputs[].inputType` | `'checkbox' \| undefined` | `'checkbox'` のとき truthy/falsy をチェックボックスで表示（readOnly と組み合わせて固定値の確認に使う） |
+
+---
+
 ## EditOperation フォームライフサイクル
 
 `EditOperation` は UI フォームのライフサイクルに対応するメソッドを持つ。
@@ -230,13 +326,13 @@ type FieldChangeEffect = {
 
 新しい業務操作を追加する手順（**この順序を守ること**）:
 
-1. `EditPattern` に新ラベルを追加（`src/domain/patterns/editPatterns.ts`）
-2. `src/domain/patterns/defs/` の該当グループファイルに `detect()` を実装
-3. `EditCommand` の実装を追加（`src/domain/commands/handlers/`）
+1. `EditPattern` に新ラベルを追加（`packages/domain/src/patterns/editPatterns.ts`）
+2. `packages/domain/src/patterns/defs/` の該当グループファイルに `detect()` を実装
+3. `EditCommand` の実装を追加（`packages/domain/src/commands/handlers/`）
 4. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-5. `OperationDef` を追加（`src/domain/commands/defs/`）して `DEFS` 配列に登録
+5. `OperationDef` を追加（`packages/domain/src/commands/defs/`）して `DEFS` 配列に登録
 6. **`SummaryView.tsx` の `SECTIONS` に追加**（`apps/web/src/components/editor/PersonOperationPanel/SummaryView.tsx`）— 省略すると UI に表示されない
-7. `EditScenario` の具体実装を追加（複数行にまたがる場合・`src/domain/commands/scenarios.ts`）
+7. `EditScenario` の具体実装を追加（複数行にまたがる場合・`packages/domain/src/commands/scenarios.ts`）
 8. TDD ガイドに従ってテストを追加（`docs/07-tdd-guide.md`）
 
 手順 4 を省略するとリストア保証が崩れるため、EditPattern 追加と

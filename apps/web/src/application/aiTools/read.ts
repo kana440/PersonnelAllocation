@@ -497,6 +497,43 @@ export function createReadMethods(service: HRApplicationService) {
       }))
   }
 
+  /**
+   * 指定した組織コードに所属する全行を返す（空席ポジションを含む）。
+   *
+   * findPersons との違い: findPersons は人物単位・人物なし行はスキップ。
+   * こちらは行単位・空席ポジションも含む。組改の影響範囲確認やまとめて処理の前確認に使う。
+   * 配下の組織は含まない（subtree が必要なら findPersons の subtreeOrgCode を使う）。
+   */
+  function getPersonsByOrg(deptCode: string): {
+    deptCode: string
+    orgName:  string
+    count:    number
+    rows: Array<{
+      rowId:          number
+      name:           string
+      hasUser:        boolean
+      localJobTitle?: string
+      positionCode?:  string
+    }>
+  } | { ok: false; error: string } {
+    const { allocationList, afterOrganizations } = service.getSnapshot()
+    const org  = afterOrganizations.find(o => (o.externalCode ?? o.id) === deptCode)
+    const rows = allocationList.filter(r => (r.departmentCode as string | undefined) === deptCode)
+    if (!org) return { ok: false, error: `組織コード "${deptCode}" が見つかりません` }
+    return {
+      deptCode,
+      orgName: org.name,
+      count:   rows.length,
+      rows: rows.map(r => ({
+        rowId:         r.rowId,
+        name:          [r.lastName, r.firstName].filter(Boolean).join(' ') || '（空席）',
+        hasUser:       !!r.userId,
+        localJobTitle: r.localJobTitle ?? undefined,
+        positionCode:  r.positionCode  ?? undefined,
+      })),
+    }
+  }
+
   return {
     findPersons, findOrgs, getPersonRows, getRow, getOrgs, getPersons,
     getRowContext, getFieldOptions, findVacantPositions,
@@ -504,5 +541,6 @@ export function createReadMethods(service: HRApplicationService) {
     getPromotionBandInfo, computePromotionStepDiff,
     getOperationStatus,
     getAvailableMultiRowOperations,
+    getPersonsByOrg,
   }
 }

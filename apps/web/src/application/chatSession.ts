@@ -42,11 +42,26 @@ const BASE_SYSTEM_PROMPT =
   '- prevXxx フィールド（発令前の状態）は変更しない。\n' +
   '- managerPositionCode を変更するときは propose_set_manager_position を使う（saveRow で直接変更すると managerName が更新されない）。\n' +
   '- 兼務を示す申請区分（transferReason）が選択されている場合、leaveOfAbsenceSign は設定できない（バリデーションで検出される）。\n\n' +
-  '## 複数ステップ操作\n' +
-  '以下のケースは全手順を提示してからユーザーの確認を取ること。\n' +
-  '- 「本務出向を兼務出向にしたい」「出向先が本務から兼務になる」→ propose_secondment_to_concurrent\n' +
-  '- 「出向先に転籍させたい」「出向先へ移籍」→ propose_secondment_transfer\n' +
-  'これらのツールは prevDepartmentCode（本務出向前の所属）が設定されている行にのみ使用可能（Excelインポート済みデータが前提）。\n\n' +
+  '## 出向操作\n' +
+  '### SF統合先 / SF外の区別\n' +
+  '- SF統合先: 自社と同一 SuccessFactors に統合されている会社。masters.companies[].isSFIntegrated = true で判定。\n' +
+  '- SF外: SF に統合されていない会社（グループ内でも別システム）。レコードを手動管理する必要がある。\n' +
+  '### 出向させる（自社 → 他社）\n' +
+  '- 本務出向（SF統合先）: ui_open_operation operationId="SecondmentOutSF"（1行操作）\n' +
+  '- 本務出向（SF外）: ui_open_operation operationId="NonSFSecondmentOut"（出向箱更新＋受入行新規の2行セット）\n' +
+  '  → SF外の場合、出向元担当が受入側レコードも代理作成する。フォームに従って2行を同時確認する。\n' +
+  '- 兼務出向（SF外のみ）: ui_open_operation operationId="ConcurrentSecondmentOutNonSF"\n' +
+  '- 兼務出向（SF統合先）: SF側が管理するため本ツール操作不要。\n' +
+  '### 受け入れる（他社 → 自社）\n' +
+  '- 本務出向受入: ui_open_operation operationId="SecondmentInReleaseSF"（SF統合先）または "SecondmentInReleaseNonSF"（SF外）\n' +
+  '- 兼務出向受入: 組織パネルの追加ボタンから操作（AI直接操作不可）\n' +
+  '### 解除・取消\n' +
+  '- 本務出向解除（SF統合先帰任）: ui_open_operation operationId="SecondmentOutReleaseSF"\n' +
+  '- 本務出向解除（SF外帰任）: ui_open_operation operationId="NonSFSecondmentRelease"（出向箱更新＋受入行削除の2行セット）\n' +
+  '- 「出向先に転籍させたい」→ propose_secondment_transfer（出向解除→転籍の2ステップを1操作で提案）\n' +
+  '### 出向箱\n' +
+  '- 本務出向時、出向元の行は「出向箱」(concurrentType="出向箱") として残る。SF上では席として存在するが発令先は出向先。\n' +
+  '- 出向箱行を findPersons で検索すると concurrentType="出向箱" で識別できる。\n\n' +
   '## 禁止事項\n' +
   '- prevXxx フィールドを直接変更すること\n' +
   '- positionCode を "_pos_" prefix なしで自己採番すること\n' +

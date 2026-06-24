@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { ComboInput } from '../../common/ComboInput'
+import { ModalShell } from '../../common/ModalShell'
 import { TitleSuggestionModal } from '../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
 import { getGroupedFieldOptions } from '@personnel/domain/choices'
@@ -122,8 +123,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
+      <ModalShell onClose={onClose}>
 
           <div className="px-4 py-3 border-b border-gray-200">
             <p className="text-sm font-semibold text-gray-700">昇降格</p>
@@ -179,8 +179,8 @@ export function PromotionDialog({ rowId, onClose }: Props) {
                       strictness={resolveFieldStrictness(key as string, overrides)}
                       hasIssue={hasError || hasWarning}
                     />
-                    {fieldIssues.map((issue, i) => (
-                      <div key={i} className={`text-[10px] ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
+                    {fieldIssues.map(issue => (
+                      <div key={`${issue.field}-${issue.message}`} className={`text-[10px] ${issue.level === 'error' ? 'text-red-600' : 'text-orange-600'}`}>
                         {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
                       </div>
                     ))}
@@ -217,8 +217,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
               className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
             >保存</button>
           </div>
-        </div>
-      </div>
+      </ModalShell>
 
       {/* 役職→タイトル提案モーダル */}
       {titleSuggest && (
