@@ -3,8 +3,8 @@ import type { EditOperation } from './types'
 import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { FIELD_METADATA } from '../../allocationRow'
 import { TR } from '../../transferReasonLabels'
+import { preserve } from './afterConstraintHelpers'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -237,6 +237,8 @@ export const employmentTransferDef: EditOperation = {
   group:       'person',
   badge:       'negative',
 
+  description: '4/1付でグループ外または他社へ移籍する場合に設定します。移籍後の氏名・組織・バンドなど必要な情報を入力してください。',
+
   operationRole: {
     kind:                'lock',
     isActive:            (row) => row.transferReason === TR.TRANSFER,
@@ -363,11 +365,11 @@ export const noChangeDef: EditOperation = {
   group:       'person',
   badge:       'neutral',
 
-  description: '変更がない場合に選択してください。after 項目はすべて空白になります。',
+  description: '変更がない場合に選択してください。after 項目は発令前の値が維持されます。セッション内で変更済みの項目がある場合は確認ダイアログが表示されます。',
 
   operationRole: {
     kind:                'lock',
-    afterConstraint:     'wipe',
+    afterConstraint:     'preserve',
     isActive:            (row) => row.transferReason === TR.NO_CHANGE,
     isActiveThisSession: (row) => row.transferReason === TR.NO_CHANGE,
   },
@@ -393,25 +395,10 @@ export const noChangeDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-
-    // after フィールドを全て空白にクリア（変更なし = Excel 上も after 欄は空欄）
-    const cleared: Partial<AllocationRow> = {}
-    for (const { after } of FIELD_METADATA) {
-      ;(cleared as Record<string, unknown>)[after] = undefined
-    }
-
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
-          ? {
-              ...r,
-              ...cleared,
-              transferReason:     values.transferReason,
-              memo:               values.memo,
-              promotionSign:      undefined,
-              demotionReason:     undefined,
-              payGradeChangeSign: undefined,
-            }
+          ? { ...r, ...preserve(row), transferReason: values.transferReason, memo: values.memo }
           : r
       ),
       label: `変更なし: ${personName(row)}`,
@@ -451,20 +438,10 @@ export const noChangeCancelDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    // noChangeDef.afterConstraint:'wipe' の逆 — FIELD_METADATA の after フィールドを before 値に復元
-    const restored: Partial<AllocationRow> = {}
-    for (const { after, before } of FIELD_METADATA) {
-      ;(restored as Record<string, unknown>)[after] = (row as Record<string, unknown>)[before]
-    }
     return {
       updatedList: ctx.allocationList.map(r =>
         r.rowId === rowId
-          ? {
-              ...r,
-              ...restored,
-              transferReason: undefined,
-              memo:           values.memo as string | undefined,
-            }
+          ? { ...r, ...preserve(row), transferReason: undefined, memo: values.memo as string | undefined }
           : r
       ),
       label: `変更なし取消: ${personName(row)}`,

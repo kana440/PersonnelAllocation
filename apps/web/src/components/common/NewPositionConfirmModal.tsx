@@ -10,7 +10,7 @@ export function NewPositionConfirmModal({ newPosCode, onCreateNew, onKeepCurrent
       <div className="bg-white rounded-lg shadow-xl w-full max-w-xs mx-4 p-4">
         <p className="text-sm font-semibold text-gray-800 mb-2">ポジションの新設</p>
         <p className="text-xs text-gray-600 mb-3">
-          バンドが変更されました。昇降格に伴い新しいポジションを作成してこの方に設定しますか？
+          給与等級が変更されます。新しいポジションを作成してこの方に設定しますか？
         </p>
         <div className="bg-gray-50 rounded px-3 py-1.5 mb-3 text-[11px] text-gray-500">
           新ポジションコード: <span className="font-mono text-gray-700">{newPosCode}</span>

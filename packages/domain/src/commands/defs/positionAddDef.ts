@@ -28,7 +28,7 @@ export const managerChangeDef: EditOperation = {
     {
       field:          'managerPositionCode',
       required:       true,
-      picker:         'position',
+      picker:         'managerPosition',
       positionFilter: (row, ctx) => {
         const self = row.positionCode as string | undefined
         if (!self) return () => true

@@ -47,6 +47,18 @@ function detectBandChangeKind(row: AllocationRow, ctx: DetectContext): 'promotio
   return 'titleChange'
 }
 
+// 読み替えバンドが同一で別バンドへの切替（M職↔P職等）かどうかを判定するヘルパー
+function isMpTrackSwitchChange(row: AllocationRow, ctx: DetectContext): boolean {
+  const prevBand  = (row.prevBand as string | undefined) ?? ''
+  const afterBand = (row.band    as string | undefined) ?? ''
+  if (!prevBand || !afterBand || prevBand === afterBand) return false
+  const jlByLabel  = new Map(ctx.masters.jobLevels.map(e => [e.label, e]))
+  const prevEntry  = jlByLabel.get(prevBand)
+  const afterEntry = jlByLabel.get(afterBand)
+  if (!prevEntry?.promotionDemotionBand || !afterEntry?.promotionDemotionBand) return false
+  return prevEntry.promotionDemotionBand === afterEntry.promotionDemotionBand
+}
+
 export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> = {
   promotion: {
     label: '昇格', addLabel: '昇格', editLabel: '昇格',
@@ -65,16 +77,25 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
     },
   },
   titleChange: {
-    label: '役職変更（昇降格なし）', addLabel: '役職変更', editLabel: '役職変更',
-    menuLabel: '役職変更',
+    label: '役職名変更', addLabel: '役職名変更', editLabel: '役職名変更',
+    menuLabel: '役職名変更',
     badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.TITLE_CHANGE
       const bandResult = detectBandChangeKind(row, ctx)
-      if (bandResult === 'titleChange') return true
+      if (bandResult === 'titleChange') return !isMpTrackSwitchChange(row, ctx)
       // band 変化なしで localJobTitle のみ変更
       if (bandResult === null && (row.localJobTitle ?? '') !== (row.prevLocalJobTitle ?? '')) return true
       return false
+    },
+  },
+  mpTrackSwitch: {
+    label: 'M職P職切替', addLabel: 'M職P職切替', editLabel: 'M職P職切替',
+    menuLabel: 'M職P職切替',
+    badge: 'jobChange', group: 'jobClassification',
+    detect: (row, ctx) => {
+      if (isNoCheckReason(row, ctx)) return false
+      return detectBandChangeKind(row, ctx) === 'titleChange' && isMpTrackSwitchChange(row, ctx)
     },
   },
   jobTypeChange: {

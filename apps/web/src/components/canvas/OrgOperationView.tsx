@@ -64,7 +64,6 @@ export function OrgOperationView() {
   const [selectedPersonIds,  setSelectedPersonIds]  = useState<Set<string>>(new Set())
   const [moveModalOpen,      setMoveModalOpen]      = useState(false)
   const [bulkActionModal,    setBulkActionModal]    = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
-  const [changeTitleRowId,   setChangeTitleRowId]   = useState<number | null>(null)
   const [secondmentInModal,  setSecondmentInModal]  = useState<{
     orgId: string; orgCode: string; sfIntegrated: boolean; concurrent: boolean
   } | null>(null)
@@ -397,8 +396,6 @@ export function OrgOperationView() {
           setConfirmDialog={setConfirmDialog}
           fieldPickerOpen={fieldPickerOpen}
           setFieldPickerOpen={setFieldPickerOpen}
-          changeTitleRowId={changeTitleRowId}
-          setChangeTitleRowId={setChangeTitleRowId}
           persons={persons}
           allocationList={allocationList}
           allAfterOrgsUnscoped={allAfterOrgsUnscoped}

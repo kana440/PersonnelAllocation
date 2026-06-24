@@ -36,7 +36,7 @@ export const jobTypeChangeDef: EditOperation = {
   group:      'jobClassification',
   badge:      'jobChange',
 
-  description: 'ジョブファミリー・ジョブタイプを変更します。給与等級の変更が発生する場合は、適切な給与等級を選択してください。',
+  description: 'ジョブファミリー・ジョブタイプを変更します。jobType × band → payGrade の導出により、band が変わらなくても給与等級が変わる場合があります。給与等級が変わる場合はポジション変更も必要です（フォーム内 [変更] ボタンから対応）。',
 
   availableFor: () => AVAILABLE,
 
@@ -52,16 +52,23 @@ export const jobTypeChangeDef: EditOperation = {
     { field: 'jobFamily',      required: false },
     { field: 'jobType',        required: true  },
     { field: 'payGrade',       required: false },
+    { field: 'positionCode',   required: false, readOnly: true, picker: 'newPosition' },
+    { kind: 'section', label: '裁量労働' },
+    { field: 'positionDiscretionaryWorkFlag', required: false },
+    { field: 'discretionaryWorkFlag',         required: false },
   ],
 
   onOpen: (row) => ({
-    promotionSign:      row.promotionSign      as string | undefined,
-    payGradeChangeSign: row.payGradeChangeSign as string | undefined,
-    transferReason:     row.transferReason ?? TR.DIV_TRANSFER as string | undefined,
-    jobFamily:          row.jobFamily      as string | undefined,
-    jobType:            row.jobType        as string | undefined,
-    payGrade:           row.payGrade       as string | undefined,
-    memo:               row.memo           ?? '職種変更' as string | undefined,
+    promotionSign:               row.promotionSign               as string | undefined,
+    payGradeChangeSign:          row.payGradeChangeSign          as string | undefined,
+    transferReason:              row.transferReason ?? TR.DIV_TRANSFER as string | undefined,
+    jobFamily:                   row.jobFamily                   as string | undefined,
+    jobType:                     row.jobType                     as string | undefined,
+    payGrade:                    row.payGrade                    as string | undefined,
+    positionCode:                row.positionCode                as string | undefined,
+    positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
+    discretionaryWorkFlag:         row.discretionaryWorkFlag         as string | undefined,
+    memo:                        row.memo ?? '職種変更'           as string | undefined,
   }),
 
   onValidate(ctx, rowId, _values) {
@@ -69,8 +76,6 @@ export const jobTypeChangeDef: EditOperation = {
       return fail(`行が見つかりません (rowId: ${rowId})`)
     return ok()
   },
-
-  // ToDo: 給与等級変更を伴う場合はポジション新設が必要（→ 昇格・降格の同名 ToDo と共通課題）。
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
@@ -94,7 +99,6 @@ export const employmentExtensionDef: EditOperation = {
 
   operationRole: {
     kind:                'lock',
-    afterConstraint:     'wipe',
     isActive:            (row) => row.transferReason === TR.EMPLOYMENT_EXTENSION_PROCEDURE,
     isActiveThisSession: (row) => row.transferReason === TR.EMPLOYMENT_EXTENSION_PROCEDURE,
   },
@@ -123,16 +127,17 @@ export const employmentExtensionDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const newRow = { ...row }
-    for (const [key, value] of Object.entries(computeEmploymentExtensionAfter())) {
-      ;(newRow as Record<string, unknown>)[key] = value
-    }
-    newRow.transferReason = values.transferReason as AllocationRow['transferReason']
-    if (values.memo !== undefined) {
-      newRow.memo = values.memo as AllocationRow['memo']
-    }
     return {
-      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? newRow : r),
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? {
+              ...r,
+              ...computeEmploymentExtensionAfter(),
+              transferReason: values.transferReason as AllocationRow['transferReason'],
+              ...(values.memo !== undefined ? { memo: values.memo as AllocationRow['memo'] } : {}),
+            }
+          : r
+      ),
       label: `雇用延長: ${personName(row)}`,
     }
   },
@@ -145,6 +150,8 @@ export const employmentTypeChangeDef: EditOperation = {
   label:      '雇用タイプ変更',
   group:      'jobClassification',
   badge:      'jobChange',
+
+  description: '雇用タイプ変更の手続きを記入します。バンドや給与等級など関連項目も必要に応じて変更してください。',
 
   availableFor: (row) =>
     row.userId ? AVAILABLE : unavailable('担当者が配属されていない行には設定できません'),

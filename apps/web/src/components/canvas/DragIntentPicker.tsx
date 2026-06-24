@@ -22,8 +22,8 @@ interface Props {
 const TRANSFER_INTENTS = [
   {
     def:   orgRestructureDef,
-    title: '組織改正による異動',
-    desc:  '組織の改廃・統廃合・名称変更などで在籍部署が変わる場合。異動事由は改組系を選択。',
+    title: '組織コード変更（組改）',
+    desc:  '組織の改廃・統廃合・名称変更などで組織コードが変わる場合。勤務場所・コストセンターは自動転記されません。',
     border: 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50',
     badge:  'bg-indigo-100 text-indigo-700',
     icon:   '🏢',
@@ -32,7 +32,7 @@ const TRANSFER_INTENTS = [
   {
     def:   orgTransferDef,
     title: '業務変更による異動',
-    desc:  '担当業務の変更・本人都合などにより、在籍部署が変わる場合。通常の社内異動。',
+    desc:  '担当業務の変更・本人都合などにより、在籍部署が変わる場合。別組織への通常異動。',
     border: 'border-blue-200 hover:border-blue-400 hover:bg-blue-50',
     badge:  'bg-blue-100 text-blue-700',
     icon:   '👤',

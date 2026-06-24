@@ -36,8 +36,8 @@ export function ChangeDigest({ data, onSelectTab }: Props) {
     {
       label: '操作パターン',
       stats: [
-        { label: '社内異動',         value: p('orgTransfer'),              color: 'text-blue-600',    bgColor: 'bg-blue-50',    tab: 'grid', filterKind: 'orgTransfer' },
-        { label: '組織改変',         value: p('orgRestructure'),           color: 'text-indigo-600',  bgColor: 'bg-indigo-50',  tab: 'grid', filterKind: 'orgRestructure' },
+        { label: '別組織へ異動',      value: p('orgTransfer'),              color: 'text-blue-600',    bgColor: 'bg-blue-50',    tab: 'grid', filterKind: 'orgTransfer' },
+        { label: '組改',             value: p('orgRestructure'),           color: 'text-indigo-600',  bgColor: 'bg-indigo-50',  tab: 'grid', filterKind: 'orgRestructure' },
         { label: '昇格',             value: p('promotion'),                color: 'text-green-600',   bgColor: 'bg-green-50',   tab: 'grid', filterKind: 'promotion' },
         { label: '降格',             value: p('demotion'),                 color: 'text-orange-600',  bgColor: 'bg-orange-50',  tab: 'grid', filterKind: 'demotion' },
         { label: 'ジョブタイプ変更', value: p('jobTypeChange'),            color: 'text-purple-600',  bgColor: 'bg-purple-50',  tab: 'grid', filterKind: 'jobTypeChange' },

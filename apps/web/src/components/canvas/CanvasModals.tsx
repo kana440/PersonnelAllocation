@@ -15,7 +15,6 @@ import {
   BulkSecondmentModal,
 } from './modals/BulkActionModals'
 import { CanvasFieldPicker }   from './CanvasFieldPicker'
-import { ChangeTitleModal }    from './modals/ChangeTitleModal'
 import { DragIntentPicker }    from './DragIntentPicker'
 import { DropOperationModal }  from './DropOperationModal'
 import type { EditOperation }  from '@personnel/domain/commands/defs/index'
@@ -40,8 +39,6 @@ export interface CanvasModalsProps {
   setConfirmDialog:   (v: { message: string; onConfirm: () => void } | null) => void
   fieldPickerOpen:      boolean
   setFieldPickerOpen:   (v: boolean) => void
-  changeTitleRowId:     number | null
-  setChangeTitleRowId:  (v: number | null) => void
   // data
   persons:            Person[]
   allocationList:     AllocationRow[]
@@ -62,7 +59,6 @@ export function CanvasModals({
   dropOpState, setDropOpState,
   confirmDialog, setConfirmDialog,
   fieldPickerOpen, setFieldPickerOpen,
-  changeTitleRowId, setChangeTitleRowId,
   persons, allocationList, allAfterOrgsUnscoped,
   positionTreeByOrgId, afterMembersByOrgId,
   handleBulkMoveConfirm, handleIntentPick,
@@ -179,14 +175,6 @@ export function CanvasModals({
 
       {fieldPickerOpen && <CanvasFieldPicker onClose={() => setFieldPickerOpen(false)} />}
 
-      {changeTitleRowId !== null && (
-        <ChangeTitleModal
-          rowId={changeTitleRowId}
-          allocationList={allocationList}
-          onDone={() => setChangeTitleRowId(null)}
-          onCancel={() => setChangeTitleRowId(null)}
-        />
-      )}
     </>
   )
 }

@@ -4,8 +4,8 @@ import type { ReviewRow } from '../hooks/useReviewData'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 
 const ALL_FILTER_CHIPS: { key: EditPattern; label: string; color: string }[] = [
-  { key: 'orgTransfer',           label: '社内異動',           color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'orgRestructure',        label: '組織改変',           color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { key: 'orgTransfer',           label: '別組織へ異動',       color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { key: 'orgRestructure',        label: '組織コード変更(組改)', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
   { key: 'promotion',             label: '昇格',               color: 'bg-green-100 text-green-700 border-green-200' },
   { key: 'demotion',              label: '降格',               color: 'bg-orange-100 text-orange-700 border-orange-200' },
   { key: 'titleChange',           label: '役職変更',           color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },

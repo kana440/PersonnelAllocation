@@ -28,9 +28,10 @@ const SECTIONS: Section[] = [
   {
     label: '昇降格・役職変更',
     ops: [
-      { id: 'Promotion',   shortLabel: '昇格' },
-      { id: 'Demotion',    shortLabel: '降格' },
-      { id: 'TitleChange', shortLabel: '役職変更' },
+      { id: 'Promotion',     shortLabel: '昇格' },
+      { id: 'Demotion',      shortLabel: '降格' },
+      { id: 'TitleChange',   shortLabel: '役職名変更' },
+      { id: 'MpTrackSwitch', shortLabel: 'M職/P職切替' },
     ],
   },
   {
@@ -44,8 +45,8 @@ const SECTIONS: Section[] = [
   {
     label: '組織への異動',
     ops: [
-      { id: 'OrgTransfer',    shortLabel: '社内異動' },
-      { id: 'OrgRestructure', shortLabel: '組織改変' },
+      { id: 'OrgRestructure', shortLabel: '組織CDの変更(組改)' },
+      { id: 'OrgTransfer',    shortLabel: '別組織へ異動' },
     ],
   },
   {

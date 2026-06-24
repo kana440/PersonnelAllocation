@@ -2,7 +2,6 @@ import type { HRApplicationService } from '../HRApplicationService'
 import type { EditCommand, ValidationResult, OperationError } from '@personnel/domain/commands/types'
 import { ALL_MULTI_ROW_OPERATION_DEFS } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow, AfterValues } from '@personnel/domain/allocationRow'
-import { ChangeTitleOperation, derivePersonGradeFields } from '@personnel/domain/commands/handlers/changeTitle'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { BulkMoveToOrgOperation } from '@personnel/domain/commands/handlers/bulkMoveToOrg'
 import { TransferPersonOperation } from '@personnel/domain/commands/handlers/transferPerson'
@@ -107,34 +106,23 @@ export function createWriteMethods(service: HRApplicationService) {
   // ── Title / grade operations ──────────────────────────────────────────────
 
   function changeTitle(params: {
-    rowId:                number
-    officialPositionCode: string
-    localJobTitle:        string
-    positionBand:         string
-    band:                 string
-    payGrade:             string
+    rowId:                 number
+    officialPositionCode?: string
+    localJobTitle?:        string
+    band?:                 string
+    positionBand?:         string
+    payGrade?:             string
   }): AIOperationResult {
-    const ctx        = service.getSnapshot()
-    const beforeList = ctx.allocationList
-    const suggested  = derivePersonGradeFields(params.officialPositionCode, ctx)
-    const result = service.executeOperation(
-      new ChangeTitleOperation(
-        params.rowId,
-        params.officialPositionCode,
-        params.localJobTitle,
-        params.positionBand || suggested.positionBand || '',
-        params.band         || suggested.band         || '',
-        params.payGrade     || suggested.payGrade     || '',
-      )
-    )
+    const beforeList = service.getSnapshot().allocationList
+    const updates: Partial<AllocationRow> = {}
+    if (params.officialPositionCode !== undefined) updates.officialPositionCode = params.officialPositionCode || undefined
+    if (params.localJobTitle        !== undefined) updates.localJobTitle        = params.localJobTitle        || undefined
+    if (params.band                 !== undefined) updates.band                 = params.band                 || undefined
+    if (params.positionBand         !== undefined) updates.positionBand         = params.positionBand         || undefined
+    if (params.payGrade             !== undefined) updates.payGrade             = params.payGrade             || undefined
+    const result = service.executeOperation(new DirectEditOperation(params.rowId, updates, '役職名変更'))
     if (!result.ok) return result
     return { ok: true, postValidation: runPostValidation(beforeList) }
-  }
-
-  function suggestTitleFields(officialPositionCode: string): {
-    positionBand?: string; band?: string; payGrade?: string
-  } {
-    return derivePersonGradeFields(officialPositionCode, service.getSnapshot())
   }
 
   // ── Manager position ──────────────────────────────────────────────────────
@@ -563,7 +551,7 @@ export function createWriteMethods(service: HRApplicationService) {
     executeMultiRowOperation,
     createVacantPosition, assignPersonToVacantPosition, unassignPersonFromPosition, removePosition,
     getUnassignedPositions, assignPositionCodes,
-    changeTitle, suggestTitleFields,
+    changeTitle,
     setManagerPosition,
     reDeriveManagerNames, reDeriveOrgSubFields,
     executeBulkTransfer, executeFieldEdit, executeBulkSetField,

@@ -46,7 +46,8 @@ export type OperationGroup = 'position' | 'jobClassification' | 'person'
 export type OperationRole =
   | {
       kind:               'lock'
-      afterConstraint?:   'wipe' | 'preserve'
+      /** フレームワークは自動適用しない。onSubmit 内で preserve(row) を明示的に呼ぶこと */
+      afterConstraint?:   'preserve'
       isActive(row: AllocationRow): boolean
       isActiveThisSession(row: AllocationRow): boolean
     }
@@ -77,6 +78,8 @@ export type FieldChangeEffect = {
   openPickerInitialOrg?: string
   suggestFieldValue?:    { field: keyof AllocationRow; value: string }
   suppressDerive?:       boolean   // true のとき deriveFieldUpdates をスキップ
+  /** deriveFieldUpdates の結果からこのフィールドを除外する（自動導出させたくない場合） */
+  excludeDerived?:       readonly (keyof AllocationRow)[]
 }
 
 /**
@@ -120,13 +123,16 @@ export interface OperationInput {
   readonly inputType?: 'checkbox'
   /**
    * 専用ピッカーダイアログの種別。省略時は ComboInput。
-   *   'org'      : 組織検索ダイアログ（departmentCode など組織コードを選ぶフィールドに付与）
-   *   'position' : ポジション選択ダイアログ（managerPositionCode など positionCode を選ぶフィールドに付与）
-   *   'person'   : 人物検索ダイアログ（userId を選ぶフィールドに付与）
-   *               選択時に userId・lastName・firstName・groupEmployeeId・employeeNumber・employmentType を一括セット。
-   *               デフォルトはフォームの departmentCode と同組織・親組織に絞り込み、横断トグルで全組織検索可。
+   *   'org'             : 組織検索ダイアログ（departmentCode など組織コードを選ぶフィールドに付与）
+   *   'position'        : ポジション選択ダイアログ（org ツリー＋ポジション一覧）
+   *   'managerPosition' : 上司ポジション選択ダイアログ（人物検索 UI から positionCode を選ぶ）
+   *                       フォームの departmentCode と同組織・親組織に絞り込み、横断トグルで全組織検索可。
+   *                       選択時に positionCode とあわせて managerName を自動セット。
+   *   'person'          : 人物検索ダイアログ（userId を選ぶフィールドに付与）
+   *                       選択時に userId・lastName・firstName・groupEmployeeId・employeeNumber・employmentType を一括セット。
+   *                       デフォルトはフォームの departmentCode と同組織・親組織に絞り込み、横断トグルで全組織検索可。
    */
-  readonly picker?: 'org' | 'position' | 'person'
+  readonly picker?: 'org' | 'position' | 'managerPosition' | 'person' | 'newPosition'
   /**
    * picker: 'position' のとき候補行を絞り込む述語。省略時は全ポジション行が候補。
    * カリー化により外側でコスト高な計算（配下列挙など）を1回だけ行い、内側を高速にする。
@@ -139,13 +145,19 @@ export interface OperationInput {
    * 省略時は FIELD_CONSTRAINTS から自動導出（全操作共通のデフォルト）。
    * optionsMode で選択肢の強制度を制御する（省略時は 'restrict'）。
    */
-  readonly options?: readonly string[] | ((ctx: DomainContext) => readonly string[])
+  readonly options?: readonly string[] | ((ctx: DomainContext, row?: AllocationRow) => readonly string[])
   /**
    * 選択肢の強制度。options が指定されている場合のみ有効。
    * - 'restrict'（デフォルト）: リスト外の入力を抑止する（strict モード）
    * - 'suggest': リストは推奨値として先頭に表示するが、自由入力も可能（guide モード）
    */
   readonly optionsMode?: 'restrict' | 'suggest'
+  /**
+   * フィールドに対して表示する動的な警告メッセージ。
+   * 現在の入力値と他フィールドの状態を参照して警告を返す（undefined なら非表示）。
+   * 例: 組織コード変更で勤務場所がマスタと不一致のとき。
+   */
+  readonly warningFn?: (ctx: DomainContext, values: Partial<AllocationRow>) => string | undefined
 }
 
 /**

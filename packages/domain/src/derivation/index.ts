@@ -18,6 +18,7 @@ import { deriveOrgSubFields }        from './orgFields'
 import { deriveManagerName }         from './managerFields'
 import { derivePromotionSign, derivePayGradeChangeSign, derivePromotionSignFromLevel } from './promotionFields'
 import { deriveOnJobFamilyChange, derivePayGradeFromJobType } from './jobFields'
+import { deriveDiscretionaryFlags } from './discretionaryFields'
 
 export { deriveOrgSubFields, reDeriveOrgSubFieldsForList, isSecondmentOrg, suggestSecondmentOrgCodes } from './orgFields'
 export { deriveManagerName, reDeriveManagerNamesForList } from './managerFields'
@@ -43,6 +44,7 @@ function isRegularEmp(row: AllocationRow, masters: AllMasters): boolean {
  *   band → promotionSign + F2条件: positionBand を band に同期
  *   band + jobType → payGrade
  *   payGrade → payGradeChangeSign + Level由来 promotionSign
+ *   positionBand / band / jobType → 裁量労働フラグの自動クリア（「はい」が許容されない場合に「いいえ」へ）
  */
 export function deriveFieldUpdates(
   changes:        DerivedUpdates,
@@ -105,6 +107,9 @@ export function deriveFieldUpdates(
       Object.assign(result, lvSign)
     }
   }
+
+  // positionBand / band / jobType → 裁量労働フラグの自動クリア
+  Object.assign(result, deriveDiscretionaryFlags(draft, effectiveChanges, masters))
 
   return result
 }

@@ -16,6 +16,7 @@ export type { EditOperation, OperationDef, OperationGroup, OperationRole, Operat
 export { isSectionDivider, isInputRow, AVAILABLE, unavailable } from './types'
 export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
+export { preserve } from './afterConstraintHelpers'
 
 // ── 昇降格・役職変更 ──────────────────────────────────────────────────────────
 export { promotionDef, demotionDef, titleChangeDef } from './promotionDefs'

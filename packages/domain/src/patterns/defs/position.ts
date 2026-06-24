@@ -4,7 +4,8 @@ import { TR } from '../../transferReasonLabels'
 
 export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
   orgTransfer: {
-    label: '社内異動', addLabel: '社内異動', editLabel: '社内異動',
+    label: '別組織へ異動', addLabel: '別組織へ異動', editLabel: '別組織へ異動',
+    menuLabel: '別組織異動',
     badge: 'transfer', group: 'position',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.ORG_TRANSFER
@@ -16,7 +17,8 @@ export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
     },
   },
   orgRestructure: {
-    label: '組織改変', addLabel: '組織改変', editLabel: '組織改変',
+    label: '組織コード変更(組改)', addLabel: '組織コード変更(組改)', editLabel: '組織コード変更(組改)',
+    menuLabel: '組織CD変更(組改)',
     badge: 'transfer', group: 'position',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.ORG_RESTRUCTURE

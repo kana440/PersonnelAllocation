@@ -11,6 +11,7 @@ import { nextRowId } from '@personnel/domain/allocationRow'
 import { ComboInput } from '../../common/ComboInput'
 import { TitleSuggestionModal } from '../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../common/NewPositionConfirmModal'
+import { NewPositionDialog }       from '../../common/NewPositionDialog'
 import { ClearFieldsConfirmModal }  from '../../common/ClearFieldsConfirmModal'
 import { PositionPickerModal }      from '../../common/PositionPickerModal'
 import { computeSideEffects, hasSideEffects, type SideEffectSummary } from './operationPreview'
@@ -61,6 +62,10 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const [posPickerFilter,     setPosPickerFilter]     = useState<((r: AllocationRow) => boolean) | undefined>(undefined)
   const [posPickerInitialOrg, setPosPickerInitialOrg] = useState<string | undefined>(undefined)
   const [showPersonPicker,    setShowPersonPicker]    = useState(false)
+  const [newPosDlgOpen,       setNewPosDlgOpen]       = useState(false)
+  const [mgrPickerField,      setMgrPickerField]      = useState<keyof AllocationRow | null>(null)
+  const [mgrPickerExclude,    setMgrPickerExclude]    = useState<ReadonlySet<string> | undefined>(undefined)
+  const [mgrPickerOrgCode,    setMgrPickerOrgCode]    = useState<string | undefined>(undefined)
 
   const draftRow = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
 
@@ -74,10 +79,16 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
     const derived  = deriveFieldUpdates(changes, draftRow, masters, allocationList)
     const effects  = def.onFieldChange?.[field]?.(value, ctx)
 
+    // excludeDerived: onFieldChange で指定されたフィールドを自動導出結果から除外する
+    const filteredDerived: Record<string, unknown> = { ...derived }
+    for (const f of (effects?.excludeDerived ?? [])) {
+      delete filteredDerived[f as string]
+    }
+
     setValues(prev => ({
       ...prev,
       ...changes,
-      ...derived,
+      ...filteredDerived,
       ...(effects?.setValues ?? {}),
     }))
 
@@ -90,6 +101,15 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
         setPosPickerFilter(() => predicate)
         setPosPickerInitialOrg(effects.openPickerInitialOrg)
         setPosPickerField(effects.openPickerFor!)
+      } else if (targetInput?.picker === 'managerPosition') {
+        const predicate = targetInput.positionFilter ? targetInput.positionFilter(row, ctx) : undefined
+        const exclude = predicate
+          ? new Set(allocationList.filter(r => r.userId && !predicate(r)).map(r => r.userId!))
+          : undefined
+        const deptCode = (values.departmentCode ?? row.departmentCode) as string | undefined
+        setMgrPickerOrgCode(deptCode)
+        setMgrPickerExclude(exclude)
+        setMgrPickerField(effects.openPickerFor!)
       } else if (targetInput?.picker === 'org') {
         setOrgPickerField(effects.openPickerFor as string)
       }
@@ -141,12 +161,14 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
     [draftRow, afterOrganizations, masters, allocationList, fieldInputs, values]
   )
 
+  // 給与等級が変わった（payGradeChangeSign が立っている）かつポジションが prev から変わっていない場合、
+  // ポジション変更が必要と判定する。band 変化ではなく payGrade 変化を基準にする。
+  // （M職P職切替は band が変わっても読み替えband が同一で給与等級が変わらないため対象外。
+  //   逆に職種変更は band 変化なしでも jobType×band→payGrade の変化でここに入りうる。）
   const needsNewPosition = (): boolean => {
-    const newBand  = (values.band ?? row.band) as string | undefined
-    const prevBand = row.prevBand as string | undefined
     const posCurrent = (values.positionCode ?? row.positionCode) as string | undefined
     const posPrev    = row.prevPositionCode as string | undefined
-    return !!newBand && newBand !== prevBand && posCurrent === posPrev
+    return !!(values.payGradeChangeSign as string | undefined) && posCurrent === posPrev
   }
 
   const doExecute = (vals: Partial<AllocationRow>) => {
@@ -163,8 +185,16 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
 
   const handleSubmit = () => {
     if (row.rowId >= 0 && needsNewPosition()) {
-      const newId = nextRowId(allocationList)
-      const code  = `_pos_${newId}`
+      const usedNums = new Set(
+        allocationList
+          .flatMap(r => [r.positionCode, r.prevPositionCode])
+          .filter((c): c is string => typeof c === 'string' && c.startsWith('_pos_'))
+          .map(c => parseInt(c.slice(5), 10))
+          .filter(n => !isNaN(n))
+      )
+      let n = nextRowId(allocationList)
+      while (usedNums.has(n)) n++
+      const code = `_pos_${n}`
       setPendingPosCode(code)
       setShowPosModal(true)
       return
@@ -255,10 +285,11 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               )
             }
 
-            const { field, required, label, stepFilter, readOnly, picker, positionFilter, inputType, indicator, options: inputOptions, optionsMode } = item
+            const { field, required, label, stepFilter, readOnly, picker, positionFilter, inputType, indicator, options: inputOptions, optionsMode, warningFn } = item
             if (indicator) return null
 
-            const fieldKey     = field as string
+            const warnMsg  = warningFn?.(ctx, values)
+            const fieldKey = field as string
             const rawLabel     = label ?? ALLOCATION_LIST_LABEL_MAP[fieldKey]?.ja ?? fieldKey
             const fieldLabel   = rawLabel.replace(/_新$/, '')
             const currentVal   = (values[field] as string | undefined) ?? ''
@@ -309,6 +340,39 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
                     {prevBox}
                   </div>
                   {diffLine}
+                </div>
+              )
+            }
+
+            // ── ポジション新設 picker（readOnly表示 + [変更]ボタン）──────────────
+            // readOnly チェックより先に評価（readOnly: true と picker: 'newPosition' を両立させるため）
+            if (picker === 'newPosition') {
+              const showWarning = !!(values.payGradeChangeSign as string | undefined)
+                && (currentVal === prevVal || !currentVal)
+              return (
+                <div key={fieldKey}>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{fieldLabel}</label>
+                  <div className={gridCls}>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`flex-1 text-xs bg-gray-50 border rounded px-2 py-[5px] min-h-[30px] text-gray-500 select-none ${isChanged ? 'border-amber-400' : 'border-gray-200'}`}>
+                        {currentVal || <span className="text-gray-300">—</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNewPosDlgOpen(true)}
+                        className="text-xs px-2.5 py-1.5 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 whitespace-nowrap flex-shrink-0"
+                      >
+                        変更
+                      </button>
+                    </div>
+                    {prevBox}
+                  </div>
+                  {diffLine}
+                  {showWarning && (
+                    <p className="text-[10px] mt-1 text-amber-600">
+                      ⚠ 給与等級が変更されます。ポジションの変更を検討してください。
+                    </p>
+                  )}
                 </div>
               )
             }
@@ -402,6 +466,48 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               )
             }
 
+            // ── 上司ポジション picker（人物検索から positionCode を選ぶ） ──────
+            if (picker === 'managerPosition') {
+              const posRow = currentVal ? allocationList.find(r => r.positionCode === currentVal && !!r.userId) : undefined
+              const posPersonName = posRow
+                ? ([posRow.lastName, posRow.firstName].filter(Boolean).join(' ') || undefined)
+                : undefined
+              return (
+                <div key={fieldKey}>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    {fieldLabel}{required && <span className="text-red-400 ml-0.5">*</span>}
+                  </label>
+                  <div className={gridCls}>
+                    <div className="flex gap-1">
+                      <ComboInput value={currentVal} onChange={v => handleChange(field, v)} options={[]} hasIssue={hasIssue} modified={isChanged} />
+                      <button
+                        onClick={() => {
+                          const predicate = positionFilter ? positionFilter(row, ctx) : undefined
+                          const exclude = predicate
+                            ? new Set(allocationList.filter(r => r.userId && !predicate(r)).map(r => r.userId!))
+                            : undefined
+                          const deptCode = (values.departmentCode ?? row.departmentCode) as string | undefined
+                          setMgrPickerOrgCode(deptCode)
+                          setMgrPickerExclude(exclude)
+                          setMgrPickerField(field)
+                        }}
+                        className="px-2 border border-gray-200 rounded text-xs text-gray-500 hover:bg-gray-50 flex-shrink-0"
+                        title="上司を人物検索"
+                      >🔍</button>
+                    </div>
+                    {prevBox}
+                  </div>
+                  {posPersonName && <p className="text-[10px] text-blue-600 mt-0.5 truncate">{posPersonName}</p>}
+                  {diffLine}
+                  {fieldIssues.map((issue, i) => (
+                    <p key={i} className={`text-[10px] mt-0.5 ${issue.level === 'error' ? 'text-red-500' : 'text-orange-500'}`}>
+                      {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
+                    </p>
+                  ))}
+                </div>
+              )
+            }
+
             // ── 組織 picker ───────────────────────────────────────────────────
             if (picker === 'org') {
               const orgName = afterOrganizations.find(
@@ -435,7 +541,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
             // ── 通常フィールド (ComboInput) ────────────────────────────────────
             // inputOptions が指定されている場合は FIELD_CONSTRAINTS より優先
             const resolvedOptions = inputOptions
-              ? (typeof inputOptions === 'function' ? inputOptions(ctx) : inputOptions) as string[]
+              ? (typeof inputOptions === 'function' ? inputOptions(ctx, row) : inputOptions) as string[]
               : null
             const { valid, invalid } = resolvedOptions
               ? { valid: resolvedOptions, invalid: [] as string[] }
@@ -474,6 +580,9 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
                     {issue.level === 'error' ? '✕ ' : '⚠ '}{issue.message}
                   </p>
                 ))}
+                {warnMsg && (
+                  <p className="text-[10px] mt-0.5 text-amber-600">⚠ {warnMsg}</p>
+                )}
               </div>
             )
           })}
@@ -510,6 +619,33 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
               setShowPersonPicker(false)
             }}
             onClose={() => setShowPersonPicker(false)}
+          />
+        )}
+
+        {mgrPickerField && (
+          <PersonPickerDialog
+            defaultOrgCode={mgrPickerOrgCode}
+            allocationList={allocationList}
+            afterOrganizations={afterOrganizations}
+            excludeUserIds={mgrPickerExclude}
+            onSelect={(p) => {
+              if (p.positionCode) {
+                const name = [p.lastName, p.firstName].filter(Boolean).join(' ')
+                setValues(prev => ({
+                  ...prev,
+                  [mgrPickerField as string]: p.positionCode,
+                  managerName: name || prev.managerName,
+                }))
+              }
+              setMgrPickerField(null)
+              setMgrPickerExclude(undefined)
+              setMgrPickerOrgCode(undefined)
+            }}
+            onClose={() => {
+              setMgrPickerField(null)
+              setMgrPickerExclude(undefined)
+              setMgrPickerOrgCode(undefined)
+            }}
           />
         )}
 
@@ -567,6 +703,33 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
             setTitleSuggest(null)
           }}
           onSkip={() => setTitleSuggest(null)}
+        />
+      )}
+
+      {/* ポジション新設ダイアログ（フォーム内 [変更] ボタン用）*/}
+      {newPosDlgOpen && (
+        <NewPositionDialog
+          suggestedCode={(() => {
+            // 既に内部コードが割り当て済みならそのまま表示（再クリックで別コードが発行されないように）
+            const cur = values.positionCode as string | undefined
+            if (cur?.startsWith('_pos_')) return cur
+            // 未割当の場合: allocationList の _pos_ 番号を収集して重複しない番号を探す
+            const usedNums = new Set(
+              allocationList
+                .flatMap(r => [r.positionCode, r.prevPositionCode])
+                .filter((c): c is string => typeof c === 'string' && c.startsWith('_pos_'))
+                .map(c => parseInt(c.slice(5), 10))
+                .filter(n => !isNaN(n))
+            )
+            let n = nextRowId(allocationList)
+            while (usedNums.has(n)) n++
+            return `_pos_${n}`
+          })()}
+          onConfirm={(code) => {
+            handleChange('positionCode', code)
+            setNewPosDlgOpen(false)
+          }}
+          onCancel={() => setNewPosDlgOpen(false)}
         />
       )}
 
