@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import { adminApi, type ApiSubmission, type AdminUser, type CreateSubmissionBody } from '../../infrastructure/api/adminApi'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
@@ -59,8 +60,8 @@ export function RowDelegationModal({ submission, onCreated, onCancel }: Props) {
 
   const filtered = rows.filter(r => {
     if (!filter) return true
-    const lbl = rowLabel(r).toLowerCase()
-    return lbl.includes(filter.toLowerCase())
+    const lbl = normalizeSearch(rowLabel(r))
+    return lbl.includes(normalizeSearch(filter))
   })
 
   const handleSave = async () => {

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import type { Organization } from '@personnel/domain/schemas'
 
 interface Props {
@@ -75,9 +76,9 @@ export function OrgCombobox({
   const toggleOrg     = (id: string) => setExpandedOrgs(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const toggleCompany = (id: string) => setExpandedCompanies(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
-  const searchLower  = search.trim().toLowerCase()
+  const searchLower  = normalizeSearch(search.trim())
   const searchResults = searchLower
-    ? viewOrgs.filter(o => o.name.toLowerCase().includes(searchLower)).slice(0, 60)
+    ? viewOrgs.filter(o => normalizeSearch(o.name).includes(searchLower)).slice(0, 60)
     : null
 
   const renderOrgNode = (org: Organization, depth: number): React.ReactNode => {

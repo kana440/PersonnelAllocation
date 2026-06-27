@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { normalizeSearch } from '../../../utils/normalizeSearch'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization }  from '@personnel/domain/schemas'
 import { OrgTreePanel }       from '../../review/components/OrgTreePanel'
@@ -48,11 +49,11 @@ export function PositionPickerModal({
   )
 
   const displayed = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = normalizeSearch(search.trim())
     if (q) {
       return candidates.filter(r => {
-        const name = displayName(r).toLowerCase()
-        const code = (r.positionCode as string).toLowerCase()
+        const name = normalizeSearch(displayName(r))
+        const code = normalizeSearch(r.positionCode as string)
         return name.includes(q) || code.includes(q)
       })
     }

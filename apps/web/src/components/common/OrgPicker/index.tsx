@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { normalizeSearch } from '../../../utils/normalizeSearch'
 import type { Organization } from '@personnel/domain/schemas'
 import { buildOrgPath } from '@personnel/domain/choices/relevantOrgs'
 
@@ -50,11 +51,11 @@ export function OrgPicker({
   )
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeSearch(query.trim())
     if (!q) return activeOrgs
     return activeOrgs.filter(o =>
-      o.name.toLowerCase().includes(q) ||
-      (o.externalCode ?? '').toLowerCase().includes(q),
+      normalizeSearch(o.name).includes(q) ||
+      normalizeSearch(o.externalCode ?? '').includes(q),
     )
   }, [activeOrgs, query])
 

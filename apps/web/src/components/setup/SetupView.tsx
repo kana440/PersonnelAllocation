@@ -7,7 +7,7 @@ import { isUninitializedRow } from '../../application/setup/afterInit'
 import { SetupHelp } from './SetupHelp'
 import { AfterInitWizard } from './AfterInitWizard'
 import { ModeSelectStep } from './ModeSelectStep'
-import { getRootOrgIds, getAssigneeOrgIds } from './panelInit'
+import { getAssigneeOrgIds, getAllMemberOrgIds } from './panelInit'
 
 const LOCAL_SAMPLE_FILES = ['sample.xlsm']
 
@@ -24,7 +24,7 @@ interface Props {
 }
 
 export function SetupView({ onReady }: Props) {
-  const { loadExcelData, setScopeWithMapping, setUserSession, focusOrg } = useStore()
+  const { loadExcelData, setUserSession, focusOrg } = useStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
   const [showHelp, setShowHelp] = useState(false)
@@ -76,6 +76,29 @@ export function SetupView({ onReady }: Props) {
     return needsInit
   }, [])
 
+  // Excel ロード後の共通パネル初期化
+  // 全組織を一括登録し、メンバーが存在する組織の LCA フィルタを同期的に計算・適用する。
+  // useEffect での遅延計算を避け、ロード直後に確実にフィルタが表示されるようにする。
+  const initCanvas = useCallback((
+    result: ImportedWorkbookResult,
+    role: 'admin' | 'assignee',
+    assigneeName: string | null,
+  ) => {
+    const { initPanelsForOrgs } = useCanvasLayoutStore.getState()
+    const orgIds = result.afterOrganizations.map(o => o.id)
+
+    // メンバー組織の LCA を計算してパネルと同じ set() で確定（タイミング問題を回避）
+    const memberOrgIds = role === 'assignee'
+      ? getAssigneeOrgIds(result.allocationList, result.afterOrganizations, assigneeName)
+      : getAllMemberOrgIds(result.allocationList, result.afterOrganizations)
+    const orgById = new Map(result.afterOrganizations.map(o => [o.id, o]))
+
+    initPanelsForOrgs(orgIds, memberOrgIds, orgById)
+
+    // 担当者モード: サイドバーを最初の担当組織にフォーカス
+    if (role === 'assignee' && memberOrgIds.length > 0) focusOrg(memberOrgIds[0])
+  }, [focusOrg])
+
   // 管理者として開く
   const handleSelectAdmin = useCallback(async () => {
     if (phase.kind !== 'mode-select') return
@@ -85,12 +108,9 @@ export function SetupView({ onReady }: Props) {
     if (needsInit) return
     await tick()
     await loadExcelData(result)
-    // 管理者モード: ルート組織パネルのみ表示（閉じたまま）
-    const { addPanel: addP } = useCanvasLayoutStore.getState()
-    getRootOrgIds(result.afterOrganizations).forEach(id => addP(id))
-    setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
+    initCanvas(result, 'admin', null)
     onReady()
-  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, initCanvas, onReady])
 
   // 担当者として開く（AssigneeSelectStep からの選択確定）
   const handleAssigneeSelect = useCallback(async (assigneeName: string) => {
@@ -102,15 +122,9 @@ export function SetupView({ onReady }: Props) {
     if (needsInit) return
     await tick()
     await loadExcelData(result)
-    // 担当者モード: 全組織を辿れるようルートパネルを追加し、担当者のメンバーがいる組織も個別展開
-    const { addPanel } = useCanvasLayoutStore.getState()
-    getRootOrgIds(result.afterOrganizations).forEach(id => addPanel(id))
-    const orgIds = getAssigneeOrgIds(result.allocationList, result.afterOrganizations, resolvedName)
-    orgIds.forEach(orgId => addPanel(orgId))
-    if (orgIds.length > 0) focusOrg(orgIds[0])
-    setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
+    initCanvas(result, 'assignee', resolvedName)
     onReady()
-  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, setScopeWithMapping, focusOrg, onReady])
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, initCanvas, onReady])
 
   // after-init ウィザード完了
   const handleAfterInitComplete = useCallback(async (modifiedResult: ImportedWorkbookResult) => {
@@ -119,16 +133,9 @@ export function SetupView({ onReady }: Props) {
     setPhase({ kind: 'loading', progress: `データ適用中... (${modifiedResult.allocationRowCount.toLocaleString()} 行)` })
     await tick()
     await loadExcelData(modifiedResult)
-    const { addPanel } = useCanvasLayoutStore.getState()
-    getRootOrgIds(modifiedResult.afterOrganizations).forEach(id => addPanel(id))
-    if (role === 'assignee') {
-      const orgIds = getAssigneeOrgIds(modifiedResult.allocationList, modifiedResult.afterOrganizations, assigneeName)
-      orgIds.forEach(orgId => addPanel(orgId))
-      if (orgIds.length > 0) focusOrg(orgIds[0])
-    }
-    setScopeWithMapping({ beforeOrgId: null, mapping: new Map() })
+    initCanvas(modifiedResult, role, assigneeName)
     onReady()
-  }, [phase, loadExcelData, setScopeWithMapping, focusOrg, onReady])
+  }, [phase, loadExcelData, initCanvas, onReady])
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">

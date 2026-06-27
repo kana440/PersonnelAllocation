@@ -45,7 +45,7 @@ export function ChangeDigest({ data, onSelectTab }: Props) {
         { label: '本務出向受入',         value: p('secondmentIn'),             color: 'text-amber-600',   bgColor: 'bg-amber-50',   tab: 'grid', filterKind: 'secondmentIn' },
         { label: '出向解除',         value: p('secondmentOutRelease'),     color: 'text-red-600',     bgColor: 'bg-red-50',     tab: 'grid', filterKind: 'secondmentOutRelease' },
         { label: '休職',             value: p('leaveOfAbsence'),           color: 'text-gray-600',    bgColor: 'bg-gray-50',    tab: 'grid', filterKind: 'leaveOfAbsence' },
-        { label: 'ポジション異動',   value: p('vacantPositionMove'),       color: 'text-cyan-600',    bgColor: 'bg-cyan-50',    tab: 'grid', filterKind: 'vacantPositionMove' },
+        { label: 'Pos変更',          value: p('positionChange'),           color: 'text-cyan-600',    bgColor: 'bg-cyan-50',    tab: 'grid', filterKind: 'positionChange' },
         { label: '移籍',             value: p('employmentTransfer'),       color: 'text-red-600',     bgColor: 'bg-red-50',     tab: 'grid', filterKind: 'employmentTransfer' },
         { label: '退職',             value: p('termination'),              color: 'text-red-600',     bgColor: 'bg-red-50',     tab: 'grid', filterKind: 'termination' },
       ],

@@ -12,13 +12,17 @@ export const TR = {
   // 組織・ポジション
   ORG_TRANSFER:    '社内異動',
   ORG_RESTRUCTURE: '組織改変',
-  MANAGER_CHANGE:  '上司変更',
+  MANAGER_CHANGE:       '上司変更',
+  NEW_POSITION:         'ポジションのみ新設・更新',
+  EXECUTIVE_APPOINTMENT: '役員就任',
   // 分掌移動（組織改変に伴う異動事由）
   DIV_TRANSFER:            '分掌移動',
   DIV_TRANSFER_REFORM:     '分掌移動（改組）',
   DIV_TRANSFER_RESTRUCTURE: '分掌移動（組改）',
 
   CONCURRENT:     '兼務追加',
+  // 雇用区分変更（出向受入）
+  SECONDMENT_ACCEPTANCE_MODE_SWITCH: '従業員区分変更（出向受入⇔兼務出向受入）',
   // 職務分類
   PROMOTION:            '昇格',
   DEMOTION:             '降格',

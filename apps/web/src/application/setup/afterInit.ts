@@ -1,16 +1,12 @@
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization }   from '@personnel/domain/schemas'
-import type { AllMasters }   from '@personnel/domain/masters/aggregate'
+import type { AllMasters }     from '@personnel/domain/masters/aggregate'
 import { FIELD_METADATA }      from '@personnel/domain/allocationRow'
 import { buildOrgMap }         from '@personnel/domain/choices/rows'
+import { normalizeSearch }     from '../../utils/normalizeSearch'
 
 // ── 判定 ──────────────────────────────────────────────────────────────────────
 
-/**
- * 「after 初期化が必要な行」の判定。
- * 条件: userId あり かつ transferReason も FIELD_METADATA の全 after フィールドも全て空。
- * noCheckRequired な異動事由（退職・削除系）が入っている行は false になる。
- */
 export function isUninitializedRow(row: AllocationRow, masters: AllMasters): boolean {
   if (!row.userId) return false
   if (row.transferReason) return false
@@ -19,30 +15,86 @@ export function isUninitializedRow(row: AllocationRow, masters: AllMasters): boo
   return FIELD_METADATA.every(({ after }) => !row[after as keyof AllocationRow])
 }
 
-// ── グループ化 ────────────────────────────────────────────────────────────────
+// ── 組織マッチング ─────────────────────────────────────────────────────────────
+
+export type MatchConfidence = 'code' | 'name' | 'none'
 
 export interface OrgMappingGroup {
-  prevCode:    string | null
-  prevOrgName: string | null
-  newOrgCode:  string | null  // null = 未選択（後で設定）
-  autoMatched: boolean        // afterOrgs に同一コードが存在し自動選択
-  rowIds:      number[]
+  prevCode:        string | null
+  prevOrgName:     string | null
+  newOrgCode:      string | null
+  autoMatched:     boolean
+  matchConfidence: MatchConfidence
+  /**
+   * 未マッチ組織のUI絞り込み用スコープ（新組織ツリーのノードID）。
+   * マッチ済み兄弟の新組織を seeds として LCA を計算した結果。
+   * null = スコープ推論できず（全件表示）。
+   */
+  scopeOrgId:      string | null
+  rowIds:          number[]
+}
+
+// ── LCA ───────────────────────────────────────────────────────────────────────
+
+/** 祖先チェーン（self → parent → ... → root） */
+function ancestorChain(org: Organization, byId: Map<string, Organization>): Organization[] {
+  const chain: Organization[] = []
+  let cur: Organization | undefined = org
+  while (cur) {
+    chain.push(cur)
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined
+  }
+  return chain
 }
 
 /**
- * 未初期化行を prevDepartmentCode でグループ化し、
- * afterOrgs への自動マッピングを試みたグループ一覧を返す。
+ * seeds の最近共通祖先（LCA）を返す。
+ * seeds が 1 件のときは「その親」（兄弟を探せるスコープ）を返す。
  */
+function lca(seeds: Organization[], byId: Map<string, Organization>): Organization | null {
+  if (seeds.length === 0) return null
+  if (seeds.length === 1) {
+    return seeds[0].parentId ? (byId.get(seeds[0].parentId) ?? null) : null
+  }
+
+  // 2件目以降の祖先セット
+  const restSets = seeds.slice(1).map(seed => {
+    const set = new Set<string>()
+    let cur: Organization | undefined = seed
+    while (cur) { set.add(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined }
+    return set
+  })
+
+  // 1件目の祖先チェーンを上に辿り、全 restSets に含まれる最初のものが LCA
+  for (const org of ancestorChain(seeds[0], byId)) {
+    if (restSets.every(s => s.has(org.id))) return org
+  }
+  return null
+}
+
+// ── グループ化 ────────────────────────────────────────────────────────────────
+
 export function buildOrgMappingGroups(
   allocationList: AllocationRow[],
   afterOrganizations: Organization[],
   beforeOrganizations: Organization[],
   masters: AllMasters,
 ): OrgMappingGroup[] {
-  const uninit = allocationList.filter(r => isUninitializedRow(r, masters))
+  const uninit          = allocationList.filter(r => isUninitializedRow(r, masters))
   const afterOrgByCode  = buildOrgMap(afterOrganizations)
   const beforeOrgByCode = buildOrgMap(beforeOrganizations)
+  const afterById       = new Map(afterOrganizations.map(o => [o.id, o]))
 
+  // 新組織: 正規化名 → 候補リスト（廃止除く）
+  const afterByName = new Map<string, Organization[]>()
+  for (const o of afterOrganizations.filter(o => !o.isAbandoned)) {
+    const key = normalizeSearch(o.name)
+    const list = afterByName.get(key) ?? []
+    list.push(o)
+    afterByName.set(key, list)
+  }
+
+  // prevDepartmentCode でグループ化（割り当て行）
   const groupMap = new Map<string | null, number[]>()
   for (const r of uninit) {
     const key = r.prevDepartmentCode ?? null
@@ -51,26 +103,85 @@ export function buildOrgMappingGroups(
     else groupMap.set(key, [r.rowId])
   }
 
-  const groups: OrgMappingGroup[] = []
-  for (const [prevCode, rowIds] of groupMap) {
-    const afterOrg  = prevCode ? afterOrgByCode.get(prevCode) : null
-    const beforeOrg = prevCode ? beforeOrgByCode.get(prevCode) : null
-    const prevOrgName = beforeOrg?.name ?? prevCode
+  // ── Pass 1 / Pass 2: 各 prevCode のマッチング ────────────────────────────
+  type MatchResult = { newOrg: Organization; confidence: Exclude<MatchConfidence, 'none'> }
+  const matchResults = new Map<string, MatchResult>()
 
-    // 新組織コードの自動判定: externalCode を優先、なければ id
-    const newOrgCode = afterOrg
-      ? (afterOrg.externalCode ?? afterOrg.id)
-      : null
+  for (const [prevCode] of groupMap) {
+    if (!prevCode) continue
 
-    groups.push({ prevCode, prevOrgName, newOrgCode, autoMatched: !!afterOrg, rowIds })
+    // Pass 1: externalCode 完全一致
+    const byCode = afterOrgByCode.get(prevCode)
+    if (byCode) {
+      matchResults.set(prevCode, { newOrg: byCode, confidence: 'code' })
+      continue
+    }
+
+    // Pass 2: 正規化名が一致 かつ候補が 1 件のみ
+    const beforeOrg = beforeOrgByCode.get(prevCode)
+    if (beforeOrg) {
+      const candidates = afterByName.get(normalizeSearch(beforeOrg.name)) ?? []
+      if (candidates.length === 1) {
+        matchResults.set(prevCode, { newOrg: candidates[0], confidence: 'name' })
+      }
+    }
   }
 
-  // 自動マッチ済み → 上、未マッチ → 中、旧コードなし（新入社員）→ 末尾
+  // ── LCA スコープ推論 ───────────────────────────────────────────────────────
+  // 旧親 ID → その配下でマッチ済みの新組織リスト
+  const parentToSeeds = new Map<string, Organization[]>()
+  for (const [prevCode, result] of matchResults) {
+    const beforeOrg = beforeOrgByCode.get(prevCode)
+    if (!beforeOrg?.parentId) continue
+    const list = parentToSeeds.get(beforeOrg.parentId) ?? []
+    list.push(result.newOrg)
+    parentToSeeds.set(beforeOrg.parentId, list)
+  }
+
+  // 旧親 ID → LCA の新組織 ID
+  const parentToScopeId = new Map<string, string>()
+  for (const [parentId, seeds] of parentToSeeds) {
+    const scope = lca(seeds, afterById)
+    if (scope) parentToScopeId.set(parentId, scope.id)
+  }
+
+  // ── グループ生成 ──────────────────────────────────────────────────────────
+  const groups: OrgMappingGroup[] = []
+
+  for (const [prevCode, rowIds] of groupMap) {
+    const beforeOrg   = prevCode ? beforeOrgByCode.get(prevCode) : null
+    const prevOrgName = beforeOrg?.name ?? prevCode
+
+    const match      = prevCode ? matchResults.get(prevCode) : null
+    const confidence = match?.confidence ?? 'none'
+    const newOrgCode = match ? (match.newOrg.externalCode ?? match.newOrg.id) : null
+
+    // スコープ: マッチ済みは自組織の親、未マッチは旧親グループの LCA
+    let scopeOrgId: string | null = null
+    if (match?.newOrg.parentId) {
+      scopeOrgId = match.newOrg.parentId
+    } else if (beforeOrg?.parentId) {
+      scopeOrgId = parentToScopeId.get(beforeOrg.parentId) ?? null
+    }
+
+    groups.push({
+      prevCode,
+      prevOrgName,
+      newOrgCode,
+      autoMatched:     confidence !== 'none',
+      matchConfidence: confidence,
+      scopeOrgId,
+      rowIds,
+    })
+  }
+
+  // ソート: コード一致 → 名前一致 → 未マッチ → 新入社員（prevCode=null）
+  const order: Record<MatchConfidence, number> = { code: 0, name: 1, none: 2 }
   groups.sort((a, b) => {
     if (a.prevCode === null && b.prevCode !== null) return 1
     if (a.prevCode !== null && b.prevCode === null) return -1
-    if (a.autoMatched && !b.autoMatched) return -1
-    if (!a.autoMatched && b.autoMatched) return 1
+    const diff = order[a.matchConfidence] - order[b.matchConfidence]
+    if (diff !== 0) return diff
     return (a.prevOrgName ?? '').localeCompare(b.prevOrgName ?? '', 'ja')
   })
 
@@ -79,11 +190,6 @@ export function buildOrgMappingGroups(
 
 // ── 適用 ──────────────────────────────────────────────────────────────────────
 
-/**
- * 未初期化行に prev* フィールドをコピーして初期化した新 allocationList を返す。
- * departmentCode のみ groups の org 選択で上書き（null の場合は prev をコピー）。
- * transferReason は意図的にコピーしない（空白 = 変更なしのシグナル）。
- */
 export function applyAfterInit(
   allocationList: AllocationRow[],
   groups: OrgMappingGroup[],

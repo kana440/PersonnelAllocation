@@ -4,7 +4,7 @@ import {
 import {
   secondmentOutSFDef, secondmentOutNonSFDef,
   secondmentOutReleaseSFDef, secondmentOutReleaseNonSFDef,
-} from '@personnel/domain/commands/defs/secondmentDefs'
+} from '@personnel/domain/commands/defs/secondmentMainDefs'
 import { concurrentAddDef }  from '@personnel/domain/commands/defs/concurrentDefs'
 import { managerChangeDef }  from '@personnel/domain/commands/defs/positionAddDef'
 import type { EditOperation } from '@personnel/domain/commands/defs/index'

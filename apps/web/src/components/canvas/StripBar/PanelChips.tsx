@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { normalizeSearch } from '../../../utils/normalizeSearch'
 import type { MemberInfo }    from './useStripCardData'
 import type { DragData }      from '../OrgViewContext'
 import type { Organization }  from '@personnel/domain/schemas'
@@ -41,8 +42,8 @@ export function PanelChips({ allMembers, currentOrgId, panelOrgId, childrenOf }:
 
   const visibleSearch = useMemo(() => {
     if (!query) return []
-    const q = query.toLowerCase()
-    return subtreeMembers.filter(m => m.person.name.toLowerCase().includes(q))
+    const q = normalizeSearch(query)
+    return subtreeMembers.filter(m => normalizeSearch(m.person.name).includes(q))
   }, [subtreeMembers, query])
 
   const directCount   = directMembers.length

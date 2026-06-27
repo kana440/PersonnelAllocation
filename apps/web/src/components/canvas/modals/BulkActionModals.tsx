@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { normalizeSearch } from '../../../utils/normalizeSearch'
 import { appService } from '../../../application/HRApplicationService'
 import type { Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
@@ -86,11 +87,11 @@ export function BulkManagerModal({ selectedPersonIds, persons, allocationList, o
   const [selectedName,    setSelectedName]    = useState('')
 
   const candidates = allocationList.filter(r => r.positionCode && r.userId)
-  const q = search.trim()
+  const q = normalizeSearch(search.trim())
   const filtered = q
     ? candidates.filter(r => {
-        const name = `${r.lastName ?? ''}${r.firstName ?? ''}`
-        return name.includes(q) || (r.positionCode ?? '').includes(q)
+        const name = normalizeSearch(`${r.lastName ?? ''}${r.firstName ?? ''}`)
+        return name.includes(q) || normalizeSearch(r.positionCode ?? '').includes(q)
       })
     : candidates.slice(0, 30)
 

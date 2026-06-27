@@ -102,9 +102,9 @@ describe('detectChanges: その他の変更種別', () => {
     expect(detectChanges(row).patterns.has('titleChange')).toBe(true)
   })
 
-  test('positionCode 変更（org 変更なし）→ vacantPositionMove', () => {
+  test('positionCode 変更（org 変更なし）→ positionChange', () => {
     const row = makeRow({ prevPositionCode: 'P001', positionCode: 'P002' })
-    expect(detectChanges(row).patterns.has('vacantPositionMove')).toBe(true)
+    expect(detectChanges(row).patterns.has('positionChange')).toBe(true)
   })
 
   test('transferReason「4/1付移籍」→ employmentTransfer', () => {

@@ -19,6 +19,28 @@ export function isNoCheckReason(row: AllocationRow, ctx: DetectContext): boolean
 
 // ── バンド比較ヘルパー ────────────────────────────────────────────────────────
 
+/**
+ * jobLevels マスタの promotionDemotionWarningLevel でバンドの方向を比較する。
+ * - 0 は「比較不可」を意味するため、どちらかが 0 なら null を返す
+ * - 両方 non-zero で等しい場合は 'same'（昇降格なし）
+ */
+export function compareBandLevels(
+  prev:  string | undefined,
+  after: string | undefined,
+  ctx:   DetectContext,
+): 'up' | 'down' | 'same' | null {
+  const level = (label: string | undefined): number =>
+    ctx.masters.jobLevels.find(e => e.label === label)?.promotionDemotionWarningLevel ?? 0
+  const p = level(prev)
+  const a = level(after)
+  if (p === 0 || a === 0) return null
+  if (a > p) return 'up'
+  if (a < p) return 'down'
+  return 'same'
+}
+
+// ── 後方互換（旧文字列パース方式）────────────────────────────────────────────
+
 // バンド文字列から数値レベルを抽出（例: "M4" → 4, "G3" → 3, "4" → 4）
 export function parseBandLevel(band: string | undefined | null): number | null {
   if (!band) return null

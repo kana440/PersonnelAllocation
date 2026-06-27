@@ -41,7 +41,7 @@ const SECTIONS: { label: string; patterns: EditPattern[] }[] = [
   },
   {
     label: '組織への異動',
-    patterns: ['orgTransfer', 'orgRestructure', 'managerChange', 'vacantPositionMove'],
+    patterns: ['orgTransfer', 'orgRestructure', 'positionChange', 'managerChange'],
   },
   {
     label: '兼務',
@@ -60,8 +60,7 @@ const SECTIONS: { label: string; patterns: EditPattern[] }[] = [
     label: '在籍・退職',
     patterns: [
       'leaveOfAbsence', 'returnFromLeave',
-      'employmentTransfer', 'termination',
-      'resignation', 'noChange',
+      'employmentTransfer', 'termination', 'noChange',
     ],
   },
 ]

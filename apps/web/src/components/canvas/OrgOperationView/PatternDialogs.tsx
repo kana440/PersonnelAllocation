@@ -1,8 +1,6 @@
 import { OrgTransferDialog }       from '../patternDialogs/OrgTransferDialog'
 import { PromotionDialog }         from '../patternDialogs/PromotionDialog'
 import { JobTypeDialog }           from '../patternDialogs/JobTypeDialog'
-import { ResignationDialog }       from '../patternDialogs/ResignationDialog'
-import { VacantPositionDialog }    from '../patternDialogs/VacantPositionDialog'
 import { SecondmentReleaseDialog } from '../patternDialogs/SecondmentReleaseDialog'
 import type { EditPattern }        from '@personnel/domain/patterns/editPattern'
 
@@ -24,12 +22,6 @@ export function PatternDialogs({ activePatternDialog, onClose }: Props) {
 
   if (pattern === 'jobTypeChange')
     return <JobTypeDialog rowId={rowId} onClose={onClose} />
-
-  if (pattern === 'resignation')
-    return <ResignationDialog rowId={rowId} onClose={onClose} />
-
-  if (pattern === 'vacantPositionMove')
-    return <VacantPositionDialog rowId={rowId} onClose={onClose} />
 
   if (pattern === 'secondmentOutRelease' || pattern === 'secondmentInRelease')
     return <SecondmentReleaseDialog rowId={rowId} onClose={onClose} />

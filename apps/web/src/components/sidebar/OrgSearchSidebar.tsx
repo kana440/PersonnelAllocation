@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import { useScopedStore } from '../../store/useScopedStore'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useOrgTreeState } from './hooks/useOrgTreeState'
 import { useCanvasPanelNav } from './hooks/useCanvasPanelNav'
 import { useSidebarMemberData } from './hooks/useSidebarMemberData'
-import { OrgTreeNode, OrgNodeProvider } from './OrgTreeNode'
+import { VirtualOrgTree, type VirtualOrgTreeHandle } from './VirtualOrgTree'
 import { UnmappedOrgSection } from './UnmappedOrgSection'
 
 export function OrgSearchSidebar() {
@@ -12,14 +13,14 @@ export function OrgSearchSidebar() {
 
   const {
     viewOrgs, afterOrgByCode, afterMembersByOrgId, assignedPersonIds,
-    subtreeCountByOrgId, persons, allocationList, beforeOrgs,
+    subtreeCountByOrgId, persons, allocationList,
   } = useSidebarMemberData()
 
   const { closedCompanies, toggleCompany, expandedOrgIds, toggleOrg, expandToOrg } = useOrgTreeState(viewOrgs)
   const { handlePersonClick, handleOrgClick, openCanvasPanel } = useCanvasPanelNav(viewOrgs, selectPerson)
   const { requestScrollToRow, showVacantPositions, toggleShowVacantPositions } = useCanvasLayoutStore()
 
-  const treeScrollRef = useRef<HTMLDivElement>(null)
+  const treeRef = useRef<VirtualOrgTreeHandle>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; personId: string } | null>(null)
   const [orgSearch, setOrgSearch] = useState('')
 
@@ -61,8 +62,6 @@ export function OrgSearchSidebar() {
     void row
   }
 
-  const viewOrgIds = useMemo(() => new Set(viewOrgs.map(o => o.id)), [viewOrgs])
-
   useEffect(() => {
     if (!selectedCardRowId) return
     const row = allocationList.find(r => r.rowId === selectedCardRowId)
@@ -70,30 +69,25 @@ export function OrgSearchSidebar() {
     const personOrg = afterOrgByCode.get(row.departmentCode)
       ?? viewOrgs.find(o => o.id === row.departmentCode)
     if (!personOrg) return
-    // サイドバーツリーを展開
     expandToOrg(personOrg.id)
-    // after-canvas パネルを展開してスクロール（before-canvas クリック時の cross-canvas 対応）
     openCanvasPanel(personOrg.id)
     requestScrollToRow(selectedCardRowId)
     const id = selectedCardRowId
-    setTimeout(() => {
-      treeScrollRef.current
-        ?.querySelector(`[data-sidebar-rowid="${id}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }, 0)
+    // 展開反映後にスクロール
+    setTimeout(() => treeRef.current?.scrollToRowId(id), 0)
   }, [selectedCardRowId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const orgSearchLower = orgSearch.toLowerCase().trim()
+  const orgSearchLower = normalizeSearch(orgSearch.trim())
   const searchResults = orgSearchLower ? [
     ...viewOrgs
-      .filter(o => o.name.toLowerCase().includes(orgSearchLower))
+      .filter(o => normalizeSearch(o.name).includes(orgSearchLower))
       .map(o => ({
         type: 'org' as const, id: o.id, label: o.name,
         sub: o.companyId ?? '',
         orgId: o.id, rowId: undefined as number | undefined,
       })),
     ...persons
-      .filter(p => p.name.toLowerCase().includes(orgSearchLower))
+      .filter(p => normalizeSearch(p.name).includes(orgSearchLower))
       .map(p => {
         const row = allocationList.find(r => r.userId === p.sfPersonId && r.concurrentType !== '兼務')
         const org = row?.departmentCode ? afterOrgByCode.get(row.departmentCode) : null
@@ -105,16 +99,43 @@ export function OrgSearchSidebar() {
       }),
   ] : []
 
-  const orgNodeCtx = {
-    viewOrgs, afterMembersByOrgId, subtreeCountByOrgId, beforeOrgs,
-    expandedOrgIds, selectedCardRowId, showVacantPositions,
-    toggleOrg,
-    onOrgClick:          handleOrgClick,
-    onPersonClick:       handlePersonClick,
-    onPersonDoubleClick: enterEditForPerson,
-    onPersonContextMenu: handlePersonContextMenu,
-    onPersonDragStart:   handlePersonDragStart,
-  }
+  const treeFooter = (
+    <>
+      <UnmappedOrgSection />
+      {(() => {
+        const unassigned = persons.filter(p => !assignedPersonIds.has(p.id))
+        if (unassigned.length === 0) return null
+        return (
+          <div className="border border-dashed border-gray-200 rounded mx-1 mt-1">
+            <div className="px-2 py-1 text-xs font-semibold text-gray-400 bg-gray-50 rounded-t">
+              所属なし ({unassigned.length})
+            </div>
+            <div className="px-1 py-0.5">
+              {unassigned.map(p => (
+                <button
+                  key={p.id}
+                  draggable
+                  onClick={() => selectPerson(p.id)}
+                  onDoubleClick={() => enterEditForPerson(p.id)}
+                  onContextMenu={e => handlePersonContextMenu(e, p.id)}
+                  className={`w-full text-left flex items-center gap-1 py-0.5 px-1 rounded text-xs transition-colors cursor-grab active:cursor-grabbing ${
+                    selectedPersonId === p.id ? 'bg-yellow-50 text-gray-800 font-semibold' : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="text-gray-300 flex-shrink-0">—</span>
+                  <span className="truncate">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+      <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-400 pt-1 border-t border-gray-100 px-2 pb-1 mt-1">
+        <span><span className="text-blue-400 mr-0.5">↑</span>役職変更</span>
+        <span><span className="text-orange-500 font-bold mr-0.5">!</span>異動事由未入力</span>
+      </div>
+    </>
+  )
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -171,77 +192,25 @@ export function OrgSearchSidebar() {
           ))}
         </div>
       ) : (
-        <div ref={treeScrollRef} className="flex-1 overflow-y-auto min-h-0 px-1 space-y-1 pb-1">
-          <OrgNodeProvider value={orgNodeCtx}>
-            {(() => {
-              const allCompanies = [...new Set(viewOrgs.map(o => o.companyId))]
-                .filter(Boolean)
-                .map(id => ({ id: id!, name: id! }))
-              return allCompanies.map(company => {
-                const rootOrgs = viewOrgs.filter(
-                  o => o.companyId === company.id && (!o.parentId || !viewOrgIds.has(o.parentId))
-                )
-                if (rootOrgs.length === 0) return null
-                const isOpen = !closedCompanies.has(company.id)
-                return (
-                  <div key={company.id} className="border border-gray-200 rounded">
-                    <button
-                      onClick={() => toggleCompany(company.id)}
-                      className="w-full flex items-center justify-between px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded transition-colors"
-                    >
-                      <span className="truncate">{company.name}</span>
-                      <span className="text-gray-400 flex-shrink-0">{isOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {isOpen && (
-                      <div className="px-1 py-1">
-                        {rootOrgs.map(org => <OrgTreeNode key={org.id} org={org} depth={0} />)}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            })()}
-          </OrgNodeProvider>
-
-          {/* 旧組織（未割当）— departmentCode が新マスタに存在しない行 */}
-          <UnmappedOrgSection />
-
-          {/* 所属なし */}
-          {(() => {
-            const unassigned = persons.filter(p => !assignedPersonIds.has(p.id))
-            if (unassigned.length === 0) return null
-            return (
-              <div className="border border-dashed border-gray-200 rounded">
-                <div className="px-2 py-1 text-xs font-semibold text-gray-400 bg-gray-50 rounded-t">
-                  所属なし ({unassigned.length})
-                </div>
-                <div className="px-1 py-0.5">
-                  {unassigned.map(p => (
-                    <button
-                      key={p.id}
-                      draggable
-                      onClick={() => selectPerson(p.id)}
-                      onDoubleClick={() => enterEditForPerson(p.id)}
-                      onContextMenu={e => handlePersonContextMenu(e, p.id)}
-                      className={`w-full text-left flex items-center gap-1 py-0.5 px-1 rounded text-xs transition-colors cursor-grab active:cursor-grabbing ${
-                        selectedPersonId === p.id ? 'bg-yellow-50 text-gray-800 font-semibold' : 'text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="text-gray-300 flex-shrink-0">—</span>
-                      <span className="truncate">{p.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* 凡例 */}
-          <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-400 pt-1 border-t border-gray-100 px-1 pb-1">
-            <span><span className="text-blue-400 mr-0.5">↑</span>役職変更</span>
-            <span><span className="text-orange-500 font-bold mr-0.5">!</span>異動事由未入力</span>
-          </div>
-        </div>
+        <VirtualOrgTree
+          ref={treeRef}
+          className="flex-1 px-1 pb-1"
+          viewOrgs={viewOrgs}
+          membersByOrgId={afterMembersByOrgId}
+          subtreeCountByOrgId={subtreeCountByOrgId}
+          showVacantPositions={showVacantPositions}
+          expandedOrgIds={expandedOrgIds}
+          closedCompanies={closedCompanies}
+          selectedCardRowId={selectedCardRowId}
+          toggleCompany={toggleCompany}
+          toggleOrg={toggleOrg}
+          onOrgClick={handleOrgClick}
+          onPersonClick={handlePersonClick}
+          onPersonDoubleClick={enterEditForPerson}
+          onPersonContextMenu={handlePersonContextMenu}
+          onPersonDragStart={handlePersonDragStart}
+          footer={treeFooter}
+        />
       )}
 
       {contextMenu && (

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { normalizeSearch } from '../../../utils/normalizeSearch'
 import { useStore } from '../../../store/useStore'
 import { appService } from '../../../application/HRApplicationService'
 import { ModalShell } from '../../common/ModalShell'
@@ -34,12 +35,12 @@ export function VacantPositionDialog({ rowId, onClose }: Props) {
   }, [allocationList, afterOrganizations, rowId])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeSearch(query.trim())
     if (!q) return vacantEntries
     return vacantEntries.filter(e =>
-      e.title.toLowerCase().includes(q) ||
-      (e.row.positionCode ?? '').toLowerCase().includes(q) ||
-      e.orgName.toLowerCase().includes(q)
+      normalizeSearch(e.title).includes(q) ||
+      normalizeSearch(e.row.positionCode ?? '').includes(q) ||
+      normalizeSearch(e.orgName).includes(q)
     )
   }, [vacantEntries, query])
 

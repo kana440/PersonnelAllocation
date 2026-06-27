@@ -23,7 +23,7 @@ export { withLeavePositionVacant, countSubordinates } from './positionVacant'
 export { promotionDef, demotionDef, titleChangeDef } from './promotionDefs'
 
 // ── 職務内容・雇用形態 ────────────────────────────────────────────────────────
-export { jobTypeChangeDef, employmentExtensionDef } from './employmentTypeDefs'
+export { jobTypeChangeDef, employmentExtensionDef, employmentExtensionCancelDef } from './employmentTypeDefs'
 
 // ── 組織への異動 ──────────────────────────────────────────────────────────────
 export { orgTransferDef, orgRestructureDef } from './orgTransferDefs'
@@ -31,19 +31,23 @@ export { orgTransferDef, orgRestructureDef } from './orgTransferDefs'
 // ── 兼務 ─────────────────────────────────────────────────────────────────────
 export { concurrentAddDef, concurrentAddNewDef, concurrentAddCancelDef, concurrentReleaseDef } from './concurrentDefs'
 
-// ── 出向 ─────────────────────────────────────────────────────────────────────
+// ── 本務出向 ──────────────────────────────────────────────────────────────────
 export {
   secondmentOutSFDef, secondmentOutNonSFDef,
   secondmentInNewDef,
-  concurrentSecondmentOutNonSFDef,
-  concurrentSecondmentInNewDef,
   secondmentOutReleaseSFDef,       secondmentOutReleaseNonSFDef,
   secondmentInReleaseSFDef,        secondmentInReleaseNonSFDef,
+  secondmentInCancelDef,
+} from './secondmentMainDefs'
+
+// ── 兼務出向 ──────────────────────────────────────────────────────────────────
+export {
+  concurrentSecondmentOutNonSFDef,
+  concurrentSecondmentInNewDef,
   concurrentSecondmentOutReleaseSFDef, concurrentSecondmentOutReleaseNonSFDef,
   concurrentSecondmentInReleaseSFDef,  concurrentSecondmentInReleaseNonSFDef,
-  secondmentInCancelDef,
   concurrentSecondmentInCancelDef,
-} from './secondmentDefs'
+} from './secondmentConcurrentDefs'
 
 // ── 在籍・退職 ────────────────────────────────────────────────────────────────
 export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employmentTransferDef, noChangeDef, noChangeCancelDef } from './personDefs'
@@ -60,7 +64,8 @@ import { DEFS as promotion }       from './promotionDefs'
 import { DEFS as employmentType }  from './employmentTypeDefs'
 import { DEFS as orgTransfer }     from './orgTransferDefs'
 import { DEFS as concurrent }      from './concurrentDefs'
-import { DEFS as secondment }      from './secondmentDefs'
+import { DEFS as secondmentMain }       from './secondmentMainDefs'
+import { DEFS as secondmentConcurrent } from './secondmentConcurrentDefs'
 import { DEFS as person }          from './personDefs'
 import { DEFS as positionAdd }     from './positionAddDef'
 
@@ -69,7 +74,8 @@ export const ALL_EDIT_OPERATIONS: EditOperation[] = [
   ...employmentType,
   ...orgTransfer,
   ...concurrent,
-  ...secondment,
+  ...secondmentMain,
+  ...secondmentConcurrent,
   ...person,
   ...positionAdd,
 ]

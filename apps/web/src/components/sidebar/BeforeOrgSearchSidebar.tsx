@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import { useStore } from '../../store/useStore'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useScopedStore } from '../../store/useScopedStore'
 import { useOrgTreeState } from './hooks/useOrgTreeState'
-import { OrgTreeNode, OrgNodeProvider } from './OrgTreeNode'
+import { VirtualOrgTree, type VirtualOrgTreeHandle } from './VirtualOrgTree'
 import { buildOrgMap } from '@personnel/domain/choices/rows'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
@@ -20,16 +21,15 @@ function subtreeCount(
 
 export function BeforeOrgSearchSidebar() {
   const {
-    beforeOrganizations, afterOrganizations, persons,
+    beforeOrganizations, persons,
     selectedCardRowId, selectedCardSource, selectCard,
   } = useStore()
   const { allocationList } = useScopedStore()
   const { comparisonPanels, setComparisonOrgOpen, requestScrollToBeforeRow } = useCanvasLayoutStore()
 
-  const treeScrollRef = useRef<HTMLDivElement>(null)
+  const treeRef = useRef<VirtualOrgTreeHandle>(null)
   const [orgSearch, setOrgSearch] = useState('')
 
-  // before-org ごとのメンバーマップ（prevDepartmentCode で紐付け）
   const { beforeMembersByOrgId, subtreeCountByOrgId } = useMemo(() => {
     const beforeOrgByCode = buildOrgMap(beforeOrganizations)
     const personBySfId = new Map(persons.map(p => [p.sfPersonId ?? '', p]))
@@ -65,12 +65,6 @@ export function BeforeOrgSearchSidebar() {
   }, [beforeOrganizations, allocationList, persons])
 
   const viewOrgs = useMemo(() => beforeOrganizations.filter(o => !o.isAbandoned), [beforeOrganizations])
-  const viewOrgIds = useMemo(() => new Set(viewOrgs.map(o => o.id)), [viewOrgs])
-
-  const afterOrgExtCodes = useMemo(
-    () => new Set(afterOrganizations.filter(o => o.externalCode).map(o => o.externalCode!)),
-    [afterOrganizations],
-  )
 
   const { closedCompanies, toggleCompany, expandedOrgIds, toggleOrg, expandToOrg } = useOrgTreeState(viewOrgs)
 
@@ -85,44 +79,29 @@ export function BeforeOrgSearchSidebar() {
     requestScrollToBeforeRow(rowId)
   }
 
-  const handleOrgClick = (orgId: string) => {
-    openComparisonPanel(orgId)
-  }
+  const handleOrgClick = (orgId: string) => { openComparisonPanel(orgId) }
 
-  // 選択カード変更時にサイドバーツリーを展開（OrgSearchSidebar と同パターン）
-  // source に関わらず展開・スクロール。hidden 要素へのスクロールは無害なので条件分岐しない
   useEffect(() => {
     if (!selectedCardRowId) return
     const row = allocationList.find(r => r.rowId === selectedCardRowId)
     if (!row?.prevDepartmentCode) return
-    // viewOrgs（廃止除外）で検索: expandToOrg は viewOrgs にない id を無視するため
     const org = viewOrgs.find(o => o.externalCode === row.prevDepartmentCode)
     if (!org) return
     expandToOrg(org.id)
     const id = selectedCardRowId
-    setTimeout(() => {
-      treeScrollRef.current
-        ?.querySelector(`[data-sidebar-rowid="${id}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }, 0)
+    setTimeout(() => treeRef.current?.scrollToRowId(id), 0)
   }, [selectedCardRowId, selectedCardSource]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getOrgChangeStatus = (orgId: string): 'changed' | 'new' | 'removed' | null => {
-    const org = beforeOrganizations.find(o => o.id === orgId)
-    if (!org?.externalCode) return null
-    return afterOrgExtCodes.has(org.externalCode) ? null : 'removed'
-  }
-
-  const orgSearchLower = orgSearch.toLowerCase().trim()
+  const orgSearchLower = normalizeSearch(orgSearch.trim())
   const searchResults = orgSearchLower ? [
     ...viewOrgs
-      .filter(o => o.name.toLowerCase().includes(orgSearchLower))
+      .filter(o => normalizeSearch(o.name).includes(orgSearchLower))
       .map(o => ({
         type: 'org' as const, id: o.id, label: o.name,
         sub: o.companyId ?? '', orgId: o.id, rowId: undefined as number | undefined,
       })),
     ...persons.flatMap(p => {
-      if (!p.name.toLowerCase().includes(orgSearchLower)) return []
+      if (!normalizeSearch(p.name).includes(orgSearchLower)) return []
       const rows = allocationList.filter(r => r.userId === p.sfPersonId && !!r.prevDepartmentCode)
       return rows.map(row => {
         const org = beforeOrganizations.find(o => o.externalCode === row.prevDepartmentCode)
@@ -134,23 +113,17 @@ export function BeforeOrgSearchSidebar() {
     }),
   ] : []
 
-  const orgNodeCtx = {
-    viewOrgs,
-    afterMembersByOrgId: beforeMembersByOrgId,
-    subtreeCountByOrgId,
-    beforeOrgs: beforeOrganizations, // 同一リスト → isNewOrg = false（「新」バッジ非表示）
-    expandedOrgIds,
-    selectedCardRowId,
-    showVacantPositions: false,
-    toggleOrg,
-    onOrgClick:          handleOrgClick,
-    onPersonClick:       handlePersonClick,
-    onPersonDoubleClick: () => {},
-    onPersonContextMenu: () => {},
-    onPersonDragStart:   () => {},
-    hasPersonChanges:    () => false,
-    getOrgChangeStatus,
-  }
+  // VirtualOrgTree は person: Person | null を期待するため cast
+  const membersByOrgIdNullable = beforeMembersByOrgId as Map<
+    string,
+    Array<{ row: AllocationRow; person: Person | null }>
+  >
+
+  const treeFooter = (
+    <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 pt-1 border-t border-gray-100 px-2 pb-1 mt-1">
+      <span><span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 mr-0.5 align-middle" />廃止組織</span>
+    </div>
+  )
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -194,43 +167,25 @@ export function BeforeOrgSearchSidebar() {
           ))}
         </div>
       ) : (
-        <div ref={treeScrollRef} className="flex-1 overflow-y-auto min-h-0 px-1 space-y-1 pb-1">
-          <OrgNodeProvider value={orgNodeCtx}>
-            {(() => {
-              const allCompanies = [...new Set(viewOrgs.map(o => o.companyId))]
-                .filter(Boolean)
-                .map(id => ({ id: id!, name: id! }))
-              return allCompanies.map(company => {
-                const rootOrgs = viewOrgs.filter(
-                  o => o.companyId === company.id && (!o.parentId || !viewOrgIds.has(o.parentId))
-                )
-                if (rootOrgs.length === 0) return null
-                const isOpen = !closedCompanies.has(company.id)
-                return (
-                  <div key={company.id} className="border border-gray-200 rounded">
-                    <button
-                      onClick={() => toggleCompany(company.id)}
-                      className="w-full flex items-center justify-between px-2 py-1 bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700 rounded transition-colors"
-                    >
-                      <span className="truncate">{company.name}</span>
-                      <span className="text-gray-400 flex-shrink-0">{isOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {isOpen && (
-                      <div className="px-1 py-1">
-                        {rootOrgs.map(org => <OrgTreeNode key={org.id} org={org} depth={0} />)}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            })()}
-          </OrgNodeProvider>
-
-          {/* 凡例 */}
-          <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 pt-1 border-t border-gray-100 px-1 pb-1">
-            <span><span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 mr-0.5 align-middle" />廃止組織</span>
-          </div>
-        </div>
+        <VirtualOrgTree
+          ref={treeRef}
+          className="flex-1 px-1 pb-1"
+          viewOrgs={viewOrgs}
+          membersByOrgId={membersByOrgIdNullable}
+          subtreeCountByOrgId={subtreeCountByOrgId}
+          showVacantPositions={false}
+          expandedOrgIds={expandedOrgIds}
+          closedCompanies={closedCompanies}
+          selectedCardRowId={selectedCardRowId}
+          toggleCompany={toggleCompany}
+          toggleOrg={toggleOrg}
+          onOrgClick={handleOrgClick}
+          onPersonClick={handlePersonClick}
+          onPersonDoubleClick={() => {}}
+          onPersonContextMenu={() => {}}
+          onPersonDragStart={() => {}}
+          footer={treeFooter}
+        />
       )}
     </div>
   )

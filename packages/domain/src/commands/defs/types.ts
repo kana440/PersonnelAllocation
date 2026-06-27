@@ -23,10 +23,12 @@ export function unavailable(reason: string): AvailabilityResult {
 /**
  * 操作の概念グループ。UI でのメニュー分類・説明文に使用する。
  *   position        : ポジション操作（組織・上司・兼務など、席に関する変更）
- *   jobClassification: 職務情報操作（バンド・役職・ジョブタイプなど、任用条件の変更）
- *   person          : 人操作（在籍状況・雇用形態・出向・移籍など）
+ *   jobClassification    : 職務情報操作（バンド・役職・ジョブタイプなど、任用条件の変更）
+ *   person              : 人操作（在籍状況・雇用形態・移籍など）
+ *   secondmentMain      : 本務出向操作（出向・受入・解除）
+ *   secondmentConcurrent: 兼務出向操作（出向・受入・解除）
  */
-export type OperationGroup = 'position' | 'jobClassification' | 'person'
+export type OperationGroup = 'position' | 'jobClassification' | 'person' | 'secondmentMain' | 'secondmentConcurrent'
 
 /**
  * 操作の排他ロール宣言。行ごとの相互排他・取消ペアを宣言的に表現する。

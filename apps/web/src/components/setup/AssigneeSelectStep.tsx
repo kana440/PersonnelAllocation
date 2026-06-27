@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/types'
 
 interface AssigneeGroup {
@@ -69,15 +70,15 @@ export function AssigneeSelectStep({ result, onSelect, onBack, noHeader }: Props
   )
 
   // 担当者名フィルタ
-  const searchLower = search.toLowerCase().trim()
+  const searchLower = normalizeSearch(search.trim())
   // 組織名フィルタ
-  const orgSearchLower = orgSearch.toLowerCase().trim()
+  const orgSearchLower = normalizeSearch(orgSearch.trim())
 
   const filteredGroups = useMemo(() => {
     return namedGroups.filter(g => {
-      const matchesAssignee = !searchLower || g.name.toLowerCase().includes(searchLower)
+      const matchesAssignee = !searchLower || normalizeSearch(g.name).includes(searchLower)
       const matchesOrg = !orgSearchLower ||
-        Array.from(g.orgCounts.keys()).some(orgName => orgName.toLowerCase().includes(orgSearchLower))
+        Array.from(g.orgCounts.keys()).some(orgName => normalizeSearch(orgName).includes(orgSearchLower))
       return matchesAssignee && matchesOrg
     })
   }, [namedGroups, searchLower, orgSearchLower])

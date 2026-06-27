@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import type { FieldStrictness } from '@personnel/domain/optionStrictness'
 
@@ -51,9 +52,9 @@ export function ComboInput({ value, onChange, onCommit, options, invalidOptions 
 
   useClickOutside([containerRef, dropdownRef], () => setOpen(false), open)
 
-  const q = input.toLowerCase()
-  const filteredValid   = typed ? options.filter(o => o.toLowerCase().includes(q))        : options
-  const filteredInvalid = typed ? invalidOptions.filter(o => o.toLowerCase().includes(q)) : invalidOptions
+  const q = normalizeSearch(input)
+  const filteredValid   = typed ? options.filter(o => normalizeSearch(o).includes(q))        : options
+  const filteredInvalid = typed ? invalidOptions.filter(o => normalizeSearch(o).includes(q)) : invalidOptions
 
   const commit = (v: string) => {
     setInput(v)

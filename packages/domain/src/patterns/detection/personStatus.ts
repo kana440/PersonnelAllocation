@@ -12,11 +12,10 @@ export function detectPersonStatus(row: AllocationRow): Set<EditPattern> {
   if (!prevLeave && afterLeave)  out.add('leaveOfAbsence')
   if (prevLeave  && !afterLeave) out.add('returnFromLeave')
 
-  // 移籍・退職・変更なし（transferReason 文字列ベース）
+  // 移籍・退職（transferReason ベース）
   const tr = (row.transferReason as string | undefined) ?? ''
   if (tr === TR.TRANSFER)    out.add('employmentTransfer')
   if (tr === TR.TERMINATION) out.add('termination')
-  if (tr.includes('退職') || tr.includes('退任'))        out.add('resignation')
 
   return out
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { normalizeSearch } from '../../utils/normalizeSearch'
 import { FIELD_LABELS } from './tableRegistry'
 
 interface Props {
@@ -35,12 +36,12 @@ export function MasterTable({ data }: Props) {
   }
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase()
+    const q = normalizeSearch(search)
     let list = q
       ? data.filter(row =>
           columns.some(c => {
             const v = row[c]
-            return typeof v === 'string' && v.toLowerCase().includes(q)
+            return typeof v === 'string' && normalizeSearch(v).includes(q)
           })
         )
       : data

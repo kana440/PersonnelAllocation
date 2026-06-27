@@ -9,6 +9,9 @@ import {
   WINDOW_W, EST_WIN_H, CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
 } from './treeWindowLayout'
+import { FilterBar }           from './FilterBar'
+import { applyCanvasFilters, buildSubtreeMap } from './FilterBar/filterLogic'
+import { findSecondmentOrgCode } from '@personnel/domain/commands/helpers'
 
 export function TreeWindowCanvas() {
   const {
@@ -18,24 +21,94 @@ export function TreeWindowCanvas() {
     panelHeights,
     triggerComparisonArrange,
     canvasZoom, setCanvasZoom, stepCanvasZoom,
+    filterCards, globalFilters,
   } = useCanvasLayoutStore()
-  const selectedOrgId     = useStore(s => s.selectedOrgId)
-  const { organizations } = useOrgView()
+  const selectedOrgId       = useStore(s => s.selectedOrgId)
+  const { masters }         = useStore()
+  const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()
+
+  // ── フィルタ用計算 ─────────────────────────────────────────────
+  const memberOrgIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const [orgId, pos] of positionTreeByOrgId) {
+      if (pos.length > 0) ids.add(orgId)
+    }
+    for (const [orgId, members] of afterMembersByOrgId) {
+      if (members.length > 0) ids.add(orgId)
+    }
+    return ids
+  }, [positionTreeByOrgId, afterMembersByOrgId])
+
+  // org → 全子孫マップ（サブツリーフィルタ用）
+  const subtreeMap = useMemo(() => buildSubtreeMap(organizations), [organizations])
+
+  // 出向アンカーの強制表示セット
+  const secondmentOrgIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const anchorId of globalFilters.secondmentAnchors) {
+      ids.add(anchorId)
+      const anchor = organizations.find(o => o.id === anchorId)
+      if (!anchor?.externalCode) continue
+      const code = findSecondmentOrgCode(anchor.externalCode, organizations, masters)
+      if (code) {
+        const sOrg = organizations.find(o => o.externalCode === code)
+        if (sOrg) ids.add(sOrg.id)
+      }
+    }
+    return ids
+  }, [globalFilters.secondmentAnchors, organizations, masters])
+
+  // Pass 1: 通常フィルタ（出向展開なし）
+  const primaryFilteredPanels = useMemo(
+    () => applyCanvasFilters({
+      panels, filterCards, globalFilters,
+      allOrgs: organizations, orgMasterEntries: masters.orgMasterEntries,
+      memberOrgIds, secondmentOrgIds, subtreeMap,
+    }),
+    [panels, filterCards, globalFilters, organizations, masters.orgMasterEntries, memberOrgIds, secondmentOrgIds, subtreeMap],
+  )
+
+  // Pass 2: 「出向組織含む」が ON のとき、表示中の各組織の出向者用組織を追加
+  const relatedSecondmentOrgIds = useMemo(() => {
+    if (!globalFilters.includeRelatedSecondmentOrgs) return new Set<string>()
+    const ids = new Set<string>()
+    for (const panel of primaryFilteredPanels) {
+      const org = organizations.find(o => o.id === panel.orgId)
+      if (!org?.externalCode) continue
+      const code = findSecondmentOrgCode(org.externalCode, organizations, masters)
+      if (code) {
+        const sOrg = organizations.find(o => o.externalCode === code)
+        if (sOrg) ids.add(sOrg.id)
+      }
+    }
+    return ids
+  }, [primaryFilteredPanels, globalFilters.includeRelatedSecondmentOrgs, organizations, masters])
+
+  const filteredPanels = useMemo(() => {
+    if (!globalFilters.includeRelatedSecondmentOrgs || relatedSecondmentOrgIds.size === 0) {
+      return primaryFilteredPanels
+    }
+    const extra = panels.filter(p =>
+      relatedSecondmentOrgIds.has(p.orgId) &&
+      !primaryFilteredPanels.some(pp => pp.orgId === p.orgId),
+    )
+    return [...primaryFilteredPanels, ...extra]
+  }, [primaryFilteredPanels, relatedSecondmentOrgIds, panels, globalFilters.includeRelatedSecondmentOrgs])
 
   // ── スタンドアロンパネルと表示座標 ───────────────────────────────
   const standalonePanels = useMemo(
-    () => panels.filter(p => isStandaloneWindow(p, panels, organizations)),
-    [panels, organizations],
+    () => filteredPanels.filter(p => isStandaloneWindow(p, filteredPanels, organizations)),
+    [filteredPanels, organizations],
   )
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
-    const posMap = computeLayout(standalonePanels, panels, organizations, panelHeights)
+    const posMap = computeLayout(standalonePanels, filteredPanels, organizations, panelHeights)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [autoArrange, standalonePanels, panels, organizations, panelHeights])
+  }, [autoArrange, standalonePanels, filteredPanels, organizations, panelHeights])
 
   const connections = useMemo(
     () => buildConnections(displayPanels, organizations),
@@ -49,23 +122,21 @@ export function TreeWindowCanvas() {
 
   // ── 整列ボタン ──────────────────────────────────────────────────
   const handleArrange = useCallback(() => {
-    setPositions(computeLayout(standalonePanels, panels, organizations, panelHeights))
+    setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights))
     triggerComparisonArrange()
-  }, [standalonePanels, panels, organizations, panelHeights, setPositions, triggerComparisonArrange])
+  }, [standalonePanels, filteredPanels, organizations, panelHeights, setPositions, triggerComparisonArrange])
 
   const handleAutoArrangeChange = useCallback((checked: boolean) => {
-    if (!checked) setPositions(computeLayout(standalonePanels, panels, organizations, panelHeights))
+    if (!checked) setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights))
     setAutoArrange(checked)
     if (checked) triggerComparisonArrange()
-  }, [standalonePanels, panels, organizations, panelHeights, setPositions, setAutoArrange, triggerComparisonArrange])
+  }, [standalonePanels, filteredPanels, organizations, panelHeights, setPositions, setAutoArrange, triggerComparisonArrange])
 
   // ── スクロール（人物・組織）────────────────────────────────────
   const { scrollerRef }                              = useCanvasScroll(displayPanels, organizations)
   const { spaceHeld, panning, band, handleCanvasMouseDown } = useCanvasInteraction(scrollerRef)
 
   // ── Ctrl+Wheel ズーム ─────────────────────────────────────────
-  // displayPanels.length > 0 を dep に含めることで、Excel 読込後にスクローラーが
-  // 現れたタイミングで effect を再実行し、リスナーを正しく登録する
   const hasCanvasContent = displayPanels.length > 0
   useEffect(() => {
     const el = scrollerRef.current
@@ -91,16 +162,11 @@ export function TreeWindowCanvas() {
     return () => document.removeEventListener('mousedown', onDown)
   }, [zoomDropdownOpen])
 
-  if (displayPanels.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        Excel を読み込むと組織が表示されます
-      </div>
-    )
-  }
-
   return (
-    <div className="relative h-full">
+    <div className="flex flex-col h-full">
+      <FilterBar />
+
+      <div className="relative flex-1 min-h-0">
       {/* ツールバー（右上固定） */}
       <div className="absolute top-2 right-3 z-10 flex items-center gap-2">
         <label className="flex items-center gap-1 cursor-pointer select-none px-2 h-[26px] border border-gray-300 bg-white rounded shadow-sm">
@@ -130,7 +196,6 @@ export function TreeWindowCanvas() {
 
         {/* ── ズームコントロール ── */}
         <div ref={zoomDropdownRef} className="relative flex items-stretch border border-gray-300 rounded bg-white shadow-sm divide-x divide-gray-200">
-          {/* 縮小ボタン（虫眼鏡−） */}
           <button
             onClick={() => stepCanvasZoom(-0.1)}
             disabled={canvasZoom <= 0.25}
@@ -144,7 +209,6 @@ export function TreeWindowCanvas() {
             </svg>
           </button>
 
-          {/* ズームレベル表示（クリックでプリセット選択） */}
           <button
             onClick={() => setZoomDropdownOpen(v => !v)}
             className="flex items-center gap-0.5 px-1.5 h-[26px] text-[11px] text-gray-700 hover:bg-gray-50 tabular-nums min-w-[44px] justify-center transition-colors"
@@ -156,7 +220,6 @@ export function TreeWindowCanvas() {
             </svg>
           </button>
 
-          {/* 拡大ボタン（虫眼鏡+） */}
           <button
             onClick={() => stepCanvasZoom(0.1)}
             disabled={canvasZoom >= 2.0}
@@ -171,7 +234,6 @@ export function TreeWindowCanvas() {
             </svg>
           </button>
 
-          {/* プリセットドロップダウン */}
           {zoomDropdownOpen && (
             <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg py-1 z-50 min-w-[80px]">
               {[25, 50, 75, 100, 125, 150, 175, 200].map(pct => (
@@ -212,53 +274,59 @@ export function TreeWindowCanvas() {
         />
       )}
 
-      <div
-        ref={scrollerRef}
-        className="h-full overflow-auto bg-[#e8ecf0]"
-        style={{ cursor: panning ? 'grabbing' : spaceHeld ? 'grab' : undefined }}
-        onMouseDown={handleCanvasMouseDown}
-        onContextMenu={e => { if (e.ctrlKey || e.metaKey) e.preventDefault() }}
-      >
-        {/* ズームラッパー: スクロール可能領域をズーム後サイズに合わせる */}
-        <div style={{ width: canvasWidth * canvasZoom, height: canvasHeight * canvasZoom, position: 'relative' }}>
-          <div
-            style={{
-              width: canvasWidth, height: canvasHeight,
-              position: 'absolute', top: 0, left: 0,
-              transformOrigin: 'top left',
-              transform: `scale(${canvasZoom})`,
-            }}
-          >
-
-            {/* SVG 接続線レイヤー */}
-            <svg
-              className="absolute inset-0 pointer-events-none"
-              width={canvasWidth} height={canvasHeight}
-              style={{ zIndex: 0 }}
+      {displayPanels.length === 0 ? (
+        <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+          {panels.length === 0
+            ? 'Excel を読み込むと組織が表示されます'
+            : 'フィルタ条件に一致する組織がありません'}
+        </div>
+      ) : (
+        <div
+          ref={scrollerRef}
+          className="h-full overflow-auto bg-[#e8ecf0]"
+          style={{ cursor: panning ? 'grabbing' : spaceHeld ? 'grab' : undefined }}
+          onMouseDown={handleCanvasMouseDown}
+          onContextMenu={e => { if (e.ctrlKey || e.metaKey) e.preventDefault() }}
+        >
+          <div style={{ width: canvasWidth * canvasZoom, height: canvasHeight * canvasZoom, position: 'relative' }}>
+            <div
+              style={{
+                width: canvasWidth, height: canvasHeight,
+                position: 'absolute', top: 0, left: 0,
+                transformOrigin: 'top left',
+                transform: `scale(${canvasZoom})`,
+              }}
             >
-              {connections.map(({ parentPanel, childPanel }) => (
-                <path
-                  key={`${parentPanel.id}-${childPanel.id}`}
-                  d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
-                  fill="none"
-                  stroke="#93a3b8"
-                  strokeWidth="1.5"
-                  strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
-                />
-              ))}
-            </svg>
-
-            {displayPanels.map(panel => (
-              <div
-                key={panel.id}
-                className="absolute"
-                style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+              <svg
+                className="absolute inset-0 pointer-events-none"
+                width={canvasWidth} height={canvasHeight}
+                style={{ zIndex: 0 }}
               >
-                <TreeWindow panel={panel} isSelected={selectedOrgId === panel.orgId} />
-              </div>
-            ))}
+                {connections.map(({ parentPanel, childPanel }) => (
+                  <path
+                    key={`${parentPanel.id}-${childPanel.id}`}
+                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
+                    fill="none"
+                    stroke="#93a3b8"
+                    strokeWidth="1.5"
+                    strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
+                  />
+                ))}
+              </svg>
+
+              {displayPanels.map(panel => (
+                <div
+                  key={panel.id}
+                  className="absolute"
+                  style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+                >
+                  <TreeWindow panel={panel} isSelected={selectedOrgId === panel.orgId} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+      )}
       </div>
     </div>
   )

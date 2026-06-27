@@ -38,9 +38,10 @@ const SECTIONS: Section[] = [
   {
     label: '職務内容・雇用形態',
     ops: [
-      { id: 'JobTypeChange',        shortLabel: '職種変更' },
-      { id: 'EmploymentExtension',  shortLabel: '雇用延長' },
-      { id: 'EmploymentTypeChange', shortLabel: '雇用タイプ変更' },
+      { id: 'JobTypeChange',              shortLabel: '職種変更' },
+      { id: 'EmploymentExtension',        shortLabel: '雇用延長' },
+      { id: 'EmploymentExtensionCancel',  shortLabel: '雇用延長取消', cancel: true },
+      { id: 'EmploymentTypeChange',       shortLabel: '雇用タイプ変更' },
     ],
   },
   {

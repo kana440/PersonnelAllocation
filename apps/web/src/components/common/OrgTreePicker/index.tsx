@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { normalizeSearch } from '../../../utils/normalizeSearch'
 import type { Organization }  from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { useOrgTreeData }     from './useOrgTreeData'
@@ -33,10 +34,10 @@ export function OrgTreePicker({
   }
 
   const searchResults = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = normalizeSearch(query.trim())
     if (!q) return null
     return active.filter(o =>
-      o.name.toLowerCase().includes(q) || (o.externalCode ?? '').toLowerCase().includes(q),
+      normalizeSearch(o.name).includes(q) || normalizeSearch(o.externalCode ?? '').includes(q),
     )
   }, [active, query])
 

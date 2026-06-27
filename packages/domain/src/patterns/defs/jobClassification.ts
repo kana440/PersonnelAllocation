@@ -1,53 +1,25 @@
 import type { AllocationRow } from '../../allocationRow'
 import type { EditPatternMeta } from './types'
 import type { DetectContext } from '../detection/helpers'
-import { isNoCheckReason, parseBandLevel } from '../detection/helpers'
+import { isNoCheckReason, compareBandLevels } from '../detection/helpers'
 import { TR } from '../../transferReasonLabels'
 
-// band / positionBand の前後を比較して昇格・降格・役職変更を判定するヘルパー
-function detectBandChangeKind(row: AllocationRow, ctx: DetectContext): 'promotion' | 'demotion' | 'titleChange' | null {
-  const bandChanged    = (row.prevBand         ?? '') !== (row.band         ?? '')
-  const posBandChanged = (row.prevPositionBand ?? '') !== (row.positionBand ?? '')
-  if (!bandChanged && !posBandChanged) return null
+// ── 分類型 ──────────────────────────────────────────────────────────────────
+// ここに列挙されたパターンは互いに排他。classifyBandTitle() が唯一の判定ソース。
 
-  if (bandChanged) {
-    const prevLevel  = parseBandLevel(row.prevBand as string | undefined)
-    const afterLevel = parseBandLevel(row.band as string | undefined)
+type BandTitleKind =
+  | 'promotion'             // 本人バンド UP
+  | 'promotionPositionOnly' // 本人バンド比較不可、ポジションバンド UP
+  | 'demotion'              // 本人バンド DOWN
+  | 'demotionPositionOnly'  // 本人バンド比較不可、ポジションバンド DOWN
+  | 'bandChange'            // 本人バンド変化、比較不可（方向不明）
+  | 'bandChangePositionOnly'// ポジションバンドのみ変化、比較不可
+  | 'mpTrackSwitch'         // 本人バンド変化、同ワーニングLv（M職↔P職等）
+  | 'titleChange'           // フリータイトルのみ変化
+  | null                    // 変化なし or isNoCheckReason で一致なし
 
-    if (prevLevel !== null && afterLevel !== null) {
-      if (afterLevel > prevLevel) return 'promotion'
-      if (afterLevel < prevLevel) return 'demotion'
-      return 'titleChange'
-    }
+// ── ヘルパー ─────────────────────────────────────────────────────────────────
 
-    // parseBandLevel が null を返す場合（数値なしバンドコード）は
-    // positionBand と同じく jobLevels.promotionDemotionWarningLevel で判定する
-    const jlwm = new Map(ctx.masters.jobLevels.map(e => [e.code, e.promotionDemotionWarningLevel]))
-    const prev  = jlwm.get((row.prevBand as string | undefined) ?? '')
-    const after = jlwm.get((row.band     as string | undefined) ?? '')
-    if (prev !== undefined && after !== undefined) {
-      if (after > prev) return 'promotion'
-      if (after < prev) return 'demotion'
-    }
-    return 'titleChange'
-  }
-
-  if (posBandChanged) {
-    const jlwm = new Map(ctx.masters.jobLevels.map(e => [e.code, e.promotionDemotionWarningLevel]))
-    const prev  = jlwm.get(row.prevPositionBand ?? '')
-    const after = jlwm.get(row.positionBand     ?? '')
-    if (prev !== undefined && after !== undefined) {
-      if (after > prev) return 'promotion'
-      if (after < prev) return 'demotion'
-      return 'titleChange'
-    }
-    return 'titleChange'
-  }
-
-  return 'titleChange'
-}
-
-// 読み替えバンドが同一で別バンドへの切替（M職↔P職等）かどうかを判定するヘルパー
 function isMpTrackSwitchChange(row: AllocationRow, ctx: DetectContext): boolean {
   const prevBand  = (row.prevBand as string | undefined) ?? ''
   const afterBand = (row.band    as string | undefined) ?? ''
@@ -59,85 +31,126 @@ function isMpTrackSwitchChange(row: AllocationRow, ctx: DetectContext): boolean 
   return prevEntry.promotionDemotionBand === afterEntry.promotionDemotionBand
 }
 
+// ── 単一分類関数 ─────────────────────────────────────────────────────────────
+// 排他性はこの関数の構造で保証する。各パターンの detect() はここに委譲するだけ。
+
+function classifyBandTitle(row: AllocationRow, ctx: DetectContext): BandTitleKind {
+  if (isNoCheckReason(row, ctx)) {
+    const tr = row.transferReason as string | undefined
+    if (tr === TR.PROMOTION)    return 'promotion'
+    if (tr === TR.DEMOTION)     return 'demotion'
+    if (tr === TR.TITLE_CHANGE) return 'titleChange'
+    return null
+  }
+
+  // ① 本人バンドが変化した（両方に値がある場合のみ比較）
+  const prevBand  = row.prevBand as string | undefined
+  const afterBand = row.band     as string | undefined
+  if (prevBand && afterBand && prevBand !== afterBand) {
+    const dir = compareBandLevels(prevBand, afterBand, ctx)
+    if (dir === 'up')   return 'promotion'
+    if (dir === 'down') return 'demotion'
+    if (dir === 'same') return isMpTrackSwitchChange(row, ctx) ? 'mpTrackSwitch' : 'titleChange'
+    return 'bandChange'
+  }
+
+  // ② ポジションバンドのみ変化（両方に値がある場合のみ比較）
+  const prevPosBand  = row.prevPositionBand as string | undefined
+  const afterPosBand = row.positionBand     as string | undefined
+  if (prevPosBand && afterPosBand && prevPosBand !== afterPosBand) {
+    const dir = compareBandLevels(prevPosBand, afterPosBand, ctx)
+    if (dir === 'up')   return 'promotionPositionOnly'
+    if (dir === 'down') return 'demotionPositionOnly'
+    return 'bandChangePositionOnly'
+  }
+
+  // ③ フリータイトルのみ変化（両方に値がある場合のみ比較）
+  const prevTitle  = row.prevLocalJobTitle as string | undefined
+  const afterTitle = row.localJobTitle     as string | undefined
+  if (prevTitle && afterTitle && prevTitle !== afterTitle) return 'titleChange'
+
+  return null
+}
+
+// ── メタ定義 ─────────────────────────────────────────────────────────────────
+
+function s(
+  kind: BandTitleKind,
+  label: string,
+  meta: Omit<EditPatternMeta, 'label' | 'addLabel' | 'editLabel' | 'detect'>,
+): EditPatternMeta {
+  return { label, addLabel: label, editLabel: label, ...meta, detect: (row, ctx) => classifyBandTitle(row, ctx) === kind }
+}
+
 export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> = {
-  promotion: {
-    label: '昇格', addLabel: '昇格', editLabel: '昇格',
-    badge: 'positive', group: 'jobClassification',
-    detect: (row, ctx) => {
-      if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.PROMOTION
-      return detectBandChangeKind(row, ctx) === 'promotion'
-    },
-  },
-  demotion: {
-    label: '降格', addLabel: '降格', editLabel: '降格',
-    badge: 'negative', group: 'jobClassification',
-    detect: (row, ctx) => {
-      if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.DEMOTION
-      return detectBandChangeKind(row, ctx) === 'demotion'
-    },
-  },
-  titleChange: {
-    label: '役職名変更', addLabel: '役職名変更', editLabel: '役職名変更',
-    menuLabel: '役職名変更',
-    badge: 'jobChange', group: 'jobClassification',
-    detect: (row, ctx) => {
-      if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.TITLE_CHANGE
-      const bandResult = detectBandChangeKind(row, ctx)
-      if (bandResult === 'titleChange') return !isMpTrackSwitchChange(row, ctx)
-      // band 変化なしで localJobTitle のみ変更
-      if (bandResult === null && (row.localJobTitle ?? '') !== (row.prevLocalJobTitle ?? '')) return true
-      return false
-    },
-  },
-  mpTrackSwitch: {
-    label: 'M職P職切替', addLabel: 'M職P職切替', editLabel: 'M職P職切替',
-    menuLabel: 'M職P職切替',
-    badge: 'jobChange', group: 'jobClassification',
-    detect: (row, ctx) => {
-      if (isNoCheckReason(row, ctx)) return false
-      return detectBandChangeKind(row, ctx) === 'titleChange' && isMpTrackSwitchChange(row, ctx)
-    },
-  },
+  promotion:              s('promotion',              '昇格',               { badge: 'positive',  group: 'jobClassification' }),
+  promotionPositionOnly:  s('promotionPositionOnly',  '昇格(Posのみ)',      { badge: 'positive',  group: 'jobClassification' }),
+  demotion:               s('demotion',               '降格',               { badge: 'negative',  group: 'jobClassification' }),
+  demotionPositionOnly:   s('demotionPositionOnly',   '降格(Posのみ)',      { badge: 'negative',  group: 'jobClassification' }),
+  bandChange:             s('bandChange',             'バンド変更',          { badge: 'jobChange', group: 'jobClassification' }),
+  bandChangePositionOnly: s('bandChangePositionOnly', 'バンド変更(Posのみ)', { badge: 'jobChange', group: 'jobClassification' }),
+  titleChange:            s('titleChange',   '役職名のみ変更', { badge: 'jobChange', group: 'jobClassification', menuLabel: '役職名のみ変更' }),
+  mpTrackSwitch:          s('mpTrackSwitch', 'M職P職切替', { badge: 'jobChange', group: 'jobClassification', menuLabel: 'M職P職切替' }),
+
   jobTypeChange: {
     label: 'ジョブタイプ変更', addLabel: 'ジョブタイプ変更', editLabel: 'ジョブタイプ変更',
     menuLabel: '職種変更',
     badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return false
+      const prevFamily = row.prevJobFamily as string | undefined
+      const afterFamily = row.jobFamily    as string | undefined
+      const prevType   = row.prevJobType   as string | undefined
+      const afterType  = row.jobType       as string | undefined
       return (
-        (row.jobFamily ?? '') !== (row.prevJobFamily ?? '') ||
-        (row.jobType   ?? '') !== (row.prevJobType   ?? '')
+        (!!prevFamily && !!afterFamily && prevFamily !== afterFamily) ||
+        (!!prevType   && !!afterType   && prevType   !== afterType)
       )
     },
   },
+
+  payGradeChange: {
+    label: '給与等級変更', addLabel: '給与等級変更', editLabel: '給与等級変更',
+    badge: 'jobChange', group: 'jobClassification',
+    detect: (row, _ctx) => {
+      const prev  = row.prevPayGrade as string | undefined
+      const after = row.payGrade     as string | undefined
+      return !!prev && !!after && prev !== after
+    },
+  },
+
+  secondmentAcceptanceModeSwitch: {
+    label: '本務兼務切替（出向受入）', addLabel: '本務兼務切替（出向受入）', editLabel: '本務兼務切替（出向受入）',
+    badge: 'jobChange', group: 'jobClassification',
+    detect: (row, ctx) => {
+      if ((row.transferReason as string | undefined) !== TR.SECONDMENT_ACCEPTANCE_MODE_SWITCH) return false
+      if (isNoCheckReason(row, ctx)) return true
+      const prevEt  = row.prevEmploymentType as string | undefined
+      const afterEt = row.employmentType     as string | undefined
+      if (!prevEt || !afterEt || prevEt === afterEt) return false
+      const etByLabel = new Map(ctx.masters.employmentTypes.map(e => [e.label, e]))
+      return !!(etByLabel.get(prevEt)?.isSecondmentAcceptance && etByLabel.get(afterEt)?.isSecondmentAcceptance)
+    },
+  },
+
   employmentExtension: {
     label: '雇用延長', addLabel: '雇用延長', editLabel: '雇用延長',
     badge: 'jobChange', group: 'jobClassification',
-    detect: (row, ctx) => {
-      if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.EMPLOYMENT_EXTENSION
-      const prevEt  = (row.prevEmploymentType as string | undefined) ?? ''
-      const afterEt = (row.employmentType     as string | undefined) ?? ''
-      return !!(
-        prevEt && afterEt && prevEt !== afterEt &&
-        (row.departmentCode ?? '') === (row.prevDepartmentCode ?? '')
-      )
+    detect: (row, _ctx) => {
+      const tr = row.transferReason as string | undefined
+      return tr === TR.EMPLOYMENT_EXTENSION || tr === TR.EMPLOYMENT_EXTENSION_PROCEDURE
     },
   },
+
   employmentTypeChange: {
     label: '雇用タイプ変更', addLabel: '雇用タイプ変更', editLabel: '雇用タイプ変更',
     badge: 'jobChange', group: 'jobClassification',
     detect: (row, ctx) => {
-      if (isNoCheckReason(row, ctx)) {
-        const reason = (row.transferReason as string | undefined) ?? ''
-        return reason.includes('従業員区分変更')
-      }
-      const prevEt  = (row.prevEmploymentType as string | undefined) ?? ''
-      const afterEt = (row.employmentType     as string | undefined) ?? ''
-      // band が変化しない雇用タイプ変更（雇用延長は band を空欄化するので除外される）
-      return !!(
-        prevEt && afterEt && prevEt !== afterEt &&
-        (row.band ?? '') === (row.prevBand ?? '')
-      )
+      if ((row.transferReason as string | undefined) !== TR.EMPLOYMENT_TYPE_CHANGE_PROCEDURE) return false
+      if (isNoCheckReason(row, ctx)) return true
+      const prevEt  = row.prevEmploymentType as string | undefined
+      const afterEt = row.employmentType     as string | undefined
+      return !!prevEt && !!afterEt && prevEt !== afterEt
     },
   },
 }

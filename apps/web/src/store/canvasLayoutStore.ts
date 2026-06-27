@@ -1,4 +1,10 @@
 import { create } from 'zustand/react'
+import {
+  makeFilterCard, DEFAULT_GLOBAL_FILTERS,
+  type FilterCard, type GlobalFilters,
+} from '../components/canvas/FilterBar/types'
+import type { Organization } from '@personnel/domain/schemas'
+import { computeLca } from '../components/canvas/FilterBar/filterLogic'
 
 // 'collapsed' を廃止: 'windowed' | 'inline' の2択
 export type ChildrenMode = 'windowed' | 'inline'
@@ -64,6 +70,8 @@ interface CanvasLayoutState {
   requestScrollToOrg: (orgId: string | null) => void
 
   addPanel:           (orgId: string, options?: { childrenMode?: ChildrenMode; collapsedOrgIds?: string[] }) => void
+  /** 全組織を一括でパネルとして設定し、メンバー組織の LCA フィルタも同時確定する（Excel ロード時） */
+  initPanelsForOrgs:  (orgIds: string[], memberOrgIds?: string[], orgById?: Map<string, Organization>) => void
   setCollapsedOrgIds: (panelId: string, ids: string[]) => void
   removePanel:        (panelId: string) => void
   removeOrgPanels:    (orgIds: readonly string[]) => void
@@ -130,6 +138,15 @@ interface CanvasLayoutState {
   setComparisonCollapsedOrgIds: (panelId: string, ids: string[]) => void
   comparisonArrangeVersion:     number
   triggerComparisonArrange:     () => void
+
+  // ── キャンバスフィルタ ────────────────────────────────────────────
+  filterCards:        FilterCard[]
+  globalFilters:      GlobalFilters
+  addFilterCard:      (card?: FilterCard) => void
+  updateFilterCard:   (id: string, card: FilterCard) => void
+  removeFilterCard:   (id: string) => void
+  updateGlobalFilters:(update: Partial<GlobalFilters>) => void
+  resetFilters:       () => void
 }
 
 export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
@@ -171,6 +188,27 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     set(s => ({ panels: [...s.panels, makePanelDef(orgId, pos, true, options?.childrenMode, options?.collapsedOrgIds)] }))
   },
 
+  initPanelsForOrgs: (orgIds, memberOrgIds?, orgById?) => {
+    const panels: PanelDef[] = orgIds.map((orgId, i) =>
+      makePanelDef(
+        orgId,
+        { x: 40 + (i % 5) * (WINDOW_W + WINDOW_GAP), y: 40 + Math.floor(i / 5) * 420 },
+      )
+    )
+    // LCA フィルタカードをパネルと同じ set() で確定する（別コールだと clearPanels のタイミングで消える可能性があるため）
+    // LCA が root（会社レベル、parentId = null）のときはフィルタを追加しない
+    // → hasMembers: true のみで制御し、空の会社パネルを出さない
+    let filterCards: FilterCard[] = []
+    if (memberOrgIds && memberOrgIds.length > 0 && orgById) {
+      const lcaId = computeLca(memberOrgIds, orgById)
+      const lcaOrg = lcaId ? orgById.get(lcaId) : null
+      if (lcaId && lcaOrg && lcaOrg.parentId !== null) {
+        filterCards = [makeFilterCard({ subtreeOrgIds: [lcaId] })]
+      }
+    }
+    set({ panels, filterCards, globalFilters: DEFAULT_GLOBAL_FILTERS })
+  },
+
   setCollapsedOrgIds: (panelId, ids) => {
     set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, collapsedOrgIds: ids } : p) }))
   },
@@ -199,6 +237,7 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     panels: [], panelHeights: {}, scrollToOrgId: null,
     comparisonPanels: [], comparisonOrgMapping: {},
     pendingMappingBeforeOrgId: null, comparisonArrangeVersion: 0,
+    filterCards: [], globalFilters: DEFAULT_GLOBAL_FILTERS,
   }),
 
   setOpen:    (panelId, open) =>
@@ -334,4 +373,16 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
 
   comparisonArrangeVersion: 0,
   triggerComparisonArrange: () => set(s => ({ comparisonArrangeVersion: s.comparisonArrangeVersion + 1 })),
+
+  // ── キャンバスフィルタ ────────────────────────────────────────────
+  filterCards:    [],
+  globalFilters:  DEFAULT_GLOBAL_FILTERS,
+  addFilterCard:  (card?) => set(s => ({ filterCards: [...s.filterCards, card ?? makeFilterCard()] })),
+  updateFilterCard: (id, card) =>
+    set(s => ({ filterCards: s.filterCards.map(c => c.id === id ? card : c) })),
+  removeFilterCard: (id) =>
+    set(s => ({ filterCards: s.filterCards.filter(c => c.id !== id) })),
+  updateGlobalFilters: (update) =>
+    set(s => ({ globalFilters: { ...s.globalFilters, ...update } })),
+  resetFilters: () => set({ filterCards: [], globalFilters: DEFAULT_GLOBAL_FILTERS }),
 }))

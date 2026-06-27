@@ -5,6 +5,7 @@ import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { isRegularEmployee, isExtendedEmployeeTarget } from '../helpers'
 import { TR } from '../../transferReasonLabels'
+import { preserve } from './afterConstraintHelpers'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -27,6 +28,7 @@ const computeEmploymentExtensionAfter = (): Partial<AllocationRow> => ({
   positionDiscretionaryWorkFlag: undefined,
   trainingPositionFlag:          undefined,
 })
+
 
 // ── ジョブタイプ変更 ──────────────────────────────────────────────────────────
 
@@ -188,4 +190,56 @@ export const employmentTypeChangeDef: EditOperation = {
   },
 }
 
-export const DEFS: EditOperation[] = [jobTypeChangeDef, employmentExtensionDef, employmentTypeChangeDef]
+// ── 雇用延長取消 ──────────────────────────────────────────────────────────────
+
+export const employmentExtensionCancelDef: EditOperation = {
+  id:          'EmploymentExtensionCancel',
+  label:       '雇用延長取消',
+  group:       'jobClassification',
+  badge:       'jobChange',
+
+  description: '雇用延長登録を取り消します。バンド・給与等級などのフィールドはインポート前の値に戻ります。',
+
+  operationRole: { kind: 'lockCancel', of: 'EmploymentExtension' },
+
+  availableFor: () => AVAILABLE,
+
+  inputs: [
+    { field: 'transferReason', required: false, readOnly: true },
+    { field: 'memo',           required: false },
+  ],
+
+  onOpen: (row) => ({
+    transferReason: undefined,
+    memo:           row.memo as string | undefined,
+  }),
+
+  onValidate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  onSubmit(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? {
+              ...r,
+              ...preserve(row),
+              transferReason: undefined,
+              memo:           values.memo as string | undefined,
+            }
+          : r
+      ),
+      label: `雇用延長取消: ${personName(row)}`,
+    }
+  },
+}
+
+export const DEFS: EditOperation[] = [
+  jobTypeChangeDef,
+  employmentExtensionDef, employmentExtensionCancelDef,
+  employmentTypeChangeDef,
+]
