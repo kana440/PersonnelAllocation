@@ -6,6 +6,7 @@ import type { PanelDef }         from '../../../store/canvasLayoutStore'
 import { TreeNode }              from './TreeNode'
 import { TreeWindowHeader }      from './TreeWindowHeader'
 import { TreeWindowControls }    from './TreeWindowControls'
+import { BandMatrixPanel }       from '../panel/BandMatrixPanel'
 import { useStore }              from '../../../store/useStore'
 import { isSecondmentOrg }       from '@personnel/domain/derivation'
 
@@ -20,7 +21,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
   } = useOrgView()
 
-  const { toggleOpen, setCollapsedOrgIds, setPanelHeight } = useCanvasLayoutStore()
+  const { toggleOpen, setCollapsedOrgIds, setPanelHeight, panelViewMode } = useCanvasLayoutStore()
   const masters   = useStore(s => s.masters)
   const selectOrg = useStore(s => s.selectOrg)
 
@@ -89,7 +90,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
       data-panelid={panel.id}
       className={`flex flex-col rounded shadow-lg border transition-colors select-none overflow-hidden
         ${isDragOver ? 'border-blue-400' : isSelected ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-400'}`}
-      style={{ background: '#ffffff', width: 288, maxHeight: 'calc(100vh - 80px)' }}
+      style={{ background: '#ffffff', width: panelViewMode === 'band' ? 208 : 288, maxHeight: 'calc(100vh - 80px)' }}
       onDragOver={e => handleDragOver(e, currentRootId)}
       onDragLeave={handleDragLeave}
       onDrop={e => handleDrop(e, currentRootId)}
@@ -108,20 +109,24 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
       <TreeWindowControls panel={panel} currentRootId={currentRootId} />
 
       {panel.open && (
-        <div className="flex-1 min-h-0 overflow-y-auto p-1.5">
-          {currentOrg ? (
-            <TreeNode
-              key={currentRootId}
-              orgId={currentRootId}
-              panelId={panel.id}
-              onNavigate={navigateTo}
-              isRoot
-              collapsedOrgs={collapsedOrgs}
-              onOrgCollapse={onOrgCollapse}
-              onOrgExpand={onOrgExpand}
-            />
-          ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {!currentOrg ? (
             <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>
+          ) : panelViewMode === 'band' ? (
+            <BandMatrixPanel orgId={currentRootId} panelId={panel.id} />
+          ) : (
+            <div className="p-1.5">
+              <TreeNode
+                key={currentRootId}
+                orgId={currentRootId}
+                panelId={panel.id}
+                onNavigate={navigateTo}
+                isRoot
+                collapsedOrgs={collapsedOrgs}
+                onOrgCollapse={onOrgCollapse}
+                onOrgExpand={onOrgExpand}
+              />
+            </div>
           )}
         </div>
       )}

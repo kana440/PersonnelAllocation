@@ -20,7 +20,7 @@ export function TreeWindowHeader({
   panel, rootPath, organizations, currentOrg, totalCount,
   headerBg, onToggleOpen, onNavigateToIdx,
 }: TreeWindowHeaderProps) {
-  const { setPosition, canvasZoom } = useCanvasLayoutStore()
+  const { setPosition, canvasZoom, panelViewMode, togglePanelViewMode } = useCanvasLayoutStore()
   const selectOrg = useStore(s => s.selectOrg)
 
   // ── ウィンドウドラッグ ─────────────────────────────────────────
@@ -84,6 +84,17 @@ export function TreeWindowHeader({
           <AddRowDropdown orgCode={currentOrg?.externalCode ?? ''} variant="header" />
         </div>
         <div className="flex items-center flex-shrink-0">
+          {/* バンド別表示トグル */}
+          <button
+            onClick={e => { e.stopPropagation(); togglePanelViewMode() }}
+            title={panelViewMode === 'band' ? 'ツリー表示に切り替え' : 'バンド別表示に切り替え'}
+            className={`w-5 h-5 flex items-center justify-center text-[10px] font-bold rounded transition-colors ${
+              panelViewMode === 'band'
+                ? 'text-white bg-blue-500 hover:bg-blue-400'
+                : 'text-blue-300 hover:text-white hover:bg-blue-700'
+            }`}
+          >⊞</button>
+
           {rootPath.length > 1 && (
             <button
               onClick={() => onNavigateToIdx(rootPath.length - 2)}

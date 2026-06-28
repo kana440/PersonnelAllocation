@@ -3,7 +3,8 @@ import { useClickOutside } from '../../../hooks/useClickOutside'
 import { useOrgView } from '../OrgViewContext'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { subtreeRowCount } from './helpers'
-import { OrgSection } from './OrgSection'
+import { OrgSection }       from './OrgSection'
+import { BandMatrixPanel }   from './BandMatrixPanel'
 import { NewRowOperationModal } from './NewRowOperationModal'
 import {
   concurrentAddNewDef,
@@ -41,7 +42,10 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
   } = useOrgView()
 
-  const { showVacantPositions, toggleShowVacantPositions } = useCanvasLayoutStore()
+  const {
+    showVacantPositions, toggleShowVacantPositions,
+    panelViewMode, togglePanelViewMode,
+  } = useCanvasLayoutStore()
 
   const org = organizations.find(o => o.id === orgId)
   if (!org) return null
@@ -59,9 +63,9 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
 
   return (
     <div
-      className={`flex-shrink-0 w-64 max-h-full flex flex-col border-2 rounded-xl shadow-sm transition-colors ${
-        isDropTarget ? 'border-blue-400 bg-blue-50/30' : 'border-gray-200 bg-white'
-      }`}
+      className={`flex-shrink-0 max-h-full flex flex-col border-2 rounded-xl shadow-sm transition-colors
+        ${panelViewMode === 'band' ? 'w-52' : 'w-64'}
+        ${isDropTarget ? 'border-blue-400 bg-blue-50/30' : 'border-gray-200 bg-white'}`}
       onDragOver={e => handleDragOver(e, orgId)}
       onDragLeave={handleDragLeave}
       onDrop={e => handleDrop(e, orgId)}
@@ -70,6 +74,17 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
       <div className="flex-shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-xl flex items-center gap-2">
         <span className="flex-1 text-xs font-semibold text-gray-800 truncate">{org.name}</span>
         <span className="text-[10px] text-gray-400 flex-shrink-0">({totalCount}名)</span>
+
+        {/* バンド別表示トグル */}
+        <button
+          onClick={togglePanelViewMode}
+          className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold transition-colors ${
+            panelViewMode === 'band'
+              ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
+              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+          }`}
+          title={panelViewMode === 'band' ? 'ツリー表示に切り替え' : 'バンド別表示に切り替え'}
+        >⊞</button>
 
         {/* 空席ポジション表示トグル */}
         <button
@@ -123,8 +138,15 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
       </div>
 
       {/* スクロール可能な本体 */}
-      <div className="flex-1 overflow-y-auto p-2 min-h-0">
-        <OrgSection orgId={orgId} panelId={panelId} isRoot colorIndex={colorIndex} />
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {panelViewMode === 'band'
+          ? <BandMatrixPanel orgId={orgId} panelId={panelId} />
+          : (
+            <div className="p-2">
+              <OrgSection orgId={orgId} panelId={panelId} isRoot colorIndex={colorIndex} />
+            </div>
+          )
+        }
         {totalCount === 0 && (
           <p className="text-[10px] text-gray-400 text-center py-3">メンバーなし</p>
         )}

@@ -94,6 +94,11 @@ interface CanvasLayoutState {
   showVacantPositions:       boolean
   toggleShowVacantPositions: () => void
 
+  // ── パネル表示モード ─────────────────────────────────────────────
+  /** 'tree' = レポートラインツリー（デフォルト）, 'band' = バンド別コンパクト表示 */
+  panelViewMode:        'tree' | 'band'
+  togglePanelViewMode:  () => void
+
   // ── 自動整列 ────────────────────────────────────────────────────
   // positions は autoArrange=ON のとき TreeWindowCanvas の useMemo で直接導出される。
   // autoArrange=OFF のとき panel.x/y（手動配置済み座標）を使用。
@@ -268,6 +273,9 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   // ── 空席ポジション表示 ───────────────────────────────────────────
   showVacantPositions:       false,
   toggleShowVacantPositions: () => set(s => ({ showVacantPositions: !s.showVacantPositions })),
+
+  panelViewMode:        'tree',
+  togglePanelViewMode:  () => set(s => ({ panelViewMode: s.panelViewMode === 'tree' ? 'band' : 'tree' })),
 
   // ── 自動整列 ────────────────────────────────────────────────────
   autoArrange:    true,
