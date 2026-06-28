@@ -22,7 +22,9 @@ export function TreeWindowCanvas() {
     triggerComparisonArrange,
     canvasZoom, setCanvasZoom, stepCanvasZoom,
     filterCards, globalFilters,
+    panelViewMode,
   } = useCanvasLayoutStore()
+  const winW = panelViewMode === 'band' ? 208 : WINDOW_W
   const selectedOrgId       = useStore(s => s.selectedOrgId)
   const { masters }         = useStore()
   const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()
@@ -103,12 +105,12 @@ export function TreeWindowCanvas() {
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
-    const posMap = computeLayout(standalonePanels, filteredPanels, organizations, panelHeights)
+    const posMap = computeLayout(standalonePanels, filteredPanels, organizations, panelHeights, winW)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [autoArrange, standalonePanels, filteredPanels, organizations, panelHeights])
+  }, [autoArrange, standalonePanels, filteredPanels, organizations, panelHeights, winW])
 
   const connections = useMemo(
     () => buildConnections(displayPanels, organizations),
@@ -116,18 +118,18 @@ export function TreeWindowCanvas() {
   )
 
   const canvasWidth  = displayPanels.length === 0 ? 1200
-    : Math.max(1200, ...displayPanels.map(p => p.x + WINDOW_W + CANVAS_MARGIN * 2))
+    : Math.max(1200, ...displayPanels.map(p => p.x + winW + CANVAS_MARGIN * 2))
   const canvasHeight = displayPanels.length === 0 ? 800
     : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
 
   // ── 整列ボタン ──────────────────────────────────────────────────
   const handleArrange = useCallback(() => {
-    setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights))
+    setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights, winW))
     triggerComparisonArrange()
-  }, [standalonePanels, filteredPanels, organizations, panelHeights, setPositions, triggerComparisonArrange])
+  }, [standalonePanels, filteredPanels, organizations, panelHeights, winW, setPositions, triggerComparisonArrange])
 
   const handleAutoArrangeChange = useCallback((checked: boolean) => {
-    if (!checked) setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights))
+    if (!checked) setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights, winW))
     setAutoArrange(checked)
     if (checked) triggerComparisonArrange()
   }, [standalonePanels, filteredPanels, organizations, panelHeights, setPositions, setAutoArrange, triggerComparisonArrange])
@@ -305,7 +307,7 @@ export function TreeWindowCanvas() {
                 {connections.map(({ parentPanel, childPanel }) => (
                   <path
                     key={`${parentPanel.id}-${childPanel.id}`}
-                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
+                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW)}
                     fill="none"
                     stroke="#93a3b8"
                     strokeWidth="1.5"
@@ -318,7 +320,7 @@ export function TreeWindowCanvas() {
                 <div
                   key={panel.id}
                   className="absolute"
-                  style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+                  style={{ left: panel.x, top: panel.y, width: winW, zIndex: 1 }}
                 >
                   <TreeWindow panel={panel} isSelected={selectedOrgId === panel.orgId} />
                 </div>

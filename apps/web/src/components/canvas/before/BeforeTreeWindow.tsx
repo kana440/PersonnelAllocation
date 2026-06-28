@@ -1,19 +1,24 @@
-import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
+import { useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo } from 'react'
 import type { PanelDef, ChildrenMode } from '../../../store/canvasLayoutStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { useBeforeOrgView } from './BeforeOrgViewContext'
 import { getDescendantOrgIds, hasAnyRows, subtreeRowCount } from '../panel/helpers'
 import { ToggleTrack } from '../components/ToggleTrack'
 import { BeforeTreeNode } from './BeforeTreeNode'
+import { useStore } from '../../../store/useStore'
+import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 
 export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
   const { beforeOrganizations, beforeRowsByOrgId } = useBeforeOrgView()
+  const { masters } = useStore()
 
   const {
     setComparisonPosition, toggleComparisonPanelOpen,
     setComparisonChildrenMode, setComparisonOrgOpen,
     setComparisonCollapsedOrgIds, setPanelHeight,
     comparisonPanels, canvasZoom,
+    panelViewMode,
   } = useCanvasLayoutStore()
 
   const hasRowsFn  = useCallback((id: string) => beforeRowsByOrgId.has(id), [beforeRowsByOrgId])
@@ -127,7 +132,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
       data-before-window="true"
       data-panelid={panel.id}
       className="flex flex-col rounded shadow-lg border border-gray-400 select-none overflow-hidden"
-      style={{ background: '#ffffff', width: 288 }}
+      style={{ background: '#ffffff', width: panelViewMode === 'band' ? 208 : 288 }}
     >
       {/* ── タイトルバー ──────────────────────────────────────────── */}
       <div
@@ -213,20 +218,75 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
 
       {/* ── ボディ ───────────────────────────────────────────────── */}
       {panel.open && (
-        <div className="overflow-y-auto p-1.5" style={{ maxHeight: 1600 }}>
-          {currentOrg ? (
-            <BeforeTreeNode
-              key={currentRootId}
-              orgId={currentRootId}
-              panelId={panel.id}
-              onNavigate={id => setRootPath(prev => [...prev, id])}
-              isRoot
-            />
-          ) : (
-            <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>
-          )}
-        </div>
+        panelViewMode === 'band'
+          ? <BeforeBandView orgId={currentRootId} beforeRowsByOrgId={beforeRowsByOrgId} masters={masters} />
+          : <div className="overflow-y-auto p-1.5" style={{ maxHeight: 1600 }}>
+              {currentOrg ? (
+                <BeforeTreeNode
+                  key={currentRootId}
+                  orgId={currentRootId}
+                  panelId={panel.id}
+                  onNavigate={id => setRootPath(prev => [...prev, id])}
+                  isRoot
+                />
+              ) : (
+                <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>
+              )}
+            </div>
       )}
+    </div>
+  )
+}
+
+interface BeforeBandViewProps {
+  orgId:              string
+  beforeRowsByOrgId:  Map<string, AllocationRow[]>
+  masters:            AllMasters
+}
+
+function BeforeBandView({ orgId, beforeRowsByOrgId, masters }: BeforeBandViewProps) {
+  const rows = beforeRowsByOrgId.get(orgId) ?? []
+
+  const bandGroups = useMemo(() => {
+    const groups = new Map<string, AllocationRow[]>()
+    for (const row of rows) {
+      if (!row.userId) continue
+      const band = (row.positionBand as string | undefined) ?? '(未設定)'
+      const arr  = groups.get(band)
+      if (arr) arr.push(row)
+      else groups.set(band, [row])
+    }
+    return [...groups.entries()]
+      .sort(([bandA], [bandB]) => {
+        const lvA = masters.jobLevels.find((e: { label: string; promotionDemotionWarningLevel: number }) => e.label === bandA)?.promotionDemotionWarningLevel ?? -1
+        const lvB = masters.jobLevels.find((e: { label: string; promotionDemotionWarningLevel: number }) => e.label === bandB)?.promotionDemotionWarningLevel ?? -1
+        return lvB - lvA
+      })
+      .map(([band, items]) => ({ band, items }))
+  }, [rows, masters.jobLevels])
+
+  if (bandGroups.length === 0) return <p className="text-[10px] text-gray-400 text-center py-3">メンバーなし</p>
+
+  return (
+    <div className="overflow-y-auto p-1.5 space-y-1.5" style={{ maxHeight: 1600 }}>
+      {bandGroups.map(({ band, items }) => (
+        <div key={band}>
+          <div className="text-[9px] font-semibold text-gray-400 tracking-wider mb-0.5 px-0.5 leading-none">{band}</div>
+          <div className="flex flex-wrap gap-1">
+            {items.map(row => {
+              const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || ''
+              return (
+                <div
+                  key={row.rowId}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 border-stone-400 bg-stone-50 text-stone-700 select-none"
+                >
+                  {name}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

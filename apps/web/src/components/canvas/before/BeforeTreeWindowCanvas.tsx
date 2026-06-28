@@ -25,7 +25,9 @@ export function BeforeTreeWindowCanvas() {
     panelHeights,
     lineStyle,
     canvasZoom, stepCanvasZoom,
+    panelViewMode,
   } = useCanvasLayoutStore()
+  const winW = panelViewMode === 'band' ? 208 : WINDOW_W
 
   // 比較モード開始時にパネルを初期化（ルート org のみ open:true、他は closed chip として表示）
   // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
@@ -75,12 +77,12 @@ export function BeforeTreeWindowCanvas() {
 
   const displayPanels = useMemo(() => {
     if (standalonePanels.length === 0) return standalonePanels
-    const posMap = computeLayout(standalonePanels, comparisonPanels, beforeOrganizations, panelHeights)
+    const posMap = computeLayout(standalonePanels, comparisonPanels, beforeOrganizations, panelHeights, winW)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [standalonePanels, comparisonPanels, beforeOrganizations, panelHeights])
+  }, [standalonePanels, comparisonPanels, beforeOrganizations, panelHeights, winW])
 
   const connections = useMemo(
     () => buildConnections(displayPanels, beforeOrganizations),
@@ -89,7 +91,7 @@ export function BeforeTreeWindowCanvas() {
 
   // キャンバスサイズ（実測高さを使用）
   const canvasWidth  = displayPanels.length === 0 ? 1200
-    : Math.max(1200, ...displayPanels.map(p => p.x + WINDOW_W + CANVAS_MARGIN * 2))
+    : Math.max(1200, ...displayPanels.map(p => p.x + winW + CANVAS_MARGIN * 2))
   const canvasHeight = displayPanels.length === 0 ? 800
     : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
 
@@ -337,7 +339,7 @@ export function BeforeTreeWindowCanvas() {
                 {connections.map(({ parentPanel, childPanel }) => (
                   <path
                     key={`${parentPanel.id}-${childPanel.id}`}
-                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle)}
+                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW)}
                     fill="none" stroke="#b8a89a" strokeWidth="1.5"
                     strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
                   />
@@ -352,7 +354,7 @@ export function BeforeTreeWindowCanvas() {
                   <div
                     key={panel.id}
                     className="absolute"
-                    style={{ left: panel.x, top: panel.y, width: WINDOW_W, zIndex: 1 }}
+                    style={{ left: panel.x, top: panel.y, width: winW, zIndex: 1 }}
                   >
                     <BeforeTreeWindow panel={panel} />
                   </div>

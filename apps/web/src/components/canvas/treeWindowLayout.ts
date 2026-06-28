@@ -30,6 +30,7 @@ export function computeLayout(
   allPanels: PanelDef[],
   orgs: Organization[],
   panelHeights: Record<string, number>,
+  windowW = WINDOW_W,
 ): Map<string, { x: number; y: number }> {
   const getParentPanel = (p: PanelDef): PanelDef | undefined => {
     const org = orgs.find(o => o.id === p.orgId)
@@ -47,12 +48,12 @@ export function computeLayout(
   const getPanelH = (p: PanelDef) => panelHeights[p.id] ?? EST_WIN_H
 
   const subtreeW = (p: PanelDef, visited = new Set<string>()): number => {
-    if (visited.has(p.id)) return WINDOW_W
+    if (visited.has(p.id)) return windowW
     const next = new Set(visited); next.add(p.id)
     const children = getChildren(p)
-    if (children.length === 0) return WINDOW_W
+    if (children.length === 0) return windowW
     const total = children.reduce((s, c, i) => s + subtreeW(c, next) + (i ? H_GAP : 0), 0)
-    return Math.max(WINDOW_W, total)
+    return Math.max(windowW, total)
   }
 
   const posMap  = new Map<string, { x: number; y: number }>()
@@ -62,7 +63,7 @@ export function computeLayout(
     if (visited.has(p.id)) return
     visited.add(p.id)
     const sw     = subtreeW(p)
-    posMap.set(p.id, { x: Math.round(x + Math.max(0, (sw - WINDOW_W) / 2)), y })
+    posMap.set(p.id, { x: Math.round(x + Math.max(0, (sw - windowW) / 2)), y })
     let cx = x
     for (const child of getChildren(p)) {
       layout(child, cx, y + getPanelH(p) + V_GAP)
@@ -86,11 +87,12 @@ export function connectionPath(
   child: PanelDef,
   panelHeights: Record<string, number>,
   lineStyle: 'bezier' | 'polyline',
+  windowW = WINDOW_W,
 ): string {
   const parentH = panelHeights[parent.id] ?? EST_WIN_H
-  const sx = parent.x + WINDOW_W / 2
+  const sx = parent.x + windowW / 2
   const sy = parent.y + parentH
-  const tx = child.x  + WINDOW_W / 2
+  const tx = child.x  + windowW / 2
   const ty = child.y
   const mid = (sy + ty) / 2
   return lineStyle === 'polyline'
