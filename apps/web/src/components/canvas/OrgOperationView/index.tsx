@@ -33,6 +33,7 @@ export function OrgOperationView() {
     previewAllocationList, previewPersons, previewAfterOrganizations,
     applyHistoryPreview, cancelHistoryPreview,
     undoHistory,
+    masters,
   } = useStore()
   const { comparisonMode, toggleComparisonMode } = useCanvasLayoutStore()
   const {
@@ -50,7 +51,7 @@ export function OrgOperationView() {
   const allocationList = (isHistoryPreviewMode && previewAllocationList)     ? previewAllocationList     : scopedAllocList
 
   const organizations = allAfterOrgs.filter(o => !o.isAbandoned)
-  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList })
+  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList, masters })
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
