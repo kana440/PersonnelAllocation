@@ -245,7 +245,10 @@ interface BeforeBandViewProps {
 }
 
 function BeforeBandView({ orgId, beforeRowsByOrgId, masters }: BeforeBandViewProps) {
-  const rows = beforeRowsByOrgId.get(orgId) ?? []
+  const rows      = beforeRowsByOrgId.get(orgId) ?? []
+  const selectCard        = useStore(s => s.selectCard)
+  const selectedCardRowId = useStore(s => s.selectedCardRowId)
+  const { requestScrollToRow } = useCanvasLayoutStore()
 
   const bandGroups = useMemo(() => {
     const groups = new Map<string, AllocationRow[]>()
@@ -274,11 +277,21 @@ function BeforeBandView({ orgId, beforeRowsByOrgId, masters }: BeforeBandViewPro
           <div className="text-[9px] font-semibold text-gray-400 tracking-wider mb-0.5 px-0.5 leading-none">{band}</div>
           <div className="flex flex-wrap gap-1">
             {items.map(row => {
-              const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || ''
+              const name       = [row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || ''
+              const isSelected = selectedCardRowId === row.rowId
               return (
                 <div
                   key={row.rowId}
-                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 border-stone-400 bg-stone-50 text-stone-700 select-none"
+                  data-before-rowid={row.rowId}
+                  onClick={() => {
+                    selectCard(row.rowId, 'before')
+                    requestScrollToRow(row.rowId)
+                  }}
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 cursor-pointer select-none transition-colors
+                    ${isSelected
+                      ? 'border-yellow-400 bg-yellow-50 text-stone-800 ring-1 ring-yellow-300'
+                      : 'border-stone-400 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                    }`}
                 >
                   {name}
                 </div>

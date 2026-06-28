@@ -51,6 +51,7 @@ export function NameChip({ entry, orgId, panelId }: Props) {
         e.dataTransfer.effectAllowed = 'move'
       } : undefined}
       onDragEnd={() => setDragOverOrgId(null)}
+      data-rowid={row.rowId}
       onClick={e => {
         if (isVacant || isHistoryPreviewMode) return
         handlePersonClick(person!.id, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }, row.rowId)
