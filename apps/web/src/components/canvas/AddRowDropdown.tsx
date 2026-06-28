@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { createPortal } from 'react-dom'
 import { NewRowOperationModal } from './panel/NewRowOperationModal'
+import { MemberMoveModal }      from './panel/MemberMoveModal'
+import { useStore }             from '../../store/useStore'
 import type { EditOperation } from '@personnel/domain/commands/defs'
 import {
   addEmptyPositionDef,
@@ -40,11 +42,14 @@ interface Props {
  * overflow:hidden 制約を受けないよう、メニューは createPortal で document.body に描画する。
  */
 export function AddRowDropdown({ orgCode, variant }: Props) {
-  const [open, setOpen]         = useState(false)
-  const [menuPos, setMenuPos]   = useState<{ top: number; right: number } | null>(null)
-  const [activeOp, setActiveOp] = useState<EditOperation | null>(null)
+  const [open, setOpen]             = useState(false)
+  const [menuPos, setMenuPos]       = useState<{ top: number; right: number } | null>(null)
+  const [activeOp, setActiveOp]     = useState<EditOperation | null>(null)
+  const [moveOpen, setMoveOpen]     = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef   = useRef<HTMLDivElement>(null)
+  const afterOrganizations = useStore(s => s.afterOrganizations)
+  const orgName = afterOrganizations.find(o => o.externalCode === orgCode)?.name ?? orgCode
 
   useClickOutside([buttonRef, menuRef], () => setOpen(false), open)
 
@@ -82,6 +87,18 @@ export function AddRowDropdown({ orgCode, variant }: Props) {
           className="w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1"
           onMouseDown={e => e.stopPropagation()}
         >
+          {/* 異動追加 */}
+          <div className="px-3 py-0.5 text-[9px] font-semibold text-gray-400 uppercase tracking-wider">
+            異動
+          </div>
+          <button
+            onClick={e => { e.stopPropagation(); setMoveOpen(true); setOpen(false) }}
+            className="w-full text-left px-3 py-1.5 text-[10px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+          >
+            この組織にメンバーを異動
+          </button>
+          <div className="border-t border-gray-100 my-1" />
+
           {ADD_OP_GROUPS.map((group, gi) => (
             <React.Fragment key={group.groupLabel}>
               {gi > 0 && <div className="border-t border-gray-100 my-1" />}
@@ -111,6 +128,13 @@ export function AddRowDropdown({ orgCode, variant }: Props) {
           onClose={() => setActiveOp(null)}
         />,
         document.body,
+      )}
+      {moveOpen && (
+        <MemberMoveModal
+          orgCode={orgCode}
+          orgName={orgName}
+          onClose={() => setMoveOpen(false)}
+        />
       )}
     </>
   )
