@@ -95,7 +95,7 @@ interface Actions {
   // ポジション操作
   createVacantPosition:         (departmentCode: string, localJobTitle: string) => void
   removePosition:               (rowId: number) => void
-  assignPersonToVacantPosition: (vacantRowId: number, personSfId: string) => void
+  assignPersonToVacantPosition: (vacantRowId: number, personSfId: string, opts?: { leaveSourceVacant?: boolean; overrideBand?: boolean }) => void
   unassignPersonFromPosition:   (occupiedRowId: number) => void
 
   // 新規採用
@@ -235,7 +235,7 @@ export const useStore = create<AppState>()((set, get) => {
       appService.createVacantPosition(deptCode, title, assignee ? { assignee } : undefined)
     },
     removePosition:               (rowId)                    => appService.removePosition(rowId),
-    assignPersonToVacantPosition: (vacantRowId, personSfId)  => appService.assignPersonToVacantPosition(vacantRowId, personSfId),
+    assignPersonToVacantPosition: (vacantRowId, personSfId, opts) => appService.assignPersonToVacantPosition(vacantRowId, personSfId, opts),
     unassignPersonFromPosition:   (rowId)                    => appService.unassignPersonFromPosition(rowId),
 
     editRow:   (rowId, changes) => appService.editRow(rowId, changes),

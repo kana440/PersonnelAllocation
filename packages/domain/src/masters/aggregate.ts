@@ -15,6 +15,7 @@ import type { DemotionReasonEntry } from './demotionReason'
 import type { OrgMasterEntry }      from './orgMaster'
 import type { TrainingPositionEntry }  from './trainingPosition'
 import type { DiscretionaryWorkEntry } from './discretionaryWork'
+import type { PromotionMatrixEntry }  from './promotionMatrix'
 
 export interface AllMasters {
   // 組織マスタ
@@ -47,6 +48,9 @@ export interface AllMasters {
   // フォーム選択肢（純粋リスト）
   trainingPositions:        TrainingPositionEntry[]   // 業務研修ポジション (BI)
   discretionaryWorkOptions: DiscretionaryWorkEntry[]  // 裁量労働／業務研修 (BM)
+
+  // 昇降格マトリクス（職務レベル × 役職 × M職P職）
+  promotionMatrix:          PromotionMatrixEntry[]    // 昇降格段階チェック (BT-BW)
 }
 
 export const EMPTY_MASTERS: AllMasters = {
@@ -65,4 +69,5 @@ export const EMPTY_MASTERS: AllMasters = {
   demotionReasons:          [],
   trainingPositions:        [],
   discretionaryWorkOptions: [],
+  promotionMatrix:          [],
 }

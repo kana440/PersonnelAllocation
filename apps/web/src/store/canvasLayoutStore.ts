@@ -1,6 +1,6 @@
 import { create } from 'zustand/react'
 import {
-  makeFilterCard, DEFAULT_GLOBAL_FILTERS,
+  makeFilterCard, makeFilterRule, DEFAULT_GLOBAL_FILTERS,
   type FilterCard, type GlobalFilters,
 } from '../components/canvas/FilterBar/types'
 import type { Organization } from '@personnel/domain/schemas'
@@ -202,8 +202,10 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     if (memberOrgIds && memberOrgIds.length > 0 && orgById) {
       const lcaId = computeLca(memberOrgIds, orgById)
       const lcaOrg = lcaId ? orgById.get(lcaId) : null
-      if (lcaId && lcaOrg && lcaOrg.parentId !== null) {
-        filterCards = [makeFilterCard({ subtreeOrgIds: [lcaId] })]
+      if (lcaId && lcaOrg && lcaOrg.parentId !== null && lcaOrg.name) {
+        filterCards = [makeFilterCard({
+          rules: [makeFilterRule({ field: 'orgName', operator: 'in', values: [lcaOrg.name], subtree: true })],
+        })]
       }
     }
     set({ panels, filterCards, globalFilters: DEFAULT_GLOBAL_FILTERS })

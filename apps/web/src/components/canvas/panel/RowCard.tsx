@@ -178,11 +178,13 @@ export function RowCard({
         onDragOver={
           isVacant ? e => {
             if (!e.dataTransfer.types.includes('application/json')) return
+            if (e.dataTransfer.types.includes('application/x-unmapped-bulk')) return
             e.preventDefault(); e.stopPropagation()
             setDragOverVacantRowId(row.rowId)
           } :
           !isSelectMode && !isHistoryPreviewMode ? e => {
             if (!e.dataTransfer.types.includes('application/json')) return
+            if (e.dataTransfer.types.includes('application/x-unmapped-bulk')) return
             e.preventDefault(); e.stopPropagation()
             setDragOverOrgId(null)
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -307,6 +309,7 @@ export function RowCard({
             }}
             onDragOver={e => {
               if (!e.dataTransfer.types.includes('application/json')) return
+              if (e.dataTransfer.types.includes('application/x-unmapped-bulk')) return
               e.preventDefault()
             }}
             onDrop={e => {

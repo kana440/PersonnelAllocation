@@ -23,85 +23,98 @@ type Section =
   | { directEdit: true }
 
 // ── セクション定義 ────────────────────────────────────────────────────────────
+// セクション分けは command def ファイル（= pattern グループ）に対応させる。
 // MultiRowOperationDef を追加するときは multiRowId: '...' で記載する。
-// Domain 側の def を変更したときはここも合わせて更新する。
 const SECTIONS: Section[] = [
+  // ── promotionDefs ──────────────────────────────────────────────────────────
   {
     label: '昇降格・役職変更',
     ops: [
       { id: 'Promotion',     shortLabel: '昇格' },
       { id: 'Demotion',      shortLabel: '降格' },
       { id: 'TitleChange',   shortLabel: '役職名変更' },
-      { id: 'MpTrackSwitch', shortLabel: 'M職/P職切替' },
+      { id: 'MpTrackSwitch', shortLabel: 'M職/P職\n切替' },
     ],
   },
+  // ── employmentTypeDefs ─────────────────────────────────────────────────────
   {
     label: '職務内容・雇用形態',
     ops: [
-      { id: 'JobTypeChange',              shortLabel: '職種変更' },
-      { id: 'EmploymentExtension',        shortLabel: '雇用延長' },
-      { id: 'EmploymentExtensionCancel',  shortLabel: '雇用延長取消', cancel: true },
-      { id: 'EmploymentTypeChange',       shortLabel: '雇用タイプ変更' },
+      { id: 'JobTypeChange',             shortLabel: '職種変更' },
+      { id: 'EmploymentExtension',       shortLabel: '雇用延長' },
+      { id: 'EmploymentExtensionCancel', shortLabel: '雇用延長\n取消',     cancel: true },
+      { id: 'EmploymentTypeChange',      shortLabel: '雇用タイプ\n変更' },
     ],
   },
+  // ── orgTransferDefs ────────────────────────────────────────────────────────
   {
     label: '組織への異動',
     ops: [
-      { id: 'OrgRestructure', shortLabel: '組織CDの変更(組改)' },
-      { id: 'OrgTransfer',    shortLabel: '別組織へ異動' },
+      { id: 'OrgTransfer',    shortLabel: '異動' },
+      { id: 'OrgRestructure', shortLabel: '異動（組改）' },
     ],
   },
+  // ── positionAddDef / positionMoveDefs ────────────────────────────────────
   {
-    label: '上司変更・ポジション追加',
+    label: 'ポジション',
     ops: [
-      { id: 'ManagerChange', shortLabel: '上司変更' },
+      { id: 'ManagerChange',        shortLabel: '上司変更' },
+      { id: 'AddEmptyPosition',     shortLabel: '新規Pos\n追加' },
+      { id: 'SubordinateHandoff',   shortLabel: '部下\n引継・統合' },
+      { id: 'MoveToVacantPosition', shortLabel: '空Posへ\n移動' },
     ],
   },
+  // ── concurrentDefs ─────────────────────────────────────────────────────────
   {
-    label: '在籍・退職',
-    ops: [
-      { id: 'LeaveOfAbsence',         shortLabel: '休職' },
-      { id: 'LeaveOfAbsenceCancel',   shortLabel: '休職取消',       cancel: true },
-      { id: 'ReturnFromLeave',        shortLabel: '復職' },
-      { id: 'ReturnFromLeaveCancel',  shortLabel: '復職取消',       cancel: true },
-      { id: 'EmploymentTransfer',     shortLabel: '移籍' },
-      { id: 'EmploymentTransferCancel', shortLabel: '移籍取消',     cancel: true },
-      { id: 'NoChange',               shortLabel: '変更なし' },
-      { id: 'NoChangeCancel',         shortLabel: '変更なし\n取消', cancel: true },
-    ],
-  },
-  { directEdit: true },
-  {
-    label: '兼務',
+    label: '社内兼務',
     ops: [
       { id: 'ConcurrentAdd',       shortLabel: '兼務追加' },
-      { id: 'ConcurrentAddCancel', shortLabel: '兼務追加取消', cancel: true },
+      { id: 'ConcurrentAddNew',    shortLabel: '新規兼務\n追加' },
+      { id: 'ConcurrentAddCancel', shortLabel: '兼務追加\n取消', cancel: true },
       { id: 'ConcurrentRelease',   shortLabel: '兼務解除' },
     ],
   },
+  // ── personDefs ─────────────────────────────────────────────────────────────
+  {
+    label: '在籍・退職',
+    ops: [
+      { id: 'LeaveOfAbsence',           shortLabel: '休職' },
+      { id: 'LeaveOfAbsenceCancel',     shortLabel: '休職取消',       cancel: true },
+      { id: 'ReturnFromLeave',          shortLabel: '復職' },
+      { id: 'ReturnFromLeaveCancel',    shortLabel: '復職取消',       cancel: true },
+      { id: 'EmploymentTransfer',       shortLabel: '移籍' },
+      { id: 'EmploymentTransferCancel', shortLabel: '移籍取消',       cancel: true },
+      { id: 'NoChange',                 shortLabel: '変更なし' },
+      { id: 'NoChangeCancel',           shortLabel: '変更なし\n取消', cancel: true },
+    ],
+  },
+  { directEdit: true },
+  // ── secondmentMainDefs ─────────────────────────────────────────────────────
   {
     label: '本務出向',
     ops: [
-      // chooser: 出向先会社を入力 → SF判定 → SF用フォーム or SF外2行フォームへルーティング
-      { chooser: 'secondmentOut',              shortLabel: '本務出向' },
-      { id: 'SecondmentOutReleaseSF',          shortLabel: 'SF\n本務出向解除' },
-      { id: 'SecondmentOutReleaseNonSF',       shortLabel: 'SF外\n本務出向解除' },
-      { multiRowId: 'NonSFSecondmentRelease',  shortLabel: 'SF外\n出向解除' },
-      { multiRowId: 'NonSFSecondmentCancel',   shortLabel: 'SF外出向\n取消', cancel: true },
-      { id: 'SecondmentInReleaseSF',           shortLabel: 'SF\n本務受入解除' },
-      { id: 'SecondmentInReleaseNonSF',        shortLabel: 'SF外\n本務受入解除' },
-      { id: 'SecondmentInCancel',              shortLabel: '本務受入\n取消', cancel: true },
+      { chooser: 'secondmentOut',             shortLabel: '本務出向' },
+      { id: 'SecondmentInNew',                shortLabel: '本務\n受入追加' },
+      { id: 'SecondmentOutReleaseSF',         shortLabel: 'SF\n本務出向解除' },
+      { id: 'SecondmentOutReleaseNonSF',      shortLabel: 'SF外\n本務出向解除' },
+      { multiRowId: 'NonSFSecondmentRelease', shortLabel: 'SF外\n出向解除' },
+      { multiRowId: 'NonSFSecondmentCancel',  shortLabel: 'SF外出向\n取消',   cancel: true },
+      { id: 'SecondmentInReleaseSF',          shortLabel: 'SF\n本務受入解除' },
+      { id: 'SecondmentInReleaseNonSF',       shortLabel: 'SF外\n本務受入解除' },
+      { id: 'SecondmentInCancel',             shortLabel: '本務受入\n取消',   cancel: true },
     ],
   },
+  // ── secondmentConcurrentDefs ───────────────────────────────────────────────
   {
     label: '兼務出向',
     ops: [
-      { chooser: 'concurrentSecondmentOut',          shortLabel: '兼務出向' },
-      { id: 'ConcurrentSecondmentOutReleaseSF',     shortLabel: 'SF\n兼務出向解除' },
-      { id: 'ConcurrentSecondmentOutReleaseNonSF',  shortLabel: 'SF外\n兼務出向解除' },
-      { id: 'ConcurrentSecondmentInReleaseSF',      shortLabel: 'SF\n兼務受入解除' },
-      { id: 'ConcurrentSecondmentInReleaseNonSF',   shortLabel: 'SF外\n兼務受入解除' },
-      { id: 'ConcurrentSecondmentInCancel',         shortLabel: '兼務受入\n取消', cancel: true },
+      { chooser: 'concurrentSecondmentOut',        shortLabel: '兼務出向' },
+      { id: 'ConcurrentSecondmentInNew',           shortLabel: '兼務\n受入追加' },
+      { id: 'ConcurrentSecondmentOutReleaseSF',    shortLabel: 'SF\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentOutReleaseNonSF', shortLabel: 'SF外\n兼務出向解除' },
+      { id: 'ConcurrentSecondmentInReleaseSF',     shortLabel: 'SF\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInReleaseNonSF',  shortLabel: 'SF外\n兼務受入解除' },
+      { id: 'ConcurrentSecondmentInCancel',        shortLabel: '兼務受入\n取消',   cancel: true },
     ],
   },
 ]

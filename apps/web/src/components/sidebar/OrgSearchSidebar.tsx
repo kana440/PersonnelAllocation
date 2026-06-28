@@ -9,10 +9,10 @@ import { VirtualOrgTree, type VirtualOrgTreeHandle } from './VirtualOrgTree'
 import { UnmappedOrgSection } from './UnmappedOrgSection'
 
 export function OrgSearchSidebar() {
-  const { selectedPersonId, selectPerson, selectedCardRowId, selectCard, enterOperationPanel } = useScopedStore()
+  const { selectPerson, selectedCardRowId, selectCard, enterOperationPanel } = useScopedStore()
 
   const {
-    viewOrgs, afterOrgByCode, afterMembersByOrgId, assignedPersonIds,
+    viewOrgs, afterOrgByCode, afterMembersByOrgId,
     subtreeCountByOrgId, persons, allocationList,
   } = useSidebarMemberData()
 
@@ -100,41 +100,10 @@ export function OrgSearchSidebar() {
   ] : []
 
   const treeFooter = (
-    <>
-      <UnmappedOrgSection />
-      {(() => {
-        const unassigned = persons.filter(p => !assignedPersonIds.has(p.id))
-        if (unassigned.length === 0) return null
-        return (
-          <div className="border border-dashed border-gray-200 rounded mx-1 mt-1">
-            <div className="px-2 py-1 text-xs font-semibold text-gray-400 bg-gray-50 rounded-t">
-              所属なし ({unassigned.length})
-            </div>
-            <div className="px-1 py-0.5">
-              {unassigned.map(p => (
-                <button
-                  key={p.id}
-                  draggable
-                  onClick={() => selectPerson(p.id)}
-                  onDoubleClick={() => enterEditForPerson(p.id)}
-                  onContextMenu={e => handlePersonContextMenu(e, p.id)}
-                  className={`w-full text-left flex items-center gap-1 py-0.5 px-1 rounded text-xs transition-colors cursor-grab active:cursor-grabbing ${
-                    selectedPersonId === p.id ? 'bg-yellow-50 text-gray-800 font-semibold' : 'text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="text-gray-300 flex-shrink-0">—</span>
-                  <span className="truncate">{p.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )
-      })()}
-      <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-400 pt-1 border-t border-gray-100 px-2 pb-1 mt-1">
-        <span><span className="text-blue-400 mr-0.5">↑</span>役職変更</span>
-        <span><span className="text-orange-500 font-bold mr-0.5">!</span>異動事由未入力</span>
-      </div>
-    </>
+    <div className="flex flex-wrap gap-x-3 text-[10px] text-gray-400 pt-1 border-t border-gray-100 px-2 pb-1 mt-1">
+      <span><span className="text-blue-400 mr-0.5">↑</span>役職変更</span>
+      <span><span className="text-orange-500 font-bold mr-0.5">!</span>異動事由未入力</span>
+    </div>
   )
 
   return (
@@ -212,6 +181,11 @@ export function OrgSearchSidebar() {
           footer={treeFooter}
         />
       )}
+
+      {/* 旧組織（未割当）: 検索モード切り替えに関わらず常時同一インスタンスで表示 */}
+      <div className="flex-shrink-0 px-1">
+        <UnmappedOrgSection />
+      </div>
 
       {contextMenu && (
         <div

@@ -14,6 +14,21 @@ import type { AllocationRow } from '../allocationRow'
 import type { AllMasters }  from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
 
+/**
+ * 既存の _pos_ 番号と重複しない新しいポジションコードを生成する。
+ * positionCode/prevPositionCode 両方を参照して番号衝突を防ぐ。
+ */
+function nextPosCode(allocationList: readonly AllocationRow[]): string {
+  const usedNums = new Set(
+    allocationList.flatMap(r => [r.positionCode, r.prevPositionCode])
+      .filter((c): c is string => typeof c === 'string' && c.startsWith('_pos_'))
+      .map(c => parseInt(c.slice(5), 10)).filter(n => !isNaN(n))
+  )
+  let n = allocationList.length + 1
+  while (usedNums.has(n)) n++
+  return `_pos_${n}`
+}
+
 import { deriveOrgSubFields }        from './orgFields'
 import { deriveManagerName }         from './managerFields'
 import { derivePromotionSign, derivePayGradeChangeSign, derivePromotionSignFromLevel } from './promotionFields'
@@ -105,6 +120,22 @@ export function deriveFieldUpdates(
     const lvSign = derivePromotionSignFromLevel(effectivePg, prevPg)
     if (lvSign.promotionSign !== undefined) {
       Object.assign(result, lvSign)
+    }
+
+    // 給与等級変化 + ポジションコード未変更 → ポジションコードを自動新設
+    // 「ポジションコード未変更」= 現在の positionCode が prevPositionCode と同じ
+    //   （フォーム上でまだ変更されていない状態を示す）
+    const currPos = draft.positionCode     as string | undefined
+    const prevPos = draft.prevPositionCode as string | undefined
+    if (prevPos) {  // 既存ポジションを持つ行のみ対象
+      if (effectivePg !== prevPg && currPos === prevPos) {
+        // payGrade が変化した → 新規 _pos_ コードを自動採番
+        result.positionCode = nextPosCode(allocationList)
+      } else if (effectivePg === prevPg && currPos !== prevPos &&
+                 typeof currPos === 'string' && currPos.startsWith('_pos_')) {
+        // payGrade が元に戻った + 自動採番コードが残っている → prevPositionCode に戻す
+        result.positionCode = prevPos
+      }
     }
   }
 

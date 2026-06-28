@@ -4,6 +4,10 @@ import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { ComparisonSplitView }  from '../ComparisonSplitView'
 import { SetPositionManagerOperation } from '@personnel/domain/commands/handlers/positionOps'
 import { ReorderRowOperation }         from '@personnel/domain/commands/handlers/reorderRow'
+import { bindOperation }               from '@personnel/domain/commands/defs'
+import { orgRestructureDef }           from '@personnel/domain/commands/defs/orgTransferDefs'
+import { TR }                          from '@personnel/domain/transferReasonLabels'
+import type { Organization }           from '@personnel/domain/schemas'
 import { appService }          from '../../../application/HRApplicationService'
 import { useScopedStore }      from '../../../store/useScopedStore'
 import { SecondmentInAddModal }  from '../SecondmentInAddModal'
@@ -50,6 +54,7 @@ export function OrgOperationView() {
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [bandDialog,          setBandDialog]          = useState<{ from: string; to: string; onOverride: () => void; onKeep: () => void } | null>(null)
   const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
   const [moveModalOpen,       setMoveModalOpen]       = useState(false)
   const [bulkActionModal,     setBulkActionModal]     = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
@@ -67,6 +72,17 @@ export function OrgOperationView() {
 
   const { dropIntentState, setDropIntentState, dropOpState, setDropOpState, handleIntentPick } = useDropIntent()
 
+  const handleUnmappedBulkDrop = useCallback((rowIds: number[], toOrg: Organization) => {
+    const targetCode = toOrg.externalCode ?? toOrg.id
+    const commands = rowIds.map(rowId =>
+      bindOperation(orgRestructureDef, rowId, {
+        departmentCode: targetCode,
+        transferReason: TR.DIV_TRANSFER_RESTRUCTURE,
+      })
+    )
+    appService.executeBatch(`組改一括: → ${toOrg.name}`, commands)
+  }, [])
+
   const {
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
@@ -78,6 +94,9 @@ export function OrgOperationView() {
     organizations, persons, saveRow, assignPersonToVacantPosition,
     openPersonMoveDialog: (fromRowId, personId, toOrgId) =>
       setDropIntentState({ fromRowId, personId, toOrgId, dropType: 'org' }),
+    onUnmappedBulkDrop: handleUnmappedBulkDrop,
+    checkBandChange:    (vacantRowId, sfId) => appService.checkAssignBandChange(vacantRowId, sfId),
+    onBandChangeRequest: setBandDialog,
   })
 
   const { bulkMoveSourceId, setBulkMoveSourceId, handleBulkMoveConfirm } = useBulkMove({
@@ -276,6 +295,33 @@ export function OrgOperationView() {
           handleIntentPick={handleIntentPick}
         />
       </div>
+
+      {/* バンド変更確認ダイアログ */}
+      {bandDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-base font-semibold text-gray-800 mb-3">バンドが変わります</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              このポジションのバンドは <strong>{bandDialog.to}</strong> です。<br />
+              現在のバンド <strong>{bandDialog.from}</strong> を上書きしますか？
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { bandDialog.onKeep(); setBandDialog(null) }}
+                className="px-3 py-1.5 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                現在のバンドを維持
+              </button>
+              <button
+                onClick={() => { bandDialog.onOverride(); setBandDialog(null) }}
+                className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+              >
+                {bandDialog.to} に上書き
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </OrgViewContext.Provider>
   )
 }

@@ -79,7 +79,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const handleChange = (field: keyof AllocationRow, value: string) => {
     const changes  = { [field]: value } as Partial<AllocationRow>
     const derived  = deriveFieldUpdates(changes, draftRow, masters, allocationList)
-    const effects  = def.onFieldChange?.[field]?.(value, ctx)
+    const effects  = def.onFieldChange?.[field]?.(value, ctx, values)
     const filteredDerived: Record<string, unknown> = { ...derived }
     for (const f of (effects?.excludeDerived ?? [])) delete filteredDerived[f as string]
     setValues(prev => ({ ...prev, ...changes, ...filteredDerived, ...(effects?.setValues ?? {}) }))
@@ -105,7 +105,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   }
 
   const handleCommit = (field: keyof AllocationRow, value: string) => {
-    const effects = def.onFieldChange?.[field]?.(value, ctx)
+    const effects = def.onFieldChange?.[field]?.(value, ctx, values)
     if (!effects?.suggestFieldValue || titleSuggest) return
     const { field: suggestField, value: suggestVal } = effects.suggestFieldValue
     const targetInput    = fieldInputs.find(i => i.field === suggestField)

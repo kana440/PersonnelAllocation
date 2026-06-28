@@ -1,65 +1,81 @@
-export type PathField = 'businessUnits' | 'divisions' | 'departments' | 'groups' | 'teams'
+export type FilterField    = 'orgName' | 'businessUnit' | 'division' | 'department' | 'group' | 'team'
+export type FilterOperator = 'contains' | 'not-contains' | 'in' | 'not-in'
 
-export const PATH_FIELDS: readonly PathField[] = [
-  'businessUnits', 'divisions', 'departments', 'groups', 'teams',
-] as const
+export const FILTER_FIELDS: readonly FilterField[] = [
+  'orgName', 'businessUnit', 'division', 'department', 'group', 'team',
+]
 
-export const PATH_FIELD_LABEL: Record<PathField, string> = {
-  businessUnits: '関係部門',
-  divisions:     '部門',
-  departments:   '統括部',
-  groups:        'グループ',
-  teams:         'チーム',
+export const FILTER_FIELD_LABEL: Record<FilterField, string> = {
+  orgName:      '組織名',
+  businessUnit: '事業部',
+  division:     '部門',
+  department:   '統括部',
+  group:        'グループ',
+  team:         'チーム',
 }
 
-export const ENTRY_FIELD: Record<PathField,
-  'pathBusinessUnit' | 'pathDivision' | 'pathDepartment' | 'pathGroup' | 'pathTeam'
-> = {
-  businessUnits: 'pathBusinessUnit',
-  divisions:     'pathDivision',
-  departments:   'pathDepartment',
-  groups:        'pathGroup',
-  teams:         'pathTeam',
+/** テキスト一部一致系の演算子（値は単一テキスト） */
+export const TEXT_OPS = new Set<FilterOperator>(['contains', 'not-contains'])
+
+/** リスト選択系の演算子（値は選択肢の配列） */
+export const LIST_OPS = new Set<FilterOperator>(['in', 'not-in'])
+
+export const FILTER_OP_LABEL: Record<FilterOperator, string> = {
+  'contains':     'テキスト含む',
+  'not-contains': 'テキスト含まない',
+  'in':           'リスト選択',
+  'not-in':       'リストから除く',
+}
+
+export interface FilterRule {
+  id:       string
+  field:    FilterField
+  operator: FilterOperator
+  /** contains/not-contains → 1要素のテキスト。in/not-in → 選択値リスト */
+  values:   string[]
+  /** true のとき、マッチした組織の配下もすべて表示対象に含める */
+  subtree:  boolean
 }
 
 export interface FilterCard {
-  id:             string
-  // 階層パスフィルタ（同一カード内 AND、カード間 OR）
-  businessUnits:  string[]
-  divisions:      string[]
-  departments:    string[]
-  groups:         string[]
-  teams:          string[]
-  // サブツリーフィルタ（org IDの配下を強制表示）
-  subtreeOrgIds:  string[]
+  id:    string
+  rules: FilterRule[]
 }
 
 export interface GlobalFilters {
-  hasMembers:                    boolean   // 人・ポジションあり（デフォルト true）
-  includeRelatedSecondmentOrgs:  boolean   // 表示中の組織の出向者用組織も表示
-  secondmentAnchors:             string[]  // 特定の org ID + その出向者用組織を強制表示
+  hasMembers:                   boolean
+  includeRelatedSecondmentOrgs: boolean
+  secondmentAnchors:            string[]
 }
 
 export const DEFAULT_GLOBAL_FILTERS: GlobalFilters = {
-  hasMembers:                   true,
+  hasMembers:                   false,
   includeRelatedSecondmentOrgs: false,
   secondmentAnchors:            [],
 }
 
 let _cardCounter = 0
-export function makeFilterCard(partial?: Partial<FilterCard>): FilterCard {
+let _ruleCounter = 0
+
+export function makeFilterRule(partial?: Partial<FilterRule>): FilterRule {
   return {
-    id: `fc_${++_cardCounter}`,
-    businessUnits: [], divisions: [], departments: [], groups: [], teams: [],
-    subtreeOrgIds: [],
+    id:       `fr_${++_ruleCounter}`,
+    field:    'orgName',
+    operator: 'contains',
+    values:   [],
+    subtree:  false,
     ...partial,
   }
 }
 
-export function lowerFields(field: PathField): PathField[] {
-  return PATH_FIELDS.slice(PATH_FIELDS.indexOf(field) + 1) as PathField[]
+export function makeFilterCard(partial?: Partial<FilterCard>): FilterCard {
+  return {
+    id:    `fc_${++_cardCounter}`,
+    rules: [makeFilterRule()],
+    ...partial,
+  }
 }
 
 export function cardIsEmpty(card: FilterCard): boolean {
-  return PATH_FIELDS.every(f => card[f].length === 0) && card.subtreeOrgIds.length === 0
+  return card.rules.every(r => r.values.length === 0 && !r.subtree)
 }

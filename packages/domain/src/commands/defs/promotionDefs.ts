@@ -1,13 +1,123 @@
 // 昇降格・役職変更 — 昇格・降格・役職変更
-import type { EditOperation } from './types'
+import type { EditOperation, SectionDivider, OperationInput } from './types'
 import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
+import type { DomainContext, OperationResult } from '../types'
 import type { AllocationRow } from '../../allocationRow'
+import { afterKeysByBinding, nextRowId } from '../../allocationRow'
 import { DirectEditOperation } from '../handlers/directEdit'
+import { deriveManagerName } from '../orgHelpers'
 import { TR } from '../../transferReasonLabels'
+import type { PromotionMatrixEntry } from '../../masters/promotionMatrix'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
+}
+
+// ── 部下引き継ぎ共有ヘルパー ──────────────────────────────────────────────────
+
+/**
+ * onOpen で現在のポジションコードを参照する部下が存在するか検出する。
+ * 部下がいる場合は '_managerTransferMode: "引き継ぐ"' を返す（フォームの初期値として使用）。
+ * SUBORDINATE_TRANSFER_INPUTS の options と値を合わせること。
+ */
+export function detectSubordinateMode(
+  row: AllocationRow,
+  ctx: DomainContext,
+): '引き継ぐ' | undefined {
+  const posCode = row.positionCode as string | undefined
+  if (!posCode) return undefined
+  return ctx.allocationList.some(r => r.managerPositionCode === posCode) ? '引き継ぐ' : undefined
+}
+
+/**
+ * 部下引き継ぎ入力フィールド定義。
+ * visibleWhen で _managerTransferMode が設定されている行（= 部下がいる）にのみ表示する。
+ */
+export const SUBORDINATE_TRANSFER_INPUTS: (SectionDivider | OperationInput)[] = [
+  { kind: 'section', label: '部下の引き継ぎ' },
+  {
+    field:       '_managerTransferMode',
+    label:       '部下の引き継ぎ方法',
+    required:    false,
+    options:     ['引き継ぐ', '他メンバに引き継ぎ'],
+    optionsMode: 'restrict',
+    visibleWhen: (values) => values._managerTransferMode !== undefined,
+  },
+]
+
+/**
+ * ポジション変更後に部下の引き継ぎ処理を適用する。
+ *
+ * - positionCode が変化していない場合: そのまま返す
+ * - '他メンバに引き継ぎ': 旧ポジションコードを持つ空席行を追加
+ * - '引き継ぐ'（デフォルト）: 部下の managerPositionCode・managerName を新ポジションへ一括更新
+ */
+export function applySubordinateTransfer(
+  originalRow: AllocationRow,
+  values:      Partial<AllocationRow>,
+  result:      OperationResult,
+): OperationResult {
+  const oldCode = originalRow.positionCode as string | undefined
+  const newCode = values.positionCode       as string | undefined
+  if (!oldCode || !newCode || oldCode === newCode) return result
+
+  const subordinates = result.updatedList.filter(r => r.managerPositionCode === oldCode)
+  if (subordinates.length === 0) return result
+
+  if (values._managerTransferMode === '他メンバに引き継ぎ') {
+    // 他メンバに引き継ぎ: 旧ポジションコードを引き継ぐ空席行を追加
+    const jobInfoClears = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
+    const vacantRow: AllocationRow = {
+      ...originalRow,
+      rowId:  nextRowId(result.updatedList),
+      userId: undefined,
+      ...jobInfoClears,
+    }
+    return { ...result, updatedList: [...result.updatedList, vacantRow] }
+  }
+
+  // 引き継ぐ（デフォルト）: 部下の上司 Pos コード・上司名を新ポジションへ更新
+  const updatedList = result.updatedList.map(r => {
+    if ((r.managerPositionCode as string | undefined) !== oldCode) return r
+    return {
+      ...r,
+      managerPositionCode: newCode,
+      managerName:         deriveManagerName(newCode, result.updatedList),
+    }
+  })
+  return { ...result, updatedList }
+}
+
+// ── 昇降格マトリクス ヘルパー ─────────────────────────────────────────────────
+
+/**
+ * 昇降格マトリクスで現在の (positionBand, officialPositionCode) に対応するエントリを返す。
+ * マッチしない場合は undefined。
+ */
+function findMatrixEntry(
+  positionBand: string | undefined,
+  officialPositionCode: string | undefined,
+  matrix: PromotionMatrixEntry[],
+): PromotionMatrixEntry | undefined {
+  if (!positionBand || !officialPositionCode) return undefined
+  return matrix.find(e => e.jobLevel === positionBand && e.officialPosition === officialPositionCode)
+}
+
+/**
+ * 指定バンドに対応するマトリクスエントリを jobClass（現在のM/P職）を優先して並べた officialPosition リストを返す。
+ * currentJobClass と一致するものを先頭に、それ以外を後続に表示する。
+ */
+function suggestOfficialPositions(
+  newBand: string,
+  currentJobClass: string | undefined,
+  matrix: PromotionMatrixEntry[],
+): string[] {
+  const candidates = matrix.filter(e => e.jobLevel === newBand)
+  if (candidates.length === 0) return []
+  const sameClass  = candidates.filter(e => currentJobClass && e.jobClass === currentJobClass).map(e => e.officialPosition)
+  const otherClass = candidates.filter(e => !currentJobClass || e.jobClass !== currentJobClass).map(e => e.officialPosition)
+  return [...new Set([...sameClass, ...otherClass])]
 }
 
 // ── 昇格 ─────────────────────────────────────────────────────────────────────
@@ -32,6 +142,12 @@ export const promotionDef: EditOperation = {
 
   availableFor: () => AVAILABLE,
 
+  // 簡易モード: positionBand と役職名だけ入力、残りは自動導出
+  quickInputs: [
+    { field: 'positionBand',        required: true,  stepFilter: 'up' },
+    { field: 'officialPositionCode', required: false },
+  ],
+
   inputs: [
     // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
     { field: 'promotionSign',      required: false, readOnly: true, inputType: 'checkbox', indicator: true },
@@ -55,28 +171,48 @@ export const promotionDef: EditOperation = {
     { field: 'unionFlag',                      required: false },
     { field: 'positionDiscretionaryWorkFlag',  required: false },
     { field: 'discretionaryWorkFlag',          required: false },
+    // ── 部下の引き継ぎ（部下がいる場合のみ表示）───────────────────────────
+    ...SUBORDINATE_TRANSFER_INPUTS,
   ],
 
   onFieldChange: {
+    positionBand: (newBand, ctx, currentValues) => {
+      const matrix = ctx.masters.promotionMatrix ?? []
+      if (!matrix.length) return {}
+      const currentJobClass = currentValues?._currentJobClass as string | undefined
+      const suggestions = suggestOfficialPositions(newBand, currentJobClass, matrix)
+      if (!suggestions.length) return {}
+      return { setValues: { officialPositionCode: suggestions[0] } }
+    },
     officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
   },
 
-  onOpen: (row) => ({
-    promotionSign:                row.promotionSign                 as string | undefined,
-    payGradeChangeSign:           row.payGradeChangeSign            as string | undefined,
-    transferReason:               (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
-    memo:                         (row.memo ?? '昇格')              as string | undefined,
-    positionBand:                 row.positionBand                  as string | undefined,
-    band:                         row.band                          as string | undefined,
-    payGrade:                     row.payGrade                      as string | undefined,
-    positionCode:                 row.positionCode                  as string | undefined,
-    officialPositionCode:         row.officialPositionCode          as string | undefined,
-    localJobTitle:                row.localJobTitle                 as string | undefined,
-    positionUnionFlag:            row.positionUnionFlag             as string | undefined,
-    unionFlag:                    row.unionFlag                     as string | undefined,
-    positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
-    discretionaryWorkFlag:        row.discretionaryWorkFlag         as string | undefined,
-  }),
+  onOpen: (row, ctx) => {
+    const matrix = ctx.masters.promotionMatrix ?? []
+    const matrixEntry = findMatrixEntry(
+      row.positionBand as string | undefined,
+      row.officialPositionCode as string | undefined,
+      matrix,
+    )
+    return {
+      promotionSign:                row.promotionSign                 as string | undefined,
+      payGradeChangeSign:           row.payGradeChangeSign            as string | undefined,
+      transferReason:               (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
+      memo:                         (row.memo ?? '昇格')              as string | undefined,
+      positionBand:                 row.positionBand                  as string | undefined,
+      band:                         row.band                          as string | undefined,
+      payGrade:                     row.payGrade                      as string | undefined,
+      positionCode:                 row.positionCode                  as string | undefined,
+      officialPositionCode:         row.officialPositionCode          as string | undefined,
+      localJobTitle:                row.localJobTitle                 as string | undefined,
+      positionUnionFlag:            row.positionUnionFlag             as string | undefined,
+      unionFlag:                    row.unionFlag                     as string | undefined,
+      positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
+      discretionaryWorkFlag:        row.discretionaryWorkFlag         as string | undefined,
+      _managerTransferMode:         detectSubordinateMode(row, ctx),
+      _currentJobClass:             matrixEntry?.jobClass,
+    }
+  },
 
   onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
@@ -88,7 +224,10 @@ export const promotionDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return new DirectEditOperation(rowId, values, `昇格: ${personName(row)}`).apply(ctx)
+    const { _managerTransferMode, _currentJobClass: _jc1, ...cleanValues } = values
+    const label = `昇格: ${personName(row)}`
+    const result = new DirectEditOperation(rowId, cleanValues, label).apply(ctx)
+    return applySubordinateTransfer(row, values, result)
   },
 }
 
@@ -107,6 +246,13 @@ export const demotionDef: EditOperation = {
   description: 'ポジションバンドを下げる降格を記入します。降格理由の入力が必須です。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから対応してください）。',
 
   availableFor: () => AVAILABLE,
+
+  // 簡易モード: positionBand・降格理由・役職名だけ入力（降格理由は必須のため含める）
+  quickInputs: [
+    { field: 'positionBand',         required: true,  stepFilter: 'down' },
+    { field: 'demotionReason',       required: true },
+    { field: 'officialPositionCode', required: false },
+  ],
 
   inputs: [
     // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────
@@ -132,28 +278,48 @@ export const demotionDef: EditOperation = {
     { field: 'unionFlag',                     required: false },
     { field: 'positionDiscretionaryWorkFlag', required: false },
     { field: 'discretionaryWorkFlag',         required: false },
+    // ── 部下の引き継ぎ（部下がいる場合のみ表示）───────────────────────────
+    ...SUBORDINATE_TRANSFER_INPUTS,
   ],
 
   onFieldChange: {
+    positionBand: (newBand, ctx, currentValues) => {
+      const matrix = ctx.masters.promotionMatrix ?? []
+      if (!matrix.length) return {}
+      const currentJobClass = currentValues?._currentJobClass as string | undefined
+      const suggestions = suggestOfficialPositions(newBand, currentJobClass, matrix)
+      if (!suggestions.length) return {}
+      return { setValues: { officialPositionCode: suggestions[0] } }
+    },
     officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
   },
 
-  onOpen: (row) => ({
-    promotionSign:                row.promotionSign                 as string | undefined,
-    payGradeChangeSign:           row.payGradeChangeSign            as string | undefined,
-    transferReason:               (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
-    memo:                         (row.memo ?? '降格')              as string | undefined,
-    positionBand:                 row.positionBand                  as string | undefined,
-    band:                         row.band                          as string | undefined,
-    payGrade:                     row.payGrade                      as string | undefined,
-    positionCode:                 row.positionCode                  as string | undefined,
-    officialPositionCode:         row.officialPositionCode          as string | undefined,
-    localJobTitle:                row.localJobTitle                 as string | undefined,
-    positionUnionFlag:            row.positionUnionFlag             as string | undefined,
-    unionFlag:                    row.unionFlag                     as string | undefined,
-    positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
-    discretionaryWorkFlag:        row.discretionaryWorkFlag         as string | undefined,
-  }),
+  onOpen: (row, ctx) => {
+    const matrix = ctx.masters.promotionMatrix ?? []
+    const matrixEntry = findMatrixEntry(
+      row.positionBand as string | undefined,
+      row.officialPositionCode as string | undefined,
+      matrix,
+    )
+    return {
+      promotionSign:                row.promotionSign                 as string | undefined,
+      payGradeChangeSign:           row.payGradeChangeSign            as string | undefined,
+      transferReason:               (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
+      memo:                         (row.memo ?? '降格')              as string | undefined,
+      positionBand:                 row.positionBand                  as string | undefined,
+      band:                         row.band                          as string | undefined,
+      payGrade:                     row.payGrade                      as string | undefined,
+      positionCode:                 row.positionCode                  as string | undefined,
+      officialPositionCode:         row.officialPositionCode          as string | undefined,
+      localJobTitle:                row.localJobTitle                 as string | undefined,
+      positionUnionFlag:            row.positionUnionFlag             as string | undefined,
+      unionFlag:                    row.unionFlag                     as string | undefined,
+      positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
+      discretionaryWorkFlag:        row.discretionaryWorkFlag         as string | undefined,
+      _managerTransferMode:         detectSubordinateMode(row, ctx),
+      _currentJobClass:             matrixEntry?.jobClass,
+    }
+  },
 
   onValidate(ctx, rowId, values) {
     if (!ctx.allocationList.find(r => r.rowId === rowId))
@@ -167,7 +333,10 @@ export const demotionDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return new DirectEditOperation(rowId, values, `降格: ${personName(row)}`).apply(ctx)
+    const { _managerTransferMode, _currentJobClass: _jc2, ...cleanValues } = values
+    const label = `降格: ${personName(row)}`
+    const result = new DirectEditOperation(rowId, cleanValues, label).apply(ctx)
+    return applySubordinateTransfer(row, values, result)
   },
 }
 
@@ -214,22 +383,56 @@ export const titleChangeDef: EditOperation = {
   },
 }
 
-// ── M職P職切替（読み替えバンドが同一の別バンドに切替）────────────────────────
+// ── M職P職切替 ───────────────────────────────────────────────────────────────
+//
+// 昇降格マトリクスがある場合:
+//   現在の (positionBand, officialPositionCode) でエントリを特定 → warningLevel・jobClass を取得
+//   → 同じ warningLevel で jobClass が異なるエントリを候補に提示
+// マトリクスがない場合:
+//   promotionDemotionBand（読み替えバンド）が同一の別バンドに切替（従来動作）
+
+function findMpAlternatives(
+  positionBand: string | undefined,
+  officialPositionCode: string | undefined,
+  matrix: PromotionMatrixEntry[],
+): { currentEntry: PromotionMatrixEntry; alternatives: PromotionMatrixEntry[] } | null {
+  if (!positionBand || !officialPositionCode || !matrix.length) return null
+  const currentEntry = findMatrixEntry(positionBand, officialPositionCode, matrix)
+  if (!currentEntry) return null
+  const alternatives = matrix.filter(
+    e => e.warningLevel === currentEntry.warningLevel && e.jobClass !== currentEntry.jobClass,
+  )
+  return { currentEntry, alternatives }
+}
 
 export const mpTrackSwitchDef: EditOperation = {
   id:          'MpTrackSwitch',
   label:       'M職P職切替',
   group:       'jobClassification',
   badge:       'jobChange',
-  description: 'bandは変わるが、昇降格判定に使う読み替えband（promotionDemotionBand）が同一のため給与等級は変わらない。ポジション変更は不要。',
+  description: '給与等級が変わらないM職・P職間の職務区分切替を記入します。現在のバンドと役職名の組み合わせから切替先の候補を自動提案します。',
 
   availableFor: (row, masters) => {
+    if (!row.userId) return unavailable('在席者がいません')
+    const positionBand       = row.positionBand as string | undefined
+    const officialPositionCode = row.officialPositionCode as string | undefined
+    const matrix = masters.promotionMatrix ?? []
+
+    // 昇降格マトリクスで候補を検索（優先）
+    const found = findMpAlternatives(positionBand, officialPositionCode, matrix)
+    if (found) {
+      return found.alternatives.length > 0
+        ? AVAILABLE
+        : unavailable('切替可能なM職P職の組み合わせがマトリクスにありません')
+    }
+
+    // フォールバック: promotionDemotionBand
     const currentBand = row.band as string | undefined
-    if (!currentBand || !row.userId) return unavailable('在席者がいません')
+    if (!currentBand) return unavailable('在席者がいません')
     const currentEntry = masters.jobLevels.find(e => e.label === currentBand || e.code === currentBand)
     if (!currentEntry?.promotionDemotionBand) return unavailable('切替可能なバンドがありません')
     const siblings = masters.jobLevels.filter(
-      e => e.promotionDemotionBand === currentEntry.promotionDemotionBand && e.label !== currentBand
+      e => e.promotionDemotionBand === currentEntry.promotionDemotionBand && e.label !== currentBand,
     )
     return siblings.length > 0 ? AVAILABLE : unavailable('切替可能なバンドがありません')
   },
@@ -239,11 +442,21 @@ export const mpTrackSwitchDef: EditOperation = {
     { field: 'memo',           required: false },
     { kind: 'section', label: 'バンド切替' },
     {
-      field:   'band',
-      label:   '切替後バンド',
+      field:    'band',
+      label:    '切替後バンド',
       required: true,
-      options: (ctx, row) => {
-        const currentBand  = row?.band as string | undefined
+      options:  (ctx, row) => {
+        const positionBand       = row?.positionBand as string | undefined
+        const officialPositionCode = row?.officialPositionCode as string | undefined
+        const matrix = ctx.masters.promotionMatrix ?? []
+
+        const found = findMpAlternatives(positionBand, officialPositionCode, matrix)
+        if (found) {
+          return [...new Set(found.alternatives.map(e => e.jobLevel))]
+        }
+
+        // フォールバック
+        const currentBand = row?.band as string | undefined
         if (!currentBand) return ctx.masters.jobLevels.map(e => e.label)
         const currentEntry = ctx.masters.jobLevels.find(e => e.label === currentBand || e.code === currentBand)
         if (!currentEntry?.promotionDemotionBand) return ctx.masters.jobLevels.map(e => e.label)
@@ -258,24 +471,64 @@ export const mpTrackSwitchDef: EditOperation = {
   ],
 
   onFieldChange: {
+    band: (newBand, ctx, currentValues) => {
+      const matrix = ctx.masters.promotionMatrix ?? []
+      if (!matrix.length) return {}
+      const currentJobClass    = currentValues?._currentJobClass as string | undefined
+      const currentWarningLevel = Number(currentValues?._currentWarningLevel)
+      if (!currentJobClass || isNaN(currentWarningLevel)) return {}
+
+      // 新バンド × 同 warningLevel × 異なる jobClass で役職候補を絞り込む
+      const candidates = matrix.filter(
+        e => e.jobLevel === newBand
+          && e.warningLevel === currentWarningLevel
+          && e.jobClass !== currentJobClass,
+      )
+      if (!candidates.length) return {}
+      return { setValues: { officialPositionCode: candidates[0].officialPosition } }
+    },
     officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
   },
 
   onOpen: (row, ctx) => {
-    const currentBand  = row.band as string | undefined
-    const currentEntry = currentBand
-      ? ctx.masters.jobLevels.find(e => e.label === currentBand || e.code === currentBand)
+    const positionBand       = row.positionBand as string | undefined
+    const officialPositionCode = row.officialPositionCode as string | undefined
+    const matrix = ctx.masters.promotionMatrix ?? []
+
+    const found = findMpAlternatives(positionBand, officialPositionCode, matrix)
+    if (found) {
+      const { currentEntry, alternatives } = found
+      const altBands  = [...new Set(alternatives.map(e => e.jobLevel))]
+      const initBand  = altBands.length === 1 ? altBands[0] : undefined
+      const initTitle = initBand
+        ? alternatives.filter(e => e.jobLevel === initBand).map(e => e.officialPosition)[0]
+        : undefined
+
+      return {
+        transferReason:        (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
+        memo:                  (row.memo ?? 'M職P職切替')              as string | undefined,
+        band:                  initBand,
+        officialPositionCode:  initTitle ?? officialPositionCode,
+        localJobTitle:         row.localJobTitle                       as string | undefined,
+        _currentJobClass:      currentEntry.jobClass,
+        _currentWarningLevel:  String(currentEntry.warningLevel),
+      }
+    }
+
+    // フォールバック: promotionDemotionBand
+    const currentBandLabel = row.band as string | undefined
+    const currentEntry = currentBandLabel
+      ? ctx.masters.jobLevels.find(e => e.label === currentBandLabel || e.code === currentBandLabel)
       : undefined
     const alternatives = currentEntry?.promotionDemotionBand
       ? ctx.masters.jobLevels
-          .filter(e => e.promotionDemotionBand === currentEntry.promotionDemotionBand && e.label !== currentBand)
-          .map(e => e.label)
+          .filter(e => e.promotionDemotionBand === currentEntry.promotionDemotionBand && e.label !== currentBandLabel)
       : []
     return {
       transferReason:       (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
       memo:                 (row.memo ?? 'M職P職切替')              as string | undefined,
-      band:                 (alternatives.length === 1 ? alternatives[0] : undefined) as string | undefined,
-      officialPositionCode: row.officialPositionCode                as string | undefined,
+      band:                 (alternatives.length === 1 ? alternatives[0].label : undefined) as string | undefined,
+      officialPositionCode: officialPositionCode,
       localJobTitle:        row.localJobTitle                       as string | undefined,
     }
   },
@@ -284,6 +537,20 @@ export const mpTrackSwitchDef: EditOperation = {
     const row = ctx.allocationList.find(r => r.rowId === rowId)
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.band) return fail('切替後のバンドを選択してください')
+
+    const matrix = ctx.masters.promotionMatrix ?? []
+    const found  = findMpAlternatives(
+      row.positionBand as string | undefined,
+      row.officialPositionCode as string | undefined,
+      matrix,
+    )
+    if (found) {
+      const isValid = found.alternatives.some(e => e.jobLevel === values.band)
+      if (!isValid) return fail('選択したバンドはM職P職切替の対象外です')
+      return ok()
+    }
+
+    // フォールバックバリデーション
     const originalBand = row.band as string | undefined
     if (values.band === originalBand) return fail('現在と同じバンドです')
     const origEntry = ctx.masters.jobLevels.find(e => e.label === originalBand || e.code === originalBand)

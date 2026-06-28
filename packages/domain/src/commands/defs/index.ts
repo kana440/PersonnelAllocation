@@ -17,7 +17,19 @@ export { isSectionDivider, isInputRow, AVAILABLE, unavailable } from './types'
 export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'
 export { preserve } from './afterConstraintHelpers'
-export { withLeavePositionVacant, countSubordinates } from './positionVacant'
+export {
+  withLeavePositionVacant,
+  countSubordinates,
+  isVacantPosition,
+  isOccupiedPosition,
+  isUnassignedPerson,
+  makeVacantRowFrom,
+  vacatePosition,
+  extractPositionFieldsFrom,
+  wouldBandChange,
+  assignPersonToVacant,
+  type AssignToVacantOptions,
+} from './positionVacant'
 
 // ── 昇降格・役職変更 ──────────────────────────────────────────────────────────
 export { promotionDef, demotionDef, titleChangeDef } from './promotionDefs'
@@ -55,6 +67,9 @@ export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employm
 // ── 上司変更・ポジション追加 ─────────────────────────────────────────────────
 export { managerChangeDef, addEmptyPositionDef } from './positionAddDef'
 
+// ── 部下引継・空Pos移動 ───────────────────────────────────────────────────────
+export { subordinateHandoffDef, moveToVacantPositionDef } from './positionMoveDefs'
+
 import type { EditOperation, AvailabilityResult } from './types'
 import { AVAILABLE } from './types'
 import type { EditCommand, DomainContext } from '../types'
@@ -68,6 +83,7 @@ import { DEFS as secondmentMain }       from './secondmentMainDefs'
 import { DEFS as secondmentConcurrent } from './secondmentConcurrentDefs'
 import { DEFS as person }          from './personDefs'
 import { DEFS as positionAdd }     from './positionAddDef'
+import { DEFS as positionMove }    from './positionMoveDefs'
 
 export const ALL_EDIT_OPERATIONS: EditOperation[] = [
   ...promotion,
@@ -78,6 +94,7 @@ export const ALL_EDIT_OPERATIONS: EditOperation[] = [
   ...secondmentConcurrent,
   ...person,
   ...positionAdd,
+  ...positionMove,
 ]
 
 /** 後方互換エイリアス */

@@ -9,14 +9,15 @@ interface Props {
   open:     boolean
   onClose:  () => void
   onSelect: (orgId: string) => void
-  title?:   string
+  title?:         string
+  confirmLabel?:  string
   /** 渡した場合はこちらを優先して使う（比較モードで before-org 一覧を渡す用途） */
   orgs?:            Organization[]
   /** 渡した場合はこちらを優先して使う（比較モードで追加済み ID を渡す用途） */
   alreadyAddedIds?: Set<string>
 }
 
-export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選択', orgs, alreadyAddedIds }: Props) {
+export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選択', confirmLabel, orgs, alreadyAddedIds }: Props) {
   const { allocationList, afterOrganizations } = useStore()
   const { panels } = useCanvasLayoutStore()
 
@@ -59,6 +60,7 @@ export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選�
             onSelect={handleSelect}
             relevantOrgIds={relevantOrgIds}
             alreadyAddedOrgIds={addedIds}
+            confirmLabel={confirmLabel}
           />
         </div>
       </div>

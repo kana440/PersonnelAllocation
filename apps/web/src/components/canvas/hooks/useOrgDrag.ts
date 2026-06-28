@@ -8,12 +8,19 @@ interface UseOrgDragDeps {
   organizations:                Organization[]
   persons:                      Person[]
   saveRow:                      (rowId: number, changes: AfterValues) => void
-  assignPersonToVacantPosition: (rowId: number, sfId: string) => void
+  assignPersonToVacantPosition: (rowId: number, sfId: string, opts?: { leaveSourceVacant?: boolean; overrideBand?: boolean }) => void
   openPersonMoveDialog:         (fromRowId: number | null, personId: string, toOrgId: string) => void
+  /** 旧組織未割当セクションから複数行を一括ドロップしたとき呼ばれる */
+  onUnmappedBulkDrop?:          (rowIds: number[], toOrg: Organization) => void
+  /** ドラッグによる空席アサイン時にバンドが変わるかチェックする（未指定時はチェックしない） */
+  checkBandChange?:             (vacantRowId: number, sfId: string) => { from: string; to: string } | null
+  /** バンド変更確認が必要なとき呼ばれる。呼び出し側でダイアログを表示し onOverride/onKeep を呼ぶ */
+  onBandChangeRequest?:         (info: { from: string; to: string; onOverride: () => void; onKeep: () => void }) => void
 }
 
 export function useOrgDrag({
   organizations, persons, saveRow, assignPersonToVacantPosition, openPersonMoveDialog,
+  onUnmappedBulkDrop, checkBandChange, onBandChangeRequest,
 }: UseOrgDragDeps) {
   const [dragOverOrgId,       setDragOverOrgId]       = useState<string | null>(null)
   const [highlightedOrgId,    setHighlightedOrgId]    = useState<string | null>(null)
@@ -40,10 +47,18 @@ export function useOrgDrag({
     e.preventDefault(); setDragOverOrgId(null)
     let data: DragData
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
-    const { dragType, fromOrgId, fromRowId } = data
 
     const toOrg = organizations.find(o => o.id === toOrgId)
     if (!toOrg) return
+
+    // 旧組織未割当セクションからの一括ドロップ
+    if (data.rowIds && data.rowIds.length > 0) {
+      onUnmappedBulkDrop?.(data.rowIds, toOrg)
+      setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
+      return
+    }
+
+    const { dragType, fromOrgId, fromRowId } = data
 
     if (dragType === 'position' && fromRowId) {
       if (fromOrgId === toOrgId) return
@@ -63,7 +78,21 @@ export function useOrgDrag({
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
     const person = persons.find(p => p.id === data.personId)
     if (!person?.sfPersonId) return
-    assignPersonToVacantPosition(vacantRowId, person.sfPersonId)
+
+    const sfId = person.sfPersonId
+
+    // バンド変更チェック
+    const bandChange = checkBandChange?.(vacantRowId, sfId)
+    if (bandChange && onBandChangeRequest) {
+      onBandChangeRequest({
+        from:       bandChange.from,
+        to:         bandChange.to,
+        onOverride: () => assignPersonToVacantPosition(vacantRowId, sfId, { overrideBand: true }),
+        onKeep:     () => assignPersonToVacantPosition(vacantRowId, sfId, { overrideBand: false }),
+      })
+    } else {
+      assignPersonToVacantPosition(vacantRowId, sfId)
+    }
   }
 
   return {

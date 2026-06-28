@@ -4,8 +4,18 @@ import type { AllocationList } from './csvImport/allocationList/schema'
 // prev* 列群: Excelから読んだまま（不変・before状態）
 // after 列群: 編集後の状態
 export type AllocationRow = AllocationList & {
-  rowId:            number     // 行番号（Excel行順・連番）
-  operationGroupId?: string    // この行を変更した OperationGroup の id
+  rowId:                number     // 行番号（Excel行順・連番）
+  operationGroupId?:    string     // この行を変更した OperationGroup の id
+  /** 部下の引き継ぎ方法（フォーム一時フィールド。Excel 非出力）。'inherit' | 'handoff' を使用する */
+  _managerTransferMode?: string
+  /** 昇降格フォーム用：現在のM職P職区分（フォーム一時フィールド。Excel 非出力） */
+  _currentJobClass?: string
+  /** 昇降格フォーム用：現在の昇降格ワーニングレベル（文字列化して格納。Excel 非出力） */
+  _currentWarningLevel?: string
+  /** 空きポジション移動操作用：移動先の空きポジションコード（フォーム一時フィールド。Excel 非出力） */
+  _targetPositionCode?: string
+  /** 空きポジション移動操作用：元ポジションを空席として残すか（フォーム一時フィールド。'1' = 残す） */
+  _leaveSourceVacant?: string
 }
 
 // ── FieldBinding ──────────────────────────────────────────────────────────────

@@ -225,11 +225,20 @@ export interface EditOperation {
   readonly inputs: (OperationInput | SectionDivider | InputRow)[]
 
   /**
+   * 簡易ダイアログ（QuickEditDialog）用の最小入力フィールド群。
+   * 定義されている場合、SummaryView から操作を選択すると QuickEditDialog が開く。
+   * これらのフィールドだけで onValidate が通るように設計すること。
+   * 定義されていない場合は OperationFormView（詳細モード）に直行する。
+   */
+  readonly quickInputs?: OperationInput[]
+
+  /**
    * フィールド変更時の操作固有サイドエフェクト。
    * deriveFieldUpdates（全操作共通）が先に動いた後、このマップのハンドラが実行される。
    * setValues は deriveFieldUpdates の結果を上書きする。
+   * currentValues: フォームの現在の入力値（他フィールドの値を参照したい場合に使用）。
    */
-  readonly onFieldChange?: Partial<Record<keyof AllocationRow, (value: string, ctx: DomainContext) => FieldChangeEffect>>
+  readonly onFieldChange?: Partial<Record<keyof AllocationRow, (value: string, ctx: DomainContext, currentValues?: Partial<AllocationRow>) => FieldChangeEffect>>
 
   /**
    * 現在の状態と入力値に対してバリデーションを実行する。

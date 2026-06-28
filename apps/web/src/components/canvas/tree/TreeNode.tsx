@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useOrgView }           from '../OrgViewContext'
-import { subtreeRowCount, hasAnyRows } from '../panel/helpers'
+import { subtreeRowCount } from '../panel/helpers'
 import { RowCard }              from '../panel/RowCard'
 import { AddRowDropdown }       from '../AddRowDropdown'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
@@ -47,9 +47,8 @@ export function TreeNode({
   const childrenMode = panel?.childrenMode ?? 'inline'
 
   const entries   = positionTreeByOrgId.get(orgId) ?? []
-  const childOrgs = organizations.filter(
-    o => o.parentId === orgId && hasAnyRows(o.id, organizations, id => positionTreeByOrgId.has(id)),
-  )
+  // 行がなくても子組織は表示する（空のままドロップ先として使えるように）
+  const childOrgs = organizations.filter(o => o.parentId === orgId)
   const org = organizations.find(o => o.id === orgId)
 
   if (!org) return null

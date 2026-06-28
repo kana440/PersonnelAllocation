@@ -6,8 +6,9 @@
 import type { EditCommand, DomainContext, OperationResult, ValidationResult } from '../types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
-import { afterKeysByBinding, nextRowId } from '../../allocationRow'
+import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields, deriveManagerName } from '../orgHelpers'
+import { vacatePosition } from '../defs/positionVacant'
 
 export class TransferPersonOperation implements EditCommand {
   readonly kind = 'TransferPerson'
@@ -66,13 +67,8 @@ export class TransferPersonOperation implements EditCommand {
       // No old position to keep (unassigned person, or user chose to retire it)
       updatedList = [...ctx.allocationList.filter(r => r.rowId !== this.sourceRowId), newRow]
     } else {
-      // Vacate the old position (clear person fields)
-      const jobInfoClears = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
-      const vacantSource: AllocationRow = {
-        ...sourceRow,
-        userId: undefined,
-        ...jobInfoClears,
-      }
+      // Vacate the old position (clear all person fields including concurrentType/concurrentReason)
+      const vacantSource = vacatePosition(sourceRow)
       updatedList = [
         ...ctx.allocationList.map(r => r.rowId === this.sourceRowId ? vacantSource : r),
         newRow,

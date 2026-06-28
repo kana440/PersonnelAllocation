@@ -6,6 +6,11 @@ import type { AllocationRow } from '../../allocationRow'
 import { isRegularEmployee, isExtendedEmployeeTarget } from '../helpers'
 import { TR } from '../../transferReasonLabels'
 import { preserve } from './afterConstraintHelpers'
+import {
+  detectSubordinateMode,
+  SUBORDINATE_TRANSFER_INPUTS,
+  applySubordinateTransfer,
+} from './promotionDefs'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -48,7 +53,6 @@ export const jobTypeChangeDef: EditOperation = {
     { field: 'payGradeChangeSign', required: false, readOnly: true, inputType: 'checkbox', indicator: true },
     { field: 'transferReason', required: false,
       options: [TR.DIV_TRANSFER], optionsMode: 'suggest' },
-
     { field: 'memo',           required: false },
     { kind: 'section', label: 'ジョブタイプ情報' },
     { field: 'jobFamily',      required: false },
@@ -58,9 +62,11 @@ export const jobTypeChangeDef: EditOperation = {
     { kind: 'section', label: '裁量労働' },
     { field: 'positionDiscretionaryWorkFlag', required: false },
     { field: 'discretionaryWorkFlag',         required: false },
+    // ── 部下の引き継ぎ（部下がいる場合のみ表示）───────────────────────────
+    ...SUBORDINATE_TRANSFER_INPUTS,
   ],
 
-  onOpen: (row) => ({
+  onOpen: (row, ctx) => ({
     promotionSign:               row.promotionSign               as string | undefined,
     payGradeChangeSign:          row.payGradeChangeSign          as string | undefined,
     transferReason:              row.transferReason ?? TR.DIV_TRANSFER as string | undefined,
@@ -71,6 +77,7 @@ export const jobTypeChangeDef: EditOperation = {
     positionDiscretionaryWorkFlag: row.positionDiscretionaryWorkFlag as string | undefined,
     discretionaryWorkFlag:         row.discretionaryWorkFlag         as string | undefined,
     memo:                        row.memo ?? '職種変更'           as string | undefined,
+    _managerTransferMode:        detectSubordinateMode(row, ctx),
   }),
 
   onValidate(ctx, rowId, _values) {
@@ -81,11 +88,13 @@ export const jobTypeChangeDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const changes = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined))
-    return {
-      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
-      label: `ジョブタイプ変更: ${personName(row)}`,
+    const { _managerTransferMode, ...cleanValues } = values
+    const label = `ジョブタイプ変更: ${personName(row)}`
+    const result = {
+      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...cleanValues } : r),
+      label,
     }
+    return applySubordinateTransfer(row, values, result)
   },
 }
 

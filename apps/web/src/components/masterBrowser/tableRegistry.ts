@@ -26,6 +26,7 @@ export const TABLE_REGISTRY: TableDef[] = [
   { key: 'demotionReasons',         label: MASTER_LABELS.demotionReasons,         group: '事由' },
   { key: 'trainingPositions',       label: MASTER_LABELS.trainingPositions,       group: 'その他' },
   { key: 'discretionaryWorkOptions',label: MASTER_LABELS.discretionaryWorkOptions,group: 'その他' },
+  { key: 'promotionMatrix',         label: MASTER_LABELS.promotionMatrix,         group: '昇降格' },
 ]
 
 export const FIELD_LABELS: Record<string, string> = {
@@ -55,6 +56,10 @@ export const FIELD_LABELS: Record<string, string> = {
   jobFamilyCode:                 '職種コード',
   promotionDemotionBand:         '昇降格読替バンド',
   promotionDemotionWarningLevel: '昇降格Warnレベル',
+  jobLevel:                      '職務レベル',
+  officialPosition:              '役職',
+  jobClass:                      'M職P職',
+  warningLevel:                  '昇降格Warnチェック',
   isDiscretionaryTarget:         '裁量対象',
   isSecondmentAcceptance: '出向受入',
   isRegularEmployee:      '社員',

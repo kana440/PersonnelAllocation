@@ -31,6 +31,12 @@ export const orgTransferDef: EditOperation = {
     return AVAILABLE
   },
 
+  // 簡易モード: 異動先組織と異動事由だけ入力。上司は onFieldChange.departmentCode で自動導出
+  quickInputs: [
+    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER], optionsMode: 'suggest' },
+    { field: 'departmentCode', required: true,  label: '異動先組織', picker: 'org' },
+  ],
+
   inputs: [
     { field: 'transferReason',  required: false,
       options: [TR.DIV_TRANSFER], optionsMode: 'suggest' },

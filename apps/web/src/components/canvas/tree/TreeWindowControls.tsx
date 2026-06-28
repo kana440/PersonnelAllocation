@@ -21,10 +21,8 @@ export function TreeWindowControls({ panel, currentRootId }: TreeWindowControlsP
   const hasRowsFn = (id: string) => positionTreeByOrgId.has(id)
   const desc      = (id: string, directOnly?: boolean) => getDescendantOrgIds(id, organizations, hasRowsFn, directOnly)
 
-  const hasChildren = organizations.some(
-    o => o.parentId === currentRootId &&
-      (positionTreeByOrgId.has(o.id) || organizations.some(c => c.parentId === o.id))
-  )
+  // 行の有無に関わらず子組織が存在すれば展開コントロールを表示する
+  const hasChildren = organizations.some(o => o.parentId === currentRootId)
   const isContained = panel.childrenMode === 'inline'
 
   const handleCollapseAll = useCallback(() => {

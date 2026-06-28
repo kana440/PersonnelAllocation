@@ -11,10 +11,12 @@ interface Props {
   onSelect:            (orgId: string) => void
   relevantOrgIds?:     Set<string>
   alreadyAddedOrgIds?: Set<string>
+  confirmLabel?:       string
 }
 
 export function OrgTreePicker({
   allOrgs, allocationList, onSelect, relevantOrgIds, alreadyAddedOrgIds = new Set(),
+  confirmLabel = 'この組織を追加',
 }: Props) {
   const [query,       setQuery]       = useState('')
   const [expanded,    setExpanded]    = useState<Set<string>>(new Set)
@@ -134,7 +136,7 @@ export function OrgTreePicker({
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
-            >{isAlreadyAdded ? '追加済み' : 'この組織を追加'}</button>
+            >{isAlreadyAdded ? '追加済み' : confirmLabel}</button>
           </>
         ) : (
           <span className="text-xs text-gray-400">組織を選択してください</span>

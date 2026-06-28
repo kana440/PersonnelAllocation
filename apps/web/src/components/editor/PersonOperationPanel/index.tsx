@@ -12,8 +12,10 @@ import { DirectEditView } from './DirectEditView'
 import { MultiRowFormView } from './MultiRowFormView'
 import { SecondmentOutChooser }           from './SecondmentOutChooser'
 import { ConcurrentSecondmentOutChooser } from './ConcurrentSecondmentOutChooser'
+import { QuickEditDialog } from './QuickEditDialog'
 import type { PanelView } from './types'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { EditOperation } from '@personnel/domain/commands/defs'
 
 interface Props {
   rowId: number
@@ -21,10 +23,11 @@ interface Props {
 
 export function PersonOperationPanel({ rowId }: Props) {
   const { allocationList, operationPanelInitialView, masters } = useStore()
-  const [view,    setView]    = useState<PanelView>(() =>
+  const [view,      setView]      = useState<PanelView>(() =>
     operationPanelInitialView === 'directEdit' ? 'directEdit' : 'summary'
   )
-  const [prefill, setPrefill] = useState<Partial<AllocationRow> | null>(null)
+  const [prefill,   setPrefill]   = useState<Partial<AllocationRow> | null>(null)
+  const [quickDef,  setQuickDef]  = useState<EditOperation | null>(null)
 
   const command      = useUICommandStore(s => s.command)
   const clearCommand = useUICommandStore(s => s.clear)
@@ -46,7 +49,20 @@ export function PersonOperationPanel({ rowId }: Props) {
   const handleBack = () => {
     setView('summary')
     setPrefill(null)
+    setQuickDef(null)
     clearForm()
+  }
+
+  // SummaryView から操作を選択したとき:
+  //   quickInputs が定義されている → QuickEditDialog を開く
+  //   それ以外 → 従来の詳細フォームへ遷移
+  const handleSelect = (v: PanelView) => {
+    if (typeof v === 'object' && 'def' in v && v.def.quickInputs) {
+      setQuickDef(v.def)
+      return
+    }
+    setView(v)
+    setPrefill(null)
   }
 
   if (view === 'directEdit') {
@@ -111,9 +127,24 @@ export function PersonOperationPanel({ rowId }: Props) {
   }
 
   return (
-    <SummaryView
-      row={row}
-      onSelect={setView}
-    />
+    <>
+      <SummaryView
+        row={row}
+        onSelect={handleSelect}
+      />
+      {quickDef && (
+        <QuickEditDialog
+          def={quickDef}
+          row={row}
+          onClose={() => setQuickDef(null)}
+          onDetail={(overrideValues) => {
+            const def = quickDef
+            setQuickDef(null)
+            setPrefill(overrideValues as Partial<AllocationRow>)
+            setView({ def, rowId: row.rowId })
+          }}
+        />
+      )}
+    </>
   )
 }

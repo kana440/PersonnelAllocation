@@ -7,6 +7,7 @@ import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields, deriveManagerName } from '../orgHelpers'
+import { vacatePosition, assignPersonToVacant } from '../defs/positionVacant'
 
 // ── CreateVacantPosition ─────────────────────────────────────────────────────
 
@@ -99,13 +100,12 @@ export class UnassignPersonFromPositionOperation implements EditCommand {
   apply(ctx: DomainContext): OperationResult {
     const row = ctx.allocationList.find(r => r.rowId === this.occupiedRowId)!
 
-    const jobInfoClears  = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
     const positionClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
 
-    const vacantRow: AllocationRow = { ...row, userId: undefined, ...jobInfoClears }
+    const vacatedRow    = vacatePosition(row)  // 空席ポジション（人フィールドをクリア）
     const unassignedRow: AllocationRow = {
       ...row,
-      rowId: nextRowId([...ctx.allocationList, vacantRow]),
+      rowId: nextRowId([...ctx.allocationList, vacatedRow]),
       ...positionClears,
     }
 
@@ -113,7 +113,7 @@ export class UnassignPersonFromPositionOperation implements EditCommand {
       r => r.rowId !== this.occupiedRowId && r.userId === row.userId && r.departmentCode === row.departmentCode
     )
 
-    const updated = ctx.allocationList.map(r => r.rowId === this.occupiedRowId ? vacantRow : r)
+    const updated = ctx.allocationList.map(r => r.rowId === this.occupiedRowId ? vacatedRow : r)
     return {
       updatedList: hasOtherRowInOrg ? updated : [...updated, unassignedRow],
       label: `アサイン解除: ${row.lastName ?? ''}${row.firstName ?? ''}`,
@@ -160,16 +160,18 @@ export class AssignPersonToPositionOperation implements EditCommand {
   readonly kind = 'AssignPersonToPosition'
 
   constructor(
-    private readonly vacantRowId: number,
-    private readonly personSfId:  string,
+    private readonly vacantRowId:       number,
+    private readonly personSfId:        string,
+    private readonly leaveSourceVacant: boolean = false,
+    private readonly overrideBand?:     boolean,
   ) {}
 
   validate(ctx: DomainContext): ValidationResult {
     const vacantRow = ctx.allocationList.find(r => r.rowId === this.vacantRowId)
-    if (!vacantRow)         return fail(`行が見つかりません (rowId: ${this.vacantRowId})`)
-    if (vacantRow.userId)   return fail('このポジションは既に在席中です')
+    if (!vacantRow)          return fail(`行が見つかりません (rowId: ${this.vacantRowId})`)
+    if (vacantRow.userId)    return fail('このポジションは既に在席中です')
     if (!vacantRow.positionCode) return fail('ポジションコードがありません')
-    if (!this.personSfId)   return fail('配属する人の ID が未指定です')
+    if (!this.personSfId)    return fail('配属する人の ID が未指定です')
     return ok()
   }
 
@@ -178,62 +180,19 @@ export class AssignPersonToPositionOperation implements EditCommand {
     const personRow = ctx.allocationList.find(r => r.userId === this.personSfId && !r.concurrentType)
                    ?? ctx.allocationList.find(r => r.userId === this.personSfId)
 
-    const jobInfoClears = Object.fromEntries(afterKeysByBinding('jobInfo').map(k => [k, undefined]))
-    const label = `配属: ${personRow ? (personRow.lastName ?? '') + (personRow.firstName ?? '') : this.personSfId}`
-
     if (!personRow) {
+      // Person not found: just set userId on the vacant row (fallback)
       return {
         updatedList: ctx.allocationList.map(r =>
           r.rowId === this.vacantRowId ? { ...r, userId: this.personSfId } : r
         ),
-        label,
+        label: `配属: ${this.personSfId}`,
       }
     }
 
-    // personRow を起点にして position/both フィールドを vacantRow で上書き
-    // → 名前・band 等の人情報を保持しつつポジション情報を引き継ぐ
-    const positionAndBothFields = Object.fromEntries(
-      [...afterKeysByBinding('position'), ...afterKeysByBinding('both')]
-        .map(k => [k, vacantRow[k as keyof AllocationRow]])
-    )
-    const filledRow: AllocationRow = {
-      ...personRow,
-      rowId:  vacantRow.rowId,
-      userId: this.personSfId,
-      ...positionAndBothFields,
-      // managerName は position バインディングのため positionAndBothFields に含まれるが、最新値で上書き
-      managerName: deriveManagerName(
-        vacantRow.managerPositionCode as string | undefined,
-        ctx.allocationList,
-      ),
-    }
-
-    const isUnassigned = !personRow.positionCode
-
-    if (isUnassigned) {
-      // Case A: 未アサイン行を削除し、空席行を配属行に置き換え
-      return {
-        updatedList: [
-          ...ctx.allocationList.filter(r => r.rowId !== this.vacantRowId && r.rowId !== personRow.rowId),
-          filledRow,
-        ],
-        label,
-      }
-    }
-
-    // Case B: 元の在席行を空席化し、空席行を配属行に置き換え
-    const vacatedPersonRow: AllocationRow = {
-      ...personRow,
-      userId: undefined,
-      ...jobInfoClears,
-    }
-    return {
-      updatedList: ctx.allocationList.map(r => {
-        if (r.rowId === this.vacantRowId)  return filledRow
-        if (r.rowId === personRow.rowId)   return vacatedPersonRow
-        return r
-      }),
-      label,
-    }
+    return assignPersonToVacant(personRow, vacantRow, ctx, {
+      leaveSourceVacant: this.leaveSourceVacant,
+      overrideBand:      this.overrideBand,
+    })
   }
 }

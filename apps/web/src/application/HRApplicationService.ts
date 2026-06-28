@@ -14,7 +14,7 @@ import {
   UnassignPersonFromPositionOperation,
   AssignPersonToPositionOperation,
 } from '@personnel/domain/commands/handlers/positionOps'
-import { bindOperation, orgTransferDef, promotionDef, jobTypeChangeDef } from '@personnel/domain/commands/defs'
+import { bindOperation, orgTransferDef, promotionDef, jobTypeChangeDef, wouldBandChange } from '@personnel/domain/commands/defs'
 import {
   ResignationOperation,
   VacantPositionMoveOperation,
@@ -300,8 +300,40 @@ export class HRApplicationService {
     this.executeOperation(new UnassignPersonFromPositionOperation(occupiedRowId))
   }
 
-  assignPersonToVacantPosition(vacantRowId: number, personSfId: string): void {
-    this.executeOperation(new AssignPersonToPositionOperation(vacantRowId, personSfId))
+  /**
+   * バンドが変わるかどうかを DryRun で確認する。
+   * 変わる場合は { from, to } を返す。ダイアログ表示の判断に使う。
+   */
+  checkAssignBandChange(vacantRowId: number, personSfId: string): { from: string; to: string } | null {
+    const vacantRow = this.allocationList.find(r => r.rowId === vacantRowId)
+    const personRow = this.allocationList.find(r => r.userId === personSfId && !r.concurrentType)
+                   ?? this.allocationList.find(r => r.userId === personSfId)
+    if (!vacantRow || !personRow) return null
+    return wouldBandChange(personRow, vacantRow)
+  }
+
+  assignPersonToVacantPosition(
+    vacantRowId: number,
+    personSfId:  string,
+    opts?: { leaveSourceVacant?: boolean; overrideBand?: boolean },
+  ): void {
+    // leaveSourceVacant が未指定のとき、部下の有無で自動判定する
+    let leaveSourceVacant = opts?.leaveSourceVacant
+    if (leaveSourceVacant === undefined) {
+      const personRow = this.allocationList.find(r => r.userId === personSfId && !r.concurrentType)
+                     ?? this.allocationList.find(r => r.userId === personSfId)
+      if (personRow?.positionCode) {
+        leaveSourceVacant = this.allocationList.some(
+          r => r.rowId !== personRow.rowId &&
+               (r.managerPositionCode as string | undefined) === (personRow.positionCode as string | undefined)
+        )
+      } else {
+        leaveSourceVacant = false
+      }
+    }
+    this.executeOperation(new AssignPersonToPositionOperation(
+      vacantRowId, personSfId, leaveSourceVacant, opts?.overrideBand,
+    ))
   }
 
   // ── ポジションコード割当 ──────────────────────────────────────────

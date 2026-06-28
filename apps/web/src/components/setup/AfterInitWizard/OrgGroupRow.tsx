@@ -4,9 +4,11 @@ import type { OrgMappingGroup } from '../../../application/setup/afterInit'
 import { matchesSearch, normalizeSearch } from '../../../utils/normalizeSearch'
 
 interface Props {
-  group:    OrgMappingGroup
-  allOrgs:  Organization[]
-  onChange: (prevCode: string | null, newOrgCode: string | null) => void
+  group:              OrgMappingGroup
+  allOrgs:            Organization[]
+  /** 初期自動提案の新組織コード。行ごとの「提案に戻す」ボタンに使う */
+  initialNewOrgCode?: string | null
+  onChange:           (prevCode: string | null, newOrgCode: string | null) => void
 }
 
 /** バイグラムによる名前類似度スコア（高いほど似ている） */
@@ -47,16 +49,15 @@ function buildSubtreeIds(rootId: string, allOrgs: Organization[]): Set<string> {
   return result
 }
 
-export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
-  const { prevCode, prevOrgName, newOrgCode, matchConfidence, scopeOrgId, rowIds } = group
+export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Props) {
+  const { prevCode, prevOrgName, prevOrgPath, newOrgCode, matchConfidence, scopeOrgId, rowIds } = group
 
   const activeOrgs = allOrgs.filter(o => !o.isAbandoned)
+  const isNewHire  = prevCode === null
 
-  const isNewHire = prevCode === null
-
-  const [search,   setSearch]   = useState('')
-  const [open,     setOpen]     = useState(false)
-  const [showAll,  setShowAll]  = useState(false)
+  const [search,  setSearch]  = useState('')
+  const [open,    setOpen]    = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -72,7 +73,6 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  // スコープ配下の ID セット（LCA 推論済みの場合のみ）
   const subtreeIds = useMemo(
     () => (scopeOrgId && !showAll) ? buildSubtreeIds(scopeOrgId, allOrgs) : null,
     [scopeOrgId, allOrgs, showAll],
@@ -88,6 +88,27 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
     [activeOrgs, newOrgCode],
   )
 
+  /** 初期提案の組織（現在値と異なるときに「提案」ボタンに表示） */
+  const initialProposalOrg = useMemo(
+    () => initialNewOrgCode
+      ? (activeOrgs.find(o => (o.externalCode ?? o.id) === initialNewOrgCode) ?? null)
+      : null,
+    [activeOrgs, initialNewOrgCode],
+  )
+
+  /** 提案組織の上位階層パス（フルパス表示） */
+  const initialProposalPath = useMemo(() => {
+    if (!initialProposalOrg) return null
+    const byId = new Map(allOrgs.map(o => [o.id, o]))
+    const ancestors: string[] = []
+    let cur = initialProposalOrg.parentId ? byId.get(initialProposalOrg.parentId) : null
+    while (cur) {
+      ancestors.unshift(cur.name)
+      cur = cur.parentId ? byId.get(cur.parentId) : null
+    }
+    return ancestors.length > 0 ? ancestors.join(' > ') : null
+  }, [initialProposalOrg, allOrgs])
+
   const suggestions = useMemo(() => {
     const pool = subtreeIds
       ? activeOrgs.filter(o => subtreeIds.has(o.id))
@@ -98,7 +119,6 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
         matchesSearch(o.name, search) ||
         (o.externalCode ? matchesSearch(o.externalCode, search) : false),
       )
-      // スコープ内に候補がなければ全件へ自動フォールバック
       if (results.length === 0 && subtreeIds) {
         return activeOrgs.filter(o =>
           matchesSearch(o.name, search) ||
@@ -108,7 +128,6 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
       return results
     }
 
-    // 未入力: 旧組織名との類似度順で上位 15 件
     const base = prevOrgName ?? ''
     return [...pool]
       .sort((a, b) => nameSimilarity(b.name, base) - nameSimilarity(a.name, base))
@@ -122,7 +141,6 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
     setShowAll(false)
   }
 
-  // ── 信頼度バッジ ─────────────────────────────────────────────────────────
   const confidenceBadge =
     matchConfidence === 'code' ? (
       <span className="text-[10px] text-green-600 font-medium flex-shrink-0">コード</span>
@@ -130,7 +148,6 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
       <span className="text-[10px] text-amber-600 font-medium flex-shrink-0">名前</span>
     ) : null
 
-  // ── 行の背景色 ───────────────────────────────────────────────────────────
   const rowCls =
     matchConfidence === 'code'  ? 'border-green-200 bg-green-50'
     : matchConfidence === 'name' ? 'border-amber-200 bg-amber-50'
@@ -149,142 +166,163 @@ export function OrgGroupRow({ group, allOrgs, onChange }: Props) {
   }
 
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs border ${rowCls}`}>
+    <div className={`px-3 py-2.5 rounded-lg text-xs border ${rowCls}`}>
 
-      {/* 旧組織 */}
-      <div className="flex-1 min-w-0">
-        <div className="font-medium truncate text-gray-700">{prevOrgName ?? prevCode}</div>
-        {prevCode && prevOrgName !== prevCode && (
-          <div className="text-[10px] text-gray-400 font-mono mt-0.5">{prevCode}</div>
-        )}
-      </div>
-
-      {confidenceBadge}
-
-      <span className="flex-shrink-0 text-gray-400">→</span>
-
-      {/* 新組織コンボボックス */}
-      <div className="flex-shrink-0 w-52 relative">
-
-        {/* スコープラベル（未マッチかつスコープあり） */}
-        {matchConfidence === 'none' && scopeOrg && (
-          <div className="text-[10px] text-blue-500 truncate mb-0.5 flex items-center gap-0.5">
-            <span>📍</span>
-            <span className="truncate">{scopeOrg.name}</span>
-            {showAll && (
-              <button
-                onClick={() => setShowAll(false)}
-                className="ml-auto flex-shrink-0 text-blue-400 hover:text-blue-600"
-              >絞込</button>
+      {/* 上段: 旧組織名（折り返し可）+ 右端に人数・バッジ・状態 */}
+      <div className="flex items-start gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-gray-700 leading-snug">
+            {prevOrgName ?? prevCode}
+            {prevCode && prevOrgName !== prevCode && (
+              <span className="ml-1.5 text-[10px] text-gray-400 font-mono">{prevCode}</span>
             )}
           </div>
-        )}
-
-        {/* トリガー兼インライン入力 */}
-        <div
-          className={`flex items-center gap-1 w-full border rounded px-1.5 py-1 text-xs bg-white focus-within:border-blue-400 cursor-text ${
-            newOrgCode
-              ? matchConfidence === 'code'  ? 'border-green-300'
-              : matchConfidence === 'name'  ? 'border-amber-300'
-              :                               'border-blue-300'
-              : 'border-orange-300'
-          }`}
-          onClick={() => { setOpen(true); requestAnimationFrame(() => inputRef.current?.focus()) }}
-        >
-          {!open && selectedOrg && (
-            <span className={`flex-1 truncate ${
-              matchConfidence === 'code'  ? 'text-green-700'
-              : matchConfidence === 'name' ? 'text-amber-700'
-              :                              'text-blue-700'
-            }`}>
-              {selectedOrg.name}
-            </span>
+          {prevOrgPath && (
+            <div className="text-[10px] text-gray-400 mt-0.5 truncate" title={prevOrgPath}>
+              {prevOrgPath}
+            </div>
           )}
-          {!open && !selectedOrg && (
-            <span className="flex-1 text-orange-500">（後で設定）</span>
-          )}
-          <input
-            ref={inputRef}
-            type="text"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setOpen(true) }}
-            onFocus={() => setOpen(true)}
-            placeholder={open ? '🔍 組織を検索…' : ''}
-            className={`bg-transparent focus:outline-none text-xs text-gray-700 ${
-              open ? 'flex-1 w-full' : 'w-0 h-0 opacity-0 absolute'
-            }`}
-          />
-          <span className="flex-shrink-0 text-gray-400 text-[10px]">▾</span>
         </div>
-
-        {/* ドロップダウン */}
-        {open && (
-          <div
-            ref={panelRef}
-            className="absolute top-full left-0 z-50 mt-0.5 w-64 bg-white border border-gray-200 rounded shadow-xl max-h-56 overflow-y-auto"
-          >
-            {/* 後で設定 */}
-            <button
-              onMouseDown={e => { e.preventDefault(); select(null) }}
-              className={`w-full text-left px-2 py-1.5 text-xs border-b border-gray-100 ${
-                !newOrgCode ? 'text-blue-700 font-semibold bg-blue-50' : 'text-gray-400 hover:bg-gray-50'
-              }`}
-            >
-              （後で設定）
-            </button>
-
-            {/* 候補 */}
-            {suggestions.length === 0 ? (
-              <div className="text-xs text-gray-400 text-center py-2">該当なし</div>
-            ) : (
-              suggestions.map(o => {
-                const code      = o.externalCode ?? o.id
-                const isSelected = code === newOrgCode
-                return (
-                  <button
-                    key={o.id}
-                    onMouseDown={e => { e.preventDefault(); select(code) }}
-                    className={`w-full text-left px-2 py-1 text-xs flex items-center gap-1.5 ${
-                      isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-blue-50'
-                    }`}
-                  >
-                    <span className="flex-1 truncate">{o.name}</span>
-                    {o.externalCode && (
-                      <span className="flex-shrink-0 text-[10px] text-gray-400 font-mono">{o.externalCode}</span>
-                    )}
-                  </button>
-                )
-              })
-            )}
-
-            {/* 全組織から検索トグル */}
-            {subtreeIds && !showAll && (
-              <button
-                onMouseDown={e => { e.preventDefault(); setShowAll(true) }}
-                className="w-full text-center px-2 py-1.5 text-[10px] text-blue-500 hover:bg-blue-50 border-t border-gray-100"
-              >
-                全組織から検索 ({activeOrgs.length}件)
-              </button>
-            )}
-            {showAll && (
-              <button
-                onMouseDown={e => { e.preventDefault(); setShowAll(false) }}
-                className="w-full text-center px-2 py-1.5 text-[10px] text-gray-400 hover:bg-gray-50 border-t border-gray-100"
-              >
-                絞り込みに戻す
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-1.5 flex-shrink-0 mt-px">
+          <span className="text-[10px] text-gray-400 whitespace-nowrap">{rowIds.length}人</span>
+          {confidenceBadge}
+          <span className="text-[10px] w-4 text-center">{newOrgCode ? '✓' : '⚠'}</span>
+        </div>
       </div>
 
-      {/* 人数バッジ */}
-      <span className="flex-shrink-0 text-[10px] text-gray-400 whitespace-nowrap">{rowIds.length}人</span>
+      {/* 下段: → 新組織コンボ（全幅） */}
+      <div className="flex items-start gap-1.5">
+        <span className="flex-shrink-0 text-gray-400 mt-1">→</span>
+        <div className="flex-1 min-w-0">
 
-      {/* 状態アイコン */}
-      <span className="flex-shrink-0 text-[10px] w-4 text-center">
-        {newOrgCode ? '✓' : '⚠'}
-      </span>
+          {/* スコープラベル（未マッチかつスコープあり） */}
+          {matchConfidence === 'none' && scopeOrg && (
+            <div className="text-[10px] text-blue-500 mb-0.5 flex items-center gap-0.5">
+              <span>📍</span>
+              <span className="truncate">{scopeOrg.name}</span>
+              {showAll && (
+                <button
+                  onClick={() => setShowAll(false)}
+                  className="ml-auto flex-shrink-0 text-blue-400 hover:text-blue-600"
+                >絞込</button>
+              )}
+            </div>
+          )}
+
+          {/* コンボボックス本体（relative はここで切る） */}
+          <div className="relative">
+            <div
+              className={`flex items-center gap-1 w-full border rounded px-1.5 py-1 text-xs bg-white focus-within:border-blue-400 cursor-text ${
+                newOrgCode
+                  ? matchConfidence === 'code'  ? 'border-green-300'
+                  : matchConfidence === 'name'  ? 'border-amber-300'
+                  :                               'border-blue-300'
+                  : 'border-orange-300'
+              }`}
+              onClick={() => { setOpen(true); requestAnimationFrame(() => inputRef.current?.focus()) }}
+            >
+              {!open && selectedOrg && (
+                <span className={`flex-1 truncate ${
+                  matchConfidence === 'code'  ? 'text-green-700'
+                  : matchConfidence === 'name' ? 'text-amber-700'
+                  :                              'text-blue-700'
+                }`}>
+                  {selectedOrg.name}
+                </span>
+              )}
+              {!open && !selectedOrg && (
+                <span className="flex-1 text-orange-500">（後で設定）</span>
+              )}
+              <input
+                ref={inputRef}
+                type="text"
+                value={search}
+                onChange={e => { setSearch(e.target.value); setOpen(true) }}
+                onFocus={() => setOpen(true)}
+                placeholder={open ? '🔍 組織を検索…' : ''}
+                className={`bg-transparent focus:outline-none text-xs text-gray-700 ${
+                  open ? 'flex-1 w-full' : 'w-0 h-0 opacity-0 absolute'
+                }`}
+              />
+              <span className="flex-shrink-0 text-gray-400 text-[10px]">▾</span>
+            </div>
+
+            {open && (
+              <div
+                ref={panelRef}
+                className="absolute top-full left-0 z-50 mt-0.5 w-full min-w-[200px] bg-white border border-gray-200 rounded shadow-xl max-h-56 overflow-y-auto"
+              >
+                <button
+                  onMouseDown={e => { e.preventDefault(); select(null) }}
+                  className={`w-full text-left px-2 py-1.5 text-xs border-b border-gray-100 ${
+                    !newOrgCode ? 'text-blue-700 font-semibold bg-blue-50' : 'text-gray-400 hover:bg-gray-50'
+                  }`}
+                >
+                  （後で設定）
+                </button>
+
+                {suggestions.length === 0 ? (
+                  <div className="text-xs text-gray-400 text-center py-2">該当なし</div>
+                ) : (
+                  suggestions.map(o => {
+                    const code       = o.externalCode ?? o.id
+                    const isSelected = code === newOrgCode
+                    return (
+                      <button
+                        key={o.id}
+                        onMouseDown={e => { e.preventDefault(); select(code) }}
+                        className={`w-full text-left px-2 py-1 text-xs flex items-center gap-1.5 ${
+                          isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-blue-50'
+                        }`}
+                      >
+                        <span className="flex-1 truncate">{o.name}</span>
+                        {o.externalCode && (
+                          <span className="flex-shrink-0 text-[10px] text-gray-400 font-mono">{o.externalCode}</span>
+                        )}
+                      </button>
+                    )
+                  })
+                )}
+
+                {subtreeIds && !showAll && (
+                  <button
+                    onMouseDown={e => { e.preventDefault(); setShowAll(true) }}
+                    className="w-full text-center px-2 py-1.5 text-[10px] text-blue-500 hover:bg-blue-50 border-t border-gray-100"
+                  >
+                    全組織から検索 ({activeOrgs.length}件)
+                  </button>
+                )}
+                {showAll && (
+                  <button
+                    onMouseDown={e => { e.preventDefault(); setShowAll(false) }}
+                    className="w-full text-center px-2 py-1.5 text-[10px] text-gray-400 hover:bg-gray-50 border-t border-gray-100"
+                  >
+                    絞り込みに戻す
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 提案セクション: ラベル + 階層パス + 組織名ボタン */}
+          {initialProposalOrg && initialNewOrgCode !== newOrgCode && (
+            <div className="mt-1.5">
+              <div className="text-[10px] text-gray-500 mb-0.5">
+                提案
+                {initialProposalPath && (
+                  <span className="text-gray-400 ml-1">{initialProposalPath}</span>
+                )}
+              </div>
+              <button
+                onClick={() => select(initialNewOrgCode ?? null)}
+                className="px-2 py-0.5 text-[11px] rounded border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors max-w-full truncate block"
+              >
+                {initialProposalOrg.name}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

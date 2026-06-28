@@ -16,6 +16,7 @@ import type {
   DemotionReasonEntry,
   TrainingPositionEntry,
   DiscretionaryWorkEntry,
+  PromotionMatrixEntry,
 } from '@personnel/domain/masters'
 import { TRAINING_POSITION_VALUES } from '@personnel/domain/masters/trainingPosition'
 import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '@personnel/domain/masters/discretionaryWork'
@@ -58,6 +59,8 @@ const ANCHORS = {
   concurrentReasons:        '兼務理由',
   demotionReasons:          '降格理由',
   concurrentType:           '本務兼務区分',
+  // 昇降格マトリクス（BT列〜BW列）: 列ヘッダーが '職務レベル'（'職務レベルCD' とは別）
+  promotionMatrix:          '職務レベル',
 } as const
 
 type AnchorKey = keyof typeof ANCHORS
@@ -90,6 +93,16 @@ function dataRowIndicesAt(raw: unknown[][], col: number): number[] {
   return rows
 }
 
+function parsePromotionMatrix(raw: unknown[][], col: number): PromotionMatrixEntry[] {
+  // col = '職務レベル' 列（BT）。右に役職(BU)・M職P職(BV)・昇降格ワーニング用チェック(BW) が続く
+  return dataRowIndicesAt(raw, col).map(r => ({
+    jobLevel:         cellStr(raw, r, col),
+    officialPosition: cellStr(raw, r, col + 1),
+    jobClass:         cellStr(raw, r, col + 2),
+    warningLevel:     cellNum(raw, r, col + 3),
+  }))
+}
+
 // ── Human-readable labels (for SetupView UI) ──────────────────────────────────
 export const MASTER_LABELS: Record<keyof AllMasters, string> = {
   orgMasterEntries:         '組織CD一覧',   // parsed by orgMasterParser, not this parser
@@ -107,6 +120,7 @@ export const MASTER_LABELS: Record<keyof AllMasters, string> = {
   demotionReasons:          '昇降格理由',
   trainingPositions:        '業務研修ポジション',
   discretionaryWorkOptions: '裁量労働／業務研修',
+  promotionMatrix:          '昇降格マトリクス',
 }
 
 // ── Per-group parsers（col = キー列の 0-indexed 列番号）─────────────────────────
@@ -321,6 +335,7 @@ export function parseMastersFromSheet(raw: unknown[][]): ParseMastersResult {
     discretionaryWorkOptions: at('discretionaryWorkOptions', c => parseCodeEntryListAt<DiscretionaryWorkEntry>(raw, c)),
     concurrentReasons:        at('concurrentReasons',        c => parseCodeEntryListAt<ConcurrentReasonEntry>(raw, c)),
     demotionReasons:          at('demotionReasons',          c => parseCodeEntryListAt<DemotionReasonEntry>(raw, c)),
+    promotionMatrix:          at('promotionMatrix',          c => parsePromotionMatrix(raw, c)),
   }
 
   const concurrentTypeActual = at('concurrentType', c =>

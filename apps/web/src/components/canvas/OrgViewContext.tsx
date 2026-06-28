@@ -17,6 +17,9 @@ export interface DragData {
   rowId?:          number
   /** どのパネルからのドラッグか（'main' | strip panel id）。クロスパネル判定用 */
   fromPanelId?:    string
+  /** 旧組織未割当セクションからの一括ドラッグ用（rowIds があれば unmapped-bulk 扱い） */
+  rowIds?:         number[]
+  prevOrgName?:    string
 }
 
 export interface PositionEntry {

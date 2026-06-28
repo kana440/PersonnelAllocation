@@ -193,9 +193,14 @@ export function OperationModals({
       {showPosModal && pendingPosCode && (
         <NewPositionConfirmModal
           newPosCode={pendingPosCode}
-          onCreateNew={() => {
+          hasSubordinates={(values._managerTransferMode as string | undefined) !== undefined}
+          onCreateNew={(managerTransferMode) => {
             setShowPosModal(false)
-            doExecute({ ...values, positionCode: pendingPosCode ?? undefined })
+            doExecute({
+              ...values,
+              positionCode: pendingPosCode ?? undefined,
+              ...(managerTransferMode !== undefined ? { _managerTransferMode: managerTransferMode } : {}),
+            })
             setPendingPosCode(null)
           }}
           onKeepCurrent={() => {
