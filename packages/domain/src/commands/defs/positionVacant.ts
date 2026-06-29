@@ -227,6 +227,32 @@ export function countSubordinates(row: AllocationRow, allocationList: Allocation
   ).length
 }
 
+// ── 現在状態ベースの部下取得（ドラッグ操作用） ────────────────────────────────
+
+/** 現在の managerPositionCode === row.positionCode の行を直属部下として返す */
+export function getDirectSubordinates(row: AllocationRow, allocationList: AllocationRow[]): AllocationRow[] {
+  const posCode = row.positionCode as string | undefined
+  if (!posCode) return []
+  return allocationList.filter(
+    r => r.rowId !== row.rowId &&
+      (r.managerPositionCode as string | undefined) === posCode
+  )
+}
+
+/** 直属部下のうち同一組織（departmentCode が一致）の行のみ返す */
+export function getSameOrgSubordinates(row: AllocationRow, allocationList: AllocationRow[]): AllocationRow[] {
+  return getDirectSubordinates(row, allocationList).filter(
+    r => r.departmentCode === row.departmentCode
+  )
+}
+
+/** 直属部下のうち別組織（departmentCode が不一致）の行のみ返す */
+export function getOtherOrgSubordinates(row: AllocationRow, allocationList: AllocationRow[]): AllocationRow[] {
+  return getDirectSubordinates(row, allocationList).filter(
+    r => r.departmentCode !== row.departmentCode
+  )
+}
+
 // ── withLeavePositionVacant ───────────────────────────────────────────────────
 
 /**

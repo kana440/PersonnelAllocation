@@ -3,7 +3,7 @@ import type { Organization } from '@personnel/domain/schemas'
 import type { Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
-import type { DropIntentState } from './hooks/useDropIntent'
+import type { DropIntentState, DropOpState } from './hooks/useDropIntent'
 
 export interface DragData {
   dragType?:       'person' | 'position'
@@ -50,6 +50,8 @@ export interface OrgViewContextValue {
   dropGapBelowRowId:        number | null
   setDropGapBelowRowId:     (v: number | null) => void
   openDropIntent:           (state: DropIntentState) => void
+  /** バンド間ドラッグ: 昇格/降格 quickInputs フォームを直接開く */
+  openBandDrop:             (state: DropOpState) => void
   handleDragOver:           (e: React.DragEvent, orgId: string) => void
   handleDragLeave:          () => void
   handleDrop:               (e: React.DragEvent, orgId: string) => void

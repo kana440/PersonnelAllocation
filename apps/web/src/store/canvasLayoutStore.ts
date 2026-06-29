@@ -9,6 +9,15 @@ import { computeLca } from '../components/canvas/FilterBar/filterLogic'
 // 'collapsed' を廃止: 'windowed' | 'inline' の2択
 export type ChildrenMode = 'windowed' | 'inline'
 
+/** パネル描写モード。将来的に 'table' 等を追加可能 */
+export type PanelViewModeId = 'tree' | 'band'
+
+/** モードごとのパネル幅（レイアウト計算と DOM 幅の両方に使用） */
+export const VIEW_MODE_WIDTHS: Record<PanelViewModeId, number> = {
+  tree: 288,
+  band: 208,
+}
+
 export interface PanelDef {
   id:              string
   orgId:           string
@@ -96,8 +105,8 @@ interface CanvasLayoutState {
 
   // ── パネル表示モード ─────────────────────────────────────────────
   /** 'tree' = レポートラインツリー（デフォルト）, 'band' = バンド別コンパクト表示 */
-  panelViewMode:        'tree' | 'band'
-  togglePanelViewMode:  () => void
+  panelViewMode:    PanelViewModeId
+  setPanelViewMode: (mode: PanelViewModeId) => void
 
   // ── 自動整列 ────────────────────────────────────────────────────
   // positions は autoArrange=ON のとき TreeWindowCanvas の useMemo で直接導出される。
@@ -274,8 +283,8 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   showVacantPositions:       false,
   toggleShowVacantPositions: () => set(s => ({ showVacantPositions: !s.showVacantPositions })),
 
-  panelViewMode:        'tree',
-  togglePanelViewMode:  () => set(s => ({ panelViewMode: s.panelViewMode === 'tree' ? 'band' : 'tree' })),
+  panelViewMode:    'tree',
+  setPanelViewMode: (mode) => set({ panelViewMode: mode }),
 
   // ── 自動整列 ────────────────────────────────────────────────────
   autoArrange:    true,

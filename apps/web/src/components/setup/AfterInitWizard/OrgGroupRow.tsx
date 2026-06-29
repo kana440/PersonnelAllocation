@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import type { Organization }    from '@personnel/domain/schemas'
 import type { OrgMappingGroup } from '../../../application/setup/afterInit'
-import { matchesSearch, normalizeSearch } from '../../../utils/normalizeSearch'
+import { matchesSearch }   from '../../../utils/normalizeSearch'
+import { orgNameSimilarity } from '../../../utils/orgMatching'
 
 interface Props {
   group:              OrgMappingGroup
@@ -9,24 +10,6 @@ interface Props {
   /** 初期自動提案の新組織コード。行ごとの「提案に戻す」ボタンに使う */
   initialNewOrgCode?: string | null
   onChange:           (prevCode: string | null, newOrgCode: string | null) => void
-}
-
-/** バイグラムによる名前類似度スコア（高いほど似ている） */
-function nameSimilarity(a: string, b: string): number {
-  const na = normalizeSearch(a)
-  const nb = normalizeSearch(b)
-  if (na === nb) return 3
-  if (na.includes(nb) || nb.includes(na)) return 2
-  const bigrams = (s: string) => {
-    const set = new Set<string>()
-    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2))
-    return set
-  }
-  const ba = bigrams(na)
-  const bb = bigrams(nb)
-  let common = 0
-  for (const g of ba) if (bb.has(g)) common++
-  return common / Math.max(ba.size + bb.size - common, 1)
 }
 
 /** スコープ組織の配下 ID セットを構築（BFS） */
@@ -130,7 +113,7 @@ export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Pro
 
     const base = prevOrgName ?? ''
     return [...pool]
-      .sort((a, b) => nameSimilarity(b.name, base) - nameSimilarity(a.name, base))
+      .sort((a, b) => orgNameSimilarity(b.name, base) - orgNameSimilarity(a.name, base))
       .slice(0, 15)
   }, [activeOrgs, search, prevOrgName, subtreeIds])
 

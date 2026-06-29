@@ -3,7 +3,7 @@ import type { DragData, PositionEntry } from '../OrgViewContext'
 import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { useStore }              from '../../../store/useStore'
-import { CanvasFieldDiff }       from '../components/CanvasFieldDiff'
+import { CanvasFieldDiff }       from '../toolbar/CanvasFieldDiff'
 import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 import { isInternalPosCode, getPositionTitle, getEmpBorderClass } from './helpers'
 

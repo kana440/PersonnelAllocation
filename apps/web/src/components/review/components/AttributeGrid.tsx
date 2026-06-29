@@ -36,7 +36,7 @@ function DiffCell({ before, after }: { before: string; after: string }) {
     <td className="px-2 py-1.5 text-xs border-b border-gray-100 whitespace-nowrap">
       {changed ? (
         <div className="flex flex-col gap-0.5">
-          <span className="text-blue-700 font-medium">{after || '—'}</span>
+          <span className="text-red-600 font-medium">{after || '—'}</span>
           <span className="text-gray-400 line-through text-[10px]">{before || '—'}</span>
         </div>
       ) : (

@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
-import { useStore } from '../../../store/useStore'
-import { appService } from '../../../application/HRApplicationService'
-import { ComboInput } from '../../common/ComboInput'
-import { ModalShell } from '../../common/ModalShell'
+import { useStore } from '../../../../store/useStore'
+import { appService } from '../../../../application/HRApplicationService'
+import { ComboInput } from '../../../common/ComboInput'
+import { ModalShell } from '../../../common/ModalShell'
 import { getGroupedFieldOptions } from '@personnel/domain/choices'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { resolveFieldStrictness } from '@personnel/domain/optionStrictness'
-import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
+import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 interface Props {

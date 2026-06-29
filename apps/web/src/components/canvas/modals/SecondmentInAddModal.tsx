@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStore } from '../../store/useStore'
+import { useStore } from '../../../store/useStore'
 import { getGroupedFieldOptions } from '@personnel/domain/choices'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 

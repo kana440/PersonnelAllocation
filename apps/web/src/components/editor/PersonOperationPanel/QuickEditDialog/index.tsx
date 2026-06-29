@@ -22,21 +22,35 @@ import type { AllocationRow }  from '@personnel/domain/allocationRow'
 import type { DomainContext }  from '@personnel/domain/context'
 
 interface Props {
-  def:      EditOperation
-  row:      AllocationRow
-  onClose:  () => void
+  def:              EditOperation
+  row:              AllocationRow
+  overrideInitial?: Partial<AllocationRow>
+  onClose:          () => void
   /** 「詳細編集」クリック時。現在の入力値を渡すので OperationFormView の overrideInitial に使う */
   onDetail: (currentValues: Partial<AllocationRow>) => void
 }
 
-export function QuickEditDialog({ def, row, onClose, onDetail }: Props) {
+export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }: Props) {
   const { allocationList, afterOrganizations, masters } = useStore()
   const ctx = useMemo(
     () => ({ allocationList, afterOrganizations, masters }),
     [allocationList, afterOrganizations, masters],
   )
 
-  const [values, setValues]               = useState<Partial<AllocationRow>>(() => def.onOpen(row, ctx))
+  const [values, setValues] = useState<Partial<AllocationRow>>(() => {
+    const base = { ...def.onOpen(row, ctx), ...overrideInitial }
+    if (!overrideInitial) return base
+    // overrideInitial で上書きされたフィールドの onFieldChange 効果を初期値に適用する
+    let result = base
+    for (const field of Object.keys(overrideInitial)) {
+      const val = (overrideInitial as Record<string, unknown>)[field]
+      if (typeof val !== 'string') continue
+      const effect = (def.onFieldChange as Record<string, Function> | undefined)?.[field]?.(val, ctx, result) as
+        { setValues?: Partial<AllocationRow> } | undefined
+      if (effect?.setValues) result = { ...result, ...effect.setValues }
+    }
+    return result
+  })
   const [orgPickerField, setOrgPickerField] = useState<string | null>(null)
   const [submitError,   setSubmitError]   = useState<string | null>(null)
 

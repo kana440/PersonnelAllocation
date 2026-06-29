@@ -325,6 +325,19 @@ executeOperation(op)
 
 **`canvasLayoutStore`**（`apps/web/src/store/canvasLayoutStore.ts`）はキャンバスレイアウトの UI 状態（組織パネルの一覧・並び順）を管理する独立した Zustand ストア。`HRApplicationService` の Undo 対象外。Excel 読み込み時・セッションリセット時に自動クリアされる。
 
+キャンバスのパネル状態には**3つのスコープ**がある：
+
+| 状態 | スコープ | 格納場所 |
+|---|---|---|
+| `panelViewMode: PanelViewModeId` | **全パネル共通** | `canvasLayoutStore` の1変数 |
+| `childrenMode: 'windowed' \| 'inline'` | **パネル個別** | `PanelDef.childrenMode` |
+| `collapsedOrgIds: string[]` | **パネル個別** | `PanelDef.collapsedOrgIds` |
+| `open: boolean` | **パネル個別** | `PanelDef.open` |
+
+- `panelViewMode` の切り替えは `setPanelViewMode(mode)` を使う（`togglePanelViewMode` は廃止）
+- `panelViewMode` の UI コントロールは**キャンバスヘッダー（`OrgOperationView`）に置く**。各パネルヘッダーには置かない（グローバル状態なのにパネルごとにボタンを持つのは誤り）
+- パネル幅は `VIEW_MODE_WIDTHS[panelViewMode]` で取得する（`=== 'band' ? 208 : 288` のハードコードをしない）
+
 ---
 
 ## AI ツール
@@ -353,7 +366,47 @@ components/foo/
   helpers.ts     ← 純粋関数ヘルパー
 ```
 
-**OrgTreePanel パターン**: レビューエリアで検索＋組織ツリーを使うときは
+**キャンバスコアツリーパターン**: after/before 両サイドのキャンバスツリーは `apps/web/src/components/canvas/core/` に統一実装がある。新しいビューコンテキスト（出向先比較など）を追加するときはこれを使う。コンテキスト固有の実装（`after/TreeWindow`・`before/BeforeTreeWindow`）はラッパーにすぎない。
+
+```
+canvas/core/
+  types.ts            ← PanelTreeAdapter・OrgTreeConfig・PanelViewModeId 等の型
+  OrgTreeNode.tsx     ← ストア非依存な再帰ノード（Prop で完結）
+  OrgTreeControls.tsx ← 展開/折りたたみコントロールバー
+  OrgTreePanel.tsx    ← パネルシェル（ドラッグ・ResizeObserver）
+```
+
+**`PanelTreeAdapter`** パターン: `OrgTreeNode` はストアを一切参照しない。`adapter.openOrg` / `adapter.closeOrg` / `adapter.addPanel?` を通じて抽象化する。after 側は `addPanel` あり、before 側は `undefined`（初期化時に全パネル作成済みのため不要）。
+
+**`OrgTreeConfig`** パターン: ツリーの「中身」（カード描写・ヘッダー色・ドラッグ有無）は `OrgTreeConfig` オブジェクトとしてクロージャで渡す。新しいビューコンテキストを追加するとき、`OrgTreeNode` 本体は変更しない。
+
+**キャンバスの組織 Map ルール**: キャンバス内では `organization.find()` による線形検索を書かない。`useMemo` で `Map<string, Organization>` と `Map<string, Organization[]>`（childrenByOrgId）を構築して O(1) ルックアップを使う。
+
+```typescript
+// ✅ 推奨
+const orgById        = useMemo(() => new Map(organizations.map(o => [o.id, o])), [organizations])
+const childrenByOrgId = useMemo(() => { /* 1回走査で構築 */ }, [organizations])
+
+// ❌ NG（3000組織では全パネル×全描写で O(N×M) になる）
+const org = organizations.find(o => o.id === panel.orgId)
+```
+
+**`beforeRowsByOrgId` の構築ルール**: `allocationList` を1回走査して Map を構築する。組織ごとに `filter()` するとO(3000×N) になる。
+
+```typescript
+// ✅ O(N + 3000)
+const codeToOrgId = new Map(beforeOrganizations.map(o => [o.externalCode, o.id]))
+for (const row of allocationList) {
+  const orgId = codeToOrgId.get(row.prevDepartmentCode)
+  // map に積む
+}
+// ❌ O(3000 × N)
+for (const org of beforeOrganizations) {
+  allocationList.filter(r => r.prevDepartmentCode === org.externalCode)
+}
+```
+
+**レビューエリアの OrgTreePanel パターン**: レビューエリアで検索＋組織ツリーを使うときは
 `apps/web/src/components/review/components/OrgTreePanel.tsx` を再利用する。
 コピーしてローカルに書かない。
 
@@ -491,6 +544,11 @@ codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>
 - `ApiXxx` インターフェースを snake_case で定義する（Drizzle の返却型と不一致になる）
 - サーバーから受け取った `codeLists` を `EMPTY_CODE_LISTS` とマージせず使う
 - React の `map()` 内で `<>` フラグメントを key なしで使う（必ず `<React.Fragment key={...}>` を使う）
+- キャンバスコンポーネントで `organizations.find(o => o.id === x)` を書く（Map を使う）
+- キャンバスの `after/TreeWindow` / `before/BeforeTreeWindow` を直接コピーして新コンテキストを作る（`core/` の `OrgTreeNode` + `OrgTreePanel` を使って `renderItems` クロージャだけ差し替える）
+- `togglePanelViewMode` を使う（廃止。`setPanelViewMode(mode)` を使う）
+- パネル幅を `=== 'band' ? 208 : 288` とハードコードする（`VIEW_MODE_WIDTHS[panelViewMode]` を使う）
+- `panelViewMode` の切り替えボタンをパネルヘッダーに置く（グローバル状態のコントロールはキャンバスヘッダー `OrgOperationView` に置く）
 
 ---
 

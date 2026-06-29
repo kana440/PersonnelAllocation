@@ -44,7 +44,7 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
 
   const {
     showVacantPositions, toggleShowVacantPositions,
-    panelViewMode, togglePanelViewMode,
+    panelViewMode,
   } = useCanvasLayoutStore()
 
   const org = organizations.find(o => o.id === orgId)
@@ -74,17 +74,6 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
       <div className="flex-shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-xl flex items-center gap-2">
         <span className="flex-1 text-xs font-semibold text-gray-800 truncate">{org.name}</span>
         <span className="text-[10px] text-gray-400 flex-shrink-0">({totalCount}名)</span>
-
-        {/* バンド別表示トグル */}
-        <button
-          onClick={togglePanelViewMode}
-          className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold transition-colors ${
-            panelViewMode === 'band'
-              ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
-              : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-          }`}
-          title={panelViewMode === 'band' ? 'ツリー表示に切り替え' : 'バンド別表示に切り替え'}
-        >⊞</button>
 
         {/* 空席ポジション表示トグル */}
         <button

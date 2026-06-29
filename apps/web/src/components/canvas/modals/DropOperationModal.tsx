@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom'
 import type { EditOperation } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import { OperationFormView } from '../editor/PersonOperationPanel/OperationFormView'
+import { OperationFormView } from '../../editor/PersonOperationPanel/OperationFormView'
 
 interface Props {
   def:             EditOperation

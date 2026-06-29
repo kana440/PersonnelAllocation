@@ -36,6 +36,12 @@
 | [14-delegation-model.md](./14-delegation-model.md) | エンジニア | 依頼・スナップショット・3-way マージモデル |
 | [09-migration-vision.md](./09-migration-vision.md) | 企画・エンジニア | 移行の背景・フェーズ設計（なぜ STEP2 が必要か） |
 
+### UI アーキテクチャ
+
+| ファイル | 対象読者 | 内容 |
+|---|---|---|
+| [17-canvas-generic-tree.md](./17-canvas-generic-tree.md) | エンジニア | キャンバス汎用ツリー設計（after/before 統合・PanelTreeAdapter・パフォーマンス） |
+
 ### 課題・提案
 
 | ファイル | 対象読者 | 内容 |

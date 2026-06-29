@@ -2,25 +2,27 @@ import type { Organization } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 export interface CandidateEntry {
-  row:         AllocationRow
-  name:        string
-  beforePath:  string  // 旧組織のフルパス（prevDepartmentCode）
-  currentOrg:  string  // 現（新）組織名
-  band:        string
-  posTitle:    string
+  row:          AllocationRow
+  name:         string
+  beforePath:   string  // 旧組織フルパス
+  currentPath:  string  // 現組織フルパス
+  band:         string
+  posTitle:     string
+  positionCode: string  // ポジション番号（検索用）
 }
 
-/** 組織コードからその組織の名前と上位2階層をつなげたパスを返す */
-export function buildOrgShortPath(orgCode: string | undefined, orgs: Organization[]): string {
+/** 組織コードからルートまで辿ったフルパスを返す（例: 本社 > 情報システム部 > 第1グループ） */
+function buildOrgFullPath(orgCode: string | undefined, orgs: Organization[]): string {
   if (!orgCode) return ''
-  const leaf = orgs.find(o => o.externalCode === orgCode)
+  const orgById = new Map(orgs.map(o => [o.id, o]))
+  const leaf    = orgs.find(o => o.externalCode === orgCode)
   if (!leaf) return orgCode
-  const parts: string[] = [leaf.name]
-  let cur = orgs.find(o => o.id === leaf.parentId)
-  if (cur) {
+
+  const parts: string[] = []
+  let cur: Organization | undefined = leaf
+  while (cur) {
     parts.unshift(cur.name)
-    const grandParent = orgs.find(o => o.id === cur!.parentId)
-    if (grandParent) parts.unshift('…')
+    cur = cur.parentId ? orgById.get(cur.parentId) : undefined
   }
   return parts.join(' > ')
 }
@@ -38,13 +40,15 @@ export function buildCandidates(
     if (row.departmentCode === targetOrgCode)      continue  // 既に対象組織
     const name = [row.lastName, row.firstName].filter(Boolean).join(' ')
     if (!name)                                     continue
+    const posCode = (row.positionCode as string | undefined) ?? ''
     results.push({
       row,
       name,
-      beforePath:  buildOrgShortPath(row.prevDepartmentCode as string | undefined, beforeOrgs),
-      currentOrg:  afterOrgs.find(o => o.externalCode === row.departmentCode)?.name ?? (row.departmentCode as string | undefined) ?? '',
-      band:        (row.positionBand as string | undefined) ?? '',
-      posTitle:    (row.officialPositionCode ?? row.localJobTitle ?? '') as string,
+      beforePath:   buildOrgFullPath(row.prevDepartmentCode as string | undefined, beforeOrgs),
+      currentPath:  buildOrgFullPath(row.departmentCode     as string | undefined, afterOrgs),
+      band:         (row.positionBand as string | undefined) ?? '',
+      posTitle:     (row.officialPositionCode ?? row.localJobTitle ?? '') as string,
+      positionCode: posCode.startsWith('_pos_') ? '' : posCode,
     })
   }
   return results

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { normalizeSearch } from '../../../utils/normalizeSearch'
-import { useStore } from '../../../store/useStore'
-import { appService } from '../../../application/HRApplicationService'
-import { ModalShell } from '../../common/ModalShell'
+import { normalizeSearch } from '../../../../utils/normalizeSearch'
+import { useStore } from '../../../../store/useStore'
+import { appService } from '../../../../application/HRApplicationService'
+import { ModalShell } from '../../../common/ModalShell'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 interface Props {

@@ -4,7 +4,7 @@ import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import type { PanelDef }        from '../../../store/canvasLayoutStore'
 import { useStore }             from '../../../store/useStore'
 import { getDescendantOrgIds }  from '../panel/helpers'
-import { ToggleTrack }          from '../components/ToggleTrack'
+import { ToggleTrack }          from '../toolbar/ToggleTrack'
 
 interface TreeWindowControlsProps {
   panel:         PanelDef

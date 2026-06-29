@@ -6,10 +6,12 @@ import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 export interface ReviewRow {
-  row:          AllocationRow
-  changes:      RowChanges
+  row:            AllocationRow
+  changes:        RowChanges
   activePatterns: Set<EditPattern>
-  issues:       ValidationIssue[]
+  issues:         ValidationIssue[]
+  /** 人物名（空席ポジションは ''） */
+  personName:     string
 }
 
 export interface ReviewData {
@@ -23,7 +25,7 @@ export interface ReviewData {
 }
 
 export function useReviewData(): ReviewData {
-  const { allocationList, afterOrganizations, beforeOrganizations, masters, orgMapping } = useScopedStore()
+  const { allocationList, afterOrganizations, beforeOrganizations, masters, orgMapping, persons } = useScopedStore()
 
   // 旧組織ID → externalCode
   const beforeCodeById = useMemo(
@@ -57,17 +59,24 @@ export function useReviewData(): ReviewData {
     sameOrgPairs,
   }), [allocationList, afterOrganizations, masters, sameOrgPairs])
 
+  const personBySfId = useMemo(
+    () => new Map(persons.map(p => [p.sfPersonId ?? '', p])),
+    [persons],
+  )
+
   const rows = useMemo((): ReviewRow[] =>
     allocationList.map(row => {
-      const changes = detectPatterns(row, detectCtx)
+      const changes    = detectPatterns(row, detectCtx)
+      const person     = row.userId ? personBySfId.get(row.userId as string) : undefined
       return {
         row,
         changes,
         activePatterns: changes.patterns,
-        issues: validateRow({ row, afterOrganizations, masters, allocationList: [], changes }),
+        issues:         validateRow({ row, afterOrganizations, masters, allocationList: [], changes }),
+        personName:     person?.name ?? '',
       }
     }),
-    [allocationList, afterOrganizations, masters, detectCtx]
+    [allocationList, afterOrganizations, masters, detectCtx, personBySfId]
   )
 
   const summary = useMemo(() => {

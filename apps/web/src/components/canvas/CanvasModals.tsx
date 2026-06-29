@@ -3,7 +3,7 @@ import type { Organization } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { PositionEntry, MemberEntry } from './OrgViewContext'
 import type { BulkMoveConfirmParams } from './modals/BulkMoveModal'
-import type { DropIntentState, DropOpState } from './hooks/useDropIntent'
+import type { DropIntentState, DropOpState, DragBatchItem } from './hooks/useDropIntent'
 import { useMemo }                   from 'react'
 import { appService }                from '../../application/HRApplicationService'
 import { MoveRowsToOrgOperation }    from '@personnel/domain/commands/handlers/moveRowsToOrg'
@@ -16,8 +16,10 @@ import {
   BulkSecondmentModal,
 } from './modals/BulkActionModals'
 import { CanvasFieldPicker }   from './CanvasFieldPicker'
-import { DragIntentPicker }    from './DragIntentPicker'
-import { DropOperationModal }  from './DropOperationModal'
+import { DragIntentPicker }    from './modals/DragIntentPicker'
+import { DropOperationModal }  from './modals/DropOperationModal'
+import { QuickEditDialog }     from '../editor/PersonOperationPanel/QuickEditDialog'
+import { RestoreVacantPositionModal } from './modals/RestoreVacantPositionModal'
 import type { EditOperation }  from '@personnel/domain/commands/defs/index'
 
 export interface CanvasModalsProps {
@@ -36,10 +38,15 @@ export interface CanvasModalsProps {
   setDropIntentState: (v: DropIntentState | null) => void
   dropOpState:        DropOpState | null
   setDropOpState:     (v: DropOpState | null) => void
+  /** バンド間ドラッグ: quickInputs フォームで開く昇格/降格操作 */
+  bandDropOpState:    DropOpState | null
+  setBandDropOpState: (v: DropOpState | null) => void
   confirmDialog:      { message: string; onConfirm: () => void } | null
   setConfirmDialog:   (v: { message: string; onConfirm: () => void } | null) => void
-  fieldPickerOpen:      boolean
-  setFieldPickerOpen:   (v: boolean) => void
+  fieldPickerOpen:             boolean
+  setFieldPickerOpen:          (v: boolean) => void
+  restoreVacantPositionOpen:   boolean
+  setRestoreVacantPositionOpen:(v: boolean) => void
   // data
   persons:            Person[]
   allocationList:     AllocationRow[]
@@ -47,8 +54,10 @@ export interface CanvasModalsProps {
   positionTreeByOrgId: Map<string, PositionEntry[]>
   afterMembersByOrgId: Map<string, MemberEntry[]>
   // callbacks
-  handleBulkMoveConfirm: (params: BulkMoveConfirmParams) => void
-  handleIntentPick:      (def: EditOperation, row: AllocationRow, overrideInitial: Partial<AllocationRow>) => void
+  handleBulkMoveConfirm:      (params: BulkMoveConfirmParams) => void
+  handleIntentPick:            (def: EditOperation, row: AllocationRow, overrideInitial: Partial<AllocationRow>) => void
+  handleImmediateTransfer:     (def: EditOperation, row: AllocationRow, values: Partial<AllocationRow>) => void
+  handleBatchTransfer:         (label: string, items: DragBatchItem[]) => void
 }
 
 export function CanvasModals({
@@ -58,11 +67,13 @@ export function CanvasModals({
   bulkMoveSourceId, setBulkMoveSourceId,
   dropIntentState, setDropIntentState,
   dropOpState, setDropOpState,
+  bandDropOpState, setBandDropOpState,
   confirmDialog, setConfirmDialog,
   fieldPickerOpen, setFieldPickerOpen,
+  restoreVacantPositionOpen, setRestoreVacantPositionOpen,
   persons, allocationList, allAfterOrgsUnscoped,
   positionTreeByOrgId, afterMembersByOrgId,
-  handleBulkMoveConfirm, handleIntentPick,
+  handleBulkMoveConfirm, handleIntentPick, handleImmediateTransfer, handleBatchTransfer,
 }: CanvasModalsProps) {
   const { secondmentOrgCodes, masters } = useMemo(() => {
     const snap = appService.getSnapshot()
@@ -167,6 +178,8 @@ export function CanvasModals({
           secondmentOrgCodes={secondmentOrgCodes}
           masters={masters}
           onPick={handleIntentPick}
+          onImmediate={handleImmediateTransfer}
+          onBatch={handleBatchTransfer}
           onCancel={() => setDropIntentState(null)}
         />
       )}
@@ -180,6 +193,24 @@ export function CanvasModals({
         />
       )}
 
+      {bandDropOpState && bandDropOpState.def.quickInputs && (
+        <QuickEditDialog
+          def={bandDropOpState.def}
+          row={bandDropOpState.row}
+          overrideInitial={bandDropOpState.overrideInitial}
+          onClose={() => setBandDropOpState(null)}
+          onDetail={currentValues => {
+            const state = bandDropOpState
+            setBandDropOpState(null)
+            setDropOpState({
+              def:             state.def,
+              row:             state.row,
+              overrideInitial: { ...state.overrideInitial, ...currentValues },
+            })
+          }}
+        />
+      )}
+
       {confirmDialog && (
         <ConfirmDialog
           message={confirmDialog.message}
@@ -190,6 +221,9 @@ export function CanvasModals({
 
       {fieldPickerOpen && <CanvasFieldPicker onClose={() => setFieldPickerOpen(false)} />}
 
+      {restoreVacantPositionOpen && (
+        <RestoreVacantPositionModal onClose={() => setRestoreVacantPositionOpen(false)} />
+      )}
     </>
   )
 }

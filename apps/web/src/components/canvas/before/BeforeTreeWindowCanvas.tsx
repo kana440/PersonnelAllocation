@@ -5,12 +5,13 @@ import { useScopedStore }       from '../../../store/useScopedStore'
 import type { Person }          from '@personnel/domain/schemas'
 import { BeforeTreeWindow }     from './BeforeTreeWindow'
 import { BeforeOrgViewContext } from './BeforeOrgViewContext'
-import { subtreeRowCount } from '../panel/helpers'
 import type { BeforeOrgViewContextValue } from './BeforeOrgViewContext'
 import {
-  WINDOW_W, EST_WIN_H, CANVAS_MARGIN,
+  EST_WIN_H, CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
+  buildPanelByOrgIdMap, buildOrgByIdMap,
 } from '../treeWindowLayout'
+import { VIEW_MODE_WIDTHS } from '../../../store/canvasLayoutStore'
 
 export function BeforeTreeWindowCanvas() {
   const { beforeOrganizations, afterOrganizations } = useStore()
@@ -26,30 +27,89 @@ export function BeforeTreeWindowCanvas() {
     lineStyle,
     canvasZoom, stepCanvasZoom,
     panelViewMode,
+    panels: afterPanels,  // 右側（after）のパネル一覧
   } = useCanvasLayoutStore()
-  const winW = panelViewMode === 'band' ? 208 : WINDOW_W
+  const winW = VIEW_MODE_WIDTHS[panelViewMode]
 
-  // 比較モード開始時にパネルを初期化（ルート org のみ open:true、他は closed chip として表示）
+  const beforeOrgByCode = useMemo(
+    () => new Map(beforeOrganizations.map(o => [o.externalCode, o.id])),
+    [beforeOrganizations],
+  )
+  // afterOrgId → beforeOrgId の逆引き Map
+  const afterIdToBeforeId = useMemo(
+    () => new Map(Object.entries(comparisonOrgMapping).map(([bId, aId]) => [aId, bId])),
+    [comparisonOrgMapping],
+  )
+  // beforeOrg の O(1) ルックアップ
+  const beforeOrgById = useMemo(() => buildOrgByIdMap(beforeOrganizations), [beforeOrganizations])
+
+  // beforeOrg の子 ID リスト（subtree 判定用）
+  const beforeChildrenIds = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const o of beforeOrganizations) {
+      if (!o.parentId) continue
+      const arr = m.get(o.parentId)
+      if (arr) arr.push(o.id)
+      else m.set(o.parentId, [o.id])
+    }
+    return m
+  }, [beforeOrganizations])
+
+  // 右側パネル (afterPanels) に対応する before-org の ID セットを計算（O(N)）
+  const syncedOpenOrgIds = useMemo(() => {
+    const result = new Set<string>()
+    for (const p of afterPanels) {
+      const afterOrg = afterOrganizations.find(o => o.id === p.orgId)
+      if (!afterOrg) continue
+      // 同じ externalCode の before-org を優先
+      const beforeId = afterOrg.externalCode ? beforeOrgByCode.get(afterOrg.externalCode) : undefined
+      if (beforeId) { result.add(beforeId); continue }
+      // comparisonOrgMapping 逆引き
+      const byMapping = afterIdToBeforeId.get(p.orgId)
+      if (byMapping) result.add(byMapping)
+    }
+    return result
+  }, [afterPanels, afterOrganizations, beforeOrgByCode, afterIdToBeforeId])
+
+  // 比較モード開始時にパネルを初期化
   // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
   useEffect(() => {
     if (comparisonPanels.length > 0) return  // guard: 既に初期化済み
     const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
     const ids = viewOrgs.map(o => o.id)
     if (ids.length === 0) return
-    const orgIdSet = new Set(ids)
-    const rootOrgIds = new Set(
-      viewOrgs.filter(o => !o.parentId || !orgIdSet.has(o.parentId)).map(o => o.id)
-    )
-    initComparisonPanels(ids, rootOrgIds)
+    // 右側パネルに対応する before-org を優先して open にする
+    // 対応がなければルート org を open にする（フォールバック）
+    const openIds = syncedOpenOrgIds.size > 0
+      ? syncedOpenOrgIds
+      : new Set(viewOrgs.filter(o => {
+          const orgIdSet = new Set(ids)
+          return !o.parentId || !orgIdSet.has(o.parentId)
+        }).map(o => o.id))
+    initComparisonPanels(ids, openIds)
   }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // orgId → その org に所属していた rows (prevDepartmentCode で紐付け)
+  // 右側パネルが追加されたら対応する before-org パネルを自動展開（リアクティブ同期）
+  useEffect(() => {
+    if (comparisonPanels.length === 0) return  // 未初期化はスキップ
+    for (const orgId of syncedOpenOrgIds) {
+      const p = comparisonPanels.find(cp => cp.orgId === orgId)
+      if (p && !p.open) setComparisonOrgOpen(orgId, true)
+    }
+  }, [syncedOpenOrgIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // orgId → その org に所属していた rows を O(N+3000) で構築
   const beforeRowsByOrgId = useMemo(() => {
+    // externalCode → orgId の Map を先に構築
+    const codeToOrgId = new Map(beforeOrganizations.map(o => [o.externalCode, o.id]))
     const map = new Map<string, typeof allocationList>()
-    for (const org of beforeOrganizations) {
-      if (!org.externalCode) continue
-      const rows = allocationList.filter(r => r.userId && r.prevDepartmentCode === org.externalCode)
-      if (rows.length > 0) map.set(org.id, rows)
+    for (const row of allocationList) {
+      if (!row.userId || !row.prevDepartmentCode) continue
+      const orgId = codeToOrgId.get(row.prevDepartmentCode)
+      if (!orgId) continue
+      const arr = map.get(orgId)
+      if (arr) arr.push(row)
+      else map.set(orgId, [row])
     }
     return map
   }, [beforeOrganizations, allocationList])
@@ -70,23 +130,23 @@ export function BeforeTreeWindowCanvas() {
   const clearSelect = useCallback(() => setSelectedIds(new Set()), [])
 
   // スタンドアロンパネル + 位置をリアクティブに計算（panelHeights が更新されると自動再計算）
-  const standalonePanels = useMemo(
-    () => comparisonPanels.filter(p => isStandaloneWindow(p, comparisonPanels, beforeOrganizations)),
-    [comparisonPanels, beforeOrganizations],
-  )
+  const standalonePanels = useMemo(() => {
+    const panelByOrgId = buildPanelByOrgIdMap(comparisonPanels)
+    return comparisonPanels.filter(p => isStandaloneWindow(p, panelByOrgId, beforeOrgById))
+  }, [comparisonPanels, beforeOrgById])
 
   const displayPanels = useMemo(() => {
     if (standalonePanels.length === 0) return standalonePanels
-    const posMap = computeLayout(standalonePanels, comparisonPanels, beforeOrganizations, panelHeights, winW)
+    const posMap = computeLayout(standalonePanels, beforeOrgById, panelHeights, winW)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [standalonePanels, comparisonPanels, beforeOrganizations, panelHeights, winW])
+  }, [standalonePanels, beforeOrgById, panelHeights, winW])
 
   const connections = useMemo(
-    () => buildConnections(displayPanels, beforeOrganizations),
-    [displayPanels, beforeOrganizations],
+    () => buildConnections(displayPanels, beforeOrgById),
+    [displayPanels, beforeOrgById],
   )
 
   // キャンバスサイズ（実測高さを使用）
@@ -348,8 +408,10 @@ export function BeforeTreeWindowCanvas() {
 
               {/* ウィンドウ群 */}
               {displayPanels.map(panel => {
-                const count = subtreeRowCount(panel.orgId, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
-                if (count === 0) return null
+                const hasSubtreeRows = (id: string): boolean =>
+                  (beforeRowsByOrgId.get(id)?.length ?? 0) > 0 ||
+                  (beforeChildrenIds.get(id) ?? []).some(hasSubtreeRows)
+                if (!hasSubtreeRows(panel.orgId)) return null
                 return (
                   <div
                     key={panel.id}

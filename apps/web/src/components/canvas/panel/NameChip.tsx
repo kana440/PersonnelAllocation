@@ -1,3 +1,4 @@
+import { useState }  from 'react'
 import { useStore }   from '../../../store/useStore'
 import { useOrgView } from '../OrgViewContext'
 import type { PositionEntry, DragData } from '../OrgViewContext'
@@ -10,7 +11,8 @@ interface Props {
 
 export function NameChip({ entry, orgId, panelId }: Props) {
   const { isHistoryPreviewMode } = useStore()
-  const { setDragOverOrgId, isSelectMode, handlePersonClick, handleRowDoubleClick } = useOrgView()
+  const { setDragOverOrgId, isSelectMode, handlePersonClick, handleRowDoubleClick, openDropIntent } = useOrgView()
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const { row, person } = entry
   const isVacant     = !row.userId
@@ -26,6 +28,36 @@ export function NameChip({ entry, orgId, panelId }: Props) {
     : isConcurrent
       ? 'border-purple-400 bg-purple-50 text-gray-700'
       : 'border-blue-400 bg-white text-gray-800 hover:bg-blue-50'
+
+  const handleDragOver = !isVacant && !isHistoryPreviewMode ? (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/json')) return
+    if (e.dataTransfer.types.includes('application/x-position-drag')) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  } : undefined
+
+  const handleDragLeave = !isVacant ? (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false)
+  } : undefined
+
+  const handleDrop = !isVacant && !isHistoryPreviewMode ? (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    let data: DragData
+    try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
+    if (data.dragType !== 'person' || !data.personId) return
+    if (data.fromRowId === row.rowId) return
+    openDropIntent({
+      fromRowId:           data.fromRowId ?? null,
+      personId:            data.personId,
+      toOrgId:             orgId,
+      fromOrgId:           data.fromOrgId,
+      dropType:            'person',
+      managerPositionCode: row.positionCode as string | undefined,
+    })
+  } : undefined
 
   return (
     <div
@@ -50,7 +82,10 @@ export function NameChip({ entry, orgId, panelId }: Props) {
         }
         e.dataTransfer.effectAllowed = 'move'
       } : undefined}
-      onDragEnd={() => setDragOverOrgId(null)}
+      onDragEnd={() => { setDragOverOrgId(null); setIsDragOver(false) }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       data-rowid={row.rowId}
       onClick={e => {
         if (isVacant || isHistoryPreviewMode) return
@@ -59,7 +94,7 @@ export function NameChip({ entry, orgId, panelId }: Props) {
       onDoubleClick={e => {
         if (!isSelectMode && !isHistoryPreviewMode) handleRowDoubleClick(e, row.rowId)
       }}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 cursor-pointer select-none transition-colors ${chipClass}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 cursor-pointer select-none transition-colors ${chipClass} ${isDragOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50' : ''}`}
     >
       {name}
     </div>

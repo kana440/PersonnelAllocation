@@ -1,7 +1,7 @@
-import { OrgTransferDialog }       from '../patternDialogs/OrgTransferDialog'
-import { PromotionDialog }         from '../patternDialogs/PromotionDialog'
-import { JobTypeDialog }           from '../patternDialogs/JobTypeDialog'
-import { SecondmentReleaseDialog } from '../patternDialogs/SecondmentReleaseDialog'
+import { OrgTransferDialog }       from '../modals/operationDialogs/OrgTransferDialog'
+import { PromotionDialog }         from '../modals/operationDialogs/PromotionDialog'
+import { JobTypeDialog }           from '../modals/operationDialogs/JobTypeDialog'
+import { SecondmentReleaseDialog } from '../modals/operationDialogs/SecondmentReleaseDialog'
 import type { EditPattern }        from '@personnel/domain/patterns/editPattern'
 
 interface Props {

@@ -20,6 +20,9 @@ export { preserve } from './afterConstraintHelpers'
 export {
   withLeavePositionVacant,
   countSubordinates,
+  getDirectSubordinates,
+  getSameOrgSubordinates,
+  getOtherOrgSubordinates,
   isVacantPosition,
   isOccupiedPosition,
   isUnassignedPerson,

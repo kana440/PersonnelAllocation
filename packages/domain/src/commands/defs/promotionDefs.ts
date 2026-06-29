@@ -391,6 +391,37 @@ export const titleChangeDef: EditOperation = {
 // マトリクスがない場合:
 //   promotionDemotionBand（読み替えバンド）が同一の別バンドに切替（従来動作）
 
+import type { AllMasters } from '../../masters/aggregate'
+
+/**
+ * M職P職切替専用マトリクス（BX-CA列）を優先し、なければ promotionMatrix にフォールバックする。
+ */
+function getMpMatrix(masters: AllMasters): PromotionMatrixEntry[] {
+  const mpMatrix = masters.mpSwitchMatrix ?? []
+  return mpMatrix.length > 0 ? mpMatrix : (masters.promotionMatrix ?? [])
+}
+
+/** jobClass が管理職（M職）を示すかどうか。'M' / 'M職' / 'Manager' など先頭 M を判定する */
+function isManagerJobClass(jobClass: string): boolean {
+  return /^M/i.test(jobClass)
+}
+
+/**
+ * M→P 切替時に部下の扱いを確認する入力フィールド。
+ * visibleWhen で `_managerTransferMode` が設定されている場合のみ表示する。
+ */
+const MP_SWITCH_SUBORDINATE_INPUTS: (SectionDivider | OperationInput)[] = [
+  { kind: 'section', label: '部下の扱い' },
+  {
+    field:       '_managerTransferMode',
+    label:       '部下の上司設定',
+    required:    false,
+    options:     ['引き継ぐ（上司のまま）', '外す（マネージャーから外れる）'],
+    optionsMode: 'restrict',
+    visibleWhen: (values) => values._managerTransferMode !== undefined,
+  },
+]
+
 function findMpAlternatives(
   positionBand: string | undefined,
   officialPositionCode: string | undefined,
@@ -414,11 +445,11 @@ export const mpTrackSwitchDef: EditOperation = {
 
   availableFor: (row, masters) => {
     if (!row.userId) return unavailable('在席者がいません')
-    const positionBand       = row.positionBand as string | undefined
+    const positionBand         = row.positionBand         as string | undefined
     const officialPositionCode = row.officialPositionCode as string | undefined
-    const matrix = masters.promotionMatrix ?? []
+    const matrix = getMpMatrix(masters)
 
-    // 昇降格マトリクスで候補を検索（優先）
+    // M職P職切替マトリクスで候補を検索（優先）
     const found = findMpAlternatives(positionBand, officialPositionCode, matrix)
     if (found) {
       return found.alternatives.length > 0
@@ -437,6 +468,12 @@ export const mpTrackSwitchDef: EditOperation = {
     return siblings.length > 0 ? AVAILABLE : unavailable('切替可能なバンドがありません')
   },
 
+  // 簡易モード: バンドと役職名だけ入力
+  quickInputs: [
+    { field: 'band',                 required: true  },
+    { field: 'officialPositionCode', required: false },
+  ],
+
   inputs: [
     { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_REFORM, TR.DIV_TRANSFER], optionsMode: 'suggest' },
     { field: 'memo',           required: false },
@@ -446,9 +483,9 @@ export const mpTrackSwitchDef: EditOperation = {
       label:    '切替後バンド',
       required: true,
       options:  (ctx, row) => {
-        const positionBand       = row?.positionBand as string | undefined
+        const positionBand         = row?.positionBand         as string | undefined
         const officialPositionCode = row?.officialPositionCode as string | undefined
-        const matrix = ctx.masters.promotionMatrix ?? []
+        const matrix = getMpMatrix(ctx.masters)
 
         const found = findMpAlternatives(positionBand, officialPositionCode, matrix)
         if (found) {
@@ -468,13 +505,15 @@ export const mpTrackSwitchDef: EditOperation = {
     { kind: 'section', label: '役職情報' },
     { field: 'officialPositionCode', required: false },
     { field: 'localJobTitle',        required: false },
+    // ── 部下の扱い（M→P 切替かつ部下がいる場合のみ表示）─────────────────────
+    ...MP_SWITCH_SUBORDINATE_INPUTS,
   ],
 
   onFieldChange: {
     band: (newBand, ctx, currentValues) => {
-      const matrix = ctx.masters.promotionMatrix ?? []
+      const matrix = getMpMatrix(ctx.masters)
       if (!matrix.length) return {}
-      const currentJobClass    = currentValues?._currentJobClass as string | undefined
+      const currentJobClass     = currentValues?._currentJobClass     as string | undefined
       const currentWarningLevel = Number(currentValues?._currentWarningLevel)
       if (!currentJobClass || isNaN(currentWarningLevel)) return {}
 
@@ -491,9 +530,9 @@ export const mpTrackSwitchDef: EditOperation = {
   },
 
   onOpen: (row, ctx) => {
-    const positionBand       = row.positionBand as string | undefined
+    const positionBand         = row.positionBand         as string | undefined
     const officialPositionCode = row.officialPositionCode as string | undefined
-    const matrix = ctx.masters.promotionMatrix ?? []
+    const matrix = getMpMatrix(ctx.masters)
 
     const found = findMpAlternatives(positionBand, officialPositionCode, matrix)
     if (found) {
@@ -504,6 +543,11 @@ export const mpTrackSwitchDef: EditOperation = {
         ? alternatives.filter(e => e.jobLevel === initBand).map(e => e.officialPosition)[0]
         : undefined
 
+      // M→P 切替で部下がいる場合のみ部下セクションを表示（P→M は部下なしが前提のため不要）
+      const isCurrentM      = isManagerJobClass(currentEntry.jobClass)
+      const hasSubordinates = detectSubordinateMode(row, ctx) !== undefined
+      const managerMode     = (isCurrentM && hasSubordinates) ? '引き継ぐ（上司のまま）' : undefined
+
       return {
         transferReason:        (row.transferReason ?? TR.DIV_TRANSFER) as string | undefined,
         memo:                  (row.memo ?? 'M職P職切替')              as string | undefined,
@@ -512,6 +556,7 @@ export const mpTrackSwitchDef: EditOperation = {
         localJobTitle:         row.localJobTitle                       as string | undefined,
         _currentJobClass:      currentEntry.jobClass,
         _currentWarningLevel:  String(currentEntry.warningLevel),
+        _managerTransferMode:  managerMode,
       }
     }
 
@@ -538,9 +583,9 @@ export const mpTrackSwitchDef: EditOperation = {
     if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
     if (!values.band) return fail('切替後のバンドを選択してください')
 
-    const matrix = ctx.masters.promotionMatrix ?? []
+    const matrix = getMpMatrix(ctx.masters)
     const found  = findMpAlternatives(
-      row.positionBand as string | undefined,
+      row.positionBand         as string | undefined,
       row.officialPositionCode as string | undefined,
       matrix,
     )
@@ -564,18 +609,33 @@ export const mpTrackSwitchDef: EditOperation = {
 
   onSubmit(ctx, rowId, values) {
     const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return new DirectEditOperation(
+    const { _managerTransferMode, _currentJobClass: _jc, _currentWarningLevel: _wl, ...cleanValues } = values
+    const result = new DirectEditOperation(
       rowId,
       {
-        transferReason:       values.transferReason,
-        memo:                 values.memo,
-        band:                 values.band,
-        positionBand:         values.band,
-        officialPositionCode: values.officialPositionCode,
-        localJobTitle:        values.localJobTitle,
+        transferReason:       cleanValues.transferReason,
+        memo:                 cleanValues.memo,
+        band:                 cleanValues.band,
+        positionBand:         cleanValues.band,
+        officialPositionCode: cleanValues.officialPositionCode,
+        localJobTitle:        cleanValues.localJobTitle,
       },
       `M職P職切替: ${personName(row)}`,
     ).apply(ctx)
+
+    // M→P 切替で「外す」を選択した場合: 部下の上司参照をクリアする
+    if (_managerTransferMode === '外す（マネージャーから外れる）') {
+      const posCode = row.positionCode as string | undefined
+      if (posCode) {
+        const updatedList = result.updatedList.map(r =>
+          (r.managerPositionCode as string | undefined) === posCode
+            ? { ...r, managerPositionCode: undefined, managerName: undefined }
+            : r
+        )
+        return { ...result, updatedList }
+      }
+    }
+    return result
   },
 }
 

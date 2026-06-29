@@ -10,12 +10,12 @@ import { TR }                          from '@personnel/domain/transferReasonLab
 import type { Organization }           from '@personnel/domain/schemas'
 import { appService }          from '../../../application/HRApplicationService'
 import { useScopedStore }      from '../../../store/useScopedStore'
-import { SecondmentInAddModal }  from '../SecondmentInAddModal'
-import type { SecondmentInValues } from '../SecondmentInAddModal'
+import { SecondmentInAddModal }  from '../modals/SecondmentInAddModal'
+import type { SecondmentInValues } from '../modals/SecondmentInAddModal'
 import type { EditPattern }    from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }        from '../CanvasModals'
 import { TreeWindowCanvas }    from '../TreeWindowCanvas'
-import { DisplayFieldCombobox } from '../components/DisplayFieldCombobox'
+import { DisplayFieldCombobox } from '../toolbar/DisplayFieldCombobox'
 import { OrgViewContext }      from '../OrgViewContext'
 import type { OrgViewContextValue } from '../OrgViewContext'
 import { useOrgDrag }          from '../hooks/useOrgDrag'
@@ -35,7 +35,7 @@ export function OrgOperationView() {
     undoHistory,
     masters,
   } = useStore()
-  const { comparisonMode, toggleComparisonMode } = useCanvasLayoutStore()
+  const { comparisonMode, toggleComparisonMode, panelViewMode, setPanelViewMode } = useCanvasLayoutStore()
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
@@ -62,7 +62,9 @@ export function OrgOperationView() {
   const [secondmentInModal,   setSecondmentInModal]   = useState<{
     orgId: string; orgCode: string; sfIntegrated: boolean; concurrent: boolean
   } | null>(null)
-  const [activePatternDialog, setActivePatternDialog] = useState<{ pattern: EditPattern; rowId: number } | null>(null)
+  const [activePatternDialog,         setActivePatternDialog]         = useState<{ pattern: EditPattern; rowId: number } | null>(null)
+  const [bandDropOpState,             setBandDropOpState]             = useState<import('../hooks/useDropIntent').DropOpState | null>(null)
+  const [restoreVacantPositionOpen,   setRestoreVacantPositionOpen]   = useState(false)
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const {
@@ -71,7 +73,10 @@ export function OrgOperationView() {
     addPersonsToSelection, clearSelection, exitSelectMode,
   } = usePersonSelection({ persons, allocationList, selectPerson, selectCard })
 
-  const { dropIntentState, setDropIntentState, dropOpState, setDropOpState, handleIntentPick } = useDropIntent()
+  const {
+    dropIntentState, setDropIntentState, dropOpState, setDropOpState,
+    handleIntentPick, handleImmediateTransfer, handleBatchTransfer,
+  } = useDropIntent()
 
   const handleUnmappedBulkDrop = useCallback((rowIds: number[], toOrg: Organization) => {
     const targetCode = toOrg.externalCode ?? toOrg.id
@@ -184,7 +189,8 @@ export function OrgOperationView() {
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
     dropGapBelowRowId, setDropGapBelowRowId,
-    openDropIntent:     isHistoryPreviewMode ? () => {} : (s) => setDropIntentState(s),
+    openDropIntent:  isHistoryPreviewMode ? () => {} : (s) => setDropIntentState(s),
+    openBandDrop:    isHistoryPreviewMode ? () => {} : (s) => setBandDropOpState(s),
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition:  isHistoryPreviewMode ? () => {} : handleAddPosition,
     handleSecondmentIn: isHistoryPreviewMode ? () => {} : handleSecondmentIn,
@@ -212,6 +218,35 @@ export function OrgOperationView() {
           <div className="flex-1" />
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {!comparisonMode && <DisplayFieldCombobox />}
+
+            {!comparisonMode && !isHistoryPreviewMode && (
+              <button
+                onClick={() => setRestoreVacantPositionOpen(true)}
+                className="px-2 py-0.5 text-xs font-medium rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+                title="旧にあって新に存在しないポジションを空席として追加"
+              >
+                未使用Pos追加
+              </button>
+            )}
+
+            {/* 表示形式セグメント */}
+            <div className="flex items-stretch border border-gray-300 rounded overflow-hidden text-xs font-medium">
+              {([
+                { id: 'tree', label: 'ツリー' },
+                { id: 'band', label: 'コンパクト' },
+              ] as const).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setPanelViewMode(id)}
+                  className={`px-2 py-0.5 transition-colors ${
+                    panelViewMode === id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >{label}</button>
+              ))}
+            </div>
+
             <button
               onClick={toggleComparisonMode}
               className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
@@ -283,10 +318,14 @@ export function OrgOperationView() {
           setDropIntentState={setDropIntentState}
           dropOpState={dropOpState}
           setDropOpState={setDropOpState}
+          bandDropOpState={bandDropOpState}
+          setBandDropOpState={setBandDropOpState}
           confirmDialog={confirmDialog}
           setConfirmDialog={setConfirmDialog}
           fieldPickerOpen={fieldPickerOpen}
           setFieldPickerOpen={setFieldPickerOpen}
+          restoreVacantPositionOpen={restoreVacantPositionOpen}
+          setRestoreVacantPositionOpen={setRestoreVacantPositionOpen}
           persons={persons}
           allocationList={allocationList}
           allAfterOrgsUnscoped={allAfterOrgsUnscoped}
@@ -294,6 +333,8 @@ export function OrgOperationView() {
           afterMembersByOrgId={afterMembersByOrgId}
           handleBulkMoveConfirm={handleBulkMoveConfirm}
           handleIntentPick={handleIntentPick}
+          handleImmediateTransfer={handleImmediateTransfer}
+          handleBatchTransfer={handleBatchTransfer}
         />
       </div>
 

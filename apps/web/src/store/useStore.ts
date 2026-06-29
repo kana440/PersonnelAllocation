@@ -1,5 +1,6 @@
 import { create } from 'zustand/react'
 import { useCanvasLayoutStore } from './canvasLayoutStore'
+import { acknowledgmentStore } from '../infrastructure/acknowledgmentStore'
 import type { AfterValues } from '@personnel/domain/allocationRow'
 import type { ValidationResult } from '@personnel/domain/commands/types'
 import { appService } from '../application/HRApplicationService'
@@ -225,6 +226,7 @@ export const useStore = create<AppState>()((set, get) => {
         clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
       }))
       clearPanels()
+      acknowledgmentStore.clear()
     },
 
     mergeExcelData: (data) => appService.mergeExcelData(data),
@@ -274,6 +276,7 @@ export const useStore = create<AppState>()((set, get) => {
       appService.reset()
       set({ selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, isLoading: false, expandedChipIds: new Set() })
       import('../store/canvasLayoutStore').then(m => m.useCanvasLayoutStore.getState().clearPanels())
+      acknowledgmentStore.clear()
     },
 
     enterOperationPanel: (rowId, initialView = 'summary') => {

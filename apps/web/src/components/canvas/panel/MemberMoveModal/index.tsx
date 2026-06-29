@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from 'react'
-import { createPortal }          from 'react-dom'
-import { useStore }              from '../../../../store/useStore'
-import { appService }            from '../../../../application/HRApplicationService'
+import { createPortal }           from 'react-dom'
+import { useStore }               from '../../../../store/useStore'
+import { appService }             from '../../../../application/HRApplicationService'
 import { MoveRowsToOrgOperation } from '@personnel/domain/commands/handlers/moveRowsToOrg'
 import { buildCandidates }        from './helpers'
-import type { CandidateEntry }   from './helpers'
+import type { CandidateEntry }    from './helpers'
+import { matchesSearch }          from '../../../../utils/normalizeSearch'
 
 interface Props {
   orgCode: string
@@ -25,9 +26,14 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
   )
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (!q) return candidates
-    return candidates.filter(c => c.name.toLowerCase().includes(q))
+    return candidates.filter(c =>
+      matchesSearch(c.name,         q) ||
+      matchesSearch(c.currentPath,  q) ||
+      matchesSearch(c.beforePath,   q) ||
+      matchesSearch(c.positionCode, q),
+    )
   }, [candidates, query])
 
   const toggle = useCallback((rowId: number) => {
@@ -66,7 +72,7 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
         className="bg-white rounded-lg shadow-xl flex flex-col"
-        style={{ width: 740, maxHeight: '80vh' }}
+        style={{ width: 860, maxHeight: '80vh' }}
         onClick={e => e.stopPropagation()}
       >
         {/* ── ヘッダー ──────────────────────────────────────────── */}
@@ -82,7 +88,7 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
         <div className="px-5 py-2.5 border-b flex-shrink-0 flex items-center gap-2">
           <input
             type="text"
-            placeholder="氏名で検索..."
+            placeholder="氏名・組織名・ポジション番号で検索..."
             value={query}
             onChange={e => setQuery(e.target.value)}
             className="flex-1 text-sm border border-gray-300 rounded px-2.5 py-1 outline-none focus:border-blue-400"
@@ -107,15 +113,14 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
                   />
                 </th>
                 <th className="px-2 py-2 text-left font-semibold text-gray-600 w-28">氏名</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-600">旧組織</th>
-                <th className="px-2 py-2 text-left font-semibold text-gray-600 w-36">現組織</th>
+                <th className="px-2 py-2 text-left font-semibold text-gray-600">所属（現在 / 旧）</th>
                 <th className="px-2 py-2 text-left font-semibold text-gray-600 w-16">バンド</th>
                 <th className="px-2 py-2 text-left font-semibold text-gray-600 w-28">役職</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-8 text-gray-400">候補が見つかりません</td></tr>
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">候補が見つかりません</td></tr>
               )}
               {filtered.map((c: CandidateEntry) => (
                 <CandidateRow
@@ -170,15 +175,19 @@ function CandidateRow({ entry, selected, onToggle }: RowProps) {
       <td className="w-8 px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
         <input type="checkbox" checked={selected} onChange={onToggle} className="cursor-pointer" />
       </td>
-      <td className="px-2 py-1.5 font-medium text-gray-800 whitespace-nowrap">{entry.name}</td>
-      <td className="px-2 py-1.5 text-gray-500 max-w-[200px] truncate" title={entry.beforePath}>
-        {entry.beforePath || <span className="text-gray-300">—</span>}
+      <td className="px-2 py-2 font-medium text-gray-800 whitespace-nowrap w-28">{entry.name}</td>
+      <td className="px-2 py-2 max-w-[420px]">
+        <div className="text-[11px] text-gray-700 leading-snug">
+          {entry.currentPath || <span className="text-gray-300">—</span>}
+        </div>
+        {entry.beforePath && entry.beforePath !== entry.currentPath && (
+          <div className="text-[9px] text-gray-400 leading-snug mt-0.5">
+            旧: {entry.beforePath}
+          </div>
+        )}
       </td>
-      <td className="px-2 py-1.5 text-gray-600 truncate max-w-[140px]" title={entry.currentOrg}>
-        {entry.currentOrg || <span className="text-gray-300">—</span>}
-      </td>
-      <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{entry.band}</td>
-      <td className="px-2 py-1.5 text-gray-500 truncate max-w-[110px]" title={entry.posTitle}>
+      <td className="px-2 py-2 text-gray-500 whitespace-nowrap w-16">{entry.band}</td>
+      <td className="px-2 py-2 text-gray-500 truncate max-w-[110px] w-28" title={entry.posTitle}>
         {entry.posTitle || <span className="text-gray-300">—</span>}
       </td>
     </tr>

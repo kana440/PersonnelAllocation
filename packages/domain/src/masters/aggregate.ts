@@ -51,6 +51,8 @@ export interface AllMasters {
 
   // 昇降格マトリクス（職務レベル × 役職 × M職P職）
   promotionMatrix:          PromotionMatrixEntry[]    // 昇降格段階チェック (BT-BW)
+  /** M職P職切替用マトリクス (BX-CA)。未設定時は promotionMatrix にフォールバック */
+  mpSwitchMatrix:           PromotionMatrixEntry[]
 }
 
 export const EMPTY_MASTERS: AllMasters = {
@@ -70,4 +72,5 @@ export const EMPTY_MASTERS: AllMasters = {
   trainingPositions:        [],
   discretionaryWorkOptions: [],
   promotionMatrix:          [],
+  mpSwitchMatrix:           [],
 }

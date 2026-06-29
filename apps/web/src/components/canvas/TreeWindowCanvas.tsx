@@ -2,13 +2,15 @@ import { useMemo, useCallback, useEffect, useState, useRef } from 'react'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useStore }             from '../../store/useStore'
 import { useOrgView }           from './OrgViewContext'
-import { TreeWindow }           from './tree'
+import { TreeWindow }           from './after'
 import { useCanvasScroll }      from './hooks/useCanvasScroll'
 import { useCanvasInteraction } from './hooks/useCanvasInteraction'
 import {
-  WINDOW_W, EST_WIN_H, CANVAS_MARGIN,
+  EST_WIN_H, CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
+  buildPanelByOrgIdMap, buildOrgByIdMap,
 } from './treeWindowLayout'
+import { VIEW_MODE_WIDTHS } from '../../store/canvasLayoutStore'
 import { FilterBar }           from './FilterBar'
 import { applyCanvasFilters, buildSubtreeMap } from './FilterBar/filterLogic'
 import { findSecondmentOrgCode } from '@personnel/domain/commands/helpers'
@@ -24,10 +26,13 @@ export function TreeWindowCanvas() {
     filterCards, globalFilters,
     panelViewMode,
   } = useCanvasLayoutStore()
-  const winW = panelViewMode === 'band' ? 208 : WINDOW_W
+  const winW = VIEW_MODE_WIDTHS[panelViewMode]
   const selectedOrgId       = useStore(s => s.selectedOrgId)
   const { masters }         = useStore()
   const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()
+
+  // ── O(1) Map（organizations が変わるときのみ再構築）──────────────
+  const orgById = useMemo(() => buildOrgByIdMap(organizations), [organizations])
 
   // ── フィルタ用計算 ─────────────────────────────────────────────
   const memberOrgIds = useMemo(() => {
@@ -98,23 +103,23 @@ export function TreeWindowCanvas() {
   }, [primaryFilteredPanels, relatedSecondmentOrgIds, panels, globalFilters.includeRelatedSecondmentOrgs])
 
   // ── スタンドアロンパネルと表示座標 ───────────────────────────────
-  const standalonePanels = useMemo(
-    () => filteredPanels.filter(p => isStandaloneWindow(p, filteredPanels, organizations)),
-    [filteredPanels, organizations],
-  )
+  const standalonePanels = useMemo(() => {
+    const panelByOrgId = buildPanelByOrgIdMap(filteredPanels)
+    return filteredPanels.filter(p => isStandaloneWindow(p, panelByOrgId, orgById))
+  }, [filteredPanels, orgById])
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
-    const posMap = computeLayout(standalonePanels, filteredPanels, organizations, panelHeights, winW)
+    const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [autoArrange, standalonePanels, filteredPanels, organizations, panelHeights, winW])
+  }, [autoArrange, standalonePanels, orgById, panelHeights, winW])
 
   const connections = useMemo(
-    () => buildConnections(displayPanels, organizations),
-    [displayPanels, organizations],
+    () => buildConnections(displayPanels, orgById),
+    [displayPanels, orgById],
   )
 
   const canvasWidth  = displayPanels.length === 0 ? 1200
@@ -124,15 +129,15 @@ export function TreeWindowCanvas() {
 
   // ── 整列ボタン ──────────────────────────────────────────────────
   const handleArrange = useCallback(() => {
-    setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights, winW))
+    setPositions(computeLayout(standalonePanels, orgById, panelHeights, winW))
     triggerComparisonArrange()
-  }, [standalonePanels, filteredPanels, organizations, panelHeights, winW, setPositions, triggerComparisonArrange])
+  }, [standalonePanels, orgById, panelHeights, winW, setPositions, triggerComparisonArrange])
 
   const handleAutoArrangeChange = useCallback((checked: boolean) => {
-    if (!checked) setPositions(computeLayout(standalonePanels, filteredPanels, organizations, panelHeights, winW))
+    if (!checked) setPositions(computeLayout(standalonePanels, orgById, panelHeights, winW))
     setAutoArrange(checked)
     if (checked) triggerComparisonArrange()
-  }, [standalonePanels, filteredPanels, organizations, panelHeights, setPositions, setAutoArrange, triggerComparisonArrange])
+  }, [standalonePanels, orgById, panelHeights, winW, setPositions, setAutoArrange, triggerComparisonArrange])
 
   // ── スクロール（人物・組織）────────────────────────────────────
   const { scrollerRef }                              = useCanvasScroll(displayPanels, organizations)

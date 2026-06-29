@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
-import { useStore } from '../../../store/useStore'
-import { appService } from '../../../application/HRApplicationService'
-import { ModalShell } from '../../common/ModalShell'
+import { useStore } from '../../../../store/useStore'
+import { appService } from '../../../../application/HRApplicationService'
+import { ModalShell } from '../../../common/ModalShell'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 

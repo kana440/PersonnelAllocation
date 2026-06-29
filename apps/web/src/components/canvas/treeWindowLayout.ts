@@ -2,48 +2,57 @@ import type { PanelDef }     from '../../store/canvasLayoutStore'
 import type { Organization } from '@personnel/domain/schemas'
 
 export const WINDOW_W  = 288
-export const EST_WIN_H = 300   // 実測値未取得時のフォールバック
-const H_GAP     = 16
-const V_GAP     = 20
-const MARGIN    = 40
+export const EST_WIN_H = 300
+const H_GAP  = 16
+const V_GAP  = 20
+const MARGIN = 40
+
+/**
+ * panels 配列から orgId → PanelDef の Map を構築する。
+ * Canvas 側で一度だけ構築し、全計算に渡すことで O(N) 検索を O(1) に削減する。
+ */
+export function buildPanelByOrgIdMap(panels: PanelDef[]): Map<string, PanelDef> {
+  return new Map(panels.map(p => [p.orgId, p]))
+}
+
+/** Organization 配列から orgId → Organization の Map を構築する */
+export function buildOrgByIdMap(orgs: Organization[]): Map<string, Organization> {
+  return new Map(orgs.map(o => [o.id, o]))
+}
 
 export function isStandaloneWindow(
-  panel: PanelDef,
-  allPanels: PanelDef[],
-  orgs: Organization[],
+  panel:        PanelDef,
+  panelByOrgId: Map<string, PanelDef>,
+  orgById:      Map<string, Organization>,
   ancestors = new Set<string>(),
 ): boolean {
   if (ancestors.has(panel.id)) return true
-  const org = orgs.find(o => o.id === panel.orgId)
+  const org = orgById.get(panel.orgId)
   if (!org?.parentId) return true
-  const parentPanel = allPanels.find(p => p.orgId === org.parentId)
+  const parentPanel = panelByOrgId.get(org.parentId)
   if (!parentPanel) return true
-  const next = new Set(ancestors)
-  next.add(panel.id)
+  const next = new Set(ancestors); next.add(panel.id)
   return parentPanel.childrenMode === 'windowed'
     && panel.open
-    && isStandaloneWindow(parentPanel, allPanels, orgs, next)
+    && isStandaloneWindow(parentPanel, panelByOrgId, orgById, next)
 }
 
 export function computeLayout(
   standalonePanels: PanelDef[],
-  allPanels: PanelDef[],
-  orgs: Organization[],
-  panelHeights: Record<string, number>,
+  orgById:          Map<string, Organization>,
+  panelHeights:     Record<string, number>,
   windowW = WINDOW_W,
 ): Map<string, { x: number; y: number }> {
-  const getParentPanel = (p: PanelDef): PanelDef | undefined => {
-    const org = orgs.find(o => o.id === p.orgId)
-    if (!org?.parentId) return undefined
-    return standalonePanels.find(pp => pp.orgId === org.parentId)
+  // standalone パネル同士の親子関係 Map（パネルツリー）
+  const standaloneByOrgId = buildPanelByOrgIdMap(standalonePanels)
+
+  const getParent = (p: PanelDef): PanelDef | undefined => {
+    const parentOrgId = orgById.get(p.orgId)?.parentId
+    return parentOrgId ? standaloneByOrgId.get(parentOrgId) : undefined
   }
 
   const getChildren = (p: PanelDef): PanelDef[] =>
-    standalonePanels.filter(c => {
-      if (c.id === p.id) return false
-      const org = orgs.find(o => o.id === c.orgId)
-      return org?.parentId === p.orgId
-    })
+    standalonePanels.filter(c => orgById.get(c.orgId)?.parentId === p.orgId)
 
   const getPanelH = (p: PanelDef) => panelHeights[p.id] ?? EST_WIN_H
 
@@ -62,7 +71,7 @@ export function computeLayout(
   const layout = (p: PanelDef, x: number, y: number) => {
     if (visited.has(p.id)) return
     visited.add(p.id)
-    const sw     = subtreeW(p)
+    const sw = subtreeW(p)
     posMap.set(p.id, { x: Math.round(x + Math.max(0, (sw - windowW) / 2)), y })
     let cx = x
     for (const child of getChildren(p)) {
@@ -71,14 +80,13 @@ export function computeLayout(
     }
   }
 
-  const roots = standalonePanels.filter(p => !getParentPanel(p))
+  const roots = standalonePanels.filter(p => !getParent(p))
   let rootX = MARGIN
   for (const root of roots) {
     layout(root, rootX, MARGIN)
     rootX += subtreeW(root) + H_GAP
   }
 
-  void allPanels
   return posMap
 }
 
@@ -102,12 +110,13 @@ export function connectionPath(
 
 export interface Connection { parentPanel: PanelDef; childPanel: PanelDef }
 
-export function buildConnections(standalonePanels: PanelDef[], orgs: Organization[]): Connection[] {
+export function buildConnections(standalonePanels: PanelDef[], orgById: Map<string, Organization>): Connection[] {
+  const panelByOrgId = buildPanelByOrgIdMap(standalonePanels)
   const result: Connection[] = []
   for (const child of standalonePanels) {
-    const org = orgs.find(o => o.id === child.orgId)
-    if (!org?.parentId) continue
-    const parent = standalonePanels.find(p => p.orgId === org.parentId)
+    const parentOrgId = orgById.get(child.orgId)?.parentId
+    if (!parentOrgId) continue
+    const parent = panelByOrgId.get(parentOrgId)
     if (parent) result.push({ parentPanel: parent, childPanel: child })
   }
   return result
