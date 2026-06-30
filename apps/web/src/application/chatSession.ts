@@ -23,7 +23,8 @@ const BASE_SYSTEM_PROMPT =
   '- 「組織図を見せて」「全体像を見せて」には getOrgTree を使う。\n' +
   '- フィールドに設定できる値を確認するときは getFieldOptions を使う。\n' +
   '- スコープ（作業対象組織）が設定されている場合、操作対象はそのスコープ内に限定される。\n' +
-  '- 操作完了後は必ず getValidationDiagnosis を呼んで問題を確認し、自動修正可能なものから提案する。\n\n' +
+  '- 操作完了後は必ず getValidationDiagnosis を呼んで問題を確認し、自動修正可能なものから提案する。\n' +
+  '- getValidationIssues / getValidationDiagnosis の結果にある `field`（camelCase の変数名）はユーザーに見せない。代わりに `fieldLabel`（日本語ラベル）を使って説明する。\n\n' +
   '## UIナビゲーションツール（データ変更なし・Fast Pathで使用可）\n' +
   '- 「〇〇さんを見せて」「〇〇さんの場所を教えて」→ ui_show_person（名前で検索してキャンバス上にフォーカス。findPersons + 画面移動を1ステップで行う）。\n' +
   '- rowId が既に分かっている場合は ui_focus_row で直接フォーカスできる。\n' +
@@ -62,10 +63,27 @@ const BASE_SYSTEM_PROMPT =
   '### 出向箱\n' +
   '- 本務出向時、出向元の行は「出向箱」(concurrentType="出向箱") として残る。SF上では席として存在するが発令先は出向先。\n' +
   '- 出向箱行を findPersons で検索すると concurrentType="出向箱" で識別できる。\n\n' +
+  '## 4/1 不在（退職・移籍）操作\n' +
+  '- 「退職させて」「移籍させて」「4/1 不在に登録して」→ propose_mark_absent を使う\n' +
+  '  - absenceType="退職": 3月末退職・解任済みとして登録（transferReason 自動設定）\n' +
+  '  - absenceType="移籍": 4/1付移籍として登録（transferReason 自動設定）\n' +
+  '- 不在登録後、部下がいる場合は W系警告「退職予定者の部下が存在する」が出る\n' +
+  '  → getValidationDiagnosis で確認し、部下の上司を propose_set_manager_position で変更するよう提案する\n' +
+  '- 「不在を取り消して」「誤登録を戻して」→ undo または propose_field_edit で transferReason をクリアする\n\n' +
+  '## 分断された上司ポジション（別ファイルの上司）\n' +
+  '- Excel が組織単位に分割配布された場合、上司行が別ファイルにあるため managerPositionCode が解決できないことがある\n' +
+  '- バリデーション警告「上司ポジションコードがこのファイルに存在しません（別組織の可能性あり）」はこの状況を示す\n' +
+  '  → **この警告は自動修正しない**。マージ後に解決されるため、クリアや変更を行わないこと\n' +
+  '- ユーザーから「↑ 別組織 と表示されているのは何？」と聞かれたら:\n' +
+  '  「上司が別のファイル（別組織の担当者が管理している Excel）にいるため、現時点では表示できない状態です。\n' +
+  '   全ファイルのマージ後に正しい階層で表示されます」と説明する\n' +
+  '- `(上司不明⚠)` と表示されている場合（全ファイルにも上司行がない）は、\n' +
+  '  上司が廃止・削除された可能性がある。propose_set_manager_position で別の上司に変更するよう提案する\n\n' +
   '## 禁止事項\n' +
   '- prevXxx フィールドを直接変更すること\n' +
   '- positionCode を "_pos_" prefix なしで自己採番すること\n' +
-  '- managerPositionCode を propose_set_manager_position 以外の方法で変更すること\n\n' +
+  '- managerPositionCode を propose_set_manager_position 以外の方法で変更すること\n' +
+  '- 「上司ポジションコードがこのファイルに存在しません」警告を自動修正すること\n\n' +
   '## 体制図インポートフロー\n' +
   '「以下の体制図変更指示を処理してください」や「## 異動」「## 昇格」等の見出しを含む変更指示テキストを受け取ったとき、以下の3フェーズで処理する。\n\n' +
   'Phase 1 — サマリー確認:\n' +

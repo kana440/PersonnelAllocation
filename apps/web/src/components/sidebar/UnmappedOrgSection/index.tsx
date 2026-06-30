@@ -97,11 +97,13 @@ export function UnmappedOrgSection() {
     })
   }, [unresolvedRows, beforeOrganizations])
 
-  // トップレベルノードを初回ロード時に自動展開
+  // 全階層の組織ノードを初回ロード時に自動展開（ユーザーが一覧を即スクロールできるように）
   useEffect(() => {
     if (!initializedRef.current && treeRoots.length > 0) {
       initializedRef.current = true
-      setExpandedOrgIds(new Set(treeRoots.map(n => n.orgId)))
+      const collectAll = (nodes: TreeNode[]): string[] =>
+        nodes.flatMap(n => [n.orgId, ...collectAll(n.children)])
+      setExpandedOrgIds(new Set(collectAll(treeRoots)))
     }
   }, [treeRoots])
 

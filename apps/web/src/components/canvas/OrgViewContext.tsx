@@ -20,13 +20,21 @@ export interface DragData {
   /** 旧組織未割当セクションからの一括ドラッグ用（rowIds があれば unmapped-bulk 扱い） */
   rowIds?:         number[]
   prevOrgName?:    string
+  /** FloatingAbsencePanel からのドラッグ（org へのドロップで lockCancel + 組織設定） */
+  fromAbsence?:    boolean
 }
 
 export interface PositionEntry {
-  row:            AllocationRow
-  person:         Person | null
-  depth:          number
-  activePatterns: Set<EditPattern>
+  row:                 AllocationRow
+  person:              Person | null
+  depth:               number
+  activePatterns:      Set<EditPattern>
+  /**
+   * managerPositionCode が存在するが org 内に対応行がない場合のみ設定される。
+   * 'cross-org': 別 org の行が持つ positionCode と一致（別ファイルの上司）
+   * 'missing':   全 allocationList に存在しない（廃止・未インポート等）
+   */
+  externalManagerKind?: 'cross-org' | 'missing'
 }
 
 export interface MemberEntry {

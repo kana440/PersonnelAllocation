@@ -32,7 +32,7 @@ export function RowCard({
   entry, orgId, panelId,
   comparisonStatus, comparisonOrgName, comparisonColorIdx = 0,
 }: RowCardProps) {
-  const { row, person, depth, activePatterns } = entry
+  const { row, person, depth, activePatterns, externalManagerKind } = entry
   const {
     isSelectMode, selectedPersonIds, selectedCardRowId,
     handlePersonClick,
@@ -79,6 +79,7 @@ export function RowCard({
       fromOrgId:           data.fromOrgId,
       dropType:            'gap',
       managerPositionCode: computeGapManager(),
+      fromAbsence:         data.fromAbsence,
     })
   }
 
@@ -92,6 +93,7 @@ export function RowCard({
       fromOrgId:           data.fromOrgId,
       dropType:            'person',
       managerPositionCode: row.positionCode ?? undefined,
+      fromAbsence:         data.fromAbsence,
     })
   }
 
@@ -285,6 +287,21 @@ export function RowCard({
             {isOnLeave && (
               <span className="flex-shrink-0 text-[9px] font-medium text-orange-500 bg-orange-50 px-1 rounded">休職</span>
             )}
+          </div>
+        )}
+
+        {/* 外部上司インジケーター: managerPositionCode が org 外を向いている場合 */}
+        {externalManagerKind && (
+          <div className={`flex items-center gap-0.5 mt-0.5 min-w-0 ${
+            externalManagerKind === 'cross-org' ? 'text-blue-400' : 'text-amber-500'
+          }`}>
+            <span className="text-[9px] flex-shrink-0">↑</span>
+            <span className="text-[9px] truncate">
+              {(row.managerName ?? row.prevManagerName) || row.managerPositionCode}
+            </span>
+            <span className="text-[9px] flex-shrink-0">
+              {externalManagerKind === 'cross-org' ? '(別組織)' : '(上司不明⚠)'}
+            </span>
           </div>
         )}
 

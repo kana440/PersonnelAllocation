@@ -8,18 +8,24 @@
 ## コマンド
 
 ```bash
-# Web アプリ（STEP1: VITE_APP_MODE=step1 がデフォルト）
-npm run dev               # Vite 開発サーバー起動
+# Web アプリ
+npm run dev               # STEP1 開発サーバー（VITE_APP_MODE=step1 デフォルト）
+npm run dev:step1         # 明示的に STEP1 モードで起動
+npm run dev:step2         # STEP2 モードで起動（.env.local 設定不要）
 npm run build             # 本番ビルド
 npm run test              # vitest（apps/web 内）
 
-# サーバー（STEP2 DEV: .env.local に VITE_APP_MODE=step2 + VITE_AUTH_MODE=stub を設定してから）
-npm run dev:server        # Hono + SQLite サーバー起動（port 3000）
+# サーバー（STEP2 DEV）
+npm run dev:server        # Hono + PGlite サーバー起動（port 3000）
+npm run db:reset          # PGlite データをリセット
 
-# 型チェック
-cd apps/web  && npx tsc --noEmit   # Web アプリの型チェック
-cd apps/server && npx tsc --noEmit # サーバーの型チェック
-cd packages/domain && npx tsc --noEmit  # ドメイン層単独の型チェック
+# 型チェック（推奨: まとめて実行）
+npm run typecheck         # 全パッケージ一括（web + server + domain）
+
+# 型チェック（個別）
+npm run typecheck:web     # apps/web のみ
+npm run typecheck:server  # apps/server のみ
+npm run typecheck:domain  # packages/domain のみ
 
 # アーキテクチャ境界チェック（apps/web から実行）
 cd apps/web && npx depcruise src --config .dependency-cruiser.cjs
@@ -42,9 +48,9 @@ repo root/
         admin/           ←     管理画面（AdminView・UserTable・UserEditModal）
       store/             ←   Zustand ストア（UI 層）
       ports/             ←   インターフェース定義
-    server/src/          ← バックエンド（STEP2 デモ用・Hono + SQLite）
-      db/                ←   SQLite スキーマ・接続
-      routes/            ←   API ルート（sessions / rows / submit / admin/*）
+    server/src/          ← バックエンド（STEP2 デモ用・Hono + PGlite/Aurora）
+      db/                ←   Drizzle スキーマ・DB接続（アダプタ切り替え）
+      routes/            ←   API ルート（auth / rounds / submissions / admin/*）
       auth/              ←   認証スタブ（X-User-Id ヘッダー切り替え）
   docs/                  ← 設計ドキュメント
   specs/                 ← 実装仕様
@@ -108,18 +114,22 @@ STEP1（Excel ローカル運用）と STEP2（サーバー・SSO・Round 管理
 | `step2` | `stub` | STEP2 DEV（Hono + SQLite）|
 | `step2` | `sso` | STEP2 本番（Aurora + SAML）|
 
-### EditView スロットパターン
+### EditViewCore スロットパターン
 
-`EditView` コンポーネントは「共通コア（常に両シェルで使われる）」＋「3スロット（シェルごとに差し替える）」で構成する。
+`EditViewCore`（`apps/web/src/components/editor/EditViewCore.tsx`）が両シェル共通の骨格。4スロットで差し替える。
 
+```typescript
+interface Props {
+  headerLeft:  ReactNode  // タイトル・スコープ等（← 戻るボタンも含む）
+  headerMid?:  ReactNode  // STEP1 専用ボタン群（マージ・担当者割当・分割エクスポート）
+  headerRight: ReactNode  // 右端アクション（STEP1: 管理+クリア / STEP2: 提出）
+  topBanner?:  ReactNode  // ヘッダー直下のバナー（STEP2 の差し戻しコメント等）
+}
 ```
-Core（共通コア）             → STEP1・STEP2 どちらにも自動反映
-userSlot                    → STEP1=モードセレクタ、STEP2=SSO ユーザー表示
-primaryActionSlot           → STEP1=Excel エクスポート、STEP2=提出ボタン
-step2ExtrasSlot             → STEP2 専用（提出状況・コメント・照会）
-```
 
-Core に追加した機能は STEP2 への手動追加なしで自動継承される。STEP2 専用機能のみ `step2ExtrasSlot` に配置する。
+- STEP1 の `App.tsx`・STEP2 の `Step2App.tsx` がそれぞれ `EditViewCore` にスロットを渡す
+- 共通ロジック（LeftSidebar・キャンバス・AI チャット・履歴パネル）は `EditViewCore` 内に固定
+- STEP2 専用 UI は `headerRight` か `topBanner` に配置する
 
 詳細は `docs/02-architecture.md` の「STEP1 / STEP2 共存アーキテクチャ」セクション参照。
 
@@ -342,14 +352,26 @@ executeOperation(op)
 
 ## AI ツール
 
-`apps/web/src/application/aiTools.ts` が AI から呼べる関数群。新しい操作を AI に公開するときはここに追加し、`HRApplicationService` の既存メソッドに委譲する。ロジックを重複して書かない。
+`apps/web/src/application/aiTools.ts` は barrel re-export。実装は `aiTools/` フォルダに分散している。
 
-**レビュー系ツール**（read-only）:
-- `getReviewSummary()` — 変更種別ごとの件数 + バリデーション問題件数
-- `getChangedPersons({ kinds? })` — 変更ありの人物リスト。変更種別でフィルタ可能
-- `getValidationIssues({ level? })` — バリデーション問題の一覧。`error` / `warning` でフィルタ可能
+```
+application/aiTools/
+  index.ts      ← createAITools() エクスポート。4グループをマージ
+  read.ts       ← findPersons / getOrgMembers / getVacantPositions 等（read-only）
+  write.ts      ← proposeOrgTransfer / proposeDemotion 等（ドメイン変更）
+  review.ts     ← getReviewSummary / getChangedPersons / getValidationIssues
+  diagnose.ts   ← diagnosePersonChanges（詳細 diff 診断）
+  orgTree.ts    ← buildOrgTree（ツリー構築ユーティリティ）
+  types.ts      ← 共有型
+```
 
-シナリオは `apps/web/src/infrastructure/ai/scenarios/`（9種）。レビュー系は `reviewSummary.ts`。
+新しい操作を AI に公開するときは **該当カテゴリの `*Methods` ファクトリ関数に追加**する。`HRApplicationService` の既存メソッドに委譲し、ロジックを重複して書かない。
+
+**LLM プロトコル層**（ツール定義）は `apps/web/src/infrastructure/ai/toolRegistry/` で管理する:
+- `readTools.ts` / `renderTools.ts` / `navigateTools.ts` / `operationTools.ts` — ToolEntry 定義
+- `index.ts` — 集約・ルーティング（`execute` / `confirm` / `render` / `navigate` / `read` の5種）
+
+ツール名プレフィックス規約: `find*/get*` = 読み取り系、`propose_*` = ドメイン変更、`ui_*` = ナビゲーション専用
 
 ---
 
@@ -416,12 +438,25 @@ for (const org of beforeOrganizations) {
 
 **左サイドバー構造**:
 ```
-LeftSidebar（タブ）
-  ├── 組織・人物タブ → OrgSearchSidebar（組織ツリー・人物一覧）
-  └── 組織パネルタブ → PanelTabContent（パネル一覧・未網羅候補・未設定）
+LeftSidebar（sidebar/LeftSidebar.tsx）
+  通常モード: OrgSearchSidebar のみ
+  比較モード: タブ切り替え
+    ├── 新組織タブ → OrgSearchSidebar（組織ツリー・人物一覧）
+    └── 旧組織タブ → BeforeOrgSearchSidebar（旧組織ツリー）
+
+OrgSearchSidebar（sidebar/OrgSearchSidebar.tsx）
+  ├── 検索インプット（組織名・人名）
+  ├── VirtualOrgTree（組織ツリー + 人物一覧、flex-1）
+  └── UnmappedOrgSection（旧組織・未割当、下部固定・最大 45% 高さ）
+        └── VirtualUnmappedList（仮想スクロール）
 ```
-- 担当者ロール（`capabilities.rowScope !== null`）: 組織パネルタブがデフォルト
-- 管理者ロール（`capabilities.rowScope === null`）: 組織・人物タブがデフォルト
+
+**「未設定」vs「未割当」の区別**（紛らわしいので注意）:
+- `UnassignedCard`（組織**未設定**）: `departmentCode` が空の行。`canvas/StripBar/UnassignedCard.tsx` に定義。
+- `UnmappedOrgSection`（旧組織・**未割当**）: `departmentCode` が新組織マスタに存在しない行。`OrgSearchSidebar` 下部に常時表示。
+
+**注意**: `canvas/StripBar/index.tsx`（`PanelTabContent`）と `canvas/LeftPalette/index.tsx`（`LeftPalette`）は現在どこからもインポートされていない孤立コンポーネント。混同しないこと。
+
 - 組織パネルの状態は `canvasLayoutStore` が管理し、Excel 読み込み時にリセットされる
 
 ---
@@ -437,9 +472,17 @@ LeftSidebar（タブ）
 ```
 apps/web/src/components/admin/   ← 管理画面コンポーネントはここ
   AdminView/
-    index.tsx         ← オーケストレーター（タブ切り替え・一覧取得）
-    UserTable.tsx     ← ユーザー一覧テーブル
-    UserEditModal.tsx ← ユーザー追加・編集モーダル
+    index.tsx              ← オーケストレーター（タブ切り替え）
+    UserTable.tsx          ← ユーザー一覧テーブル
+    UserEditModal.tsx      ← ユーザー追加・編集モーダル
+    BulkRegisterModal.tsx  ← ユーザー一括登録
+    RoundTab.tsx           ← ラウンド管理タブ
+    RoundCreateModal.tsx   ← ラウンド新規作成
+    RoundDetailView.tsx    ← ラウンド詳細・提出状況
+    SessionTable.tsx       ← セッション一覧
+    DelegationModal.tsx    ← 委任設定
+    PositionTable.tsx      ← ポジション一覧
+    PositionEditModal.tsx  ← ポジション編集
     ...（画面が増えたらここに追加）
 apps/web/src/infrastructure/api/
   adminApi.ts         ← 管理 API クライアント（apps/server の /api/admin/* を呼ぶ）
@@ -490,6 +533,7 @@ apps/web/src/infrastructure/api/
 
 ### Drizzle ORM のキー命名
 
+サーバーは PGlite（開発）/ Aurora PostgreSQL（本番）。DB アクセスはすべて Drizzle ORM。
 Drizzle は TypeScript プロパティ名（camelCase）でキーを返す。**`ApiXxx` インターフェースも camelCase** で定義する。
 これにより Drizzle の返却型と一致し、エイリアスなしで型安全に `c.json()` できる。
 

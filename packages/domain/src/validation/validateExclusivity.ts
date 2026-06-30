@@ -10,7 +10,8 @@ function checkManagerPositionCode(row: AllocationRow, allRows: AllocationRow[]):
 
   const mgrRow = allRows.find(r => r.positionCode === mgrCode)
   if (!mgrRow)
-    return [{ field: 'managerPositionCode', level: 'error', message: `上司ポジションコード "${mgrCode}" が見つかりません` }]
+    // ファイル分割運用では上司が別 Excel に存在するため warning に留める（保存はブロックしない）
+    return [{ field: 'managerPositionCode', level: 'warning', message: `上司ポジションコード "${mgrCode}" がこのファイルに存在しません（別組織の可能性あり）` }]
 
   if (row.positionCode && mgrCode === row.positionCode)
     return [{ field: 'managerPositionCode', level: 'error', message: '自分自身を上司ポジションに設定できません' }]

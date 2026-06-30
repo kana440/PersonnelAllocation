@@ -431,6 +431,43 @@ export const OPERATION_TOOLS: Array<ConfirmEntry | ExecuteEntry> = [
     },
   },
 
+  // ── propose_mark_absent ────────────────────────────────────────────────────
+  // 4/1 不在（退職・移籍）登録。FloatingAbsencePanel のドラッグ操作と同等の処理を AI から実行する。
+  {
+    kind: 'execute',
+    definition: {
+      type: 'function',
+      function: {
+        name:        'propose_mark_absent',
+        description:
+          '指定した行を「4/1 不在」として登録する（即時実行）。' +
+          '退職（3月末退職・解任済み）または移籍（4/1付移籍）の異動事由を自動設定し、' +
+          '組織ツリーから除外する。実行前に findPersons で rowId を確認すること。' +
+          '休職（leaveOfAbsenceSign）とは別の操作。休職中の人は対象外。',
+        parameters: {
+          type: 'object',
+          required: ['rowId', 'absenceType'],
+          properties: {
+            rowId:       { type: 'number', description: '対象の rowId（findPersons の positions[].rowId）' },
+            absenceType: {
+              type: 'string',
+              enum: ['退職', '移籍'],
+              description: '退職: 3月末までに退職・解任済み / 移籍: 4/1付で他社へ移籍',
+            },
+            memo: { type: 'string', description: '補足メモ（任意）' },
+          },
+        },
+      },
+    },
+    execute: args => {
+      const { rowId, absenceType, memo } = args as { rowId: number; absenceType: '退職' | '移籍'; memo?: string }
+      const TR_TERMINATION = '【対応なし】3月末までに退職／解任済み'
+      const TR_TRANSFER    = '【個別】4/1付移籍'
+      const transferReason = absenceType === '退職' ? TR_TERMINATION : TR_TRANSFER
+      return aiTools.executeResignation(rowId, transferReason, memo)
+    },
+  },
+
   // ── propose_leave_of_absence ───────────────────────────────────────────────
   {
     kind: 'execute',

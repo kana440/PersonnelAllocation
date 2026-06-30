@@ -6,6 +6,7 @@ import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
 import { detectPatterns } from '@personnel/domain/patterns/detection'
 import { buildPositionDepthList } from '../panel/helpers'
+import { isAbsenceRow } from '../FloatingAbsencePanel/helpers'
 
 interface UseOrgViewDataDeps {
   allAfterOrgs:   Organization[]
@@ -42,6 +43,7 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters 
     const map = new Map<string, MemberEntry[]>()
     for (const row of allocationList) {
       if (!row.departmentCode) continue
+      if (isAbsenceRow(row)) continue
       const org    = afterOrgByCode.get(row.departmentCode)
       if (!org) continue
       const person = personBySfId.get(row.userId ?? '')
@@ -57,6 +59,7 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters 
     const map = new Map<string, AllocationRow[]>()
     for (const row of allocationList) {
       if (!row.departmentCode) continue
+      if (isAbsenceRow(row)) continue
       const org = afterOrgByCode.get(row.departmentCode)
       if (!org) continue
       const arr = map.get(org.id)
@@ -68,21 +71,40 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters 
 
   const rowComparator = useMemo(() => makeRowComparator(masters), [masters])
 
+  // 全行の positionCode セット（クロスOrg 上司判定用）
+  const allPositionCodes = useMemo(() => {
+    const s = new Set<string>()
+    for (const row of allocationList) { if (row.positionCode) s.add(row.positionCode) }
+    return s
+  }, [allocationList])
+
   const positionTreeByOrgId = useMemo((): Map<string, PositionEntry[]> => {
     const result = new Map<string, PositionEntry[]>()
     for (const [orgId, rows] of afterOrgRowsById) {
+      // 同一 org 内の positionCode セット（外部上司判定用）
+      const inOrgCodes = new Set<string>()
+      for (const row of rows) { if (row.positionCode) inOrgCodes.add(row.positionCode) }
+
       // 同一階層内をバンド降順→氏名五十音順でソートしてから深さリストを構築
       const sortedRows = [...rows].sort(rowComparator)
       const depthList  = buildPositionDepthList(sortedRows, r => r.positionCode, r => r.managerPositionCode)
-      result.set(orgId, depthList.map(({ row, depth }) => ({
-        row,
-        depth,
-        person:         row.userId ? (personBySfId.get(row.userId) ?? null) : null,
-        activePatterns: detectPatterns(row).patterns,
-      })))
+      result.set(orgId, depthList.map(({ row, depth }) => {
+        const mgrCode = row.managerPositionCode
+        let externalManagerKind: 'cross-org' | 'missing' | undefined
+        if (mgrCode && !inOrgCodes.has(mgrCode)) {
+          externalManagerKind = allPositionCodes.has(mgrCode) ? 'cross-org' : 'missing'
+        }
+        return {
+          row,
+          depth,
+          person:              row.userId ? (personBySfId.get(row.userId) ?? null) : null,
+          activePatterns:      detectPatterns(row).patterns,
+          externalManagerKind,
+        }
+      }))
     }
     return result
-  }, [afterOrgRowsById, personBySfId, rowComparator])
+  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes])
 
   return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId }
 }

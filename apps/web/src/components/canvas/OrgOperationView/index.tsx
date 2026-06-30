@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useStore }           from '../../../store/useStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { ComparisonSplitView }  from '../ComparisonSplitView'
@@ -24,6 +24,7 @@ import { useBulkMove }         from '../hooks/useBulkMove'
 import { useOrgViewData }      from '../hooks/useOrgViewData'
 import { usePersonSelection }  from './usePersonSelection'
 import { PatternDialogs }      from './PatternDialogs'
+import { FloatingAbsencePanel } from '../FloatingAbsencePanel'
 
 export function OrgOperationView() {
   const store = useScopedStore()
@@ -65,6 +66,8 @@ export function OrgOperationView() {
   const [activePatternDialog,         setActivePatternDialog]         = useState<{ pattern: EditPattern; rowId: number } | null>(null)
   const [bandDropOpState,             setBandDropOpState]             = useState<import('../hooks/useDropIntent').DropOpState | null>(null)
   const [restoreVacantPositionOpen,   setRestoreVacantPositionOpen]   = useState(false)
+  const [absencePanelVisible,         setAbsencePanelVisible]         = useState(false)
+  const canvasRef = useRef<HTMLDivElement>(null)
 
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const {
@@ -103,6 +106,10 @@ export function OrgOperationView() {
     onUnmappedBulkDrop: handleUnmappedBulkDrop,
     checkBandChange:    (vacantRowId, sfId) => appService.checkAssignBandChange(vacantRowId, sfId),
     onBandChangeRequest: setBandDialog,
+    onAbsenceReturn: (fromRowId, toOrg) => {
+      const targetCode = toOrg.externalCode ?? toOrg.id
+      saveRow(fromRowId, { departmentCode: targetCode, transferReason: undefined })
+    },
   })
 
   const { bulkMoveSourceId, setBulkMoveSourceId, handleBulkMoveConfirm } = useBulkMove({
@@ -189,7 +196,14 @@ export function OrgOperationView() {
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
     dropGapBelowRowId, setDropGapBelowRowId,
-    openDropIntent:  isHistoryPreviewMode ? () => {} : (s) => setDropIntentState(s),
+    openDropIntent:  isHistoryPreviewMode ? () => {} : (s) => {
+      if (s.fromAbsence && s.fromRowId) {
+        const toOrg = organizations.find(o => o.id === s.toOrgId)
+        if (toOrg) saveRow(s.fromRowId, { departmentCode: toOrg.externalCode ?? toOrg.id, transferReason: undefined })
+        return
+      }
+      setDropIntentState(s)
+    },
     openBandDrop:    isHistoryPreviewMode ? () => {} : (s) => setBandDropOpState(s),
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition:  isHistoryPreviewMode ? () => {} : handleAddPosition,
@@ -226,6 +240,20 @@ export function OrgOperationView() {
                 title="旧にあって新に存在しないポジションを空席として追加"
               >
                 未使用Pos追加
+              </button>
+            )}
+
+            {!comparisonMode && !isHistoryPreviewMode && (
+              <button
+                onClick={() => setAbsencePanelVisible(v => !v)}
+                className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
+                  absencePanelVisible
+                    ? 'bg-red-600 text-white border-red-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+                title="退職・移籍など4/1時点で不在になる方を管理"
+              >
+                4/1不在
               </button>
             )}
 
@@ -278,6 +306,7 @@ export function OrgOperationView() {
         )}
 
         <div
+          ref={canvasRef}
           className="flex-1 overflow-hidden"
           onDragOverCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
           onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
@@ -364,6 +393,12 @@ export function OrgOperationView() {
           </div>
         </div>
       )}
+      <FloatingAbsencePanel
+        allocationList={allocationList}
+        orgsByCode={afterOrgByCode}
+        visible={absencePanelVisible}
+        containerRef={canvasRef}
+      />
     </OrgViewContext.Provider>
   )
 }

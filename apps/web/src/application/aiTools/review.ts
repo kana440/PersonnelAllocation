@@ -4,6 +4,7 @@ import type { EditPattern } from '@personnel/domain/patterns/editPatterns'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
+import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
 export function createReviewMethods(service: HRApplicationService) {
 
@@ -143,6 +144,7 @@ export function createReviewMethods(service: HRApplicationService) {
     firstName?:       string
     name:             string
     field:            string
+    fieldLabel:       string
     level:            string
     message:          string
     currentValue?:    string
@@ -188,6 +190,7 @@ export function createReviewMethods(service: HRApplicationService) {
           firstName:       row.firstName || undefined,
           name,
           field,
+          fieldLabel:      FIELD_DISPLAY_LABELS[field] ?? field,
           level:           issue.level,
           message:         issue.message,
           currentValue:    rawVal != null ? String(rawVal) : undefined,
@@ -205,6 +208,7 @@ export function createReviewMethods(service: HRApplicationService) {
     summary: { errors: number; warnings: number }
     byField: Array<{
       field:            string
+      fieldLabel:       string
       level:            'error' | 'warning'
       count:            number
       rowIds:           number[]
@@ -248,6 +252,7 @@ export function createReviewMethods(service: HRApplicationService) {
         const hint = FIELD_TOOL[field]
         return {
           field,
+          fieldLabel:      FIELD_DISPLAY_LABELS[field] ?? field,
           level,
           count:           rowIdsArr.length,
           rowIds:          rowIdsArr,

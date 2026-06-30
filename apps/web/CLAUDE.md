@@ -75,13 +75,20 @@ appService.executeScenario({ label: '部長交代', commands: [cmdA, cmdB, cmdC]
 ## 左サイドバー構造
 
 ```
-LeftSidebar（タブ）
-  ├── 組織・人物タブ → OrgSearchSidebar（組織ツリー・人物一覧）
-  └── 組織パネルタブ → PanelTabContent（パネル一覧・未網羅候補・未設定）
+LeftSidebar（sidebar/LeftSidebar.tsx）
+  通常モード: OrgSearchSidebar のみ
+  比較モード: タブ切り替え
+    ├── 新組織タブ → OrgSearchSidebar（組織ツリー・人物一覧）
+    └── 旧組織タブ → BeforeOrgSearchSidebar
+
+OrgSearchSidebar
+  ├── 検索インプット
+  ├── VirtualOrgTree（flex-1）
+  └── UnmappedOrgSection（旧組織・未割当、最大 45% 高さ）
 ```
 
-- 担当者ロール（`capabilities.rowScope !== null`）: 組織パネルタブがデフォルト
-- 管理者ロール（`capabilities.rowScope === null`）: 組織・人物タブがデフォルト
+- `canvas/StripBar/index.tsx`（`PanelTabContent`）と `canvas/LeftPalette/index.tsx` は現在どこからもインポートされていない孤立コンポーネント
+- `UnassignedCard`（departmentCode 未設定）と `UnmappedOrgSection`（新組織マスタに存在しない旧組織）は別物
 
 ---
 

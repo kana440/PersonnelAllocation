@@ -15,6 +15,8 @@ export interface DropIntentState {
   dropType:             'org' | 'person' | 'gap'
   /** ドロップ後の上司として設定する positionCode（person/gap ドロップ時のみ） */
   managerPositionCode?: string
+  /** FloatingAbsencePanel からのドラッグ（復帰処理に使用） */
+  fromAbsence?:         boolean
 }
 
 export interface DropOpState {

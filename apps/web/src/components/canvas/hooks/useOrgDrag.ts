@@ -16,11 +16,13 @@ interface UseOrgDragDeps {
   checkBandChange?:             (vacantRowId: number, sfId: string) => { from: string; to: string } | null
   /** バンド変更確認が必要なとき呼ばれる。呼び出し側でダイアログを表示し onOverride/onKeep を呼ぶ */
   onBandChangeRequest?:         (info: { from: string; to: string; onOverride: () => void; onKeep: () => void }) => void
+  /** FloatingAbsencePanel からドラッグされた行を org に復帰させる（lockCancel + 組織設定） */
+  onAbsenceReturn?:             (fromRowId: number, toOrg: Organization) => void
 }
 
 export function useOrgDrag({
   organizations, persons, saveRow, assignPersonToVacantPosition, openPersonMoveDialog,
-  onUnmappedBulkDrop, checkBandChange, onBandChangeRequest,
+  onUnmappedBulkDrop, checkBandChange, onBandChangeRequest, onAbsenceReturn,
 }: UseOrgDragDeps) {
   const [dragOverOrgId,       setDragOverOrgId]       = useState<string | null>(null)
   const [highlightedOrgId,    setHighlightedOrgId]    = useState<string | null>(null)
@@ -59,6 +61,13 @@ export function useOrgDrag({
     }
 
     const { dragType, fromOrgId, fromRowId } = data
+
+    // 不在ボックスからの復帰ドラッグ
+    if (data.fromAbsence && fromRowId) {
+      onAbsenceReturn?.(fromRowId, toOrg)
+      setHighlightedOrgId(toOrgId); setTimeout(() => setHighlightedOrgId(null), 800)
+      return
+    }
 
     if (dragType === 'position' && fromRowId) {
       if (fromOrgId === toOrgId) return

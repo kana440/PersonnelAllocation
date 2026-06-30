@@ -232,7 +232,7 @@ function BeforeBandView({ orgId, beforeRowsByOrgId }: {
     const groups = new Map<string, AllocationRow[]>()
     for (const row of rows) {
       if (!row.userId) continue
-      const band = (row.positionBand as string | undefined) ?? '(未設定)'
+      const band = (row.prevPositionBand as string | undefined) ?? (row.positionBand as string | undefined) ?? '(未設定)'
       const arr  = groups.get(band)
       if (arr) arr.push(row)
       else groups.set(band, [row])

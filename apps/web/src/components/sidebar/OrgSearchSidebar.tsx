@@ -182,8 +182,9 @@ export function OrgSearchSidebar() {
         />
       )}
 
-      {/* 旧組織（未割当）: 検索モード切り替えに関わらず常時同一インスタンスで表示 */}
-      <div className="flex-shrink-0 px-1">
+      {/* 旧組織（未割当）: 検索モード切り替えに関わらず常時同一インスタンスで表示。
+          max-h-[45%] でサイドバー高さの上限を設け、ツリー検索エリアが潰れないようにする。 */}
+      <div className="flex-shrink-0 px-1 overflow-hidden" style={{ maxHeight: '45%' }}>
         <UnmappedOrgSection />
       </div>
 
