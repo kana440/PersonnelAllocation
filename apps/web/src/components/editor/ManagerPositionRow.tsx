@@ -3,7 +3,7 @@ import { PositionPickerModal }   from '../common/PositionPickerModal'
 import { ConfirmOverwriteDialog } from './ConfirmOverwriteDialog'
 import type { Organization }  from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 
 interface Props {
   label:               string

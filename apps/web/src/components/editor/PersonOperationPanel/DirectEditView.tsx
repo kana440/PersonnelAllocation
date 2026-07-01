@@ -1,8 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useStore } from '../../../store/useStore'
-import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import { deriveFieldUpdates, deriveManagerName, deriveOrgSubFields } from '@personnel/domain/derivation'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import { deriveFieldUpdates, deriveManagerName, deriveOrgSubFields } from '@personnel/domain/rules/derive'
 import { AutoDeriveDialog } from '../AutoDeriveDialog'
 import { MetaSection } from '../RowEditorPanel/MetaSection'
 import { FieldList } from '../RowEditorPanel/FieldList'
@@ -17,7 +16,6 @@ interface Props {
 
 export function DirectEditView({ row, onBack }: Props) {
   const { allocationList, saveRow, afterOrganizations, masters } = useStore()
-  const { fieldStrictnessOverrides } = useCanvasDisplayStore()
 
   const [buffer,        setBuffer]        = useState<Partial<Record<string, string>>>({})
   const [isDirty,       setIsDirty]       = useState(false)
@@ -34,19 +32,15 @@ export function DirectEditView({ row, onBack }: Props) {
     [row, buffer]
   )
 
-  // DirectEdit は Excel 後方互換モード: strictness overrides を適用し、
-  // 残ったエラーも全てワーニングに降格してセーブをブロックしない
+  // DirectEdit は Excel 後方互換モード: エラーは全てワーニングに降格してセーブをブロックしない
   const issues = useMemo(() => {
-    const raw = validateRow({
-      row: effectiveRow, afterOrganizations, masters, allocationList,
-      strictnessOverrides: fieldStrictnessOverrides,
-    })
+    const raw = validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList })
     return raw.map(i => i.level === 'error' ? { ...i, level: 'warning' as const } : i)
-  }, [effectiveRow, afterOrganizations, masters, allocationList, fieldStrictnessOverrides])
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
     const changes = { [key as string]: value } as Partial<Record<keyof AllocationRow, string>>
-    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList, fieldStrictnessOverrides)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList)
     setBuffer(prev => ({ ...prev, ...changes, ...derived }))
     setIsDirty(true)
   }

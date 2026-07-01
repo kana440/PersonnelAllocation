@@ -75,7 +75,7 @@ export function runOperationScenarios(
         // availableFor
         if (s.expect.available !== undefined) {
           expect(
-            def.availableFor(row, ms),
+            def.availableFor(row, ms).available,
             `availableFor() は ${s.expect.available} であるはず`,
           ).toBe(s.expect.available)
         }

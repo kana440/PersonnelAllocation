@@ -3,10 +3,8 @@ import { useStore } from '../../../../store/useStore'
 import { appService } from '../../../../application/HRApplicationService'
 import { ComboInput } from '../../../common/ComboInput'
 import { ModalShell } from '../../../common/ModalShell'
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import { resolveFieldStrictness } from '@personnel/domain/optionStrictness'
-import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
+import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 interface Props {
@@ -18,7 +16,6 @@ const FIELD_KEYS = new Set(['employmentType', 'secondmentToCompany', 'secondment
 
 export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
   const { allocationList, masters, afterOrganizations } = useStore()
-  const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
   const defaultReason = useMemo(() => {
@@ -42,9 +39,9 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList, strictnessOverrides: overrides })
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList })
       .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, masters, allocationList, overrides])
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   if (!row || !effectiveRow) return null
 
@@ -102,7 +99,7 @@ export function SecondmentReleaseDialog({ rowId, onClose }: Props) {
                       onChange={v => setBuffer(prev => ({ ...prev, [key]: v }))}
                       options={valid}
                       invalidOptions={invalid}
-                      strictness={resolveFieldStrictness(key, overrides)}
+                      strictness={invalid.length > 0 ? 'guide' : 'free'}
                       hasIssue={hasError || hasWarning}
                     />
                     {fieldIssues.map(issue => (

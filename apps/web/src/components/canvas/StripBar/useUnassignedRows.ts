@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
-import { buildOrgMap } from '@personnel/domain/choices/rows'
-import { buildOrgPath } from '@personnel/domain/choices/relevantOrgs'
+import { buildOrgMap } from '@personnel/domain/rules/options/rows'
+import { buildOrgPath } from '@personnel/domain/rules/options/relevantOrgs'
 
 export interface UnassignedGroup {
   groupKey:    string

@@ -5,7 +5,7 @@ import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useScopedStore } from '../../store/useScopedStore'
 import { useOrgTreeState } from './hooks/useOrgTreeState'
 import { VirtualOrgTree, type VirtualOrgTreeHandle } from './VirtualOrgTree'
-import { buildOrgMap } from '@personnel/domain/choices/rows'
+import { buildOrgMap } from '@personnel/domain/rules/options/rows'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
 

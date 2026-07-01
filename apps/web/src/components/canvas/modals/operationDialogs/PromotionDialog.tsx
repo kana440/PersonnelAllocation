@@ -1,17 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../../../store/useStore'
 import { appService } from '../../../../application/HRApplicationService'
 import { ComboInput } from '../../../common/ComboInput'
 import { ModalShell } from '../../../common/ModalShell'
 import { TitleSuggestionModal } from '../../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../../common/NewPositionConfirmModal'
-import { getGroupedFieldOptions, filterBandsByStep, type StepMode } from '@personnel/domain/choices'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import { resolveFieldStrictness } from '@personnel/domain/optionStrictness'
-import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
-import { deriveFieldUpdates } from '@personnel/domain/derivation'
+import { getGroupedFieldOptions, filterBandsByStep, type StepMode } from '@personnel/domain/rules/options'
+import { resolveRow, type ResolveContext } from '@personnel/domain/resolver'
 import { nextRowId } from '@personnel/domain/allocationRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { DerivedUpdates } from '@personnel/domain/rules/derive'
 
 interface Props {
   rowId:   number
@@ -30,45 +28,44 @@ const FIELD_KEYS = new Set(FIELDS.map(f => f.key as string))
 
 export function PromotionDialog({ rowId, onClose }: Props) {
   const { allocationList, masters, afterOrganizations } = useStore()
-  const overrides = useFieldStrictnessOverrides()
   const row = allocationList.find(r => r.rowId === rowId)
 
-  const [buffer,           setBuffer]           = useState<Partial<Record<string, string>>>({})
-  const [stepMode,         setStepMode]         = useState<StepMode>('1')
-  const [titleSuggest,     setTitleSuggest]     = useState<string | null>(null)
-  const [showPosModal,     setShowPosModal]     = useState(false)
-  const [pendingPosCode,   setPendingPosCode]   = useState<string | null>(null)
+  const [buffer,         setBuffer]         = useState<Partial<Record<string, string>>>({})
+  const [stepMode,       setStepMode]       = useState<StepMode>('1')
+  const [titleSuggest,   setTitleSuggest]   = useState<string | null>(null)
+  const [showPosModal,   setShowPosModal]   = useState(false)
+  const [pendingPosCode, setPendingPosCode] = useState<string | null>(null)
 
-  const effectiveRow = useMemo(
-    () => (row ? { ...row, ...buffer } as AllocationRow : null),
-    [row, buffer]
+  const resolveCtx = useMemo((): ResolveContext => ({
+    masters, allocationList, afterOrganizations,
+  }), [masters, allocationList, afterOrganizations])
+
+  const resolveResult = useMemo(
+    () => (row ? resolveRow(row, buffer as DerivedUpdates, resolveCtx) : null),
+    [row, buffer, resolveCtx],
   )
 
-  const issues = useMemo(() => {
-    if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList, strictnessOverrides: overrides })
-      .filter(i => FIELD_KEYS.has(i.field as string))
-  }, [effectiveRow, afterOrganizations, masters, allocationList])
+  if (!row || !resolveResult) return null
 
-  if (!row || !effectiveRow) return null
+  const effectiveRow = resolveResult.row
+  const issues = resolveResult.issues.filter(i => FIELD_KEYS.has(i.field as string))
 
   const get = (key: string) =>
-    (buffer[key] ?? (row[key as keyof AllocationRow] as string | undefined) ?? '')
+    ((effectiveRow[key as keyof AllocationRow] as string | undefined) ?? '')
 
-  const handleChange = (key: string, v: string) => {
-    const changes = { [key]: v } as Partial<AllocationRow>
-    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList, overrides)
-    if (key === 'officialPositionCode' && v) {
-      setTitleSuggest(v)
+  const handleChange = useCallback((key: string, v: string) => {
+    const nextBuffer = { ...buffer, [key]: v }
+    const { row: resolved } = resolveRow(row, nextBuffer as DerivedUpdates, resolveCtx)
+    if (key === 'officialPositionCode' && v) setTitleSuggest(v)
+    // buffer = 元の row からの差分のみ保持
+    const delta: Partial<Record<string, string>> = {}
+    for (const k of Object.keys(resolved) as Array<keyof AllocationRow>) {
+      if (k === 'rowId') continue
+      const rv = resolved[k] as string | undefined
+      if (rv !== (row[k] as string | undefined)) delta[k as string] = rv
     }
-    setBuffer(prev => ({
-      ...prev,
-      [key]: v,
-      ...Object.fromEntries(
-        Object.entries(derived).map(([k, val]) => [k, val as string | undefined])
-      ),
-    }))
-  }
+    setBuffer(delta)
+  }, [buffer, row, resolveCtx])
 
   const needsNewPosition = (): boolean => {
     const newBand  = buffer.band ?? (row.band as string | undefined)
@@ -156,7 +153,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
                       onChange={v => handleChange(key as string, v)}
                       options={filteredValid}
                       invalidOptions={invalid}
-                      strictness={resolveFieldStrictness(key as string, overrides)}
+                      strictness={invalid.length > 0 ? 'guide' : 'free'}
                       hasIssue={hasError || hasWarning}
                     />
                     {fieldIssues.map(issue => (

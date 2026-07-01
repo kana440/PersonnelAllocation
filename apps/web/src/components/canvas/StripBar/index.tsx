@@ -1,6 +1,6 @@
 import { useState, useMemo }      from 'react'
 import type { Organization }     from '@personnel/domain/schemas'
-import { collectTopLevelRelevantOrgIds } from '@personnel/domain/choices/relevantOrgs'
+import { collectTopLevelRelevantOrgIds } from '@personnel/domain/rules/options/relevantOrgs'
 import { useStore }              from '../../../store/useStore'
 import { useCanvasLayoutStore }  from '../../../store/canvasLayoutStore'
 import type { PanelDef }         from '../../../store/canvasLayoutStore'

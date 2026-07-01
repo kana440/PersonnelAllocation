@@ -1,7 +1,7 @@
 // derivation/orgFields.ts + managerFields.ts のテスト
 import { describe, test, expect } from 'vitest'
-import { deriveOrgSubFields, reDeriveOrgSubFieldsForList } from '@personnel/domain/derivation/orgFields'
-import { deriveManagerName, reDeriveManagerNamesForList }  from '@personnel/domain/derivation/managerFields'
+import { deriveOrgSubFields, reDeriveOrgSubFieldsForList } from '@personnel/domain/rules/derive/orgFields'
+import { deriveManagerName, reDeriveManagerNamesForList }  from '@personnel/domain/rules/derive/managerFields'
 import { makeRow, makeCL, MOCK_ORG_ENTRIES } from '../helpers/fixtures'
 
 // ── deriveOrgSubFields ────────────────────────────────────────────────────────

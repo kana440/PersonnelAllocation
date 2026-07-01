@@ -9,7 +9,7 @@ import type { AllocationRow } from './allocationRow'
 import type { Organization }  from './schemas'
 import type { AllMasters }  from './masters/aggregate'
 import type { RowChanges }    from './patterns/changeDetection'
-import type { FieldStrictness } from './optionStrictness'
+import type { RowRuleCtx }   from './rules/rowRule'
 
 // ── 全ドメイン処理の共通基盤 ─────────────────────────────────────────────────
 
@@ -22,9 +22,19 @@ export interface DomainContext {
 // ── 行単位の処理に追加情報を付与 ─────────────────────────────────────────────
 
 export interface RowContext extends DomainContext {
-  readonly row:                  AllocationRow
-  readonly changes?:             RowChanges   // G/W系・EditPattern 検出に使用
-  readonly strictnessOverrides?: Partial<Record<string, FieldStrictness>>
+  readonly row:             AllocationRow
+  readonly changes?:        RowChanges    // G/W系・EditPattern 検出に使用
+  /**
+   * バッチ処理で共有する RowRuleCtx（省略時は validateRow 内で都度生成）。
+   * batchValidate.ts が渡すことで orgMasterByCode 等の lazy 計算をバッチ全体で 1 回に抑える。
+   */
+  readonly rowRuleCtx?:     RowRuleCtx
+  /**
+   * InterRowRule 用の事前構築済み index（省略時は validateRow で InterRow チェックをスキップ）。
+   * batchValidate が INTER_ROW_RULES.validateAll() で別途処理するため、
+   * 単行フォーム編集時は null のままでよい（validateGlobalConsistency.ts の W3 が担う）。
+   */
+  readonly interRowIndexes?: Map<string, unknown>
 }
 
 // ── グループ行ヘルパー ────────────────────────────────────────────────────────

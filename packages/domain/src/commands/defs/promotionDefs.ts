@@ -9,6 +9,44 @@ import { DirectEditOperation } from '../handlers/directEdit'
 import { deriveManagerName } from '../orgHelpers'
 import { TR } from '../../transferReasonLabels'
 import type { PromotionMatrixEntry } from '../../masters/promotionMatrix'
+import type { FieldRule } from '../../rules/field'
+
+// ── アクション制約ヘルパー ────────────────────────────────────────────────────
+
+/**
+ * バンド（band / positionBand）の昇降格方向制約を生成する。
+ *
+ * prevXxx フィールドと比較して「現在より上位/下位のバンドのみ有効」と宣言する。
+ * stepMode（1段階/2段階）は UI 側の Profile が担当するため、ここでは direction のみ。
+ *
+ * AI 文脈で "1段階昇格" のような完全指定アクションを実装する場合は、
+ * source 関数内で step 数まで絞り込んだ FieldRule を別途定義する。
+ */
+function bandDirectionConstraint(
+  direction: 'up' | 'down',
+  field:     'band' | 'positionBand',
+): FieldRule {
+  const prevField = field === 'band' ? 'prevBand' : 'prevPositionBand'
+  return {
+    field,
+    value:      'none',
+    options:    'split',
+    validation: 'error',
+    when:  (row) => !!(row[prevField as keyof AllocationRow]),
+    source: (masters, row) => {
+      const prevLabel = row[prevField as keyof AllocationRow] as string | undefined
+      const prevLevel = masters.jobLevels.find(e => e.label === prevLabel)?.promotionDemotionWarningLevel
+      if (prevLevel === undefined) return masters.jobLevels.map(e => e.label)
+      return masters.jobLevels.filter(e => {
+        const lvl = e.promotionDemotionWarningLevel ?? 0
+        return direction === 'up' ? lvl > prevLevel : lvl < prevLevel
+      }).map(e => e.label)
+    },
+    message: (val) => direction === 'up'
+      ? `バンド「${val}」は昇格方向（現在より上位）の選択肢から選択してください`
+      : `バンド「${val}」は降格方向（現在より下位）の選択肢から選択してください`,
+  }
+}
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -138,9 +176,20 @@ export const promotionDef: EditOperation = {
   badge:       'positive',
   suppressSideEffectWarning: true,
 
+  // アクション制約: positionBand / band は「現在より上位」のみ有効
+  // stepMode（1段階/2段階）は UI 側 BandStepFilter + Profile が担当
+  constraints: [
+    bandDirectionConstraint('up', 'positionBand'),
+    bandDirectionConstraint('up', 'band'),
+  ],
+
   description: 'ポジションバンドを上げる昇格を記入します。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから新規採番または既存空きポジションへの移動を選択してください）。',
 
-  availableFor: () => AVAILABLE,
+  availableFor: (row, masters) => {
+    const emp = masters.employmentTypes.find(e => e.label === row.employmentType)
+    if (emp && !emp.isRegularEmployee) return unavailable('正社員のみ昇格できます')
+    return AVAILABLE
+  },
 
   // 簡易モード: positionBand と役職名だけ入力、残りは自動導出
   quickInputs: [
@@ -243,9 +292,19 @@ export const demotionDef: EditOperation = {
   badge:       'negative',
   suppressSideEffectWarning: true,
 
+  // アクション制約: positionBand / band は「現在より下位」のみ有効
+  constraints: [
+    bandDirectionConstraint('down', 'positionBand'),
+    bandDirectionConstraint('down', 'band'),
+  ],
+
   description: 'ポジションバンドを下げる降格を記入します。降格理由の入力が必須です。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから対応してください）。',
 
-  availableFor: () => AVAILABLE,
+  availableFor: (row, masters) => {
+    const emp = masters.employmentTypes.find(e => e.label === row.employmentType)
+    if (emp && !emp.isRegularEmployee) return unavailable('正社員のみ降格できます')
+    return AVAILABLE
+  },
 
   // 簡易モード: positionBand・降格理由・役職名だけ入力（降格理由は必須のため含める）
   quickInputs: [

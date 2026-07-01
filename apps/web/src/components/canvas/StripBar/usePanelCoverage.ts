@@ -1,7 +1,7 @@
 import { useMemo }            from 'react'
 import { useStore }            from '../../../store/useStore'
-import { buildOrgMap }         from '@personnel/domain/choices/rows'
-import { getDescendantOrgIds } from '@personnel/domain/choices/orgTree'
+import { buildOrgMap }         from '@personnel/domain/rules/options/rows'
+import { getDescendantOrgIds } from '@personnel/domain/rules/options/orgTree'
 import type { PanelDef }       from '../../../store/canvasLayoutStore'
 
 export interface CandidateOrg {

@@ -75,7 +75,21 @@ packages/domain/src/                             ← ドメイン層（外部依
   context.ts              ← DomainContext・RowContext（全ドメイン処理の共通コンテキスト）
   masters/                ← マスタデータ型定義・集約（AllCodeLists）
   fieldConstraints.ts     ← FIELD_CONSTRAINTS（許容値制約の単一定義ソース）
-  validation/             ← バリデーション A〜G・W 系（純粋関数）
+  rules/                  ← ルール・バリデーション・導出・選択肢（統合）
+    field.ts              ←   FieldRule・FIELD_RULES（フィールド単位の3軸宣言）
+    rowRule.ts            ←   RowRule・ROW_RULES・RowRuleCtx（行内クロスフィールド）
+    interRowRule.ts       ←   InterRowRule・INTER_ROW_RULES（行間バリデーション）
+    row/                  ←   RowRule 実装（correlation.ts・consistency.ts）
+    interRow/             ←   InterRowRule 実装（managerChain・positionUniq・managerOrg）
+    validate/             ←   バリデーション A〜G・W 系（純粋関数）
+      validateRow.ts      ←     単行バリデーション（ROW_RULES を side-effect import）
+      batchValidate.ts    ←     バッチバリデーション（INTER_ROW_RULES を side-effect import）
+    derive/               ←   フィールド自動導出（組織・上司名・昇降格）
+    options/              ←   UI 選択肢・表示用ユーティリティ
+      index.ts            ←     選択肢の生成・絞り込み（FIELD_CONSTRAINTS から導出）
+      orgTree.ts          ←     組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
+      rows.ts             ←     行・人物の表示用変換（buildOrgMap・derivePersons）
+      relevantOrgs.ts     ←     組織ピッカー候補の絞り込み
   commands/               ← 業務操作（EditCommand・OperationDef・シナリオ）
     types.ts              ←   EditCommand インターフェース・DomainContext 再エクスポート
     handlers/             ←   EditCommand 実装群
@@ -89,12 +103,6 @@ packages/domain/src/                             ← ドメイン層（外部依
     groupPatternMatcher.ts ←  グループ行（出向2行等）のパターン検出
     defs/                 ←   パターンごとの detect() 実装（jobClassification / position / person / secondment / legacy）
     detection/            ←   detectPatterns()・DetectContext・isNoCheckReason
-  choices/                ← UI 選択肢・表示用ユーティリティ
-    index.ts              ←   選択肢の生成・絞り込み（FIELD_CONSTRAINTS から導出）
-    orgTree.ts            ←   組織ツリー操作（getDescendantOrgIds・flattenOrgTree）
-    rows.ts               ←   行・人物の表示用変換（buildOrgMap・derivePersons）
-    relevantOrgs.ts       ←   組織ピッカー候補の絞り込み
-  derivation/             ← フィールド自動導出（組織・上司名・昇降格）
   csvImport/              ← Excel/CSV 解釈（純粋関数）
 ```
 

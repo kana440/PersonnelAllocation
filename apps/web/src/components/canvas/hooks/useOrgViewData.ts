@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { buildOrgMap } from '@personnel/domain/choices/rows'
+import { buildOrgMap } from '@personnel/domain/rules/options/rows'
 import type { Organization, Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { AllMasters } from '@personnel/domain/masters/aggregate'

@@ -3,7 +3,7 @@ import type { Organization } from '@personnel/domain/schemas'
 import { useStore }        from '../../../store/useStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { OrgTreePicker }   from '../OrgTreePicker'
-import { collectTopLevelRelevantOrgIds } from '@personnel/domain/choices/relevantOrgs'
+import { collectTopLevelRelevantOrgIds } from '@personnel/domain/rules/options/relevantOrgs'
 
 interface Props {
   open:     boolean

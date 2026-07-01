@@ -1,6 +1,6 @@
 // choices/rows.ts のテスト
 import { describe, test, expect } from 'vitest'
-import { buildOrgMap, derivePersons } from '@personnel/domain/choices/rows'
+import { buildOrgMap, derivePersons } from '@personnel/domain/rules/options/rows'
 import { makeRow } from '../helpers/fixtures'
 import type { Organization } from '@personnel/domain/schemas'
 

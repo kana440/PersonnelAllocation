@@ -12,11 +12,11 @@ import {
   demotionDef,
   orgRestructureDef,
 } from '@personnel/domain/commands/defs'
-import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
-import { deriveFieldUpdates } from '@personnel/domain/derivation'
+import { buildFlatOrgView } from '@personnel/domain/rules/options/orgTree'
+import { resolveRow } from '@personnel/domain/resolver'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import type { ValidationIssue } from '@personnel/domain/validation/types'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/types'
 import type { PositionCodeAssignment } from '../../ports'
 import type { AIOperationResult } from './types'
 
@@ -310,9 +310,13 @@ export function createWriteMethods(service: HRApplicationService) {
 
     const changes: Partial<AllocationRow> = { positionBand: opts.newPositionBand }
 
-    // positionBand → band（社員なら連動）→ payGrade は deriveFieldUpdates が一括処理
-    const derived = deriveFieldUpdates(changes as AfterValues, row, masters, allocationList)
-    Object.assign(changes, derived)
+    // positionBand → band（社員なら連動）→ payGrade: resolveRow の収束ループで一括処理
+    const { row: resolved } = resolveRow(row, changes, { masters, allocationList, afterOrganizations: service.getSnapshot().afterOrganizations })
+    for (const k of Object.keys(resolved) as Array<keyof AllocationRow>) {
+      if (k === 'rowId') continue
+      if ((resolved[k] as unknown) !== (row[k] as unknown))
+        (changes as Record<string, unknown>)[k as string] = resolved[k]
+    }
 
     if (opts.newOfficialPositionCode !== undefined) changes.officialPositionCode = opts.newOfficialPositionCode
     if (opts.newLocalJobTitle        !== undefined) changes.localJobTitle        = opts.newLocalJobTitle

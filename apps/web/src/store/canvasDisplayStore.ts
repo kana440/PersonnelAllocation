@@ -1,10 +1,9 @@
 import { create } from 'zustand/react'
-import type { FieldStrictness, UnavailableOperationDisplay } from '@personnel/domain/optionStrictness'
+import type { UnavailableOperationDisplay } from '@personnel/domain/optionStrictness'
 import { DEFAULT_UNAVAILABLE_OPERATION_DISPLAY } from '@personnel/domain/optionStrictness'
 import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
 const STORAGE_KEY                    = 'canvas_display_fields'
-const STRICTNESS_STORAGE_KEY         = 'field_strictness_overrides'
 const UNAVAIL_OP_DISPLAY_STORAGE_KEY = 'unavailable_operation_display'
 const HIDDEN_BADGE_TYPES_STORAGE_KEY = 'canvas_hidden_badge_types'
 const COMPACT_GROUP_STORAGE_KEY      = 'compact_group_by'
@@ -55,14 +54,6 @@ function loadFromStorage(): string[] {
   return DEFAULT_FIELDS
 }
 
-function loadStrictnessOverrides(): Partial<Record<string, FieldStrictness>> {
-  try {
-    const raw = localStorage.getItem(STRICTNESS_STORAGE_KEY)
-    if (!raw) return {}
-    return JSON.parse(raw) as Partial<Record<string, FieldStrictness>>
-  } catch { return {} }
-}
-
 function loadUnavailableOperationDisplay(): UnavailableOperationDisplay {
   try {
     const raw = localStorage.getItem(UNAVAIL_OP_DISPLAY_STORAGE_KEY)
@@ -88,16 +79,14 @@ function loadCompactGroupById(): string {
 }
 
 interface CanvasDisplayState {
-  displayFields:                string[]
-  setDisplayFields:             (fields: string[]) => void
-  fieldStrictnessOverrides:     Partial<Record<string, FieldStrictness>>
-  setFieldStrictness:           (field: string, value: FieldStrictness | undefined) => void
-  unavailableOperationDisplay:  UnavailableOperationDisplay
+  displayFields:                  string[]
+  setDisplayFields:               (fields: string[]) => void
+  unavailableOperationDisplay:    UnavailableOperationDisplay
   setUnavailableOperationDisplay: (value: UnavailableOperationDisplay) => void
-  hiddenBadgeTypes:             string[]
-  setHiddenBadgeTypes:          (types: string[]) => void
-  compactGroupById:             string
-  setCompactGroupById:          (id: string) => void
+  hiddenBadgeTypes:               string[]
+  setHiddenBadgeTypes:            (types: string[]) => void
+  compactGroupById:               string
+  setCompactGroupById:            (id: string) => void
 }
 
 export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
@@ -105,16 +94,6 @@ export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
   setDisplayFields: (fields) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(fields))
     set({ displayFields: fields })
-  },
-  fieldStrictnessOverrides: loadStrictnessOverrides(),
-  setFieldStrictness: (field, value) => {
-    set(state => {
-      const next = { ...state.fieldStrictnessOverrides }
-      if (value === undefined) delete next[field]
-      else next[field] = value
-      localStorage.setItem(STRICTNESS_STORAGE_KEY, JSON.stringify(next))
-      return { fieldStrictnessOverrides: next }
-    })
   },
   unavailableOperationDisplay: loadUnavailableOperationDisplay(),
   setUnavailableOperationDisplay: (value) => {

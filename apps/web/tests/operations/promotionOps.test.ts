@@ -31,7 +31,7 @@ runOperationScenarios('昇格 — validate', promotionDef, [
     id: 'promo-val-1',
     desc: '対象行が存在すれば validate 成功',
     row: { employmentType: '社員' },
-    createCommand: (row) => bindOperation(promotionDef, row.rowId, { band: 'M5' }),
+    createCommand: (row) => bindOperation(promotionDef, row.rowId, { positionBand: 'M5', band: 'M5' }),
     expect: { validateOk: true },
   },
   {

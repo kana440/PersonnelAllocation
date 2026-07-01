@@ -1,8 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useStore } from '../../../store/useStore'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import { deriveFieldUpdates, deriveManagerName, deriveOrgSubFields } from '@personnel/domain/derivation'
-import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import { deriveFieldUpdates, deriveManagerName, deriveOrgSubFields } from '@personnel/domain/rules/derive'
 import { AutoDeriveDialog } from '../AutoDeriveDialog'
 import { MetaSection } from './MetaSection'
 import { FieldList } from './FieldList'
@@ -15,7 +14,6 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
     allocationList, selectedRowId, saveRow,
     afterOrganizations, masters,
   } = useStore()
-  const strictnessOverrides = useFieldStrictnessOverrides()
 
   const [buffer,       setBuffer]       = useState<Partial<Record<string, string>>>({})
   const [isDirty,      setIsDirty]      = useState(false)
@@ -36,8 +34,8 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList, strictnessOverrides })
-  }, [effectiveRow, afterOrganizations, masters, allocationList, strictnessOverrides])
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList })
+  }, [effectiveRow, afterOrganizations, masters, allocationList])
 
   if (!selectedRowId || !row || !effectiveRow) {
     return (
@@ -49,7 +47,7 @@ export function RowEditorPanel({ readOnly = false }: { readOnly?: boolean }) {
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
     const changes = { [key as string]: value } as Partial<Record<keyof AllocationRow, string>>
-    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList, strictnessOverrides)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList)
     setBuffer(prev => ({ ...prev, ...changes, ...derived }))
     setIsDirty(true)
   }

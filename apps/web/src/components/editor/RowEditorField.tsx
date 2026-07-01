@@ -1,6 +1,6 @@
 import { ComboInput } from '../common/ComboInput'
-import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
-import type { FieldStrictness } from '@personnel/domain/optionStrictness'
+import type { FieldStrictness } from '../common/ComboInput'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 
 interface Props {
   label:          string

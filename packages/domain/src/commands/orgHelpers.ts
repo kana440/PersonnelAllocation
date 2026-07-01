@@ -5,4 +5,4 @@ export {
   reDeriveOrgSubFieldsForList,
   deriveManagerName,
   reDeriveManagerNamesForList,
-} from '../derivation'
+} from '../rules/derive'

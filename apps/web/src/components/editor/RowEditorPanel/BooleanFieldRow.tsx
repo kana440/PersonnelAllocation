@@ -1,4 +1,4 @@
-import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 
 interface Props {
   label:    string

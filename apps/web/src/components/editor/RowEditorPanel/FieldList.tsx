@@ -8,12 +8,10 @@ import {
   BOOLEAN_1_FIELDS, MANAGER_POS_FIELDS, ORG_FIELDS, READONLY_FIELDS,
   getOptions,
 } from './helpers'
-import { useFieldStrictnessOverrides } from '../../../hooks/useFieldStrictness'
-import { resolveFieldStrictness } from '@personnel/domain/optionStrictness'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { Organization } from '@personnel/domain/schemas'
-import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 
 interface Props {
   effectiveRow:        AllocationRow
@@ -35,8 +33,6 @@ export function FieldList({
   readOnly, currentJobFamily,
   onChange, onManagerChange, onOrgChange,
 }: Props) {
-  const strictnessOverrides = useFieldStrictnessOverrides()
-
   return (
     <div className="flex-1 overflow-y-auto">
       {EDITOR_FIELD_ORDER.map(key => {
@@ -114,7 +110,7 @@ export function FieldList({
               onChange={v => onChange(afterKey, v)}
               options={valid}
               invalidOptions={invalid}
-              strictness={resolveFieldStrictness(key, strictnessOverrides)}
+              strictness={invalid.length > 0 ? 'guide' : 'free'}
               issues={fieldIssues}
               readOnly={isReadOnly}
             />

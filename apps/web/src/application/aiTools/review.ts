@@ -2,8 +2,8 @@ import type { HRApplicationService } from '../HRApplicationService'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import type { EditPattern } from '@personnel/domain/patterns/editPatterns'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import { buildFlatOrgView } from '@personnel/domain/rules/options/orgTree'
 import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
 export function createReviewMethods(service: HRApplicationService) {

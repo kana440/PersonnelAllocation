@@ -1,5 +1,4 @@
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
-import { resolveFieldStrictness }  from '@personnel/domain/optionStrictness'
+import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import type { OperationInput }    from '@personnel/domain/commands/defs/index'
 import { isSectionDivider, isInputRow } from '@personnel/domain/commands/defs/index'
@@ -334,7 +333,7 @@ export function FieldInput({ item, ctx }: Props) {
           invalidOptions={invalid}
           strictness={resolvedOptions
             ? (optionsMode === 'suggest' ? 'guide' : 'strict')
-            : resolveFieldStrictness(fieldKey, {})}
+            : (invalid.length > 0 ? 'guide' : 'free')}
           hasIssue={hasIssue}
           modified={isChanged}
         />

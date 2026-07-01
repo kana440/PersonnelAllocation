@@ -19,7 +19,7 @@ npm run typecheck --workspace=packages/domain
 
 1. `src/patterns/editPatterns.ts` — `EditPattern` に新ラベルを追加
 2. `src/commands/handlers/` — `EditCommand` を実装
-3. `src/validation/` — **バリデーションに検出条件を追加**（リストア保証の維持・必須）
+3. `src/rules/validate/` — **バリデーションに検出条件を追加**（リストア保証の維持・必須）
 4. `src/commands/defs/` — `OperationDef` を追加して `ALL_OPERATION_DEFS` に登録
 5. 複数行にまたがる場合は `src/commands/scenarios.ts` に `EditScenario` を追加
 
@@ -74,7 +74,7 @@ export class MyOperation implements EditCommand {
   message: _ => 'バンドは雇用タイプに対応する選択肢から選択してください' }
 ```
 
-**W系（ワーニング）は FIELD_CONSTRAINTS に乗らない**。`src/validation/validateGlobalConsistency.ts` にカスタム関数として実装し `level: 'warning'` で返す。
+**W系（ワーニング）は FIELD_CONSTRAINTS に乗らない**。`src/rules/validate/globalConsistency.ts` にカスタム関数として実装し `level: 'warning'` で返す。
 
 ---
 

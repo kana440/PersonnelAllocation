@@ -1,6 +1,6 @@
 // choices/orgTree.ts のテスト
 import { describe, test, expect } from 'vitest'
-import { getDescendantOrgIds, flattenOrgTree } from '@personnel/domain/choices/orgTree'
+import { getDescendantOrgIds, flattenOrgTree } from '@personnel/domain/rules/options/orgTree'
 import type { Organization } from '@personnel/domain/schemas'
 
 // ── テスト用組織ツリー ──────────────────────────────────────────────────────────

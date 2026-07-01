@@ -11,14 +11,20 @@ export const POSITION_META: Partial<Record<string, EditPatternMeta>> = {
       if (isNoCheckReason(row, ctx)) return (row.transferReason as string | undefined) === TR.ORG_TRANSFER
       const prevCode  = row.prevDepartmentCode as string | undefined
       const afterCode = row.departmentCode     as string | undefined
-      return !!prevCode && !!afterCode && prevCode !== afterCode
+      if (!prevCode || !afterCode || prevCode === afterCode) return false
+      return !ctx.sameOrgPairs?.has(`${prevCode}|${afterCode}`)
     },
   },
   orgRestructure: {
     label: '異動（組改）', addLabel: '異動（組改）', editLabel: '異動（組改）',
     menuLabel: '異動（組改）',
     badge: 'transfer', group: 'position',
-    detect: (_row, _ctx) => false,
+    detect: (row, ctx) => {
+      const prevCode  = row.prevDepartmentCode as string | undefined
+      const afterCode = row.departmentCode     as string | undefined
+      if (!prevCode || !afterCode || prevCode === afterCode) return false
+      return !!ctx.sameOrgPairs?.has(`${prevCode}|${afterCode}`)
+    },
   },
   positionChange: {
     label: 'Pos変更', addLabel: 'Pos変更', editLabel: 'Pos変更',

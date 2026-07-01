@@ -4,7 +4,7 @@ import type { EditCommand, DomainContext, OperationResult, ValidationResult } fr
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { nextRowId } from '../../allocationRow'
-import { deriveOrgSubFields } from '../../derivation/orgFields'
+import { deriveOrgSubFields } from '../../rules/derive/orgFields'
 
 // ── RestorablePosition ────────────────────────────────────────────────────────
 

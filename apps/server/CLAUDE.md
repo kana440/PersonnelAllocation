@@ -138,7 +138,7 @@ if (!user) return c.json({ error: 'Unauthorized' }, 401)
 サーバーからドメイン層の純粋関数を使う：
 
 ```typescript
-import { validateCrossRowConsistency } from '@personnel/domain/validation/validateCrossRowConsistency'
+import { validateCrossRowConsistency } from '@personnel/domain/rules/validate/crossRowConsistency'
 ```
 
 ロジックをサーバーに直接書かない。必ず `@personnel/domain` に実装してから呼ぶ。

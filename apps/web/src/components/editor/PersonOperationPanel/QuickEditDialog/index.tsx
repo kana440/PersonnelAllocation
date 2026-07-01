@@ -6,21 +6,27 @@
  * - onSubmit ドライランで変更内容をプレビュー
  * - バリデーションエラー時は「確定」を無効化し、詳細編集を促す
  * - 「詳細編集」で現在の入力値を引き継いで OperationFormView に遷移する
+ *
+ * stepFilter を持つフィールドはバンドステップセレクターを表示する（OperationFormView と同動作）。
+ * resolveRow を使って導出・バリデーション・選択肢を一括計算する。
  */
 import { useState, useMemo, useCallback } from 'react'
 import { useStore }            from '../../../../store/useStore'
 import { appService }          from '../../../../application/HRApplicationService'
-import { deriveFieldUpdates }  from '@personnel/domain/derivation'
-import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
+import { resolveRow, type Profile } from '@personnel/domain/resolver'
+import { filterBandsByStep }   from '@personnel/domain/rules/options'
+import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
 import { bindOperation }       from '@personnel/domain/commands/defs'
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { ComboInput }          from '../../../common/ComboInput'
 import { OrgPickerModal }      from '../../../common/OrgPickerModal'
+import { BandStepFilter }      from '../BandStepFilter'
+import type { StepMode }       from '../BandStepFilter'
 import { ChangePreview }       from './ChangePreview'
 import type { EditOperation, OperationInput } from '@personnel/domain/commands/defs'
 import type { AllocationRow }  from '@personnel/domain/allocationRow'
 import type { DomainContext }  from '@personnel/domain/context'
+import type { DerivedUpdates } from '@personnel/domain/rules/derive'
 
 interface Props {
   def:              EditOperation
@@ -33,7 +39,6 @@ interface Props {
 
 export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }: Props) {
   const { allocationList, afterOrganizations, masters } = useStore()
-  const strictnessOverrides = useFieldStrictnessOverrides()
   const ctx = useMemo(
     () => ({ allocationList, afterOrganizations, masters }),
     [allocationList, afterOrganizations, masters],
@@ -42,7 +47,6 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
   const [values, setValues] = useState<Partial<AllocationRow>>(() => {
     const base = { ...def.onOpen(row, ctx), ...overrideInitial }
     if (!overrideInitial) return base
-    // overrideInitial で上書きされたフィールドの onFieldChange 効果を初期値に適用する
     let result = base
     for (const field of Object.keys(overrideInitial)) {
       const val = (overrideInitial as Record<string, unknown>)[field]
@@ -55,17 +59,52 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
   })
   const [orgPickerField, setOrgPickerField] = useState<string | null>(null)
   const [submitError,   setSubmitError]   = useState<string | null>(null)
+  const [stepMode,      setStepMode]      = useState<StepMode>('1')
 
-  const draftRow = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
+  const quickInputs = def.quickInputs!
+
+  // resolveRow コンテキスト（def.constraints = 方向フィルタ等のアクション制約）
+  const resolveCtx = useMemo(() => ({
+    masters, allocationList, afterOrganizations,
+    actionConstraints: def.constraints,
+  }), [masters, allocationList, afterOrganizations, def.constraints])
+
+  // quickInputs に stepFilter を持つフィールドがあれば、stepMode で選択肢を絞り込む動的プロファイルを生成
+  // def.profile（静的部分）とマージして resolveRow に渡す
+  const profile = useMemo((): Profile => {
+    const dynamic: Profile = {}
+    for (const input of quickInputs) {
+      if (!input.stepFilter) continue
+      const direction = input.stepFilter
+      const field     = input.field as string
+      dynamic[field]  = {
+        source: (ms, resolvedRow) => {
+          const { valid: constrained } = getGroupedFieldOptions(field, resolvedRow, ms)
+          return filterBandsByStep(
+            constrained,
+            row[input.field] as string | undefined,  // original row の値を基準に
+            ms,
+            stepMode,
+            direction,
+          )
+        },
+      }
+    }
+    return { ...def.profile, ...dynamic }
+  }, [quickInputs, def.profile, row, stepMode])
+
+  // 導出・バリデーション・選択肢を resolveRow で一括計算
+  const resolveResult = useMemo(
+    () => resolveRow(row, values as DerivedUpdates, resolveCtx, profile),
+    [row, values, resolveCtx, profile],
+  )
+
+  const draftRow = resolveResult.row
 
   // 部下がいる場合: _managerTransferMode が設定されている
   const hasSubordinates = !!(values as Record<string, unknown>)._managerTransferMode
   const isInheritMode   = (values as Record<string, unknown>)._managerTransferMode !== '他メンバに引き継ぎ'
 
-  // 「部下の引き継ぎ方法」ラジオを表示する条件:
-  //   payGrade が prevPayGrade と異なる（給与等級変化） かつ
-  //   新 positionCode ≠ prevPositionCode（＝自動新設が走った）
-  //   かつ 部下がいる
   const payGradeChanged  = !!(draftRow.payGradeChangeSign as string | undefined)
   const positionRenewed  = (draftRow.positionCode as string | undefined) !==
                            (row.prevPositionCode  as string | undefined)
@@ -84,15 +123,20 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
       const changes   = { [field]: value } as Partial<AllocationRow>
       type FCMap = Partial<Record<string, (v: string, ctx: DomainContext, currentValues?: Partial<AllocationRow>) => { setValues?: Partial<AllocationRow> }>>
       const effects   = (def.onFieldChange as FCMap | undefined)?.[field as string]?.(value, ctx, prev)
-      const derived   = deriveFieldUpdates(
-        { ...changes, ...(effects?.setValues ?? {}) },
-        prevDraft, masters, allocationList, strictnessOverrides,
-      )
-      return { ...prev, ...changes, ...(effects?.setValues ?? {}), ...derived }
+      const effectChanges = { ...changes, ...(effects?.setValues ?? {}) }
+      // resolveRow で収束導出
+      const { row: resolved } = resolveRow(prevDraft, effectChanges as DerivedUpdates, resolveCtx, profile)
+      // prevDraft から変化したフィールドだけ values に取り込む
+      const delta: Partial<AllocationRow> = {}
+      for (const k of Object.keys(resolved) as Array<keyof AllocationRow>) {
+        if (k === 'rowId') continue
+        if (resolved[k] !== prevDraft[k]) (delta as Record<string, unknown>)[k as string] = resolved[k]
+      }
+      return { ...prev, ...delta }
     })
-  }, [def, row, ctx, masters, allocationList])
+  }, [def, row, ctx, resolveCtx, profile])
 
-  // バリデーション
+  // バリデーション（def.onValidate: 操作固有。issues: FIELD_CONSTRAINTS 等の共通バリデーション）
   const validation = useMemo(
     () => def.onValidate(ctx, row.rowId, values),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,7 +166,8 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
     onClose()
   }
 
-  const quickInputs = def.quickInputs!
+  // stepFilter を持つフィールドが存在するか（バンドステップ UI 表示判定）
+  const hasStepFilter = quickInputs.some(i => i.stepFilter)
 
   return (
     <div
@@ -149,8 +194,25 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
           </button>
         </div>
 
+        {/* ── バンドステップセレクター（stepFilter フィールドがある場合のみ） ── */}
+        {hasStepFilter && (
+          <div className="px-5 pt-3 pb-1 flex-shrink-0">
+            {quickInputs
+              .filter((i): i is OperationInput & { stepFilter: 'up' | 'down' } => !!i.stepFilter)
+              .slice(0, 1)  // 先頭の stepFilter 方向を使って表示（通常1種類）
+              .map(i => (
+                <BandStepFilter
+                  key={i.field as string}
+                  mode={stepMode}
+                  direction={i.stepFilter}
+                  onChange={setStepMode}
+                />
+              ))}
+          </div>
+        )}
+
         {/* ── 簡易入力フィールド ────────────────────────────────────────────── */}
-        <div className="px-5 pt-4 pb-3 flex-shrink-0 space-y-3">
+        <div className="px-5 pt-3 pb-3 flex-shrink-0 space-y-3">
           {quickInputs.map((input: OperationInput) => {
             const fieldKey   = input.field as string
             const fieldLabel = input.label ?? ALLOCATION_LIST_LABEL_MAP[fieldKey]?.ja ?? fieldKey
@@ -181,8 +243,8 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
               )
             }
 
-            // ドロップダウン（ComboInput）
-            const { valid, invalid } = getGroupedFieldOptions(fieldKey, draftRow, masters)
+            // ドロップダウン（ComboInput）— resolveRow.getOptions でプロファイル適用済み選択肢を取得
+            const { valid, invalid } = resolveResult.getOptions(fieldKey)
             return (
               <div key={fieldKey}>
                 <label className="text-xs text-gray-500 mb-1 block">
@@ -210,7 +272,7 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
           />
         )}
 
-        {/* ── 部下引き継ぎ方法ラジオ（payGrade変化 + 新設ポジション + 部下あり の時のみ表示）── */}
+        {/* ── 部下引き継ぎ方法ラジオ ─────────────────────────────────────── */}
         {showSubordinateRadio && (
           <div className="px-5 py-3 border-t flex-shrink-0 space-y-2">
             <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">

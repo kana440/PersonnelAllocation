@@ -1,6 +1,6 @@
 import type { Organization } from '../schemas'
 import type { AllocationRow } from '../allocationRow'
-import { getDescendantOrgIds } from '../choices/orgTree'
+import { getDescendantOrgIds } from '../rules/options/orgTree'
 
 export type MatchConfidence = 'exact' | 'name' | 'overlap' | 'none'
 

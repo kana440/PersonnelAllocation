@@ -1,7 +1,7 @@
-import type { StepMode } from '@personnel/domain/choices'
+import type { StepMode } from '@personnel/domain/rules/options'
 
-export type { StepMode } from '@personnel/domain/choices'
-export { filterBandsByStep } from '@personnel/domain/choices'
+export type { StepMode } from '@personnel/domain/rules/options'
+export { filterBandsByStep } from '@personnel/domain/rules/options'
 
 interface Props {
   mode:      StepMode

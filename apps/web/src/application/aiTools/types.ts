@@ -1,5 +1,5 @@
 import type { ValidationError } from '@personnel/domain/commands/types'
-import type { ValidationIssue } from '@personnel/domain/validation/types'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/types'
 
 export interface VacantPositionResult {
   rowId:         number

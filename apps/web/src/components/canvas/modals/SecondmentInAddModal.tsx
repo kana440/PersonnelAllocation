@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../../store/useStore'
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
+import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 export interface SecondmentInValues {

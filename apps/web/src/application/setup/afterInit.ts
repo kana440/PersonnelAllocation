@@ -2,7 +2,7 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization }   from '@personnel/domain/schemas'
 import type { AllMasters }     from '@personnel/domain/masters/aggregate'
 import { FIELD_METADATA }      from '@personnel/domain/allocationRow'
-import { buildOrgMap }         from '@personnel/domain/choices/rows'
+import { buildOrgMap }         from '@personnel/domain/rules/options/rows'
 import { normalizeSearch }     from '../../utils/normalizeSearch'
 
 // ── 判定 ──────────────────────────────────────────────────────────────────────

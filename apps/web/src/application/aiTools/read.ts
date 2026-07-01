@@ -1,13 +1,13 @@
 import type { HRApplicationService } from '../HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
-import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
+import { buildFlatOrgView } from '@personnel/domain/rules/options/orgTree'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { EDIT_PATTERN_META } from '@personnel/domain/patterns/editPatterns'
 import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS, resolveAvailability } from '@personnel/domain/commands/defs'
-import { validateRow } from '@personnel/domain/validation/validateRow'
-import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/choices'
-import { computeBandStepDiff, getBandsByStep } from '@personnel/domain/derivation'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import { getFieldOptions as getFieldOptionsFromDomain } from '@personnel/domain/rules/options'
+import { computeBandStepDiff, getBandsByStep } from '@personnel/domain/rules/derive'
 import type { OrgTreeNode, SelectedRowContext } from '../aiTypes'
 import type {
   PersonSearchResult, PersonResult, PersonRowDetail, VacantPositionResult,

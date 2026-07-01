@@ -10,8 +10,8 @@
 import type { ChatWidget, PersonDiff, WizardStep } from '../../application/aiTypes'
 import { appService } from '../../application/HRApplicationService'
 import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '@personnel/domain/commands/orgHelpers'
-import { buildFlatOrgView } from '@personnel/domain/choices/orgTree'
-import { computeBandStepDiff } from '@personnel/domain/derivation'
+import { buildFlatOrgView } from '@personnel/domain/rules/options/orgTree'
+import { computeBandStepDiff } from '@personnel/domain/rules/derive'
 
 type ProposalResult = { widget: ChatWidget } | { error: string }
 

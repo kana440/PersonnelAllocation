@@ -10,7 +10,7 @@ import type { AllocationRow } from '../../allocationRow'
 import { afterKeysByBinding, FIELD_METADATA, nextRowId } from '../../allocationRow'
 import type { DomainContext } from '../types'
 import type { EditOperation } from './types'
-import { deriveFieldUpdates } from '../../derivation'
+import { deriveFieldUpdates } from '../../rules/derive'
 
 // ── 人フィールドのクリア定義 ──────────────────────────────────────────────────
 

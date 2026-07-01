@@ -1,6 +1,6 @@
 import { ComboInput } from '../../common/ComboInput'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 
 interface Props {
   effectiveRow:          AllocationRow

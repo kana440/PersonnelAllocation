@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useScopedStore } from '../../../store/useScopedStore'
-import { buildOrgMap } from '@personnel/domain/choices/rows'
+import { buildOrgMap } from '@personnel/domain/rules/options/rows'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Person, Organization } from '@personnel/domain/schemas'
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { normalizeSearch } from '../../../utils/normalizeSearch'
 import type { Organization } from '@personnel/domain/schemas'
-import { buildOrgPath } from '@personnel/domain/choices/relevantOrgs'
+import { buildOrgPath } from '@personnel/domain/rules/options/relevantOrgs'
 
 interface OrgPickerProps {
   value:           string | null

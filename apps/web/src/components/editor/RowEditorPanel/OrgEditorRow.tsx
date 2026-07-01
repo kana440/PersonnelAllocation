@@ -3,7 +3,7 @@ import { OrgSearchDialog } from '../OrgSearchDialog'
 import { ConfirmOverwriteDialog } from '../ConfirmOverwriteDialog'
 import type { Organization } from '@personnel/domain/schemas'
 import type { OrgMasterEntry } from '@personnel/domain/masters/orgMaster'
-import type { ValidationIssue } from '@personnel/domain/validation/validateRow'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 
 interface RelatedValues {
   businessUnit?: string

@@ -4,7 +4,7 @@ import {
   derivePromotionSignFromLevel,
   derivePromotionSign,
   derivePayGradeChangeSign,
-} from '@personnel/domain/derivation/promotionFields'
+} from '@personnel/domain/rules/derive/promotionFields'
 import { makeCL } from '../helpers/fixtures'
 
 // ── derivePromotionSignFromLevel ──────────────────────────────────────────────

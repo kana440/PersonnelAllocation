@@ -7,7 +7,7 @@ import {
   collectRelevantOrgIds,
   collectTopLevelRelevantOrgIds,
   buildOrgPath,
-} from '@personnel/domain/choices/relevantOrgs'
+} from '@personnel/domain/rules/options/relevantOrgs'
 
 const PANEL_REORDER_TYPE = 'application/x-panel-reorder'
 

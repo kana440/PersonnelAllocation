@@ -6,7 +6,7 @@ import type { AllocationRow } from '../../allocationRow'
 import { nextRowId }          from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
 import { getDescendantPositionCodes } from '../helpers'
-import { deriveManagerName }  from '../../derivation'
+import { deriveManagerName }  from '../../rules/derive'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`

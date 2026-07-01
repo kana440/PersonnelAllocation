@@ -1,7 +1,7 @@
 // derivation/jobFields.ts + deriveFieldUpdates 統合テスト
 import { describe, test, expect } from 'vitest'
-import { computePayGrade, deriveOnJobFamilyChange } from '@personnel/domain/derivation/jobFields'
-import { deriveFieldUpdates } from '@personnel/domain/derivation/index'
+import { computePayGrade, deriveOnJobFamilyChange } from '@personnel/domain/rules/derive/jobFields'
+import { deriveFieldUpdates } from '@personnel/domain/rules/derive'
 import { makeRow, makeCL } from '../helpers/fixtures'
 
 // ── computePayGrade ────────────────────────────────────────────────────────────

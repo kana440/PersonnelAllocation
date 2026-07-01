@@ -1,7 +1,7 @@
 import { useMemo }           from 'react'
 import type { Organization }  from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import { buildOrgMap }        from '@personnel/domain/choices/rows'
+import { buildOrgMap }        from '@personnel/domain/rules/options/rows'
 
 export interface OrgTreeData {
   active:       Organization[]

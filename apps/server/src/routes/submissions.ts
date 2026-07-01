@@ -14,7 +14,7 @@ import { randomUUID } from 'crypto'
 import { resolveScope, isScopeWithin } from '../lib/scopeFilter.ts'
 import type { SubmissionScope } from '../lib/scopeFilter.ts'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import { validateCrossRowConsistency } from '@personnel/domain/validation/validateCrossRowConsistency'
+import { validateCrossRowConsistency } from '@personnel/domain/rules/validate/crossRowConsistency'
 import { mergeSubmission, computeRowDiffs } from '@personnel/domain/diffMerge'
 
 const app = new Hono<{ Variables: AuthVariables }>()

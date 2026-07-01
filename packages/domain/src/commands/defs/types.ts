@@ -2,6 +2,7 @@ import type { AllocationRow }  from '../../allocationRow'
 import type { AllMasters }   from '../../masters/aggregate'
 import type { DomainContext, ValidationResult, OperationResult } from '../types'
 import type { OperationBadge } from './badge'
+import type { FieldRule, Profile } from '../../rules/field'
 
 /**
  * availableFor の戻り値型。
@@ -231,6 +232,25 @@ export interface EditOperation {
    * 定義されていない場合は OperationFormView（詳細モード）に直行する。
    */
   readonly quickInputs?: OperationInput[]
+
+  /**
+   * この操作固有のアクション制約（FIELD_CONSTRAINTS の State 制約を補完する）。
+   *
+   * - prevXxx フィールドを参照して「変更の文脈（昇格方向 / 降格方向 等）」を表現する
+   * - Phase 2 (validation): 違反を ValidationIssue として追加する
+   * - Phase 3 (options):    base.valid と交差させて有効選択肢を絞り込む
+   *
+   * stepMode など UI 動的状態による絞り込みは呼び出し側で profile を合成する。
+   * AI 文脈で "1段階昇格" のような完全指定アクションを表現する場合もここに含める。
+   */
+  readonly constraints?: readonly FieldRule[]
+
+  /**
+   * この操作の場面固有の選択肢フィルタ（UI 動的状態部分）。
+   * constraints（方向等の静的制約）より後に適用され、stepMode 等でさらに絞り込む。
+   * resolveRow の Profile 引数として渡される。
+   */
+  readonly profile?: Profile
 
   /**
    * フィールド変更時の操作固有サイドエフェクト。

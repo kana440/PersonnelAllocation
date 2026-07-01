@@ -5,7 +5,7 @@ import {
   parseBandLevel,
   parsePositionBandRange,
 } from '@personnel/domain/patterns/changeDetection'
-import { makeRow } from '../helpers/fixtures'
+import { makeRow, makeCL } from '../helpers/fixtures'
 
 // ── parseBandLevel ────────────────────────────────────────────────────────────
 
@@ -66,30 +66,37 @@ describe('detectChanges: 組織変更', () => {
 })
 
 describe('detectChanges: 昇降格', () => {
+  const ms = makeCL()
+
   test('band が上昇したとき promotion', () => {
-    const row = makeRow({ prevBand: 'M4', band: 'M5' })
-    const { patterns } = detectChanges(row)
+    const row = makeRow({ prevBand: 'M3', band: 'M4' })
+    const { patterns } = detectChanges(row, undefined, ms)
     expect(patterns.has('promotion')).toBe(true)
     expect(patterns.has('demotion')).toBe(false)
   })
 
   test('band が下降したとき demotion', () => {
-    const row = makeRow({ prevBand: 'M5', band: 'M4' })
-    const { patterns } = detectChanges(row)
+    const row = makeRow({ prevBand: 'M4', band: 'M3' })
+    const { patterns } = detectChanges(row, undefined, ms)
     expect(patterns.has('demotion')).toBe(true)
     expect(patterns.has('promotion')).toBe(false)
   })
 
-  test('band が数値として比較できないとき titleChange', () => {
-    const row = makeRow({ prevBand: 'M4', band: 'G4' })
-    const { patterns } = detectChanges(row)
-    // M=4, G=4 → 数値は同じなので titleChange
+  test('band が同一 warningLevel で prefix が変わるとき titleChange', () => {
+    // M3(level=2)→M4(level=3) は promotion だが、
+    // 同一 level のバンド変化は titleChange になることをカスタムマスタで確認する
+    const customMs = makeCL({ jobLevels: [
+      { code: 'M4',  label: 'M4',  promotionDemotionWarningLevel: 3, promotionDemotionBand: undefined, isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployeePosition: false, isExtendedEmployeeJobClassification: false, isRegularEmployeeOrSecondmentAcceptance: true,  isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
+      { code: 'M4B', label: 'M4B', promotionDemotionWarningLevel: 3, promotionDemotionBand: undefined, isRegularEmployee: true,  isSecondmentAcceptance: false, isExtendedEmployeePosition: false, isExtendedEmployeeJobClassification: false, isRegularEmployeeOrSecondmentAcceptance: true,  isExtendedEmployeeUnionMember: false, isDiscretionaryTarget: 0 },
+    ] })
+    const row = makeRow({ prevBand: 'M4', band: 'M4B' })
+    const { patterns } = detectChanges(row, undefined, customMs)
     expect(patterns.has('titleChange')).toBe(true)
   })
 
   test('band 変更なし → 昇降格なし', () => {
     const row = makeRow({ prevBand: 'M4', band: 'M4' })
-    const { patterns } = detectChanges(row)
+    const { patterns } = detectChanges(row, undefined, ms)
     expect(patterns.has('promotion')).toBe(false)
     expect(patterns.has('demotion')).toBe(false)
     expect(patterns.has('titleChange')).toBe(false)
@@ -118,7 +125,7 @@ describe('detectChanges: その他の変更種別', () => {
   })
 
   test('兼務新規追加 → concurrentAdd', () => {
-    const row = makeRow({ concurrentType: '兼務' })
+    const row = makeRow({ transferReason: '兼務追加' })
     expect(detectChanges(row).patterns.has('concurrentAdd')).toBe(true)
   })
 })

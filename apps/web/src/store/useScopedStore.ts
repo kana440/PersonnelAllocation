@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useStore } from './useStore'
 import { deriveCapabilities } from '../application/userSession'
-import { getDescendantOrgIds } from '@personnel/domain/choices/orgTree'
+import { getDescendantOrgIds } from '@personnel/domain/rules/options/orgTree'
 
 // Wraps useStore and returns allocation data filtered to the current scope.
 //

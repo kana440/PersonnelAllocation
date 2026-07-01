@@ -1,7 +1,7 @@
 // fieldConstraints.ts の payGrade 絞り込みロジックのテスト
 // getGroupedFieldOptions('payGrade', row, masters) を通して検証する
 import { describe, test, expect } from 'vitest'
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
+import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
 import { makePersonRow, makeCL } from '../helpers/fixtures'
 import type { PayGradeEntry } from '@personnel/domain/masters/payGrade'
 import type { JobLevelEntry } from '@personnel/domain/masters/jobLevel'

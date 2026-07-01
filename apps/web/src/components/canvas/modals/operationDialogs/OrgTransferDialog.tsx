@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../../../../store/useStore'
 import { appService } from '../../../../application/HRApplicationService'
 import { ModalShell } from '../../../common/ModalShell'
-import { validateRow } from '@personnel/domain/validation/validateRow'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
 import { OrgSearchDialog } from '../../../editor/OrgSearchDialog'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 

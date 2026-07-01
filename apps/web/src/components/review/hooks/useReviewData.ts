@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useScopedStore } from '../../../store/useScopedStore'
-import { validateRow, type ValidationIssue } from '@personnel/domain/validation/validateRow'
+import { validateRow, type ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 import { detectPatterns, type RowChanges, type DetectContext } from '@personnel/domain/patterns/detection'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow } from '@personnel/domain/allocationRow'

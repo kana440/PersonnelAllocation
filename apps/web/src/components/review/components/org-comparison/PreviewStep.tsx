@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { flattenOrgTree } from '@personnel/domain/choices/orgTree'
+import { flattenOrgTree } from '@personnel/domain/rules/options/orgTree'
 import { detectPatterns } from '@personnel/domain/patterns/detection'
 import type { Organization } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'

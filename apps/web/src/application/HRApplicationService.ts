@@ -23,7 +23,7 @@ import {
 import type { SecondmentReleaseFields } from '@personnel/domain/commands/handlers/patternOps'
 import { AssignPositionCodesOperation } from '@personnel/domain/commands/handlers/assignPositionCodes'
 import type { PositionCodeAssignment } from '../ports'
-import { derivePersons } from '@personnel/domain/choices/rows'
+import { derivePersons } from '@personnel/domain/rules/options/rows'
 import type { Person } from '@personnel/domain/schemas'
 import type { IOperationPattern, PatternDetectionResult } from '@personnel/domain/patterns/groupPatternTypes'
 import { matchAllPatterns } from '@personnel/domain/patterns/groupPatternMatcher'

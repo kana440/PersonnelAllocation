@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { normalizeSearch } from '../../utils/normalizeSearch'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import type { FieldStrictness } from '@personnel/domain/optionStrictness'
+
+/** 無効選択肢の扱い: 'strict' = 選択不可 / 'guide' = 選択可（デフォルト）/ 'free' = 均等表示 */
+export type FieldStrictness = 'strict' | 'guide' | 'free'
 
 interface Props {
   value:           string

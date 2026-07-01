@@ -1,6 +1,6 @@
 // C系（関連チェック）・D系（存在チェック）シナリオ
 // 仕様: specs/G2-domain/02-validation-rules.md
-import { runScenarios, strict } from '../helpers/runner'
+import { runScenarios } from '../helpers/runner'
 
 // ══════════════════════════════════════════════════════════════════════════════
 // C1: 組織サブフィールドがマスタと一致するか
@@ -94,7 +94,6 @@ runScenarios('D2-2: 役職はマスタに存在すること', [
   {
     id: 'D2-2-1', desc: 'マスタ外の役職 → エラー',
     row: { officialPositionCode: '存在しない役職' },
-    strictnessOverrides: strict('officialPositionCode'),
     expect: { errorFields: ['officialPositionCode'] },
   },
   {
@@ -108,7 +107,6 @@ runScenarios('D2-5: 雇用タイプはマスタに存在すること', [
   {
     id: 'D2-5-1', desc: 'マスタ外の雇用タイプ → エラー',
     row: { employmentType: '存在しない雇用タイプ' },
-    strictnessOverrides: strict('employmentType'),
     expect: { errorFields: ['employmentType'] },
   },
   {
@@ -122,7 +120,6 @@ runScenarios('D2-8: バンドはマスタに存在すること', [
   {
     id: 'D2-8-1', desc: 'マスタ外のバンド → エラー',
     row: { band: '存在しないバンド' },
-    strictnessOverrides: strict('band'),
     expect: { errorFields: ['band'] },
   },
   {
@@ -144,7 +141,6 @@ runScenarios('ルーティング: noCheckRequired=true のとき D系チェッ�
   {
     id: 'ROUTE-2', desc: 'noCheckRequired=false → band マスタ外でエラーあり',
     row: { transferReason: '通常異動', band: '存在しないバンド' },
-    strictnessOverrides: strict('band'),
     expect: { errorFields: ['band'] },
   },
 ])

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Organization }       from '@personnel/domain/schemas'
-import { isSecondmentOrg }         from '@personnel/domain/derivation'
+import { isSecondmentOrg }         from '@personnel/domain/rules/derive'
 import { useOrgView }              from '../OrgViewContext'
 import { useCanvasLayoutStore }    from '../../../store/canvasLayoutStore'
 import type { PanelDef }           from '../../../store/canvasLayoutStore'

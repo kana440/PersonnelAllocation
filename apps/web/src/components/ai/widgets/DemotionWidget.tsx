@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../../../store/useStore'
-import { deriveFieldUpdates, computeBandStepDiff } from '@personnel/domain/derivation'
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
+import { deriveFieldUpdates, computeBandStepDiff } from '@personnel/domain/rules/derive'
+import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
 import { filterBandsByStep } from '../../editor/PersonOperationPanel/BandStepFilter'
 import type { StepMode } from '../../editor/PersonOperationPanel/BandStepFilter'
 
