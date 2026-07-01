@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useStore } from '../../../store/useStore'
+import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { deriveFieldUpdates, deriveManagerName, deriveOrgSubFields } from '@personnel/domain/derivation'
 import { AutoDeriveDialog } from '../AutoDeriveDialog'
@@ -16,6 +17,7 @@ interface Props {
 
 export function DirectEditView({ row, onBack }: Props) {
   const { allocationList, saveRow, afterOrganizations, masters } = useStore()
+  const { fieldStrictnessOverrides } = useCanvasDisplayStore()
 
   const [buffer,        setBuffer]        = useState<Partial<Record<string, string>>>({})
   const [isDirty,       setIsDirty]       = useState(false)
@@ -32,14 +34,19 @@ export function DirectEditView({ row, onBack }: Props) {
     [row, buffer]
   )
 
-  const issues = useMemo(
-    () => validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }),
-    [effectiveRow, afterOrganizations, masters, allocationList]
-  )
+  // DirectEdit は Excel 後方互換モード: strictness overrides を適用し、
+  // 残ったエラーも全てワーニングに降格してセーブをブロックしない
+  const issues = useMemo(() => {
+    const raw = validateRow({
+      row: effectiveRow, afterOrganizations, masters, allocationList,
+      strictnessOverrides: fieldStrictnessOverrides,
+    })
+    return raw.map(i => i.level === 'error' ? { ...i, level: 'warning' as const } : i)
+  }, [effectiveRow, afterOrganizations, masters, allocationList, fieldStrictnessOverrides])
 
   const handleChange = (key: keyof AllocationRow, value: string) => {
     const changes = { [key as string]: value } as Partial<Record<keyof AllocationRow, string>>
-    const derived = deriveFieldUpdates(changes, effectiveRow, masters)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList, fieldStrictnessOverrides)
     setBuffer(prev => ({ ...prev, ...changes, ...derived }))
     setIsDirty(true)
   }

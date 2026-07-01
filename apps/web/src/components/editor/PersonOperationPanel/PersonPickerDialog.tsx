@@ -121,7 +121,7 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
   // これによりキャンバスの mousedown ハンドラ（ラバーバンド選択）が
   // モーダル内のマウス操作に干渉しなくなる。
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/30" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div
         className="bg-white rounded-xl shadow-xl w-[520px] max-h-[600px] flex flex-col"
         onClick={e => e.stopPropagation()}

@@ -11,6 +11,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { useStore }            from '../../../../store/useStore'
 import { appService }          from '../../../../application/HRApplicationService'
 import { deriveFieldUpdates }  from '@personnel/domain/derivation'
+import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
 import { bindOperation }       from '@personnel/domain/commands/defs'
 import { getGroupedFieldOptions } from '@personnel/domain/choices'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
@@ -32,6 +33,7 @@ interface Props {
 
 export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }: Props) {
   const { allocationList, afterOrganizations, masters } = useStore()
+  const strictnessOverrides = useFieldStrictnessOverrides()
   const ctx = useMemo(
     () => ({ allocationList, afterOrganizations, masters }),
     [allocationList, afterOrganizations, masters],
@@ -84,7 +86,7 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
       const effects   = (def.onFieldChange as FCMap | undefined)?.[field as string]?.(value, ctx, prev)
       const derived   = deriveFieldUpdates(
         { ...changes, ...(effects?.setValues ?? {}) },
-        prevDraft, masters, allocationList,
+        prevDraft, masters, allocationList, strictnessOverrides,
       )
       return { ...prev, ...changes, ...(effects?.setValues ?? {}), ...derived }
     })

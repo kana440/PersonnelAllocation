@@ -9,6 +9,7 @@ import type { AllocationRow } from './allocationRow'
 import type { Organization }  from './schemas'
 import type { AllMasters }  from './masters/aggregate'
 import type { RowChanges }    from './patterns/changeDetection'
+import type { FieldStrictness } from './optionStrictness'
 
 // ── 全ドメイン処理の共通基盤 ─────────────────────────────────────────────────
 
@@ -21,8 +22,9 @@ export interface DomainContext {
 // ── 行単位の処理に追加情報を付与 ─────────────────────────────────────────────
 
 export interface RowContext extends DomainContext {
-  readonly row:      AllocationRow
-  readonly changes?: RowChanges   // G/W系・EditPattern 検出に使用。不要な処理は無視してよい
+  readonly row:                  AllocationRow
+  readonly changes?:             RowChanges   // G/W系・EditPattern 検出に使用
+  readonly strictnessOverrides?: Partial<Record<string, FieldStrictness>>
 }
 
 // ── グループ行ヘルパー ────────────────────────────────────────────────────────

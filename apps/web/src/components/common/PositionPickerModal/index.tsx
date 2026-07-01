@@ -64,7 +64,7 @@ export function PositionPickerModal({
   }, [candidates, search, selectedOrgId, orgById])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-lg shadow-xl w-[720px] h-[500px] flex flex-col">
 
         {/* ヘッダー */}

@@ -42,7 +42,7 @@ export function OrgPickerModal({ open, onClose, onSelect, title = '組織を選�
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div

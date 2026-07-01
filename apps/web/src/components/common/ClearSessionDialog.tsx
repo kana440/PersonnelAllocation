@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
-import { buildExportBuffer } from '../../infrastructure/excel/engine'
+import { buildExportBuffer, removeOverlay } from '../../infrastructure/excel/engine'
 
 interface Props {
   onCleared: () => void   // セッションクリア後に呼ぶ（sessionReady = false など）
@@ -62,12 +62,13 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
       onCleared()
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
-        // ユーザーがファイルピッカーをキャンセル → クリアしない
+        // ユーザーがファイルピッカーをキャンセル → クリアしない（何もしない）
       } else {
         setSaveError(String(e))
       }
     } finally {
       setSaving(false)
+      removeOverlay()
     }
   }
 

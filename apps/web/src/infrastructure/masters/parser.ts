@@ -61,8 +61,6 @@ const ANCHORS = {
   concurrentType:           '本務兼務区分',
   // 昇降格マトリクス（BT列〜BW列）: 列ヘッダーが '職務レベル'（'職務レベルCD' とは別）
   promotionMatrix:          '職務レベル',
-  // M職P職切替マトリクス（BX列〜CA列）: '職務レベル' と競合しないよう別名ヘッダー
-  mpSwitchMatrix:           '職務レベル(主要)',
 } as const
 
 type AnchorKey = keyof typeof ANCHORS
@@ -123,7 +121,6 @@ export const MASTER_LABELS: Record<keyof AllMasters, string> = {
   trainingPositions:        '業務研修ポジション',
   discretionaryWorkOptions: '裁量労働／業務研修',
   promotionMatrix:          '昇降格マトリクス',
-  mpSwitchMatrix:           'M職P職切替マトリクス',
 }
 
 // ── Per-group parsers（col = キー列の 0-indexed 列番号）─────────────────────────
@@ -324,6 +321,7 @@ export function parseMastersFromSheet(raw: unknown[][]): ParseMastersResult {
   const at = <T>(key: AnchorKey, fn: (c: number) => T[], empty: T[] = []): T[] =>
     col(key) >= 0 ? fn(col(key)) : empty
 
+  const promotionMatrixData = at('promotionMatrix', c => parsePromotionMatrix(raw, c))
   const lists: Partial<AllMasters> = {
     companyFilters:           at('companyFilters',           c => parseCompanyFilters(raw, c)),
     transferReasons:          at('transferReasons',          c => parseTransferReasons(raw, c)),
@@ -338,8 +336,7 @@ export function parseMastersFromSheet(raw: unknown[][]): ParseMastersResult {
     discretionaryWorkOptions: at('discretionaryWorkOptions', c => parseCodeEntryListAt<DiscretionaryWorkEntry>(raw, c)),
     concurrentReasons:        at('concurrentReasons',        c => parseCodeEntryListAt<ConcurrentReasonEntry>(raw, c)),
     demotionReasons:          at('demotionReasons',          c => parseCodeEntryListAt<DemotionReasonEntry>(raw, c)),
-    promotionMatrix:          at('promotionMatrix',          c => parsePromotionMatrix(raw, c)),
-    mpSwitchMatrix:           at('mpSwitchMatrix',           c => parsePromotionMatrix(raw, c)),
+    promotionMatrix:          promotionMatrixData,
   }
 
   const concurrentTypeActual = at('concurrentType', c =>

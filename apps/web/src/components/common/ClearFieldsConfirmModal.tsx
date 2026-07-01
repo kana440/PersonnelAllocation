@@ -7,7 +7,7 @@ interface Props {
 
 export function ClearFieldsConfirmModal({ cleared, changed, onConfirm, onCancel }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-lg shadow-xl w-80 p-5">
         <p className="text-sm font-semibold text-gray-800 mb-3">この操作の影響を確認してください</p>
 

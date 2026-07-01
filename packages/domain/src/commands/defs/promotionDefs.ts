@@ -393,12 +393,8 @@ export const titleChangeDef: EditOperation = {
 
 import type { AllMasters } from '../../masters/aggregate'
 
-/**
- * M職P職切替専用マトリクス（BX-CA列）を優先し、なければ promotionMatrix にフォールバックする。
- */
 function getMpMatrix(masters: AllMasters): PromotionMatrixEntry[] {
-  const mpMatrix = masters.mpSwitchMatrix ?? []
-  return mpMatrix.length > 0 ? mpMatrix : (masters.promotionMatrix ?? [])
+  return masters.promotionMatrix ?? []
 }
 
 /** jobClass が管理職（M職）を示すかどうか。'M' / 'M職' / 'Manager' など先頭 M を判定する */

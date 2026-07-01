@@ -7,6 +7,7 @@ const STORAGE_KEY                    = 'canvas_display_fields'
 const STRICTNESS_STORAGE_KEY         = 'field_strictness_overrides'
 const UNAVAIL_OP_DISPLAY_STORAGE_KEY = 'unavailable_operation_display'
 const HIDDEN_BADGE_TYPES_STORAGE_KEY = 'canvas_hidden_badge_types'
+const COMPACT_GROUP_STORAGE_KEY      = 'compact_group_by'
 
 export interface CanvasField {
   key:   string
@@ -80,6 +81,12 @@ function loadHiddenBadgeTypes(): string[] {
   return []
 }
 
+function loadCompactGroupById(): string {
+  try {
+    return localStorage.getItem(COMPACT_GROUP_STORAGE_KEY) ?? 'positionBand'
+  } catch { return 'positionBand' }
+}
+
 interface CanvasDisplayState {
   displayFields:                string[]
   setDisplayFields:             (fields: string[]) => void
@@ -89,6 +96,8 @@ interface CanvasDisplayState {
   setUnavailableOperationDisplay: (value: UnavailableOperationDisplay) => void
   hiddenBadgeTypes:             string[]
   setHiddenBadgeTypes:          (types: string[]) => void
+  compactGroupById:             string
+  setCompactGroupById:          (id: string) => void
 }
 
 export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
@@ -116,5 +125,10 @@ export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
   setHiddenBadgeTypes: (types) => {
     localStorage.setItem(HIDDEN_BADGE_TYPES_STORAGE_KEY, JSON.stringify(types))
     set({ hiddenBadgeTypes: types })
+  },
+  compactGroupById: loadCompactGroupById(),
+  setCompactGroupById: (id) => {
+    localStorage.setItem(COMPACT_GROUP_STORAGE_KEY, id)
+    set({ compactGroupById: id })
   },
 }))

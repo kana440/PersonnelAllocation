@@ -58,7 +58,7 @@ function upsertOverlay(pct: number): void {
   if (pctEl)  pctEl.textContent   = `${pct}%`
 }
 
-function removeOverlay(): void {
+export function removeOverlay(): void {
   document.getElementById(OVERLAY_ID)?.remove()
 }
 

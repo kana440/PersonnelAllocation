@@ -5,7 +5,7 @@
 //              元ファイルなし時は ExcelJS で新規ワークブック生成
 
 export { importFromFile, importFromUrl, importWorkbook } from './exceljs/importer'
-export { exportToXlsx, buildExportBuffer }              from './zip/exporter'
+export { exportToXlsx, buildExportBuffer, removeOverlay } from './zip/exporter'
 
 // ── エンジン非依存の共有エクスポート ─────────────────────────────────────────
 export { SHEET_ALLOCATION, SHEET_MASTERS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD, SHEET_COMPANY } from './sheetNames'

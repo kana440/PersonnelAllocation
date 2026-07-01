@@ -4,6 +4,7 @@ import { useStore }          from '../../../../store/useStore'
 import { appService }        from '../../../../application/HRApplicationService'
 import { deriveFieldUpdates }   from '@personnel/domain/derivation'
 import { validateRow }          from '@personnel/domain/validation/validateRow'
+import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { nextRowId }            from '@personnel/domain/allocationRow'
 import { FIELD_METADATA }       from '@personnel/domain/allocationRow'
@@ -26,6 +27,7 @@ interface Props {
 
 export function OperationFormView({ def, row, onBack, overrideInitial }: Props) {
   const { allocationList, masters, afterOrganizations } = useStore()
+  const strictnessOverrides = useFieldStrictnessOverrides()
   const ctx = useMemo(
     () => ({ allocationList, afterOrganizations, masters }),
     [allocationList, afterOrganizations, masters]
@@ -35,7 +37,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
     const base     = def.onOpen(row, ctx)
     const override = overrideInitial ?? {}
     const derived  = Object.keys(override).length > 0
-      ? deriveFieldUpdates(override, { ...row, ...base } as AllocationRow, masters, allocationList)
+      ? deriveFieldUpdates(override, { ...row, ...base } as AllocationRow, masters, allocationList, strictnessOverrides)
       : {}
     return { ...base, ...override, ...derived }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,7 +80,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
 
   const handleChange = (field: keyof AllocationRow, value: string) => {
     const changes  = { [field]: value } as Partial<AllocationRow>
-    const derived  = deriveFieldUpdates(changes, draftRow, masters, allocationList)
+    const derived  = deriveFieldUpdates(changes, draftRow, masters, allocationList, strictnessOverrides)
     const effects  = def.onFieldChange?.[field]?.(value, ctx, values)
     const filteredDerived: Record<string, unknown> = { ...derived }
     for (const f of (effects?.excludeDerived ?? [])) delete filteredDerived[f as string]
@@ -128,7 +130,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   }, [pendingSuggestion])
 
   const issues = useMemo(
-    () => validateRow({ row: draftRow, afterOrganizations, masters, allocationList })
+    () => validateRow({ row: draftRow, afterOrganizations, masters, allocationList, strictnessOverrides })
       .filter(i => {
         const inp = fieldInputs.find(f => f.field === i.field && !f.readOnly)
         if (!inp) return false

@@ -9,19 +9,15 @@ import { runDataExistence }         from './validateDataExistence'
 import { runExclusivity }           from './validateExclusivity'
 import { runFilteredByEmployment }  from './validateFilteredByEmployment'
 import { runGlobalConsistency }     from './validateGlobalConsistency'
-import type { FieldStrictness } from '../optionStrictness'
-
 export type { ValidationLevel, ValidationIssue } from './types'
 
 // ── メインバリデーション関数 ─────────────────────────────────────────────────
 // ルーティング:
 //   transferReason の noCheckRequired === true → E系（キー重複）のみ
 //   それ以外 → A/B/D/E/F/G/W 全系を実行
-export function validateRow(
-  ctx:       RowContext,
-  overrides?: Partial<Record<string, FieldStrictness>>,
-): ValidationIssue[] {
-  const { row, afterOrganizations: orgs, masters, allocationList, changes } = ctx
+// strictnessOverrides は ctx.strictnessOverrides から読む（第2引数は廃止）
+export function validateRow(ctx: RowContext): ValidationIssue[] {
+  const { row, afterOrganizations: orgs, masters, allocationList, changes, strictnessOverrides } = ctx
   const reasonEntry = masters.transferReasons.find(r => r.label === row.transferReason)
 
   if (reasonEntry?.noCheckRequired) {
@@ -32,8 +28,8 @@ export function validateRow(
     ...runAssertRequired(row, masters),
     ...runBasedOnFormat(row),
     ...runCorrelation(row, masters),
-    ...runFilteredByEmployment(row, masters, overrides),
-    ...runDataExistence(row, orgs, masters, overrides),
+    ...runFilteredByEmployment(row, masters, strictnessOverrides),
+    ...runDataExistence(row, orgs, masters, strictnessOverrides),
     ...(allocationList.length > 0 ? runExclusivity(row, allocationList) : []),
     ...runGlobalConsistency(row, masters, changes, allocationList, orgs),
   ]

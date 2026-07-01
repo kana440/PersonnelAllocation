@@ -1,6 +1,7 @@
-import type { AllMasters } from '@personnel/domain/masters/aggregate'
+import type { StepMode } from '@personnel/domain/choices'
 
-export type StepMode = '1' | '2' | 'all'
+export type { StepMode } from '@personnel/domain/choices'
+export { filterBandsByStep } from '@personnel/domain/choices'
 
 interface Props {
   mode:      StepMode
@@ -12,7 +13,7 @@ export function BandStepFilter({ mode, direction, onChange }: Props) {
   return (
     <div className="flex items-center gap-1 mb-1.5">
       <span className="text-[10px] text-gray-400 mr-0.5">変更幅:</span>
-      {(['1', '2', 'all'] as StepMode[]).map(m => (
+      {(['1', '2', 'all'] as const).map(m => (
         <button
           key={m}
           type="button"
@@ -28,26 +29,4 @@ export function BandStepFilter({ mode, direction, onChange }: Props) {
       ))}
     </div>
   )
-}
-
-/** band 選択肢を warningLevel 差でフィルタする */
-export function filterBandsByStep(
-  options: string[],
-  baseBand: string | undefined,
-  masters: AllMasters,
-  stepMode: StepMode,
-  direction: 'up' | 'down',
-): string[] {
-  if (stepMode === 'all' || !baseBand) return options
-  const baseLevel = masters.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
-  if (baseLevel === 0) return options
-  const steps = parseInt(stepMode, 10)
-  return options.filter(opt => {
-    const optLevel = masters.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
-    if (optLevel === 0) return false
-    const diff = optLevel - baseLevel
-    if (direction === 'up')   return diff >= 1 && diff <= steps
-    if (direction === 'down') return diff >= -steps && diff <= -1
-    return false
-  })
 }

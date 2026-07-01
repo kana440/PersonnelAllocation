@@ -5,16 +5,13 @@ import { ComboInput } from '../../../common/ComboInput'
 import { ModalShell } from '../../../common/ModalShell'
 import { TitleSuggestionModal } from '../../../common/TitleSuggestionModal'
 import { NewPositionConfirmModal } from '../../../common/NewPositionConfirmModal'
-import { getGroupedFieldOptions } from '@personnel/domain/choices'
+import { getGroupedFieldOptions, filterBandsByStep, type StepMode } from '@personnel/domain/choices'
 import { validateRow } from '@personnel/domain/validation/validateRow'
 import { resolveFieldStrictness } from '@personnel/domain/optionStrictness'
 import { useFieldStrictnessOverrides } from '../../../../hooks/useFieldStrictness'
 import { deriveFieldUpdates } from '@personnel/domain/derivation'
 import { nextRowId } from '@personnel/domain/allocationRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { AllMasters } from '@personnel/domain/masters/aggregate'
-
-type StepMode = '1' | '2' | 'all'
 
 interface Props {
   rowId:   number
@@ -30,23 +27,6 @@ const FIELDS: Array<{ key: keyof AllocationRow; prevKey: keyof AllocationRow; la
 ]
 
 const FIELD_KEYS = new Set(FIELDS.map(f => f.key as string))
-
-function filterBandsByStep(
-  options: string[],
-  baseBand: string | undefined,
-  masters: AllMasters,
-  stepMode: StepMode,
-): string[] {
-  if (stepMode === 'all' || !baseBand) return options
-  const baseLevel = masters.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
-  if (baseLevel === 0) return options
-  const steps = parseInt(stepMode, 10)
-  return options.filter(opt => {
-    const optLevel = masters.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
-    if (optLevel === 0) return false
-    return Math.abs(optLevel - baseLevel) >= 1 && Math.abs(optLevel - baseLevel) <= steps
-  })
-}
 
 export function PromotionDialog({ rowId, onClose }: Props) {
   const { allocationList, masters, afterOrganizations } = useStore()
@@ -66,7 +46,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList, strictnessOverrides: overrides })
       .filter(i => FIELD_KEYS.has(i.field as string))
   }, [effectiveRow, afterOrganizations, masters, allocationList])
 
@@ -77,7 +57,7 @@ export function PromotionDialog({ rowId, onClose }: Props) {
 
   const handleChange = (key: string, v: string) => {
     const changes = { [key]: v } as Partial<AllocationRow>
-    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList)
+    const derived = deriveFieldUpdates(changes, effectiveRow, masters, allocationList, overrides)
     if (key === 'officialPositionCode' && v) {
       setTitleSuggest(v)
     }

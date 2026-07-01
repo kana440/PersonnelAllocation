@@ -10,6 +10,8 @@
 import type { AllocationRow } from '../allocationRow'
 import type { AllMasters }    from '../masters/aggregate'
 import type { DerivedUpdates } from './types'
+import type { FieldStrictness } from '../optionStrictness'
+import { resolveFieldStrictness } from '../optionStrictness'
 import { DISCRETIONARY_YES, DISCRETIONARY_NO } from '../masters/discretionaryWork'
 
 /** 組織コードから noDiscretionaryVMAutoCreate フラグを取得 */
@@ -27,9 +29,10 @@ function getNoAutoCreate(draft: AllocationRow, ms: AllMasters): boolean {
  * @param masters          マスタデータ
  */
 export function deriveDiscretionaryFlags(
-  draft:            AllocationRow,
-  effectiveChanges: DerivedUpdates,
-  masters:          AllMasters,
+  draft:               AllocationRow,
+  effectiveChanges:    DerivedUpdates,
+  masters:             AllMasters,
+  strictnessOverrides?: Partial<Record<string, FieldStrictness>>,
 ): DerivedUpdates {
   const result: DerivedUpdates = {}
 
@@ -51,7 +54,8 @@ export function deriveDiscretionaryFlags(
   // ── ポジション_裁量労働対象（positionBand と jobType に依存）────────────────
   if (triggeredByPosBand || triggeredByJobType) {
     const curFlag = draft.positionDiscretionaryWorkFlag as string | undefined
-    if (curFlag === DISCRETIONARY_YES) {
+    if (curFlag === DISCRETIONARY_YES
+        && resolveFieldStrictness('positionDiscretionaryWorkFlag', strictnessOverrides ?? {}) !== 'free') {
       const posBandEntry = masters.jobLevels.find(e => e.label === newPosBand || e.code === newPosBand)
       const bandAllows = posBandEntry
         ? (posBandEntry.isDiscretionaryTarget === 1
@@ -66,7 +70,8 @@ export function deriveDiscretionaryFlags(
   // ── 裁量労働対象（band と jobType に依存）────────────────────────────────────
   if (triggeredByBand || triggeredByJobType) {
     const curFlag = draft.discretionaryWorkFlag as string | undefined
-    if (curFlag === DISCRETIONARY_YES) {
+    if (curFlag === DISCRETIONARY_YES
+        && resolveFieldStrictness('discretionaryWorkFlag', strictnessOverrides ?? {}) !== 'free') {
       const bandEntry = masters.jobLevels.find(e => e.label === newBand || e.code === newBand)
       const bandAllows = bandEntry
         ? (bandEntry.isDiscretionaryTarget === 1

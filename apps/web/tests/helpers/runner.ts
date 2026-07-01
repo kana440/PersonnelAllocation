@@ -52,10 +52,10 @@ export function runScenarios(suiteName: string, scenarios: Scenario[]) {
         const row      = makeRow(s.row)
         const ms = makeCL(s.cl)
         const orgs     = s.orgs ?? MOCK_ORGS
-        const issues   = validateRow(
-          { row, afterOrganizations: orgs, masters: ms, allocationList: s.allRows ?? [], changes: s.changes },
-          s.strictnessOverrides,
-        )
+        const issues   = validateRow({
+          row, afterOrganizations: orgs, masters: ms, allocationList: s.allRows ?? [], changes: s.changes,
+          strictnessOverrides: s.strictnessOverrides,
+        })
 
         for (const field of s.expect.errorFields ?? []) {
           expect(

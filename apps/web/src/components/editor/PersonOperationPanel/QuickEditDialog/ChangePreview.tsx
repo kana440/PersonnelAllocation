@@ -10,8 +10,9 @@ interface Props {
 
 interface FieldDiff {
   label:  string
-  before: string
-  after:  string
+  before: string  // このセッションでの変更前
+  after:  string  // このセッションでの変更後
+  old:    string  // 旧（インポート基準 = prevXxx）
 }
 
 function rowDiffs(original: AllocationRow, updated: AllocationRow): FieldDiff[] {
@@ -23,8 +24,9 @@ function rowDiffs(original: AllocationRow, updated: AllocationRow): FieldDiff[] 
     })
     .map(f => ({
       label:  ALLOCATION_LIST_LABEL_MAP[f.after as string]?.ja ?? (f.after as string),
-      before: (original[f.after] as string | undefined) ?? '',
-      after:  (updated[f.after]  as string | undefined) ?? '',
+      before: (original[f.after]  as string | undefined) ?? '',
+      after:  (updated[f.after]   as string | undefined) ?? '',
+      old:    (original[f.before] as string | undefined) ?? '',
     }))
 }
 
@@ -64,18 +66,34 @@ export function ChangePreview({ anchorRow, originalList, updatedList }: Props) {
       {/* 対象行の変更 */}
       {anchorDiffs.length > 0 && (
         <div>
-          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-            変更内容（{anchorDiffs.length}件）
+          {/* ヘッダー行 */}
+          <div className="flex items-center gap-2 text-[9px] font-semibold text-gray-300 uppercase tracking-wider mb-1 pr-1">
+            <span className="w-24 flex-shrink-0" />
+            <span className="flex-1">変更前 → 変更後</span>
+            <span className="w-20 flex-shrink-0 text-right border-l border-gray-200 pl-2">旧</span>
           </div>
           <div className="space-y-1">
-            {anchorDiffs.map(d => (
-              <div key={d.label} className="flex items-center gap-2 text-xs min-w-0">
-                <span className="text-gray-500 w-24 flex-shrink-0 truncate">{d.label}</span>
-                <span className="text-gray-400 line-through truncate max-w-[100px]">{d.before || '（空）'}</span>
-                <span className="text-gray-400 flex-shrink-0">→</span>
-                <span className="text-blue-600 font-medium truncate">{d.after || '（空）'}</span>
-              </div>
-            ))}
+            {anchorDiffs.map(d => {
+              const sameAsOld = d.old !== '' && d.after === d.old
+              return (
+                <div key={d.label} className="flex items-center gap-2 text-xs min-w-0">
+                  <span className="text-gray-500 w-24 flex-shrink-0 truncate">{d.label}</span>
+                  {/* 変更前 → 変更後 */}
+                  <span className="flex-1 flex items-center gap-1 min-w-0">
+                    <span className="text-gray-400 line-through truncate">{d.before || '（空）'}</span>
+                    <span className="text-gray-300 flex-shrink-0">→</span>
+                    <span className="text-blue-600 font-medium truncate">{d.after || '（空）'}</span>
+                  </span>
+                  {/* 旧（右列） */}
+                  <span className="w-20 flex-shrink-0 text-right border-l border-gray-200 pl-2 flex items-center justify-end gap-1">
+                    <span className="text-gray-400 truncate text-[10px]">{d.old || '—'}</span>
+                    {sameAsOld && (
+                      <span className="text-green-600 flex-shrink-0" title="旧と同じ">✓</span>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

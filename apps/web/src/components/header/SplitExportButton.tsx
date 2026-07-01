@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { useUserSession } from '../../store/useUserSession'
-import { buildExportBuffer } from '../../infrastructure/excel/engine'
+import { buildExportBuffer, removeOverlay } from '../../infrastructure/excel/engine'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 
 interface AssigneeSummary {
@@ -86,6 +86,8 @@ export function SplitExportButton() {
       setState({ kind: 'done', exportedCount: targets.length })
     } catch (err) {
       setState({ kind: 'error', error: String(err) })
+    } finally {
+      removeOverlay()
     }
   }, [exportableAssignees, selected, allocationList, afterOrganizations, effectiveDate])
 

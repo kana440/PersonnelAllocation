@@ -35,7 +35,7 @@ export function JobTypeDialog({ rowId, onClose }: Props) {
 
   const issues = useMemo(() => {
     if (!effectiveRow) return []
-    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList }, overrides)
+    return validateRow({ row: effectiveRow, afterOrganizations, masters, allocationList, strictnessOverrides: overrides })
       .filter(i => FIELD_KEYS.has(i.field as string))
   }, [effectiveRow, afterOrganizations, masters, allocationList, overrides])
 

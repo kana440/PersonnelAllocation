@@ -103,9 +103,9 @@ export async function importWorkbook(
 
     allocationList = allocResult.rows.map((row, idx) => ({
       ...row,
-      // Excel列（姓カナ・名カナ）が優先。なければふりがなマップから補完
-      lastNameKana:  row.lastNameKana  ?? (row.lastName  ? phoneticMap.get(row.lastName)  : undefined),
-      firstNameKana: row.firstNameKana ?? (row.firstName ? phoneticMap.get(row.firstName) : undefined),
+      // ふりがなは Excel 列定義なし。VBA マクロで付与された rPh 要素から補完する
+      lastNameKana:  row.lastName  ? phoneticMap.get(row.lastName)  : undefined,
+      firstNameKana: row.firstName ? phoneticMap.get(row.firstName) : undefined,
       rowId: idx + 1,
     }))
   } else { sheetsMissing.push(SHEET_ALLOCATION) }

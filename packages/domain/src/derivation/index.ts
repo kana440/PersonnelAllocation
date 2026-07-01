@@ -34,6 +34,9 @@ import { deriveManagerName }         from './managerFields'
 import { derivePromotionSign, derivePayGradeChangeSign, derivePromotionSignFromLevel } from './promotionFields'
 import { deriveOnJobFamilyChange, derivePayGradeFromJobType } from './jobFields'
 import { deriveDiscretionaryFlags } from './discretionaryFields'
+import { deriveUnionFlags }         from './unionFields'
+import type { FieldStrictness }     from '../optionStrictness'
+import { resolveFieldStrictness }   from '../optionStrictness'
 
 export { deriveOrgSubFields, reDeriveOrgSubFieldsForList, isSecondmentOrg, suggestSecondmentOrgCodes } from './orgFields'
 export { deriveManagerName, reDeriveManagerNamesForList } from './managerFields'
@@ -62,20 +65,23 @@ function isRegularEmp(row: AllocationRow, masters: AllMasters): boolean {
  *   positionBand / band / jobType → 裁量労働フラグの自動クリア（「はい」が許容されない場合に「いいえ」へ）
  */
 export function deriveFieldUpdates(
-  changes:        DerivedUpdates,
-  currentRow:     AllocationRow,
-  masters:      AllMasters,
-  allocationList: readonly AllocationRow[] = [],
+  changes:             DerivedUpdates,
+  currentRow:          AllocationRow,
+  masters:           AllMasters,
+  allocationList:      readonly AllocationRow[] = [],
+  strictnessOverrides?: Partial<Record<string, FieldStrictness>>,
 ): DerivedUpdates {
   const draft = { ...currentRow, ...changes } as AllocationRow
   const result: DerivedUpdates = {}
 
   // positionBand → band（社員かつ band が明示変更でない場合に自動連動）
-  // effectiveChanges を正規化することで後続の band 依存ルールがそのまま働く
+  // band が 'free' のときはユーザーが独立制御したいので連動をスキップ
   const effectiveChanges: DerivedUpdates = { ...changes }
   if ('positionBand' in changes && !('band' in changes) && isRegularEmp(draft, masters)) {
-    effectiveChanges.band = changes.positionBand
-    result.band = changes.positionBand  // positionBand → band を呼び出し側にも返す
+    if (resolveFieldStrictness('band', strictnessOverrides ?? {}) !== 'free') {
+      effectiveChanges.band = changes.positionBand
+      result.band = changes.positionBand  // positionBand → band を呼び出し側にも返す
+    }
   }
 
   // departmentCode → 組織サブフィールド群
@@ -139,8 +145,11 @@ export function deriveFieldUpdates(
     }
   }
 
-  // positionBand / band / jobType → 裁量労働フラグの自動クリア
-  Object.assign(result, deriveDiscretionaryFlags(draft, effectiveChanges, masters))
+  // positionBand / band / jobType → 裁量労働フラグの自動クリア（'free' 時はスキップ）
+  Object.assign(result, deriveDiscretionaryFlags(draft, effectiveChanges, masters, strictnessOverrides))
+
+  // positionBand / band → 労働組合員フラグの自動クリア（'free' 時はスキップ）
+  Object.assign(result, deriveUnionFlags(draft, effectiveChanges, masters, strictnessOverrides))
 
   return result
 }

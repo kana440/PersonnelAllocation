@@ -16,6 +16,8 @@ import type { EditPattern }    from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }        from '../CanvasModals'
 import { TreeWindowCanvas }    from '../TreeWindowCanvas'
 import { DisplayFieldCombobox } from '../toolbar/DisplayFieldCombobox'
+import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
+import { COMPACT_GROUP_DEFS }    from '../panel/compactGroupDefs'
 import { OrgViewContext }      from '../OrgViewContext'
 import type { OrgViewContextValue } from '../OrgViewContext'
 import { useOrgDrag }          from '../hooks/useOrgDrag'
@@ -37,6 +39,7 @@ export function OrgOperationView() {
     masters,
   } = useStore()
   const { comparisonMode, toggleComparisonMode, panelViewMode, setPanelViewMode } = useCanvasLayoutStore()
+  const { compactGroupById, setCompactGroupById } = useCanvasDisplayStore()
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
@@ -274,6 +277,20 @@ export function OrgOperationView() {
                 >{label}</button>
               ))}
             </div>
+
+            {/* コンパクトビューのグループ単位 */}
+            {!comparisonMode && panelViewMode === 'band' && (
+              <select
+                value={compactGroupById}
+                onChange={e => setCompactGroupById(e.target.value)}
+                className="text-xs border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 cursor-pointer"
+                title="コンパクトビューのグループ単位"
+              >
+                {COMPACT_GROUP_DEFS.map(d => (
+                  <option key={d.id} value={d.id}>{d.label}別</option>
+                ))}
+              </select>
+            )}
 
             <button
               onClick={toggleComparisonMode}

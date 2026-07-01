@@ -105,3 +105,50 @@ export function getFieldOptions(
   const { valid, invalid } = getGroupedFieldOptions(field, row, masters, currentJobFamily)
   return [...valid, ...invalid]
 }
+
+// ── 昇降格バンド絞り込み ─────────────────────────────────────────────────────
+
+/** 昇降格のステップ幅指定。'1'=1段階・'2'=2段階・'all'=制限なし */
+export type StepMode = '1' | '2' | 'all'
+
+/**
+ * バンド選択肢を昇降格ステップ幅でフィルタする。
+ *
+ * direction が指定された場合はその方向のみ通過（'up'=上位・'down'=下位）。
+ * direction が省略された場合は両方向を許容（PromotionDialog 等の昇降格兼用 UI 向け）。
+ * promotionDemotionWarningLevel が 0 のバンドは候補から除外する。
+ */
+export function filterBandsByStep(
+  options:   string[],
+  baseBand:  string | undefined,
+  masters:   AllMasters,
+  stepMode:  StepMode,
+  direction?: 'up' | 'down',
+): string[] {
+  if (stepMode === 'all' || !baseBand) return options
+  const baseLevel = masters.jobLevels.find(e => e.label === baseBand)?.promotionDemotionWarningLevel ?? 0
+  if (baseLevel === 0) return options
+  const steps = parseInt(stepMode, 10)
+  return options.filter(opt => {
+    const optLevel = masters.jobLevels.find(e => e.label === opt)?.promotionDemotionWarningLevel ?? 0
+    if (optLevel === 0) return false
+    const diff = optLevel - baseLevel
+    if (direction === 'up')   return diff >= 1 && diff <= steps
+    if (direction === 'down') return diff >= -steps && diff <= -1
+    return Math.abs(diff) >= 1 && Math.abs(diff) <= steps
+  })
+}
+
+/**
+ * 指定行の positionBand フィールドに対する昇降格候補バンドを返す。
+ * FIELD_CONSTRAINTS の選択肢生成 + ステップフィルタを合成した AI / 操作 UI 向けヘルパー。
+ */
+export function getValidPositionBands(
+  row:       AllocationRow,
+  masters:   AllMasters,
+  stepMode:  StepMode,
+  direction?: 'up' | 'down',
+): string[] {
+  const { valid } = getGroupedFieldOptions('positionBand', row, masters)
+  return filterBandsByStep(valid, row.positionBand as string | undefined, masters, stepMode, direction)
+}

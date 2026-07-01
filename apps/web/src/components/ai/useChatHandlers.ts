@@ -7,7 +7,7 @@ import { ChatSession, buildSystemPrompt, type SessionState } from '../../applica
 import { mockApiService } from '../../infrastructure/ai/chatServiceFactory'
 import type { AgentRunner, SkillToolEntry } from '../../infrastructure/ai/agentRunner'
 import type { InMemoryTraceObserver } from '../../infrastructure/ai/aiTrace'
-import { importFromFile, buildExportBuffer } from '../../infrastructure/excel/engine'
+import { importFromFile, buildExportBuffer, removeOverlay } from '../../infrastructure/excel/engine'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 import { buildExportChangeSummary } from '../../infrastructure/excel/exportSummary'
 import type { ChatWidget, ClassificationWidgetData, ConversationItem, ConfirmResult, WidgetCallbacks } from '../../application/aiTypes'
@@ -349,6 +349,8 @@ export function useChatHandlers({
         ? 'エクスポートをキャンセルしました。'
         : `エクスポートエラーが発生しました: ${String(e)}`
       updateMessage(id, { isLoading: false, text })
+    } finally {
+      removeOverlay()
     }
     setPhase('idle')
   }, [addAILoading, updateMessage, setPhase, store])
