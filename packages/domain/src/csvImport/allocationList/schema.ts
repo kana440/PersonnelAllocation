@@ -11,6 +11,8 @@ export const AllocationListSchema = z.object({
   employeeNumber:                    z.string().optional(),
   lastName:                          z.string().optional(),
   firstName:                         z.string().optional(),
+  lastNameKana:                      z.string().optional(),
+  firstNameKana:                     z.string().optional(),
   transferReason:                    z.string().optional(),
   memo:                              z.string().optional(),
   promotionSign:                     flagField,

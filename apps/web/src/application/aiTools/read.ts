@@ -71,7 +71,25 @@ export function createReadMethods(service: HRApplicationService) {
       const name    = [primary.lastName, primary.firstName].filter(Boolean).join(' ')
 
       // Identity filters (partial match)
-      if (query.name           && !name.includes(query.name))                                    continue
+      if (query.name) {
+        // ひらがな→カタカナ統一 + スペース除去で正規化
+        const norm = (s: string) =>
+          s.replace(/\s+/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+
+        const q = norm(query.name)
+
+        // 検索対象: 姓名結合・姓のみ・名のみ・読み（カナ）
+        const kana = [primary.lastNameKana, primary.firstNameKana].filter(Boolean).join('')
+        const matched =
+          norm(name).includes(q) ||                          // 姓名（漢字）スペースなし
+          norm(primary.lastName  ?? '').includes(q) ||       // 姓のみ
+          norm(primary.firstName ?? '').includes(q) ||       // 名のみ
+          norm(kana).includes(q) ||                          // 読み全体
+          norm(primary.lastNameKana  ?? '').includes(q) ||   // 姓カナのみ
+          norm(primary.firstNameKana ?? '').includes(q)      // 名カナのみ
+
+        if (!matched) continue
+      }
       if (query.userId         && !(primary.userId         ?? '').includes(query.userId))         continue
       if (query.groupEmployeeId && !(primary.groupEmployeeId ?? '').includes(query.groupEmployeeId)) continue
       if (query.employeeNumber  && !(primary.employeeNumber  ?? '').includes(query.employeeNumber))  continue

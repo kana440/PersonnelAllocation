@@ -13,6 +13,8 @@ export const ALLOCATION_LIST_FIELDS: FieldDef[] = [
   { key: 'employeeNumber',                   header: '社員番号',                     en: 'Employee Number',                        ja: '社員番号' },
   { key: 'lastName',                         header: '姓',                           en: 'Last Name',                              ja: '姓' },
   { key: 'firstName',                        header: '名',                           en: 'First Name',                             ja: '名' },
+  { key: 'lastNameKana',                     header: '姓カナ',                       en: 'Last Name Kana',                         ja: '姓カナ' },
+  { key: 'firstNameKana',                    header: '名カナ',                       en: 'First Name Kana',                        ja: '名カナ' },
   { key: 'transferReason',                   header: '申請区分(異動事由)',            en: 'Transfer Reason',                        ja: '申請区分(異動事由)' },
   { key: 'memo',                             header: 'メモ',                         en: 'Memo',                                   ja: 'メモ' },
   { key: 'promotionSign',                    header: '昇降格サイン',                 en: 'Promotion/Demotion Sign',                ja: '昇降格サイン' },

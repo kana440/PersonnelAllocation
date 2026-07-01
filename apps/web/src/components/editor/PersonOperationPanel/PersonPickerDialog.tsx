@@ -35,8 +35,12 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
   function handleQueryChange(value: string) {
     setQuery(value)
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setDebouncedQuery(value.trim().toLowerCase()), 150)
+    timerRef.current = setTimeout(() => setDebouncedQuery(value.trim()), 150)
   }
+
+  // ひらがな→カタカナ統一 + スペース除去で正規化（かな検索・スペースなし入力に対応）
+  const norm = (s: string) =>
+    s.replace(/\s+/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase()
 
   const orgByCode = useMemo(
     () => new Map(afterOrganizations.flatMap(o => o.externalCode ? [[o.externalCode, o]] : [])),
@@ -90,13 +94,23 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
     }
 
     if (debouncedQuery) {
-      const q = debouncedQuery
-      rows = rows.filter(r =>
-        [r.lastName, r.firstName].filter(Boolean).join('').toLowerCase().includes(q) ||
-        (r.groupEmployeeId?.toLowerCase() ?? '').includes(q) ||
-        (r.employeeNumber?.toLowerCase()  ?? '').includes(q) ||
-        (r.positionCode?.toLowerCase()    ?? '').includes(q)
-      )
+      // スペース・カンマ・読点で分割してOR検索（空トークンは除去）
+      const tokens = debouncedQuery.split(/[\s,、]+/).map(norm).filter(Boolean)
+      rows = rows.filter(r => {
+        const targets = [
+          norm([r.lastName, r.firstName].filter(Boolean).join(' ')),
+          norm([r.lastName, r.firstName].filter(Boolean).join('')),
+          norm(r.lastName          ?? ''),
+          norm(r.firstName         ?? ''),
+          norm([r.lastNameKana, r.firstNameKana].filter(Boolean).join('')),
+          norm(r.lastNameKana      ?? ''),
+          norm(r.firstNameKana     ?? ''),
+          r.groupEmployeeId?.toLowerCase() ?? '',
+          r.employeeNumber?.toLowerCase()  ?? '',
+          r.positionCode?.toLowerCase()    ?? '',
+        ]
+        return tokens.some(token => targets.some(target => target.includes(token)))
+      })
     }
 
     return rows.slice(0, 50)
@@ -107,6 +121,7 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
       <div
         className="bg-white rounded-xl shadow-xl w-[520px] max-h-[600px] flex flex-col"
         onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
       >
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
           <span className="text-sm font-semibold text-gray-700">人物を検索</span>
@@ -117,7 +132,7 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
           <input
             type="text"
             autoFocus
-            placeholder="氏名・社員番号・グループ社員ID・ポジションIDで検索"
+            placeholder="氏名・ふりがな・社員番号で検索（スペース・カンマでOR）"
             value={query}
             onChange={e => handleQueryChange(e.target.value)}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"

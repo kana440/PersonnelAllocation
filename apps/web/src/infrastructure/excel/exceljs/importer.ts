@@ -10,6 +10,7 @@ import { tick }                   from '../types'
 import { parseOrgMasterRaw, orgMasterToEntities } from '../shared/orgMasterParser'
 import { parseAllocationSheet }   from '../shared/allocationParser'
 import { parseMastersFromSheet, parseCompanySheet } from '../../masters/parser'
+import { extractPhoneticMap }     from '../shared/phoneticExtractor'
 
 // ExcelJS セル値 → unknown（number/boolean 型を保持）
 function rawCellValue(v: ExcelJS.CellValue | undefined): unknown {
@@ -38,6 +39,7 @@ export async function importWorkbook(
   wb: ExcelJS.Workbook,
   fallbackCompanyName = 'インポートデータ',
   onProgress?: ProgressCallback,
+  rawBuffer?: ArrayBuffer,
 ): Promise<ImportedWorkbookResult> {
   const report = async (msg: string) => { onProgress?.(msg); await tick() }
 
@@ -95,7 +97,17 @@ export async function importWorkbook(
     const allocResult = parseAllocationSheet(worksheetToRaw(wb.getWorksheet(SHEET_ALLOCATION)!))
     columnWarnings.push(...allocResult.columnWarnings)
     await report(`要員配置リストを処理中... (${allocResult.rows.length} 行)`)
-    allocationList = allocResult.rows.map((row, idx) => ({ ...row, rowId: idx + 1 }))
+
+    // ふりがなマップを構築（VBAマクロで付与済みの場合に取得できる）
+    const phoneticMap = rawBuffer ? await extractPhoneticMap(rawBuffer) : new Map<string, string>()
+
+    allocationList = allocResult.rows.map((row, idx) => ({
+      ...row,
+      // Excel列（姓カナ・名カナ）が優先。なければふりがなマップから補完
+      lastNameKana:  row.lastNameKana  ?? (row.lastName  ? phoneticMap.get(row.lastName)  : undefined),
+      firstNameKana: row.firstNameKana ?? (row.firstName ? phoneticMap.get(row.firstName) : undefined),
+      rowId: idx + 1,
+    }))
   } else { sheetsMissing.push(SHEET_ALLOCATION) }
 
   return { masters, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, oldOrgEntries, allocationRowCount: allocationList.length, masterCompatibilityWarnings, columnWarnings }
@@ -115,7 +127,7 @@ export function importFromFile(file: File, onProgress?: ProgressCallback): Promi
         const wb = new ExcelJS.Workbook()
         await wb.xlsx.load(data)
         const companyName = file.name.replace(/\.[^.]+$/, '').replace(/[_\-]?要員配置.*$/i, '').trim() || 'インポートデータ'
-        resolve(await importWorkbook(wb, companyName, onProgress))
+        resolve(await importWorkbook(wb, companyName, onProgress, data))
       } catch (err) { reject(err) }
     }
     reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'))
@@ -137,5 +149,5 @@ export async function importFromUrl(url: string, onProgress?: ProgressCallback):
   setLastWorkbook(buffer, url.split('/').pop() ?? 'import.xlsx')
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer)
-  return importWorkbook(wb, undefined, onProgress)
+  return importWorkbook(wb, undefined, onProgress, buffer)
 }
