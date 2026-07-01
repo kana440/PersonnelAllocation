@@ -5,7 +5,9 @@ import { appService }             from '../../../../application/HRApplicationSer
 import { MoveRowsToOrgOperation } from '@personnel/domain/commands/handlers/moveRowsToOrg'
 import { buildCandidates }        from './helpers'
 import type { CandidateEntry }    from './helpers'
-import { matchesSearch }          from '../../../../utils/normalizeSearch'
+// ひらがな→カタカナ + スペース除去 + NFKC 正規化（スペースなし入力・かな検索に対応）
+const norm = (s: string) =>
+  s.normalize('NFKC').replace(/\s+/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase()
 
 interface Props {
   orgCode: string
@@ -28,12 +30,24 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
   const filtered = useMemo(() => {
     const q = query.trim()
     if (!q) return candidates
-    return candidates.filter(c =>
-      matchesSearch(c.name,         q) ||
-      matchesSearch(c.currentPath,  q) ||
-      matchesSearch(c.beforePath,   q) ||
-      matchesSearch(c.positionCode, q),
-    )
+    // スペース・カンマ（半角・全角）・読点で分割してOR検索
+    const tokens = q.split(/[\s,，、]+/).map(norm).filter(Boolean)
+    return candidates.filter(c => {
+      const row = c.row
+      const targets = [
+        norm(c.name),
+        norm([row.lastName, row.firstName].filter(Boolean).join('')),
+        norm(row.lastName        ?? ''),
+        norm(row.firstName       ?? ''),
+        norm([row.lastNameKana, row.firstNameKana].filter(Boolean).join('')),
+        norm(row.lastNameKana    ?? ''),
+        norm(row.firstNameKana   ?? ''),
+        norm(c.currentPath),
+        norm(c.beforePath),
+        norm(c.positionCode),
+      ]
+      return tokens.some(token => targets.some(target => target.includes(token)))
+    })
   }, [candidates, query])
 
   const toggle = useCallback((rowId: number) => {
@@ -69,11 +83,13 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
   const allChecked = filtered.length > 0 && filtered.every(c => selectedIds.has(c.row.rowId))
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose} onMouseDown={e => { if (e.target === e.currentTarget) e.stopPropagation() }}>
       <div
         className="bg-white rounded-lg shadow-xl flex flex-col"
         style={{ width: 860, maxHeight: '80vh' }}
+        data-window="member-move-modal"
         onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
       >
         {/* ── ヘッダー ──────────────────────────────────────────── */}
         <div className="px-5 py-3 border-b flex items-center justify-between flex-shrink-0">
@@ -88,7 +104,7 @@ export function MemberMoveModal({ orgCode, orgName, onClose }: Props) {
         <div className="px-5 py-2.5 border-b flex-shrink-0 flex items-center gap-2">
           <input
             type="text"
-            placeholder="氏名・組織名・ポジション番号で検索..."
+            placeholder="氏名・ふりがな・組織名・ポジション番号で検索（スペース・カンマでOR）..."
             value={query}
             onChange={e => setQuery(e.target.value)}
             className="flex-1 text-sm border border-gray-300 rounded px-2.5 py-1 outline-none focus:border-blue-400"

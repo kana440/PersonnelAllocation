@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
 
@@ -94,8 +95,8 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
     }
 
     if (debouncedQuery) {
-      // スペース・カンマ・読点で分割してOR検索（空トークンは除去）
-      const tokens = debouncedQuery.split(/[\s,、]+/).map(norm).filter(Boolean)
+      // スペース・カンマ（半角・全角）・読点で分割してOR検索（空トークンは除去）
+      const tokens = debouncedQuery.split(/[\s,，、]+/).map(norm).filter(Boolean)
       rows = rows.filter(r => {
         const targets = [
           norm([r.lastName, r.firstName].filter(Boolean).join(' ')),
@@ -116,8 +117,11 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
     return rows.slice(0, 50)
   }, [allocationList, debouncedQuery, crossOrg, scopedOrgCodes])
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+  // createPortal で document.body 直下に描画し、キャンバスの DOM ツリー外に出す。
+  // これによりキャンバスの mousedown ハンドラ（ラバーバンド選択）が
+  // モーダル内のマウス操作に干渉しなくなる。
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
       <div
         className="bg-white rounded-xl shadow-xl w-[520px] max-h-[600px] flex flex-col"
         onClick={e => e.stopPropagation()}
@@ -212,6 +216,7 @@ export function PersonPickerDialog({ defaultOrgCode, allocationList, afterOrgani
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
