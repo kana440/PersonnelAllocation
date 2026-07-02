@@ -44,6 +44,11 @@ export function wasSecondedIn(row: AllocationRow): boolean {
   return !!(row.prevSecondmentFromCompany as string | undefined)
 }
 
+/** このセッションで新規追加された行かどうか（インポート行は必ず prevEmploymentType が入る） */
+export function isNewRow(row: AllocationRow): boolean {
+  return !(row.prevEmploymentType as string | undefined)
+}
+
 /** 前の雇用タイプに「出向受入」が含まれるかどうか */
 export function prevWasSecondmentIn(row: AllocationRow, masters: AllMasters): boolean {
   const prevEt = row.prevEmploymentType as string | undefined

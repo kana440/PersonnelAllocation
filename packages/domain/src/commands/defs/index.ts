@@ -68,7 +68,7 @@ export {
 export { leaveOfAbsenceDef, leaveOfAbsenceCancelDef, returnFromLeaveDef, employmentTransferDef, noChangeDef, noChangeCancelDef } from './personDefs'
 
 // ── 上司変更・ポジション追加 ─────────────────────────────────────────────────
-export { managerChangeDef, addEmptyPositionDef } from './positionAddDef'
+export { managerChangeDef, addEmptyPositionDef, addEmptyPositionCancelDef } from './positionAddDef'
 
 // ── 部下引継・空Pos移動 ───────────────────────────────────────────────────────
 export { subordinateHandoffDef, moveToVacantPositionDef } from './positionMoveDefs'

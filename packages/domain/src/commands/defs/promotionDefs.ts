@@ -185,11 +185,7 @@ export const promotionDef: EditOperation = {
 
   description: 'ポジションバンドを上げる昇格を記入します。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから新規採番または既存空きポジションへの移動を選択してください）。',
 
-  availableFor: (row, masters) => {
-    const emp = masters.employmentTypes.find(e => e.label === row.employmentType)
-    if (emp && !emp.isRegularEmployee) return unavailable('正社員のみ昇格できます')
-    return AVAILABLE
-  },
+  availableFor: () => AVAILABLE,
 
   // 簡易モード: positionBand と役職名だけ入力、残りは自動導出
   quickInputs: [
@@ -227,11 +223,13 @@ export const promotionDef: EditOperation = {
   onFieldChange: {
     positionBand: (newBand, ctx, currentValues) => {
       const matrix = ctx.masters.promotionMatrix ?? []
-      if (!matrix.length) return {}
+      // band を positionBand と明示的に同期（isRegularEmp チェックをバイパス）
+      const base: Partial<AllocationRow> = { band: newBand }
+      if (!matrix.length) return { setValues: base }
       const currentJobClass = currentValues?._currentJobClass as string | undefined
       const suggestions = suggestOfficialPositions(newBand, currentJobClass, matrix)
-      if (!suggestions.length) return {}
-      return { setValues: { officialPositionCode: suggestions[0] } }
+      if (!suggestions.length) return { setValues: base }
+      return { setValues: { ...base, officialPositionCode: suggestions[0] } }
     },
     officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
   },
@@ -300,11 +298,7 @@ export const demotionDef: EditOperation = {
 
   description: 'ポジションバンドを下げる降格を記入します。降格理由の入力が必須です。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから対応してください）。',
 
-  availableFor: (row, masters) => {
-    const emp = masters.employmentTypes.find(e => e.label === row.employmentType)
-    if (emp && !emp.isRegularEmployee) return unavailable('正社員のみ降格できます')
-    return AVAILABLE
-  },
+  availableFor: () => AVAILABLE,
 
   // 簡易モード: positionBand・降格理由・役職名だけ入力（降格理由は必須のため含める）
   quickInputs: [
@@ -344,11 +338,13 @@ export const demotionDef: EditOperation = {
   onFieldChange: {
     positionBand: (newBand, ctx, currentValues) => {
       const matrix = ctx.masters.promotionMatrix ?? []
-      if (!matrix.length) return {}
+      // band を positionBand と明示的に同期（isRegularEmp チェックをバイパス）
+      const base: Partial<AllocationRow> = { band: newBand }
+      if (!matrix.length) return { setValues: base }
       const currentJobClass = currentValues?._currentJobClass as string | undefined
       const suggestions = suggestOfficialPositions(newBand, currentJobClass, matrix)
-      if (!suggestions.length) return {}
-      return { setValues: { officialPositionCode: suggestions[0] } }
+      if (!suggestions.length) return { setValues: base }
+      return { setValues: { ...base, officialPositionCode: suggestions[0] } }
     },
     officialPositionCode: (value) => ({ suggestFieldValue: { field: 'localJobTitle', value } }),
   },

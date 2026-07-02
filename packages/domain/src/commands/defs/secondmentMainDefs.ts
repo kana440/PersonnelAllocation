@@ -5,7 +5,8 @@ import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
-import { isRegularEmployee, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany, findSecondmentOrgCode, findReturnOrgCode } from '../helpers'
+import { isRegularEmployee, wasSecondedIn, isMainAssignment, prevWasSecondmentIn, isSFIntegratedCompany, findSecondmentOrgCode, findReturnOrgCode, isNewRow } from '../helpers'
+import { vacatePosition, getDirectSubordinates } from './positionVacant'
 import type { AllMasters } from '../../masters/aggregate'
 import { TR } from '../../transferReasonLabels'
 
@@ -187,7 +188,19 @@ export const secondmentInNewDef: EditOperation = {
   group: 'secondmentMain',
   badge: 'secondment',
 
-  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => isNewRow(row) && (row.transferReason as string | undefined) === TR.SECONDMENT_IN,
+    isActiveThisSession: (row) => isNewRow(row) && (row.transferReason as string | undefined) === TR.SECONDMENT_IN,
+  },
+
+  availableFor(row) {
+    if (!isNewRow(row))
+      return unavailable('新規追加された行のみ対象です（インポート済み行は出向受入解除を使用してください）')
+    if ((row.transferReason as string | undefined) !== TR.SECONDMENT_IN)
+      return unavailable('本務出向受入として追加された行のみ対象です')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'userId',                       required: false, picker: 'person' },
@@ -464,6 +477,8 @@ export const secondmentInCancelDef: EditOperation = {
   description: 'このセッションで追加した出向受入を取消します。下記の情報が削除されます。',
   suppressSideEffectWarning: true,
 
+  operationRole: { kind: 'lockCancel', of: 'SecondmentInNew' },
+
   availableFor(row) {
     if (!isMainAssignment(row))        return unavailable('本務行のみ対象です（兼務行には設定できません）')
     if (!row.secondmentFromCompany)    return unavailable('出向受入が設定されていません')
@@ -497,8 +512,15 @@ export const secondmentInCancelDef: EditOperation = {
   },
 
   onSubmit(ctx, rowId) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${personName(row)}` }
+    const row  = ctx.allocationList.find(r => r.rowId === rowId)!
+    const name = personName(row)
+    if (getDirectSubordinates(row, ctx.allocationList).length > 0) {
+      return {
+        updatedList: ctx.allocationList.map(r => r.rowId === rowId ? vacatePosition(r) : r),
+        label: `本務出向受入取消（空席化）: ${name}`,
+      }
+    }
+    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${name}` }
   },
 }
 

@@ -5,7 +5,8 @@ import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { nextRowId } from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
-import { isMainAssignment } from '../helpers'
+import { isMainAssignment, isNewRow } from '../helpers'
+import { vacatePosition, getDirectSubordinates } from './positionVacant'
 import { TR } from '../../transferReasonLabels'
 
 function inputName(values: Partial<AllocationRow>): string {
@@ -100,8 +101,17 @@ export const concurrentAddNewDef: EditOperation = {
   group:      'position',
   badge: 'concurrent',
 
-  // 組織パネルボタンからのみ起動。行メニューには表示しない
-  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => isNewRow(row) && (row.transferReason as string | undefined) === TR.CONCURRENT,
+    isActiveThisSession: (row) => isNewRow(row) && (row.transferReason as string | undefined) === TR.CONCURRENT,
+  },
+
+  availableFor(row) {
+    if (!isNewRow(row)) return unavailable('新規追加された行のみ対象です')
+    if ((row.transferReason as string | undefined) !== TR.CONCURRENT) return unavailable('社内兼務追加（新規）として作成された行のみ対象です')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',   required: false },
@@ -124,6 +134,7 @@ export const concurrentAddNewDef: EditOperation = {
   // 組織ボタン起動時: row.departmentCode に初期組織コードが入ってくる
   onOpen: (row) => ({
     departmentCode: row.departmentCode,
+    transferReason: (row.transferReason as string | undefined) ?? TR.CONCURRENT,
   }),
 
   onValidate(_ctx, _rowId, values) {
@@ -169,6 +180,8 @@ export const concurrentAddCancelDef: EditOperation = {
   description: 'このセッションで追加した社内兼務を取消します。下記の情報が削除されます。',
   suppressSideEffectWarning: true,
 
+  operationRole: { kind: 'lockCancel', of: 'ConcurrentAddNew' },
+
   // prevConcurrentType が空 = このセッションで追加した行
   availableFor(row) {
     if (row.concurrentType !== '兼務')  return unavailable('兼務行のみ対象です')
@@ -207,8 +220,14 @@ export const concurrentAddCancelDef: EditOperation = {
   },
 
   onSubmit(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const row  = ctx.allocationList.find(r => r.rowId === rowId)!
     const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
+    if (getDirectSubordinates(row, ctx.allocationList).length > 0) {
+      return {
+        updatedList: ctx.allocationList.map(r => r.rowId === rowId ? vacatePosition(r) : r),
+        label: `社内兼務追加取消（空席化）: ${name}`,
+      }
+    }
     return {
       updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
       label: `社内兼務追加取消: ${name}`,

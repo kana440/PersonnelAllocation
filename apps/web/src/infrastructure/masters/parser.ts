@@ -59,8 +59,8 @@ const ANCHORS = {
   concurrentReasons:        '兼務理由',
   demotionReasons:          '降格理由',
   concurrentType:           '本務兼務区分',
-  // 昇降格マトリクス（BT列〜BW列）: 列ヘッダーが '職務レベル'（'職務レベルCD' とは別）
-  promotionMatrix:          '職務レベル',
+  // 昇降格マトリクス（BT列〜BW列）: 列ヘッダーが '職務レベル(主要)'（'職務レベルCD' とは別）
+  promotionMatrix:          '職務レベル(主要)',
 } as const
 
 type AnchorKey = keyof typeof ANCHORS
@@ -94,7 +94,7 @@ function dataRowIndicesAt(raw: unknown[][], col: number): number[] {
 }
 
 function parsePromotionMatrix(raw: unknown[][], col: number): PromotionMatrixEntry[] {
-  // col = '職務レベル' 列（BT）。右に役職(BU)・M職P職(BV)・昇降格ワーニング用チェック(BW) が続く
+  // col = '職務レベル(主要)' 列（BT）。右に役職(BU)・M職P職(BV)・昇降格ワーニング用チェック(BW) が続く
   return dataRowIndicesAt(raw, col).map(r => ({
     jobLevel:         cellStr(raw, r, col),
     officialPosition: cellStr(raw, r, col + 1),
@@ -249,7 +249,7 @@ export function parseCompanySheet(raw: unknown[][]): CompanyEntry[] {
   const rowCount = raw.length
   if (rowCount === 0) return []
 
-  let cCode = 0, cName = 1, cDiscretionary = 2
+  let cCode = 0, cName = 1, cDiscretionary = 2, cSFIntegrated = -1
   let dataStartRow = 1
 
   const colCount = (raw[0]?.length ?? 0)
@@ -258,9 +258,10 @@ export function parseCompanySheet(raw: unknown[][]): CompanyEntry[] {
     for (let c = 0; c < Math.min(colCount, 20); c++) {
       const h = cellStr(raw, r, c).replace(/\s/g, '')
       if (!h) continue
-      if      (/会社コード|会社CD/.test(h)) { cCode = c; foundCode = true }
-      else if (/会社名/.test(h))            { cName = c }
-      else if (/裁量対象/.test(h))          { cDiscretionary = c }
+      if      (/会社コード|会社CD/.test(h))  { cCode = c; foundCode = true }
+      else if (/出向先会社$|会社名/.test(h)) { cName = c }  // 「出向先会社CD」は先にコード列で拾うため $ で区別
+      else if (/裁量対象/.test(h))           { cDiscretionary = c }
+      else if (/SF導入/.test(h))             { cSFIntegrated = c }
     }
     if (foundCode) { dataStartRow = r + 1; break }
   }
@@ -273,6 +274,7 @@ export function parseCompanySheet(raw: unknown[][]): CompanyEntry[] {
       code,
       label:                 cellStr(raw, r, cName),
       isDiscretionaryTarget: cellBool(raw, r, cDiscretionary),
+      isSFIntegrated:        cSFIntegrated >= 0 ? cellBool(raw, r, cSFIntegrated) : undefined,
     })
   }
   return entries

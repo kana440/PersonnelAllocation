@@ -5,8 +5,9 @@ import { ok, fail }           from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import { nextRowId }          from '../../allocationRow'
 import { deriveOrgSubFields } from '../orgHelpers'
-import { getDescendantPositionCodes } from '../helpers'
+import { getDescendantPositionCodes, isNewRow } from '../helpers'
 import { deriveManagerName }  from '../../rules/derive'
+import { TR } from '../../transferReasonLabels'
 
 function personName(row: AllocationRow): string {
   return [row.lastName, row.firstName].filter(Boolean).join(' ') || `rowId:${row.rowId}`
@@ -81,8 +82,17 @@ export const addEmptyPositionDef: EditOperation = {
 
   suppressSideEffectWarning: true,
 
-  // 組織パネルボタンからのみ起動。行メニューには表示しない
-  availableFor: () => unavailable('組織パネルボタンからのみ起動できます'),
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => isNewRow(row) && (row.transferReason as string | undefined) === TR.NEW_POSITION,
+    isActiveThisSession: (row) => isNewRow(row) && (row.transferReason as string | undefined) === TR.NEW_POSITION,
+  },
+
+  availableFor(row) {
+    if (!isNewRow(row)) return unavailable('新規追加された行のみ対象です')
+    if ((row.transferReason as string | undefined) !== TR.NEW_POSITION) return unavailable('ポジション追加として作成された行のみ対象です')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'positionCode',   required: false, label: 'ポジション番号（自動採番・変更可）' },
@@ -92,10 +102,10 @@ export const addEmptyPositionDef: EditOperation = {
 
   // row.departmentCode に追加先組織コードが入ってくる（NewRowOperationModal の syntheticRow）
   onOpen: (row, ctx) => ({
-    positionCode:   `_pos_${nextRowId(ctx.allocationList)}`,
+    positionCode:   (row.positionCode as string | undefined) ?? `_pos_${nextRowId(ctx.allocationList)}`,
     departmentCode: row.departmentCode,
-    transferReason: undefined,
-    memo:           undefined,
+    transferReason: (row.transferReason as string | undefined) ?? TR.NEW_POSITION,
+    memo:           row.memo as string | undefined,
   }),
 
   onValidate(_ctx, _rowId, _values) {
@@ -125,4 +135,51 @@ export const addEmptyPositionDef: EditOperation = {
   },
 }
 
-export const DEFS: EditOperation[] = [managerChangeDef, addEmptyPositionDef]
+// ── ポジション追加取消（セッション内追加分） ──────────────────────────────────
+
+export const addEmptyPositionCancelDef: EditOperation = {
+  id:    'AddEmptyPositionCancel',
+  label: 'ポジション追加取消',
+  group: 'position',
+  badge: 'negative',
+  description: 'このセッションで追加した空席ポジションを削除します。',
+  suppressSideEffectWarning: true,
+
+  operationRole: { kind: 'lockCancel', of: 'AddEmptyPosition' },
+
+  availableFor(row) {
+    if (!isNewRow(row)) return unavailable('新規追加された行のみ対象です')
+    if ((row.transferReason as string | undefined) !== TR.NEW_POSITION) return unavailable('ポジション追加として作成された行のみ対象です')
+    return AVAILABLE
+  },
+
+  inputs: [
+    { field: 'positionCode',   required: false, readOnly: true, label: 'ポジション番号' },
+    { field: 'departmentCode', required: false, readOnly: true, label: '組織コード' },
+    { field: 'transferReason', required: false, readOnly: true },
+    { field: 'memo',           required: false, readOnly: true },
+  ],
+
+  onOpen: (row) => ({
+    positionCode:   row.positionCode,
+    departmentCode: row.departmentCode,
+    transferReason: row.transferReason,
+    memo:           row.memo,
+  }),
+
+  onValidate(ctx, rowId) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  onSubmit(ctx, rowId) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    const deptCode = (row.departmentCode as string | undefined) ?? ''
+    return {
+      updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
+      label: `ポジション追加取消: ${deptCode}`,
+    }
+  },
+}
+
+export const DEFS: EditOperation[] = [managerChangeDef, addEmptyPositionDef, addEmptyPositionCancelDef]
