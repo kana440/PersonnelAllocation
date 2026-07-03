@@ -78,9 +78,11 @@ interface CanvasLayoutState {
   scrollToOrgId:      string | null
   requestScrollToOrg: (orgId: string | null) => void
 
-  addPanel:           (orgId: string, options?: { childrenMode?: ChildrenMode; collapsedOrgIds?: string[] }) => void
+  addPanel:       (orgId: string, options?: { childrenMode?: ChildrenMode; collapsedOrgIds?: string[] }) => void
+  /** 複数 org を一括でパネル追加（1回の set() でまとめる）。既存パネルはスキップ */
+  addPanelsBatch: (orgIds: string[]) => void
   /** 全組織を一括でパネルとして設定し、メンバー組織の LCA フィルタも同時確定する（Excel ロード時） */
-  initPanelsForOrgs:  (orgIds: string[], memberOrgIds?: string[], orgById?: Map<string, Organization>) => void
+  initPanelsForOrgs: (orgIds: string[], memberOrgIds?: string[], orgById?: Map<string, Organization>) => void
   setCollapsedOrgIds: (panelId: string, ids: string[]) => void
   removePanel:        (panelId: string) => void
   removeOrgPanels:    (orgIds: readonly string[]) => void
@@ -193,7 +195,6 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
       requestAnimationFrame(() => {
         scheduled = false
         if (pending.size === 0) return
-        console.log(`[PERF] setPanelHeight batch flush: ${pending.size} panels`)
         set(s => {
           let changed = false
           let next = s.panelHeights
@@ -219,6 +220,22 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     }
     const pos = defaultPosition(get().panels)
     set(s => ({ panels: [...s.panels, makePanelDef(orgId, pos, true, options?.childrenMode, options?.collapsedOrgIds)] }))
+  },
+
+  addPanelsBatch: (orgIds) => {
+    set(s => {
+      const existingOrgIds = new Set(s.panels.map(p => p.orgId))
+      const toAdd = orgIds.filter(id => !existingOrgIds.has(id))
+      if (toAdd.length === 0) return s
+      const accumulated = [...s.panels]
+      const newPanels = toAdd.map(id => {
+        const pos = defaultPosition(accumulated)
+        const p = makePanelDef(id, pos)
+        accumulated.push(p)
+        return p
+      })
+      return { panels: [...s.panels, ...newPanels] }
+    })
   },
 
   initPanelsForOrgs: (orgIds, memberOrgIds?, orgById?) => {

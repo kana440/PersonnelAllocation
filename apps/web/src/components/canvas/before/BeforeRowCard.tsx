@@ -20,7 +20,7 @@ export function BeforeRowCard({ row, orgId, depth = 0 }: Props) {
   const masters           = useStore(s => s.masters)
   const selectedCardRowId = useStore(s => s.selectedCardRowId)
   const selectCard        = useStore(s => s.selectCard)
-  const { requestScrollToRow } = useCanvasLayoutStore()
+  const requestScrollToRow = useCanvasLayoutStore(s => s.requestScrollToRow)
 
   const person  = persons.find((p: Person) => p.sfPersonId === row.userId)
   const isVacant = !person

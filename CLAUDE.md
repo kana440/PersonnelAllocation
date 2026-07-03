@@ -410,6 +410,16 @@ canvas/core/
 
 **`OrgTreeConfig`** パターン: ツリーの「中身」（カード描写・ヘッダー色・ドラッグ有無）は `OrgTreeConfig` オブジェクトとしてクロージャで渡す。新しいビューコンテキストを追加するとき、`OrgTreeNode` 本体は変更しない。
 
+**Zustand ストア購読パターン（キャンバス必須）**: `useStore()` / `useCanvasLayoutStore()` をセレクタなしで呼ぶと、ストア内の**任意の値**が変わるたびにコンポーネントが再レンダーされる。キャンバスは `TreeWindow`・`BandMatrixPanel` 等が 2000 インスタンスになるため、`canvasZoom`・`panelHeights`（ResizeObserver で毎フレーム更新）で全インスタンスが再レンダーされ深刻なフリーズを引き起こす。
+
+| 用途 | 正しい書き方 |
+|---|---|
+| 複数フィールドを subscribe | `useCanvasLayoutStore(useShallow(s => ({ a: s.a, b: s.b })))` |
+| 単一フィールドのみ | `useCanvasLayoutStore(s => s.fieldName)` |
+| イベントハンドラ内でのみ読む（render に不要） | `useCanvasLayoutStore.getState().fieldName` |
+
+`canvasZoom` はドラッグ計算にのみ必要で render に影響しないため `getState()` で取得する（`OrgTreePanel.tsx` 参照）。
+
 **キャンバスの組織 Map ルール**: キャンバス内では `organization.find()` による線形検索を書かない。`useMemo` で `Map<string, Organization>` と `Map<string, Organization[]>`（childrenByOrgId）を構築して O(1) ルックアップを使う。
 
 ```typescript
@@ -420,6 +430,10 @@ const childrenByOrgId = useMemo(() => { /* 1回走査で構築 */ }, [organizati
 // ❌ NG（3000組織では全パネル×全描写で O(N×M) になる）
 const org = organizations.find(o => o.id === panel.orgId)
 ```
+
+**`subtreeRowCount` の呼び出し方**: 第2引数に `Organization[]` の代わりに `Map<string, Organization[]>`（childrenByOrgId）を渡すと O(1) ルックアップになる。`organizations.filter(o => o.parentId === x)` を内部で繰り返す配列版は O(N×depth) になるため、context から `childrenByOrgId` を取得できる場合は必ず Map を渡す。
+
+**`addPanelsBatch`**: 複数の org を一括でパネル追加する場合は `addPanel` を N 回呼ばず `addPanelsBatch(orgIds)` を使う。1回の `set()` にまとめるため不要な中間 re-render が発生しない。
 
 **`beforeRowsByOrgId` の構築ルール**: `allocationList` を1回走査して Map を構築する。組織ごとに `filter()` するとO(3000×N) になる。
 
@@ -597,6 +611,8 @@ codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>
 - サーバーから受け取った `codeLists` を `EMPTY_CODE_LISTS` とマージせず使う
 - React の `map()` 内で `<>` フラグメントを key なしで使う（必ず `<React.Fragment key={...}>` を使う）
 - キャンバスコンポーネントで `organizations.find(o => o.id === x)` を書く（Map を使う）
+- `useStore()` / `useCanvasLayoutStore()` をセレクタなしで呼ぶ（`canvasZoom` 等の高頻度更新で 2000 コンポーネントが毎フレーム再レンダーされフリーズする。複数フィールドは `useShallow`、単一フィールドは `s => s.field`、イベントハンドラ内のみなら `getState()` を使う）
+- 複数の org パネルを `addPanel` を N 回呼んで追加する（`addPanelsBatch(orgIds)` を使う）
 - キャンバスの `after/TreeWindow` / `before/BeforeTreeWindow` を直接コピーして新コンテキストを作る（`core/` の `OrgTreeNode` + `OrgTreePanel` を使って `renderItems` クロージャだけ差し替える）
 - `togglePanelViewMode` を使う（廃止。`setPanelViewMode(mode)` を使う）
 - パネル幅を `=== 'band' ? 208 : 288` とハードコードする（`VIEW_MODE_WIDTHS[panelViewMode]` を使う）

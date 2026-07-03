@@ -1,8 +1,12 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { OrgPanel } from './panel'
 
 export function MultiOrgCanvas() {
-  const { panels, removePanel } = useCanvasLayoutStore()
+  const { panels, removePanel } = useCanvasLayoutStore(useShallow(s => ({
+    panels:      s.panels,
+    removePanel: s.removePanel,
+  })))
 
   if (panels.length === 0) {
     return (

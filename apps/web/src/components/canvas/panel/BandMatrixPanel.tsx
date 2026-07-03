@@ -15,8 +15,9 @@ interface Props {
 }
 
 export function BandMatrixPanel({ orgId, panelId }: Props) {
-  const { masters, allocationList }  = useStore()
-  const { showVacantPositions }      = useCanvasLayoutStore()
+  const masters             = useStore(s => s.masters)
+  const allocationList      = useStore(s => s.allocationList)
+  const showVacantPositions = useCanvasLayoutStore(s => s.showVacantPositions)
   const { compactGroupById }         = useCanvasDisplayStore()
   const { positionTreeByOrgId, openBandDrop, isHistoryPreviewMode } = useOrgView()
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { Organization }       from '@personnel/domain/schemas'
 import { isSecondmentOrg }         from '@personnel/domain/rules/derive'
@@ -8,7 +8,7 @@ import type { PanelDef }           from '../../../store/canvasLayoutStore'
 import { useStore }                from '../../../store/useStore'
 import { OrgTreePanel }            from '../core/OrgTreePanel'
 import { OrgTreeNode }             from '../core/OrgTreeNode'
-import { OrgTreeControls }         from '../core/OrgTreeControls'
+import { OrgTreeControls, getDescOrgIds } from '../core/OrgTreeControls'
 import type { OrgTreeConfig, PanelTreeAdapter } from '../core/types'
 import { TreeWindowHeader }        from './TreeWindowHeader'
 import { AddRowDropdown }          from '../AddRowDropdown'
@@ -28,44 +28,52 @@ interface TreeWindowProps {
 
 export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const {
-    organizations, positionTreeByOrgId,
+    organizations, orgById, childrenByOrgId, positionTreeByOrgId,
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
   } = useOrgView()
 
   const {
-    panels, setPosition, toggleOpen, setOrgOpen, addPanel,
+    panels, setPosition, toggleOpen, setOrgOpen, addPanel, addPanelsBatch,
     setChildrenMode, setCollapsedOrgIds, removeOrgPanels, setPanelHeight,
-    panelViewMode, canvasZoom,
+    panelViewMode,
   } = useCanvasLayoutStore(useShallow(s => ({
     panels:             s.panels,
     setPosition:        s.setPosition,
     toggleOpen:         s.toggleOpen,
     setOrgOpen:         s.setOrgOpen,
     addPanel:           s.addPanel,
+    addPanelsBatch:     s.addPanelsBatch,
     setChildrenMode:    s.setChildrenMode,
     setCollapsedOrgIds: s.setCollapsedOrgIds,
     removeOrgPanels:    s.removeOrgPanels,
     setPanelHeight:     s.setPanelHeight,
     panelViewMode:      s.panelViewMode,
-    canvasZoom:         s.canvasZoom,
   })))
 
   const masters   = useStore(s => s.masters)
   const selectOrg = useStore(s => s.selectOrg)
   const selectedOrgId = useStore(s => s.selectedOrgId)
 
-  // ── O(1) ルックアップ Map（organizations が変わるときのみ再構築）──
-  const orgById = useMemo(() => new Map(organizations.map(o => [o.id, o])), [organizations])
-  const childrenByOrgId = useMemo(() => {
-    const m = new Map<string, Organization[]>()
-    for (const o of organizations) {
-      if (!o.parentId) continue
-      const arr = m.get(o.parentId)
-      if (arr) arr.push(o)
-      else m.set(o.parentId, [o])
+  // ── 初回マウント時: メンバー/ポジションを持つ子孫 org を自動展開 ──────
+  const hasAutoExpanded = useRef(false)
+  useEffect(() => {
+    if (hasAutoExpanded.current) return
+    hasAutoExpanded.current = true
+
+    // サブツリーに items を持つ org かを O(N) でメモ化チェック
+    const memo = new Map<string, boolean>()
+    const hasSubtreeItems = (id: string): boolean => {
+      const cached = memo.get(id)
+      if (cached !== undefined) return cached
+      const direct = (positionTreeByOrgId.get(id)?.length ?? 0) > 0
+      const result = direct || (childrenByOrgId.get(id) ?? []).some(c => hasSubtreeItems(c.id))
+      memo.set(id, result)
+      return result
     }
-    return m
-  }, [organizations])
+
+    const idsToOpen = getDescOrgIds(panel.orgId, childrenByOrgId, hasSubtreeItems)
+    if (idsToOpen.length > 0) addPanelsBatch(idsToOpen)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getItemCount = useCallback((id: string) => positionTreeByOrgId.get(id)?.length ?? 0, [positionTreeByOrgId])
 
@@ -162,7 +170,6 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     <OrgTreePanel
       panel={panel}
       panelViewMode={panelViewMode}
-      canvasZoom={canvasZoom}
       isSelected={isSelected}
       windowKind="window"
       setPosition={setPosition}

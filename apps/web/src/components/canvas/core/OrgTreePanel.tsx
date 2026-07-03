@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type React from 'react'
 import type { PanelDef, PanelViewModeId } from '../../../store/canvasLayoutStore'
-import { VIEW_MODE_WIDTHS } from '../../../store/canvasLayoutStore'
+import { VIEW_MODE_WIDTHS, useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 
 interface Props {
   panel:          PanelDef
   panelViewMode:  PanelViewModeId
-  canvasZoom:     number
   isSelected?:    boolean
   /** データ属性: 'window' → after 側, 'before-window' → before 側 */
   windowKind:     'window' | 'before-window'
@@ -30,7 +29,7 @@ interface Props {
 }
 
 export function OrgTreePanel({
-  panel, panelViewMode, canvasZoom, isSelected, windowKind,
+  panel, panelViewMode, isSelected, windowKind,
   setPosition, setPanelHeight,
   renderHeader, renderControls, renderBody,
   dragHandlersOuter,
@@ -38,8 +37,9 @@ export function OrgTreePanel({
   const panelRef  = useRef<HTMLDivElement>(null)
   const dragging  = useRef(false)
   const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 })
-  const zoomRef   = useRef(canvasZoom)
-  zoomRef.current = canvasZoom
+  const zoomRef   = useRef(1)
+  // ドラッグ計算にのみ使用するため、レンダリングをトリガーせずに最新値を取得
+  zoomRef.current = useCanvasLayoutStore.getState().canvasZoom
 
   // ── ResizeObserver でパネル実測高さをストアへ通知 ─────────────────
   useLayoutEffect(() => {

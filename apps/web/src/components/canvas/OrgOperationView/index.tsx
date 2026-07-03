@@ -58,6 +58,17 @@ export function OrgOperationView() {
   const allocationList = (isHistoryPreviewMode && previewAllocationList)     ? previewAllocationList     : scopedAllocList
 
   const organizations = useMemo(() => allAfterOrgs.filter(o => !o.isAbandoned), [allAfterOrgs])
+  const orgById = useMemo(() => new Map(organizations.map(o => [o.id, o])), [organizations])
+  const childrenByOrgId = useMemo(() => {
+    const m = new Map<string, Organization[]>()
+    for (const o of organizations) {
+      if (!o.parentId) continue
+      const arr = m.get(o.parentId)
+      if (arr) arr.push(o)
+      else m.set(o.parentId, [o])
+    }
+    return m
+  }, [organizations])
   const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList, masters })
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -197,7 +208,7 @@ export function OrgOperationView() {
 
   // ── Context value ─────────────────────────────────────────────────────────
   const ctxValue: OrgViewContextValue = {
-    organizations, positionTreeByOrgId, afterMembersByOrgId,
+    organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,

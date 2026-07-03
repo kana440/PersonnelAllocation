@@ -68,15 +68,17 @@ export function hasAnyRows(
   return organizations.filter(o => o.parentId === orgId).some(c => hasAnyRows(c.id, organizations, hasRows))
 }
 
-/** サブツリー内の行数合計 */
+/** サブツリー内の行数合計。Organization[] または childrenByOrgId Map を受け付ける */
 export function subtreeRowCount(
-  orgId:         string,
-  organizations: Organization[],
-  getCount:      (orgId: string) => number,
+  orgId:     string,
+  orgsOrMap: Organization[] | Map<string, Organization[]>,
+  getCount:  (orgId: string) => number,
 ): number {
   const direct   = getCount(orgId)
-  const children = organizations.filter(o => o.parentId === orgId)
-  return direct + children.reduce((sum, c) => sum + subtreeRowCount(c.id, organizations, getCount), 0)
+  const children = orgsOrMap instanceof Map
+    ? (orgsOrMap.get(orgId) ?? [])
+    : orgsOrMap.filter(o => o.parentId === orgId)
+  return direct + children.reduce((sum, c) => sum + subtreeRowCount(c.id, orgsOrMap, getCount), 0)
 }
 
 // ── 行カード共通ヘルパー ─────────────────────────────────────────────

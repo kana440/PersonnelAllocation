@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useOrgView }           from '../OrgViewContext'
 import { subtreeRowCount } from '../panel/helpers'
 import { RowCard }              from '../panel/RowCard'
@@ -32,8 +33,12 @@ export function TreeNode({
   orgId, panelId, onNavigate, isRoot,
   collapsedOrgs, onOrgCollapse, onOrgExpand,
 }: TreeNodeProps) {
-  const { organizations, positionTreeByOrgId } = useOrgView()
-  const { panels, setOrgOpen, addPanel } = useCanvasLayoutStore()
+  const { orgById, childrenByOrgId, positionTreeByOrgId } = useOrgView()
+  const { panels, setOrgOpen, addPanel } = useCanvasLayoutStore(useShallow(s => ({
+    panels:    s.panels,
+    setOrgOpen: s.setOrgOpen,
+    addPanel:   s.addPanel,
+  })))
   const selectedOrgId = useStore(s => s.selectedOrgId)
   const selectOrg     = useStore(s => s.selectOrg)
 
@@ -48,8 +53,8 @@ export function TreeNode({
 
   const entries   = positionTreeByOrgId.get(orgId) ?? []
   // 行がなくても子組織は表示する（空のままドロップ先として使えるように）
-  const childOrgs = organizations.filter(o => o.parentId === orgId)
-  const org = organizations.find(o => o.id === orgId)
+  const childOrgs = childrenByOrgId.get(orgId) ?? []
+  const org = orgById.get(orgId)
 
   if (!org) return null
   if (!isRoot && entries.length === 0 && childOrgs.length === 0) return null
@@ -73,7 +78,7 @@ export function TreeNode({
           // ── 展開（windowed）モード ──────────────────────────────
           if (childrenMode === 'windowed') {
             if (isOpen) {
-              const count = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
+              const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
               return (
                 <ChildChip
                   key={child.id}
@@ -84,7 +89,7 @@ export function TreeNode({
                 />
               )
             }
-            const count = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
+            const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
             return (
               <ChildChip
                 key={child.id}
@@ -124,7 +129,7 @@ export function TreeNode({
             )
           }
 
-          const count = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
+          const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
           return (
             <ChildChip
               key={child.id}
@@ -244,10 +249,10 @@ function InlineOrgSection({
   onOrgExpand?:   (id: string) => void
 }) {
   const {
-    organizations, positionTreeByOrgId,
+    childrenByOrgId, positionTreeByOrgId,
     handleDragOver, handleDragLeave, handleDrop, dragOverOrgId,
   } = useOrgView()
-  const count      = subtreeRowCount(child.id, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
+  const count      = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
   const isDragOver = dragOverOrgId === child.id
 
   return (

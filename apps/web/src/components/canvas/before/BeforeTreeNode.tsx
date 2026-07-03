@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { useBeforeOrgView } from './BeforeOrgViewContext'
 import { BeforeRowCard } from './BeforeRowCard'
@@ -14,7 +15,10 @@ interface Props {
 
 export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
   const { beforeOrganizations, beforeRowsByOrgId } = useBeforeOrgView()
-  const { comparisonPanels, setComparisonOrgOpen } = useCanvasLayoutStore()
+  const { comparisonPanels, setComparisonOrgOpen } = useCanvasLayoutStore(useShallow(s => ({
+    comparisonPanels:     s.comparisonPanels,
+    setComparisonOrgOpen: s.setComparisonOrgOpen,
+  })))
 
   const panel        = comparisonPanels.find(p => p.id === panelId)
   const childrenMode = panel?.childrenMode ?? 'inline'

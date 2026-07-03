@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { useStore }             from '../../../store/useStore'
 import { useScopedStore }       from '../../../store/useScopedStore'
@@ -14,9 +15,10 @@ import {
 import { VIEW_MODE_WIDTHS } from '../../../store/canvasLayoutStore'
 
 export function BeforeTreeWindowCanvas() {
-  const { beforeOrganizations, afterOrganizations } = useStore()
-  const { allocationList } = useScopedStore()
-  const persons = useStore(s => s.persons) as Person[]
+  const beforeOrganizations = useStore(s => s.beforeOrganizations)
+  const afterOrganizations  = useStore(s => s.afterOrganizations)
+  const persons             = useStore(s => s.persons) as Person[]
+  const { allocationList }  = useScopedStore()
 
   const {
     comparisonPanels,
@@ -28,7 +30,18 @@ export function BeforeTreeWindowCanvas() {
     canvasZoom, stepCanvasZoom,
     panelViewMode,
     panels: afterPanels,  // 右側（after）のパネル一覧
-  } = useCanvasLayoutStore()
+  } = useCanvasLayoutStore(useShallow(s => ({
+    comparisonPanels:     s.comparisonPanels,
+    comparisonOrgMapping: s.comparisonOrgMapping,
+    initComparisonPanels: s.initComparisonPanels,
+    setComparisonOrgOpen: s.setComparisonOrgOpen,
+    panelHeights:         s.panelHeights,
+    lineStyle:            s.lineStyle,
+    canvasZoom:           s.canvasZoom,
+    stepCanvasZoom:       s.stepCanvasZoom,
+    panelViewMode:        s.panelViewMode,
+    panels:               s.panels,
+  })))
   const winW = VIEW_MODE_WIDTHS[panelViewMode]
 
   const beforeOrgByCode = useMemo(
@@ -71,6 +84,30 @@ export function BeforeTreeWindowCanvas() {
     return result
   }, [afterPanels, afterOrganizations, beforeOrgByCode, afterIdToBeforeId])
 
+  // syncedOpenOrgIds とその祖先を含む展開済み ID セット
+  // root 以外の org が synced されている場合、その祖先も open にしないと
+  // isStandaloneWindow で standalone にならず表示されない
+  const expandedOpenIds = useMemo(() => {
+    const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
+    const orgIdSet  = new Set(viewOrgs.map(o => o.id))
+    const orgById   = new Map(viewOrgs.map(o => [o.id, o]))
+
+    // 常にルート org を含める（synced がなければルートのみ）
+    const roots = new Set(viewOrgs.filter(o => !o.parentId || !orgIdSet.has(o.parentId)).map(o => o.id))
+    const result = new Set(roots)
+
+    // synced org とその全祖先を追加
+    for (const orgId of syncedOpenOrgIds) {
+      result.add(orgId)
+      let cur = orgById.get(orgId)?.parentId
+      while (cur) {
+        result.add(cur)
+        cur = orgById.get(cur)?.parentId
+      }
+    }
+    return result
+  }, [beforeOrganizations, syncedOpenOrgIds])
+
   // 比較モード開始時にパネルを初期化
   // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
   useEffect(() => {
@@ -78,25 +115,17 @@ export function BeforeTreeWindowCanvas() {
     const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
     const ids = viewOrgs.map(o => o.id)
     if (ids.length === 0) return
-    // 右側パネルに対応する before-org を優先して open にする
-    // 対応がなければルート org を open にする（フォールバック）
-    const openIds = syncedOpenOrgIds.size > 0
-      ? syncedOpenOrgIds
-      : new Set(viewOrgs.filter(o => {
-          const orgIdSet = new Set(ids)
-          return !o.parentId || !orgIdSet.has(o.parentId)
-        }).map(o => o.id))
-    initComparisonPanels(ids, openIds)
+    initComparisonPanels(ids, expandedOpenIds)
   }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 右側パネルが追加されたら対応する before-org パネルを自動展開（リアクティブ同期）
+  // 右側パネルが追加されたら対応する before-org パネルを自動展開（祖先も含めて open）
   useEffect(() => {
     if (comparisonPanels.length === 0) return  // 未初期化はスキップ
-    for (const orgId of syncedOpenOrgIds) {
+    for (const orgId of expandedOpenIds) {
       const p = comparisonPanels.find(cp => cp.orgId === orgId)
       if (p && !p.open) setComparisonOrgOpen(orgId, true)
     }
-  }, [syncedOpenOrgIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expandedOpenIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // orgId → その org に所属していた rows を O(N+3000) で構築
   const beforeRowsByOrgId = useMemo(() => {

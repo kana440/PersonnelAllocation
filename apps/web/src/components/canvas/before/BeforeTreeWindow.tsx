@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import type { Organization } from '@personnel/domain/schemas'
 import { useBeforeOrgView }         from './BeforeOrgViewContext'
 import { BeforeRowCard }            from './BeforeRowCard'
@@ -23,8 +24,17 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     setComparisonPosition, toggleComparisonPanelOpen,
     setComparisonChildrenMode, setComparisonOrgOpen,
     setComparisonCollapsedOrgIds, setPanelHeight,
-    comparisonPanels, panelViewMode, canvasZoom,
-  } = useCanvasLayoutStore()
+    comparisonPanels, panelViewMode,
+  } = useCanvasLayoutStore(useShallow(s => ({
+    setComparisonPosition:        s.setComparisonPosition,
+    toggleComparisonPanelOpen:    s.toggleComparisonPanelOpen,
+    setComparisonChildrenMode:    s.setComparisonChildrenMode,
+    setComparisonOrgOpen:         s.setComparisonOrgOpen,
+    setComparisonCollapsedOrgIds: s.setComparisonCollapsedOrgIds,
+    setPanelHeight:               s.setPanelHeight,
+    comparisonPanels:             s.comparisonPanels,
+    panelViewMode:                s.panelViewMode,
+  })))
 
   // ── O(1) ルックアップ Map ─────────────────────────────────────────
   const orgById = useMemo(() => new Map(beforeOrganizations.map(o => [o.id, o])), [beforeOrganizations])
@@ -102,7 +112,6 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     <OrgTreePanel
       panel={panel}
       panelViewMode={panelViewMode}
-      canvasZoom={canvasZoom}
       windowKind="before-window"
       setPosition={setComparisonPosition}
       setPanelHeight={setPanelHeight}
@@ -226,7 +235,7 @@ function BeforeBandView({ orgId, beforeRowsByOrgId }: {
   const selectCard        = useStore(s => s.selectCard)
   const selectedCardRowId = useStore(s => s.selectedCardRowId)
   const masters           = useStore(s => s.masters)
-  const { requestScrollToRow } = useCanvasLayoutStore()
+  const requestScrollToRow = useCanvasLayoutStore(s => s.requestScrollToRow)
 
   const bandGroups = useMemo(() => {
     const groups = new Map<string, AllocationRow[]>()

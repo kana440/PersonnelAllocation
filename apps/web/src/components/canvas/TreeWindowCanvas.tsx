@@ -27,8 +27,8 @@ export function TreeWindowCanvas() {
     panelViewMode,
   } = useCanvasLayoutStore()
   const winW = VIEW_MODE_WIDTHS[panelViewMode]
-  const selectedOrgId       = useStore(s => s.selectedOrgId)
-  const { masters }         = useStore()
+  const selectedOrgId = useStore(s => s.selectedOrgId)
+  const masters       = useStore(s => s.masters)
   const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()
 
   // ── O(1) Map（organizations が変わるときのみ再構築）──────────────
@@ -110,9 +110,7 @@ export function TreeWindowCanvas() {
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
-    const t = performance.now()
     const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW)
-    console.log(`[PERF] computeLayout ${(performance.now()-t).toFixed(1)}ms panels=${standalonePanels.length}`)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p

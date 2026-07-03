@@ -60,6 +60,29 @@ components/foo/
 - **UI コンポーネントから `appService` を直接参照しない**（一部例外あり）。
 - **`canvasLayoutStore`**（`src/store/canvasLayoutStore.ts`）はキャンバスレイアウトの UI 状態を管理する独立した Zustand ストア。`HRApplicationService` の Undo 対象外。
 
+### Zustand ストア購読パターン
+
+セレクタなしの `useStore()` / `useCanvasLayoutStore()` は、ストア内の任意の値変化で再レンダーを引き起こす。キャンバスコンポーネントは 2000 インスタンスになるため致命的。
+
+```typescript
+// ❌ NG: ストア全体を subscribe → canvasZoom / panelHeights の毎フレーム更新で全インスタンスが再レンダー
+const { panels, setOrgOpen } = useCanvasLayoutStore()
+const { masters } = useStore()
+
+// ✅ OK: 複数フィールド → useShallow
+const { panels, setOrgOpen } = useCanvasLayoutStore(useShallow(s => ({
+  panels:    s.panels,
+  setOrgOpen: s.setOrgOpen,
+})))
+
+// ✅ OK: 単一フィールド → セレクタ関数
+const masters = useStore(s => s.masters)
+
+// ✅ OK: イベントハンドラ内のみ（render に不要）→ getState()
+//   canvasZoom はドラッグ計算にのみ必要 → subscribe せず都度読む
+const z = useCanvasLayoutStore.getState().canvasZoom
+```
+
 ### 操作の呼び出し方（UI から）
 
 ```typescript

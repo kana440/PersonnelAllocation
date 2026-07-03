@@ -44,6 +44,10 @@ export interface MemberEntry {
 
 export interface OrgViewContextValue {
   organizations:            Organization[]
+  /** organizations の id → Organization Map（TreeWindow 共有用） */
+  orgById:                  Map<string, Organization>
+  /** organizations の parentId → 子 Organization[] Map（TreeWindow 共有用） */
+  childrenByOrgId:          Map<string, Organization[]>
   positionTreeByOrgId:      Map<string, PositionEntry[]>
   afterMembersByOrgId:      Map<string, MemberEntry[]>
   dragOverOrgId:            string | null

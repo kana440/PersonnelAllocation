@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useClickOutside } from '../../../hooks/useClickOutside'
 import { useOrgView } from '../OrgViewContext'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
@@ -38,19 +39,23 @@ interface OrgPanelProps {
 
 export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps) {
   const {
-    organizations, positionTreeByOrgId,
+    orgById, childrenByOrgId, positionTreeByOrgId,
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
   } = useOrgView()
 
   const {
     showVacantPositions, toggleShowVacantPositions,
     panelViewMode,
-  } = useCanvasLayoutStore()
+  } = useCanvasLayoutStore(useShallow(s => ({
+    showVacantPositions:       s.showVacantPositions,
+    toggleShowVacantPositions: s.toggleShowVacantPositions,
+    panelViewMode:             s.panelViewMode,
+  })))
 
-  const org = organizations.find(o => o.id === orgId)
+  const org = orgById.get(orgId)
   if (!org) return null
 
-  const totalCount   = subtreeRowCount(orgId, organizations, id => positionTreeByOrgId.get(id)?.length ?? 0)
+  const totalCount   = subtreeRowCount(orgId, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
   const isDropTarget = dragOverOrgId === orgId
 
   const [dropdownOpen, setDropdownOpen] = useState(false)
