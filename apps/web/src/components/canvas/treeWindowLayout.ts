@@ -24,17 +24,18 @@ export function isStandaloneWindow(
   panel:        PanelDef,
   panelByOrgId: Map<string, PanelDef>,
   orgById:      Map<string, Organization>,
-  ancestors = new Set<string>(),
 ): boolean {
-  if (ancestors.has(panel.id)) return true
-  const org = orgById.get(panel.orgId)
-  if (!org?.parentId) return true
-  const parentPanel = panelByOrgId.get(org.parentId)
-  if (!parentPanel) return true
-  const next = new Set(ancestors); next.add(panel.id)
-  return parentPanel.childrenMode === 'windowed'
-    && panel.open
-    && isStandaloneWindow(parentPanel, panelByOrgId, orgById, next)
+  let current = panel
+  let depth = 0
+  while (depth++ < 30) {
+    const org = orgById.get(current.orgId)
+    if (!org?.parentId) return true
+    const parentPanel = panelByOrgId.get(org.parentId)
+    if (!parentPanel) return true
+    if (parentPanel.childrenMode !== 'windowed' || !current.open) return false
+    current = parentPanel
+  }
+  return true
 }
 
 export function computeLayout(

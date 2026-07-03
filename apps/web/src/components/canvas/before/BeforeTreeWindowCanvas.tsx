@@ -56,14 +56,14 @@ export function BeforeTreeWindowCanvas() {
   // beforeOrg の O(1) ルックアップ
   const beforeOrgById = useMemo(() => buildOrgByIdMap(beforeOrganizations), [beforeOrganizations])
 
-  // beforeOrg の子 ID リスト（subtree 判定用）
-  const beforeChildrenIds = useMemo(() => {
-    const m = new Map<string, string[]>()
+  // beforeOrg の O(1) 子ルックアップ（全 BeforeTreeWindow が共有する）
+  const beforeChildrenByOrgId = useMemo(() => {
+    const m = new Map<string, typeof beforeOrganizations>()
     for (const o of beforeOrganizations) {
       if (!o.parentId) continue
       const arr = m.get(o.parentId)
-      if (arr) arr.push(o.id)
-      else m.set(o.parentId, [o.id])
+      if (arr) arr.push(o)
+      else m.set(o.parentId, [o])
     }
     return m
   }, [beforeOrganizations])
@@ -143,6 +143,21 @@ export function BeforeTreeWindowCanvas() {
     return map
   }, [beforeOrganizations, allocationList])
 
+  // orgId → サブツリー全体の行数。O(N) で1回構築し全 BeforeTreeWindow が共有する
+  const beforeSubtreeCountByOrgId = useMemo(() => {
+    const map = new Map<string, number>()
+    const compute = (orgId: string): number => {
+      const cached = map.get(orgId)
+      if (cached !== undefined) return cached
+      let n = beforeRowsByOrgId.get(orgId)?.length ?? 0
+      for (const c of beforeChildrenByOrgId.get(orgId) ?? []) n += compute(c.id)
+      map.set(orgId, n)
+      return n
+    }
+    for (const org of beforeOrganizations) compute(org.id)
+    return map
+  }, [beforeRowsByOrgId, beforeChildrenByOrgId, beforeOrganizations])
+
   // 選択状態（ローカル）
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const toggleSelect = useCallback((personId: string, ctrl: boolean) => {
@@ -179,10 +194,23 @@ export function BeforeTreeWindowCanvas() {
   )
 
   // キャンバスサイズ（実測高さを使用）
-  const canvasWidth  = displayPanels.length === 0 ? 1200
+  const canvasWidth = useMemo(() =>
+    displayPanels.length === 0 ? 1200
     : Math.max(1200, ...displayPanels.map(p => p.x + winW + CANVAS_MARGIN * 2))
-  const canvasHeight = displayPanels.length === 0 ? 800
+  , [displayPanels, winW])
+
+  const canvasHeight = useMemo(() =>
+    displayPanels.length === 0 ? 800
     : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
+  , [displayPanels, panelHeights])
+
+  const connectionPaths = useMemo(() =>
+    connections.map(({ parentPanel, childPanel }) => ({
+      key: `${parentPanel.id}-${childPanel.id}`,
+      d: connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW),
+      dashArray: lineStyle === 'polyline' ? undefined : '5 3',
+    }))
+  , [connections, panelHeights, lineStyle, winW])
 
   // ── 選択中の行が変わったら before-canvas をスクロール ─────────────
   const selectedCardRowId    = useStore(s => s.selectedCardRowId)
@@ -358,6 +386,8 @@ export function BeforeTreeWindowCanvas() {
   const ctxValue: BeforeOrgViewContextValue = {
     beforeOrganizations,
     beforeRowsByOrgId,
+    childrenByOrgId: beforeChildrenByOrgId,
+    beforeSubtreeCountByOrgId,
     afterOrganizations,
     comparisonOrgMapping,
     persons,
@@ -425,22 +455,19 @@ export function BeforeTreeWindowCanvas() {
                 width={canvasWidth} height={canvasHeight}
                 style={{ zIndex: 0 }}
               >
-                {connections.map(({ parentPanel, childPanel }) => (
+                {connectionPaths.map(({ key, d, dashArray }) => (
                   <path
-                    key={`${parentPanel.id}-${childPanel.id}`}
-                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW)}
+                    key={key}
+                    d={d}
                     fill="none" stroke="#b8a89a" strokeWidth="1.5"
-                    strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
+                    strokeDasharray={dashArray}
                   />
                 ))}
               </svg>
 
               {/* ウィンドウ群 */}
               {displayPanels.map(panel => {
-                const hasSubtreeRows = (id: string): boolean =>
-                  (beforeRowsByOrgId.get(id)?.length ?? 0) > 0 ||
-                  (beforeChildrenIds.get(id) ?? []).some(hasSubtreeRows)
-                if (!hasSubtreeRows(panel.orgId)) return null
+                if ((beforeSubtreeCountByOrgId.get(panel.orgId) ?? 0) === 0) return null
                 return (
                   <div
                     key={panel.id}

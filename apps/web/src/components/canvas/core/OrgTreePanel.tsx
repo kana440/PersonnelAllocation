@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import type React from 'react'
 import type { PanelDef, PanelViewModeId } from '../../../store/canvasLayoutStore'
 import { VIEW_MODE_WIDTHS, useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
+import { scheduleHeightUpdate } from './panelHeightBatcher'
 
 interface Props {
   panel:          PanelDef
@@ -42,10 +43,11 @@ export function OrgTreePanel({
   zoomRef.current = useCanvasLayoutStore.getState().canvasZoom
 
   // ── ResizeObserver でパネル実測高さをストアへ通知 ─────────────────
+  // scheduleHeightUpdate で同一フレーム内の全パネル更新をバッチ化する
   useLayoutEffect(() => {
     const el = panelRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => { setPanelHeight(panel.id, el.offsetHeight) })
+    const ro = new ResizeObserver(() => { scheduleHeightUpdate(panel.id, el.offsetHeight, setPanelHeight) })
     ro.observe(el)
     return () => ro.disconnect()
   }, [panel.id, setPanelHeight])

@@ -11,14 +11,11 @@ import { OrgTreeNode }              from '../core/OrgTreeNode'
 import { OrgTreeControls }          from '../core/OrgTreeControls'
 import type { OrgTreeConfig, PanelTreeAdapter } from '../core/types'
 
-function subtreeSize(orgId: string, childrenByOrgId: Map<string, Organization[]>, getCount: (id: string) => number): number {
-  let n = getCount(orgId)
-  for (const c of childrenByOrgId.get(orgId) ?? []) n += subtreeSize(c.id, childrenByOrgId, getCount)
-  return n
-}
-
 export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
-  const { beforeOrganizations, beforeRowsByOrgId } = useBeforeOrgView()
+  const {
+    beforeOrganizations, beforeRowsByOrgId,
+    childrenByOrgId, beforeSubtreeCountByOrgId,
+  } = useBeforeOrgView()
 
   const {
     setComparisonPosition, toggleComparisonPanelOpen,
@@ -36,18 +33,8 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     panelViewMode:                s.panelViewMode,
   })))
 
-  // ── O(1) ルックアップ Map ─────────────────────────────────────────
+  // orgById はウィンドウ内ナビゲーション（breadcrumb）に使うだけ。contextに入れるほどでもないのでローカルに保つ
   const orgById = useMemo(() => new Map(beforeOrganizations.map(o => [o.id, o])), [beforeOrganizations])
-  const childrenByOrgId = useMemo(() => {
-    const m = new Map<string, Organization[]>()
-    for (const o of beforeOrganizations) {
-      if (!o.parentId) continue
-      const arr = m.get(o.parentId)
-      if (arr) arr.push(o)
-      else m.set(o.parentId, [o])
-    }
-    return m
-  }, [beforeOrganizations])
 
   const getItemCount = useCallback((id: string) => beforeRowsByOrgId.get(id)?.length ?? 0, [beforeRowsByOrgId])
 
@@ -56,7 +43,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
   useEffect(() => { setRootPath([panel.orgId]) }, [panel.orgId])
   const currentRootId = rootPath[rootPath.length - 1]
   const currentOrg    = orgById.get(currentRootId)
-  const totalCount    = subtreeSize(currentRootId, childrenByOrgId, getItemCount)
+  const totalCount    = beforeSubtreeCountByOrgId.get(currentRootId) ?? 0
 
   const navigateTo    = useCallback((childOrgId: string) => {
     setRootPath(prev => [...prev, childOrgId])
@@ -79,14 +66,16 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     [panel.id, panel.collapsedOrgIds, setComparisonCollapsedOrgIds],
   )
 
+  // ── パネル O(1) ルックアップ Map ────────────────────────────────
+  const comparisonPanelByOrgId = useMemo(() => new Map(comparisonPanels.map(p => [p.orgId, p])), [comparisonPanels])
+
   // ── PanelTreeAdapter（before 側: addPanel なし） ───────────────
   const adapter: PanelTreeAdapter = useMemo(() => ({
-    getPanelByOrgId: (orgId) => comparisonPanels.find(p => p.orgId === orgId),
-    getChildrenMode: (panelId) => comparisonPanels.find(p => p.id === panelId)?.childrenMode ?? 'inline',
+    getPanelByOrgId: (orgId) => comparisonPanelByOrgId.get(orgId),
     openOrg:         (orgId) => setComparisonOrgOpen(orgId, true),
     closeOrg:        (orgId) => setComparisonOrgOpen(orgId, false),
     // addPanel は before 側では不要（全パネルは初期化時に作成済み）
-  }), [comparisonPanels, setComparisonOrgOpen])
+  }), [comparisonPanelByOrgId, setComparisonOrgOpen])
 
   // ── OrgTreeConfig ─────────────────────────────────────────────
   const config: OrgTreeConfig = useMemo(() => ({
@@ -94,6 +83,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     orgById,
     childrenByOrgId,
     getItemCount,
+    subtreeCountByOrgId: beforeSubtreeCountByOrgId,
     renderItems: (orgId) => {
       const rows      = beforeRowsByOrgId.get(orgId) ?? []
       const depthList = buildPositionDepthList(rows, r => r.prevPositionCode, r => r.prevManagerPositionCode)
@@ -104,7 +94,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     getHeaderBg: () => '#5c5248',
     accentColor: 'amber',
     showEmptyOrgs: false,
-  }), [beforeOrganizations, orgById, childrenByOrgId, getItemCount, beforeRowsByOrgId])
+  }), [beforeOrganizations, orgById, childrenByOrgId, getItemCount, beforeSubtreeCountByOrgId, beforeRowsByOrgId])
 
   const hasChildren = (childrenByOrgId.get(currentRootId)?.length ?? 0) > 0
 
@@ -133,7 +123,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
           ca={{
             panel, currentRootId, childrenByOrgId,
             hasItems: id => getItemCount(id) > 0,
-            getPanelByOrgId: orgId => comparisonPanels.find(p => p.orgId === orgId),
+            getPanelByOrgId: orgId => comparisonPanelByOrgId.get(orgId),
             setChildrenMode: setComparisonChildrenMode,
             setCollapsedOrgIds: setComparisonCollapsedOrgIds,
             openOrg:  orgId => setComparisonOrgOpen(orgId, true),

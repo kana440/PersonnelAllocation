@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useEffect, useState, useRef, memo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useStore }             from '../../store/useStore'
 import { useOrgView }           from './OrgViewContext'
@@ -18,6 +19,8 @@ import { findSecondmentOrgCode } from '@personnel/domain/commands/helpers'
 // memo: OrgOperationView が selectedCardRowId 等の変化で再レンダーしても、
 // context が変わらない限りここは再レンダーしない（props なし）
 export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
+  // scrollToRowRequest / scrollToOrgId は useCanvasScroll が命令型で扱うため除外
+  // → それらが変化してもここは再レンダーされない
   const {
     panels, setPositions,
     autoArrange, setAutoArrange,
@@ -27,7 +30,22 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     canvasZoom, setCanvasZoom, stepCanvasZoom,
     filterCards, globalFilters,
     panelViewMode,
-  } = useCanvasLayoutStore()
+  } = useCanvasLayoutStore(useShallow(s => ({
+    panels:                  s.panels,
+    setPositions:            s.setPositions,
+    autoArrange:             s.autoArrange,
+    setAutoArrange:          s.setAutoArrange,
+    lineStyle:               s.lineStyle,
+    setLineStyle:            s.setLineStyle,
+    panelHeights:            s.panelHeights,
+    triggerComparisonArrange: s.triggerComparisonArrange,
+    canvasZoom:              s.canvasZoom,
+    setCanvasZoom:           s.setCanvasZoom,
+    stepCanvasZoom:          s.stepCanvasZoom,
+    filterCards:             s.filterCards,
+    globalFilters:           s.globalFilters,
+    panelViewMode:           s.panelViewMode,
+  })))
   const winW = VIEW_MODE_WIDTHS[panelViewMode]
   const selectedOrgId = useStore(s => s.selectedOrgId)
   const masters       = useStore(s => s.masters)
@@ -124,10 +142,23 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     [displayPanels, orgById],
   )
 
-  const canvasWidth  = displayPanels.length === 0 ? 1200
+  const canvasWidth = useMemo(() =>
+    displayPanels.length === 0 ? 1200
     : Math.max(1200, ...displayPanels.map(p => p.x + winW + CANVAS_MARGIN * 2))
-  const canvasHeight = displayPanels.length === 0 ? 800
+  , [displayPanels, winW])
+
+  const canvasHeight = useMemo(() =>
+    displayPanels.length === 0 ? 800
     : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
+  , [displayPanels, panelHeights])
+
+  const connectionPaths = useMemo(() =>
+    connections.map(({ parentPanel, childPanel }) => ({
+      key: `${parentPanel.id}-${childPanel.id}`,
+      d: connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW),
+      dashArray: lineStyle === 'polyline' ? undefined : '5 3',
+    }))
+  , [connections, panelHeights, lineStyle, winW])
 
   // ── 整列ボタン ──────────────────────────────────────────────────
   const handleArrange = useCallback(() => {
@@ -311,14 +342,14 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
                 width={canvasWidth} height={canvasHeight}
                 style={{ zIndex: 0 }}
               >
-                {connections.map(({ parentPanel, childPanel }) => (
+                {connectionPaths.map(({ key, d, dashArray }) => (
                   <path
-                    key={`${parentPanel.id}-${childPanel.id}`}
-                    d={connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW)}
+                    key={key}
+                    d={d}
                     fill="none"
                     stroke="#93a3b8"
                     strokeWidth="1.5"
-                    strokeDasharray={lineStyle === 'polyline' ? undefined : '5 3'}
+                    strokeDasharray={dashArray}
                   />
                 ))}
               </svg>

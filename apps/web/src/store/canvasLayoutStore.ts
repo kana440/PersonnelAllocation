@@ -239,12 +239,43 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   },
 
   initPanelsForOrgs: (orgIds, memberOrgIds?, orgById?) => {
-    const panels: PanelDef[] = orgIds.map((orgId, i) =>
-      makePanelDef(
+    const memberOrgIdSet = new Set(memberOrgIds ?? [])
+    const orgIdSet       = new Set(orgIds)
+
+    // 子 → 親方向のリンクから children Map を構築（サブツリー判定用）
+    const childrenById = new Map<string, string[]>()
+    if (orgById) {
+      for (const orgId of orgIds) {
+        const parentId = orgById.get(orgId)?.parentId
+        if (parentId && orgIdSet.has(parentId)) {
+          const arr = childrenById.get(parentId)
+          if (arr) arr.push(orgId)
+          else childrenById.set(parentId, [orgId])
+        }
+      }
+    }
+
+    // チップボタンの人数表示と同じロジック: 配下（サブツリー）にメンバーがいれば true
+    const subtreeMemo = new Map<string, boolean>()
+    const hasSubtreeMembers = (orgId: string): boolean => {
+      const cached = subtreeMemo.get(orgId)
+      if (cached !== undefined) return cached
+      const result = memberOrgIdSet.has(orgId) ||
+        (childrenById.get(orgId) ?? []).some(c => hasSubtreeMembers(c))
+      subtreeMemo.set(orgId, result)
+      return result
+    }
+
+    const panels: PanelDef[] = orgIds.map((orgId, i) => {
+      const org    = orgById?.get(orgId)
+      const isRoot = !org?.parentId || !orgIdSet.has(org.parentId)
+      // ルートは常に open。それ以外はボタン人数（配下メンバー数）> 0 なら open、0 なら closed
+      return makePanelDef(
         orgId,
         { x: 40 + (i % 5) * (WINDOW_W + WINDOW_GAP), y: 40 + Math.floor(i / 5) * 420 },
+        isRoot || hasSubtreeMembers(orgId),
       )
-    )
+    })
     // LCA フィルタカードをパネルと同じ set() で確定する（別コールだと clearPanels のタイミングで消える可能性があるため）
     // LCA が root（会社レベル、parentId = null）のときはフィルタを追加しない
     // → hasMembers: true のみで制御し、空の会社パネルを出さない

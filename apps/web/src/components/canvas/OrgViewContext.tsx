@@ -49,6 +49,8 @@ export interface OrgViewContextValue {
   /** organizations の parentId → 子 Organization[] Map（TreeWindow 共有用） */
   childrenByOrgId:          Map<string, Organization[]>
   positionTreeByOrgId:      Map<string, PositionEntry[]>
+  /** orgId → サブツリー全体のアイテム数。O(N) で1回構築し全 TreeWindow が O(1) で参照 */
+  subtreeCountByOrgId:      Map<string, number>
   afterMembersByOrgId:      Map<string, MemberEntry[]>
   dragOverOrgId:            string | null
   setDragOverOrgId:         (id: string | null) => void

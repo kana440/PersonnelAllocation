@@ -8,8 +8,6 @@ export type { PanelViewModeId } from '../../../store/canvasLayoutStore'
 export interface PanelTreeAdapter {
   /** orgId → そのパネル定義を返す（存在しない場合は undefined） */
   getPanelByOrgId:  (orgId: string) => PanelDef | undefined
-  /** panelId → childrenMode ('windowed' | 'inline') */
-  getChildrenMode:  (panelId: string) => ChildrenMode
   openOrg:          (orgId: string) => void
   closeOrg:         (orgId: string) => void
   /** after 側のみ（before 側では undefined） */
@@ -48,8 +46,10 @@ export interface OrgTreeConfig {
   orgById:          Map<string, Organization>
   /** O(1) ルックアップ用。orgId → 直接の子 Organization[] */
   childrenByOrgId:  Map<string, Organization[]>
-  /** その組織の直接所属アイテム数（カード数）。subtreeCount 計算に使う */
+  /** その組織の直接所属アイテム数（カード数） */
   getItemCount:     (orgId: string) => number
+  /** O(1) ルックアップ用。orgId → サブツリー全体のアイテム数（TreeWindow が useMemo で1回だけ構築） */
+  subtreeCountByOrgId?: Map<string, number>
   /** ツリーモードのカード描写 */
   renderItems:      (orgId: string, panelId: string) => React.ReactNode
   /** バンド等のフラットモード描写 */

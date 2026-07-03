@@ -50,7 +50,8 @@ export function RowCard({
 
   // selectedCardRowId: コンテキスト経由をやめてストア直接購読 → このカードが選択状態か否かだけ比較
   // これにより他のカードのクリックでこのカードが再レンダーされない
-  const isCardSelected   = useStore(s => !isVacant && !isSelectMode && s.selectedCardRowId === row.rowId)
+  // person は entry から先に取得済みなので isVacant の代わりに使用（TDZ 回避）
+  const isCardSelected   = useStore(s => person != null && !isSelectMode && s.selectedCardRowId === row.rowId)
   const displayFields    = useCanvasDisplayStore(s => s.displayFields)
   const hiddenBadgeTypes = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
   const masters       = useStore(s => s.masters)

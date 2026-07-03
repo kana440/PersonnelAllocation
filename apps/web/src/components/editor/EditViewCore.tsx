@@ -58,7 +58,11 @@ interface Props {
 }
 
 export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: Props) {
-  const { undo, redo, canUndo, canRedo, selectedCardRowId, masterWarnings } = useStore()
+  const undo           = useStore(s => s.undo)
+  const redo           = useStore(s => s.redo)
+  const canUndo        = useStore(s => s.canUndo)
+  const canRedo        = useStore(s => s.canRedo)
+  const masterWarnings = useStore(s => s.masterWarnings)
 
   const [isTreeOpen,    setIsTreeOpen]    = useState(true)
   const [isChatOpen,    setIsChatOpen]    = useState(true)
@@ -68,7 +72,8 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const [masterBrowserOpen,    setMasterBrowserOpen]    = useState(false)
   const [strictnessSettingsOpen, setStrictnessSettingsOpen] = useState(false)
 
-  const prevBottomHeightRef = useRef(BOTTOM_DEFAULT)
+  const prevBottomHeightRef  = useRef(BOTTOM_DEFAULT)
+  const excelCollapsedRef    = useRef(excelCollapsed)
 
   const [sidebarWidth,  , handleSidebarResizeStart]  = useResizablePanel(SIDEBAR_DEFAULT, { min: SIDEBAR_MIN,  max: SIDEBAR_MAX,  axis: 'x' })
   const [chatWidth,     , handleChatResizeStart]     = useResizablePanel(CHAT_DEFAULT,    { min: CHAT_MIN,     max: CHAT_MAX,     axis: 'x', invert: true })
@@ -77,6 +82,9 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
     BOTTOM_DEFAULT,
     { min: BOTTOM_MIN, max: () => window.innerHeight * BOTTOM_MAX_RATIO, axis: 'y', invert: true },
   )
+
+  // excelCollapsed が変わったら ref に同期（subscribe クロージャが常に最新値を参照できるように）
+  useEffect(() => { excelCollapsedRef.current = excelCollapsed }, [excelCollapsed])
 
   const toggleExcelCollapse = useCallback(() => {
     if (excelCollapsed) {
@@ -90,14 +98,17 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   }, [excelCollapsed, bottomHeight, setBottomHeight])
 
   // Canvas でカードを選択したとき折りたたまれていれば自動展開
+  // useStore() 全体を subscribe せず命令型にすることで EditViewCore 自体の再レンダーを防ぐ
   useEffect(() => {
-    if (!selectedCardRowId) return
-    if (excelCollapsed) {
+    return useStore.subscribe((state, prev) => {
+      if (state.selectedCardRowId === prev.selectedCardRowId) return
+      if (!state.selectedCardRowId) return
+      if (!excelCollapsedRef.current) return
       setBottomHeight(prevBottomHeightRef.current > BOTTOM_COLLAPSED ? prevBottomHeightRef.current : BOTTOM_DEFAULT)
       setExcelCollapsed(false)
-    }
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCardRowId])
+  }, [])
 
   // Ctrl+Z / Ctrl+Y
   useEffect(() => {

@@ -5,12 +5,6 @@ import type { OrgTreeConfig, PanelTreeAdapter } from './types'
 const CHILD_COLLAPSE_THRESHOLD = 6
 const CHILD_SHOW_COUNT = 5
 
-function subtreeCount(orgId: string, childrenByOrgId: Map<string, Organization[]>, getItemCount: (id: string) => number): number {
-  let n = getItemCount(orgId)
-  for (const c of childrenByOrgId.get(orgId) ?? []) n += subtreeCount(c.id, childrenByOrgId, getItemCount)
-  return n
-}
-
 interface Props {
   orgId:        string
   panelId:      string
@@ -24,7 +18,7 @@ interface Props {
 }
 
 export function OrgTreeNode({ orgId, panelId, config, adapter, collapsedOrgs, onOrgCollapse, onOrgExpand, onNavigate, isRoot }: Props) {
-  const { orgById, childrenByOrgId, getItemCount, renderItems, showEmptyOrgs, accentColor, dragHandlers, selectedOrgId, onSelectOrg } = config
+  const { orgById, childrenByOrgId, getItemCount, renderItems, showEmptyOrgs, accentColor, dragHandlers, selectedOrgId, onSelectOrg, subtreeCountByOrgId } = config
   const [localCollapsed,  setLocalCollapsed]  = useState<Set<string>>(() => new Set())
   const [showAllChildren, setShowAllChildren] = useState(false)
 
@@ -33,13 +27,13 @@ export function OrgTreeNode({ orgId, panelId, config, adapter, collapsedOrgs, on
   const allChildren = childrenByOrgId.get(orgId) ?? []
   const childOrgs = showEmptyOrgs
     ? allChildren
-    : allChildren.filter(c => subtreeCount(c.id, childrenByOrgId, getItemCount) > 0)
+    : allChildren.filter(c => (subtreeCountByOrgId?.get(c.id) ?? 0) > 0)
 
   if (!org) return null
   if (!isRoot && itemCount === 0 && childOrgs.length === 0) return null
 
   const panel        = adapter.getPanelByOrgId(orgId)
-  const childrenMode = panel ? adapter.getChildrenMode(panel.id) : 'inline'
+  const childrenMode = panel?.childrenMode ?? 'inline'
 
   // ── 子組織セクション ─────────────────────────────────────────────
   const needsCollapse = childOrgs.length > CHILD_COLLAPSE_THRESHOLD
@@ -51,7 +45,7 @@ export function OrgTreeNode({ orgId, panelId, config, adapter, collapsedOrgs, on
       {visibleChildren.map(child => {
         const childPanel = adapter.getPanelByOrgId(child.id)
         const isOpen     = childPanel?.open ?? false
-        const count      = subtreeCount(child.id, childrenByOrgId, getItemCount)
+        const count      = subtreeCountByOrgId?.get(child.id) ?? 0
 
         if (childrenMode === 'windowed') {
           if (isOpen) {

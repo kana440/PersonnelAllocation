@@ -6,6 +6,10 @@ export interface BeforeOrgViewContextValue {
   beforeOrganizations:  Organization[]
   /** orgId → その org に prevDepartmentCode で紐付く rows */
   beforeRowsByOrgId:    Map<string, AllocationRow[]>
+  /** O(1) ルックアップ用。orgId → 直接の子 Organization[]（全 BeforeTreeWindow が共有） */
+  childrenByOrgId:      Map<string, Organization[]>
+  /** orgId → サブツリー全体の行数。O(N) で1回構築し全 BeforeTreeWindow が O(1) で参照 */
+  beforeSubtreeCountByOrgId: Map<string, number>
   afterOrganizations:   Organization[]
   /** beforeOrgId → afterOrgId のマッピング */
   comparisonOrgMapping: Record<string, string>

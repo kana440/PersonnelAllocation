@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { Organization }       from '@personnel/domain/schemas'
 import { isSecondmentOrg }         from '@personnel/domain/rules/derive'
 import { useOrgView }              from '../OrgViewContext'
 import { useCanvasLayoutStore }    from '../../../store/canvasLayoutStore'
@@ -15,12 +14,6 @@ import { AddRowDropdown }          from '../AddRowDropdown'
 import { BandMatrixPanel }         from '../panel/BandMatrixPanel'
 import { RowCard }                 from '../panel/RowCard'
 
-function subtreeSize(orgId: string, childrenByOrgId: Map<string, Organization[]>, getCount: (id: string) => number): number {
-  let n = getCount(orgId)
-  for (const c of childrenByOrgId.get(orgId) ?? []) n += subtreeSize(c.id, childrenByOrgId, getCount)
-  return n
-}
-
 interface TreeWindowProps {
   panel:       PanelDef
   isSelected?: boolean
@@ -29,6 +22,7 @@ interface TreeWindowProps {
 export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const {
     organizations, orgById, childrenByOrgId, positionTreeByOrgId,
+    subtreeCountByOrgId,
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,
   } = useOrgView()
 
@@ -71,15 +65,13 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
       return result
     }
 
-    // 直接 items を持つ org のみ open にする（中間組織は除外）
-    // ただし再帰はサブツリーに items がある枝だけ辿る
+    // チップボタンの人数（配下サブツリー全体）が 0 超なら open、0 なら closed
+    // initPanelsForOrgs と同じ判定基準にする
     const idsToOpen: string[] = []
     const collect = (orgId: string) => {
       for (const child of childrenByOrgId.get(orgId) ?? []) {
         if (!hasSubtreeItems(child.id)) continue
-        if ((positionTreeByOrgId.get(child.id)?.length ?? 0) > 0) {
-          idsToOpen.push(child.id)
-        }
+        idsToOpen.push(child.id)   // サブツリーにメンバーがいれば open
         collect(child.id)
       }
     }
@@ -93,10 +85,10 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   // ── ヘッダー色 ──────────────────────────────────────────────────
   const getHeaderBg = useCallback((orgId: string) => {
     const org  = orgById.get(orgId)
-    const hasRows = subtreeSize(orgId, childrenByOrgId, getItemCount) > 0
+    const hasRows = (subtreeCountByOrgId.get(orgId) ?? 0) > 0
     const isSecondment = org?.externalCode ? isSecondmentOrg(org.externalCode, masters) : false
     return isSecondment ? '#2e7d52' : !hasRows ? '#b54520' : '#3c7abf'
-  }, [orgById, childrenByOrgId, getItemCount, masters])
+  }, [orgById, subtreeCountByOrgId, masters])
 
   const headerBg = getHeaderBg(panel.orgId)
 
@@ -135,17 +127,19 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     else selectOrg(orgById.get(panel.orgId)?.parentId ?? panel.orgId)
   }, [panel, toggleOpen, selectOrg, orgById])
 
-  const totalCount = subtreeSize(currentRootId, childrenByOrgId, getItemCount)
+  const totalCount = subtreeCountByOrgId.get(currentRootId) ?? 0
   const isDragOver = dragOverOrgId === currentRootId
+
+  // ── パネル O(1) ルックアップ Map ────────────────────────────────
+  const panelByOrgId = useMemo(() => new Map(panels.map(p => [p.orgId, p])), [panels])
 
   // ── PanelTreeAdapter（after 側） ────────────────────────────────
   const adapter: PanelTreeAdapter = useMemo(() => ({
-    getPanelByOrgId: (orgId) => panels.find(p => p.orgId === orgId),
-    getChildrenMode: (panelId) => panels.find(p => p.id === panelId)?.childrenMode ?? 'inline',
+    getPanelByOrgId: (orgId) => panelByOrgId.get(orgId),
     openOrg:         (orgId) => setOrgOpen(orgId, true),
     closeOrg:        (orgId) => setOrgOpen(orgId, false),
     addPanel,
-  }), [panels, setOrgOpen, addPanel])
+  }), [panelByOrgId, setOrgOpen, addPanel])
 
   // ── OrgTreeConfig ─────────────────────────────────────────────
   const config: OrgTreeConfig = useMemo(() => ({
@@ -153,6 +147,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     orgById,
     childrenByOrgId,
     getItemCount,
+    subtreeCountByOrgId,
     renderItems: (orgId, panelId) => {
       const entries = positionTreeByOrgId.get(orgId) ?? []
       return entries.map(e => <RowCard key={e.row.rowId} entry={e} orgId={orgId} panelId={panelId} />)
@@ -175,7 +170,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     selectedOrgId: selectedOrgId ?? undefined,
     onSelectOrg: selectOrg,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [organizations, orgById, childrenByOrgId, getItemCount, positionTreeByOrgId, getHeaderBg, handleDragOver, handleDragLeave, handleDrop, dragOverOrgId, selectedOrgId, selectOrg])
+  }), [organizations, orgById, childrenByOrgId, getItemCount, subtreeCountByOrgId, positionTreeByOrgId, getHeaderBg, handleDragOver, handleDragLeave, handleDrop, dragOverOrgId, selectedOrgId, selectOrg])
 
   const hasChildren = (childrenByOrgId.get(currentRootId)?.length ?? 0) > 0
 
@@ -212,7 +207,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
           ca={{
             panel, currentRootId, childrenByOrgId,
             hasItems: id => getItemCount(id) > 0,
-            getPanelByOrgId: orgId => panels.find(p => p.orgId === orgId),
+            getPanelByOrgId: orgId => panelByOrgId.get(orgId),
             setChildrenMode, setCollapsedOrgIds,
             openOrg:         orgId => setOrgOpen(orgId, true),
             closeOrg:        orgId => setOrgOpen(orgId, false),

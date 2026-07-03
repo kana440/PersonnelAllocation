@@ -72,6 +72,21 @@ export function OrgOperationView() {
   }, [organizations])
   const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList, masters })
 
+  // orgId → サブツリー全体のアイテム数。O(N) で1回構築し全 TreeWindow が共有する
+  const subtreeCountByOrgId = useMemo(() => {
+    const map = new Map<string, number>()
+    const compute = (orgId: string): number => {
+      const cached = map.get(orgId)
+      if (cached !== undefined) return cached
+      let n = positionTreeByOrgId.get(orgId)?.length ?? 0
+      for (const c of childrenByOrgId.get(orgId) ?? []) n += compute(c.id)
+      map.set(orgId, n)
+      return n
+    }
+    for (const org of organizations) compute(org.id)
+    return map
+  }, [positionTreeByOrgId, childrenByOrgId, organizations])
+
   // ── UI state ──────────────────────────────────────────────────────────────
   const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [bandDialog,          setBandDialog]          = useState<{ from: string; to: string; onOverride: () => void; onKeep: () => void } | null>(null)
@@ -212,7 +227,7 @@ export function OrgOperationView() {
   // RowCard は useStore(s => s.selectedCardRowId === row.rowId) で直接購読する。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ctxValue: OrgViewContextValue = useMemo(() => ({
-    organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId,
+    organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId, subtreeCountByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
@@ -242,7 +257,7 @@ export function OrgOperationView() {
     toggleChip: () => {},
   // deps: selectedCardRowId は意図的に除外（RowCard は store 直接購読に移行済み）
   }), [
-    organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId,
+    organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId, subtreeCountByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
