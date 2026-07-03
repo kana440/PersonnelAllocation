@@ -64,18 +64,29 @@ export function OrgPreviewTree({ groups }: Props) {
                     </div>
                     {/* Field changes */}
                     <div className="space-y-0.5 pl-5">
-                      {person.changes.map((change, idx) => (
-                        <div key={idx} className="flex items-start gap-1 text-xs">
-                          <span className="text-gray-400 flex-shrink-0 w-20 truncate">{change.label}:</span>
-                          <span className="text-red-500 line-through flex-shrink-0 max-w-[100px] truncate" title={change.before}>
-                            {change.before || '（空）'}
-                          </span>
-                          <span className="text-gray-400 flex-shrink-0">→</span>
-                          <span className="text-emerald-600 font-medium flex-shrink-0 max-w-[100px] truncate" title={change.after}>
-                            {change.after || '（空）'}
-                          </span>
-                        </div>
-                      ))}
+                      {person.changes.map((change, idx) =>
+                        change.kind === 'warning' ? (
+                          <div key={idx} className="flex items-start gap-1 text-xs text-amber-700">
+                            <span className="flex-shrink-0">⚠</span>
+                            <span className="flex-shrink-0 w-20 truncate">{change.label}:</span>
+                            <span className="flex-shrink-0 max-w-[100px] truncate" title={change.before}>{change.before}</span>
+                            <span className="flex-shrink-0 text-amber-400">→ マスタ:</span>
+                            <span className="font-medium flex-shrink-0 max-w-[100px] truncate" title={change.after}>{change.after}</span>
+                            <span className="text-amber-500 flex-shrink-0">（手動確認）</span>
+                          </div>
+                        ) : (
+                          <div key={idx} className="flex items-start gap-1 text-xs">
+                            <span className="text-gray-400 flex-shrink-0 w-20 truncate">{change.label}:</span>
+                            <span className="text-red-500 line-through flex-shrink-0 max-w-[100px] truncate" title={change.before}>
+                              {change.before || '（空）'}
+                            </span>
+                            <span className="text-gray-400 flex-shrink-0">→</span>
+                            <span className="text-emerald-600 font-medium flex-shrink-0 max-w-[100px] truncate" title={change.after}>
+                              {change.after || '（空）'}
+                            </span>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
                 ))}

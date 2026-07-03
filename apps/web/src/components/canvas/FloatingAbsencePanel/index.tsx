@@ -16,10 +16,11 @@ const PANEL_H = 400
 const MARGIN  = 12
 
 interface Props {
-  allocationList: AllocationRow[]
-  orgsByCode:     Map<string, Organization>
-  visible:        boolean
-  containerRef:   React.RefObject<HTMLElement | null>
+  allocationList:   AllocationRow[]
+  orgsByCode:       Map<string, Organization>
+  visible:          boolean
+  containerRef:     React.RefObject<HTMLElement | null>
+  onCardDoubleClick?: (rowId: number) => void
 }
 
 interface PendingDrop {
@@ -41,7 +42,7 @@ function defaultPos(rect: DOMRect): { x: number; y: number } {
   }
 }
 
-export function FloatingAbsencePanel({ allocationList, orgsByCode, visible, containerRef }: Props) {
+export function FloatingAbsencePanel({ allocationList, orgsByCode, visible, containerRef, onCardDoubleClick }: Props) {
   // ── キャンバス境界の追跡 ──────────────────────────────────────────────────
   const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null)
 
@@ -236,6 +237,7 @@ export function FloatingAbsencePanel({ allocationList, orgsByCode, visible, cont
                   category={cat}
                   prevOrgName={prevOrgName}
                   onDragStart={handleCardDragStart}
+                  onDoubleClick={onCardDoubleClick}
                 />
               )
             })

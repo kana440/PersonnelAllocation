@@ -47,12 +47,13 @@ export class TransferPersonOperation implements EditCommand {
     const newManagerPositionCode = this.overrideFields?.managerPositionCode !== undefined
       ? (this.overrideFields.managerPositionCode as string | undefined)
       : topRow?.positionCode
+    const { location: _l, costCenter: _cc, ...derivedOrgSub } = deriveOrgSubFields(targetCode, ctx.masters)
     const newRow: AllocationRow = {
       ...sourceRow,
       rowId:               newRowId,
       positionCode:        `_pos_${newRowId}`,
       departmentCode:      targetCode,
-      ...deriveOrgSubFields(targetCode, ctx.masters),
+      ...derivedOrgSub,
       managerPositionCode: newManagerPositionCode,
       managerName:         deriveManagerName(newManagerPositionCode, ctx.allocationList),
       ...(this.overrideFields ?? {}),

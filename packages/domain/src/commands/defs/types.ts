@@ -34,23 +34,38 @@ export type OperationGroup = 'position' | 'jobClassification' | 'person' | 'seco
 /**
  * 操作の排他ロール宣言。行ごとの相互排他・取消ペアを宣言的に表現する。
  *
- *   lock        : この操作が行に適用されると「ロック状態」になり、他の normal/lock 操作を排他する。
+ *   lock        : 厳密ロック。他の lock/softLock/normal 操作を全てブロックする。
  *                 afterConstraint で after フィールドの扱いを宣言できる:
- *                   'wipe'    : after フィールドを全てクリア（例: 変更なし・雇用延長）
- *                   'preserve': after フィールドを before からコピー（例: 将来の用途）
+ *                   'preserve': after フィールドを before からコピー（例: 変更なし）
  *                   省略時    : after フィールドを自由に変更可
  *                 isActive/isActiveThisSession は UI・AI がロック状態を検出するための述語。
- *   lockCancel  : 指定した lock 操作のロール状態を取り消す操作。
+ *   softLock    : 許容ロック。他の lock/softLock 操作はブロックするが、通常操作は許可する。
+ *                 ownedFields: このロックが「所有権」を持つフィールド群。
+ *                   - OperationFormView はこれらを readOnly で表示する（Layer 2）
+ *                   - submit 時に values へ現在値を注入して onSubmit に渡す（Layer 1）
+ *                   → 両層は同じ ownedFields を参照するため実装が分離しない。
+ *                 isActive/isActiveThisSession は UI・AI がロック状態を検出するための述語。
+ *   lockCancel  : 指定した lock 操作のロール状態を取り消す操作（strict lock 専用）。
+ *                 softLock のキャンセルは availableFor で prev 状態を参照して制御する。
  *                 of: キャンセル対象の lock 操作の id を指定する。
- *                 availableFor がセッション内取消条件、framework は isActiveThisSession を参照する。
  *   normal      : 排他制御に参加しない通常の操作（明示的に宣言する場合）。
- *                 lock が有効な行では自動的にブロックされる（将来の resolveAvailability で制御）。
  */
 export type OperationRole =
   | {
       kind:               'lock'
       /** フレームワークは自動適用しない。onSubmit 内で preserve(row) を明示的に呼ぶこと */
       afterConstraint?:   'preserve'
+      isActive(row: AllocationRow): boolean
+      isActiveThisSession(row: AllocationRow): boolean
+    }
+  | {
+      kind:        'softLock'
+      /**
+       * このロックが所有するフィールド。
+       * 許容された操作がこれらを書き換えようとしても、フレームワーク側で元値に戻す。
+       * UI はこれらのフィールドを readOnly で表示する。
+       */
+      ownedFields: readonly (keyof AllocationRow)[]
       isActive(row: AllocationRow): boolean
       isActiveThisSession(row: AllocationRow): boolean
     }

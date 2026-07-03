@@ -10,7 +10,7 @@ import { FIELD_METADATA }       from '@personnel/domain/allocationRow'
 import { computeSideEffects, hasSideEffects } from '../operationPreview'
 import type { SideEffectSummary } from '../operationPreview'
 import type { EditOperation, OperationInput } from '@personnel/domain/commands/defs/index'
-import { bindOperation, isSectionDivider, isInputRow, withLeavePositionVacant, countSubordinates } from '@personnel/domain/commands/defs/index'
+import { bindOperation, isSectionDivider, isInputRow, withLeavePositionVacant, countSubordinates, getActiveSoftLock } from '@personnel/domain/commands/defs/index'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { StepMode }      from '../BandStepFilter'
 import { FieldInput }          from './FieldInput'
@@ -68,12 +68,23 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const effectiveDef  = def.supportsLeaveVacant && leaveVacant && !!row.positionCode
     ? withLeavePositionVacant(def) : def
 
+  // softLock がアクティブなとき、ownedFields を readOnly 化した入力定義（Layer 2）
+  const activeSoftLock = useMemo(() => getActiveSoftLock(row), [row])
+  const effectiveInputs = useMemo(() => {
+    if (!activeSoftLock || activeSoftLock.id === def.id) return def.inputs
+    const owned = new Set(activeSoftLock.operationRole.ownedFields as string[])
+    return def.inputs.map(item => {
+      if (isSectionDivider(item) || isInputRow(item) || !owned.has(item.field as string)) return item
+      return { ...item, readOnly: true as const }
+    })
+  }, [def.inputs, def.id, activeSoftLock])
+
   const draftRow   = useMemo(() => ({ ...row, ...values } as AllocationRow), [row, values])
   const fieldInputs = useMemo(
-    () => def.inputs.filter((i): i is OperationInput => !isSectionDivider(i) && !isInputRow(i))
+    () => effectiveInputs.filter((i): i is OperationInput => !isSectionDivider(i) && !isInputRow(i))
       .filter(i => !i.visibleWhen || i.visibleWhen(values, masters)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [def.inputs, values, masters]
+    [effectiveInputs, values, masters]
   )
 
   const handleChange = (field: keyof AllocationRow, value: string) => {
@@ -144,7 +155,11 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
   const doExecute = (vals: Partial<AllocationRow>) => {
     setSubmitError(null)
     try {
-      const command = bindOperation(effectiveDef, row.rowId, vals)
+      // Layer 1: softLock の ownedFields を row の現在値で注入（onSubmit の上書きを防ぐ）
+      const safeVals = activeSoftLock && activeSoftLock.id !== def.id
+        ? { ...vals, ...Object.fromEntries(activeSoftLock.operationRole.ownedFields.map(f => [f, row[f]])) }
+        : vals
+      const command = bindOperation(effectiveDef, row.rowId, safeVals)
       const result  = appService.executeOperation(command)
       if (!result.ok) { setSubmitError(result.errors.map(e => e.message).join(' / ')); return }
       onBack()
@@ -247,7 +262,7 @@ export function OperationFormView({ def, row, onBack, overrideInitial }: Props) 
             </div>
           )}
 
-          {def.inputs.map((item, idx) => {
+          {effectiveInputs.map((item, idx) => {
             const key = isSectionDivider(item) ? `section-${idx}` : isInputRow(item) ? `row-${idx}` : item.field as string
             return <FieldInput key={key} item={item} ctx={fieldCtx} />
           })}

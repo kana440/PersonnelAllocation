@@ -3,6 +3,8 @@ export interface FieldChange {
   label:  string
   before: string
   after:  string
+  /** 'change': 自動適用される変更。'warning': 表示のみ（自動上書きしない） */
+  kind?:  'change' | 'warning'
 }
 
 export interface PersonChange {

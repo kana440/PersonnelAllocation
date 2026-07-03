@@ -1,8 +1,9 @@
-// 人操作 — 休職・復職・移籍・変更なし
+// 人操作 — 休職・復職・移籍・変更なし・組織割当リセット
 import type { EditOperation } from './types'
 import { AVAILABLE, unavailable } from './types'
 import { ok, fail } from '../types'
 import type { AllocationRow } from '../../allocationRow'
+import { FIELD_METADATA } from '../../allocationRow'
 import { TR } from '../../transferReasonLabels'
 import { preserve } from './afterConstraintHelpers'
 
@@ -22,7 +23,8 @@ export const leaveOfAbsenceDef: EditOperation = {
   description: '4/1付で休職する場合は個別対応します。3/31以前の休職については通常の申請を行った上で、必要な異動をしてください。',
 
   operationRole: {
-    kind:                'lock',
+    kind:        'softLock',
+    ownedFields: ['transferReason', 'leaveOfAbsenceSign'],
     isActive:            (row) => !!row.leaveOfAbsenceSign,
     isActiveThisSession: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
   },
@@ -81,9 +83,11 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
 
   description: '4/1付休職を取り消します。4/1以前に休職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
 
-  operationRole: { kind: 'lockCancel', of: 'LeaveOfAbsence' },
-
-  availableFor: () => AVAILABLE,
+  availableFor(row) {
+    if (!row.leaveOfAbsenceSign)     return unavailable('休職中ではないため取消できません')
+    if (row.prevLeaveOfAbsenceSign)  return unavailable('インポート前からの休職は取消できません（復職操作を使用してください）')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'transferReason',     required: false, readOnly: true },
@@ -131,7 +135,8 @@ export const returnFromLeaveDef: EditOperation = {
   description: '4/1付で復職します。4/1以前に復職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
 
   operationRole: {
-    kind:                'lock',
+    kind:        'softLock',
+    ownedFields: ['transferReason', 'leaveOfAbsenceSign'],
     // 元から休職中（prev あり）でセッション内に解除した状態
     isActive:            (row) => !row.leaveOfAbsenceSign && !!row.prevLeaveOfAbsenceSign,
     isActiveThisSession: (row) => !row.leaveOfAbsenceSign && !!row.prevLeaveOfAbsenceSign,
@@ -187,9 +192,11 @@ export const returnFromLeaveCancelDef: EditOperation = {
 
   description: '4/1付復職を取り消します。',
 
-  operationRole: { kind: 'lockCancel', of: 'ReturnFromLeave' },
-
-  availableFor: () => AVAILABLE,
+  availableFor(row) {
+    if (row.leaveOfAbsenceSign)       return unavailable('まだ休職中のため復職取消できません')
+    if (!row.prevLeaveOfAbsenceSign)  return unavailable('インポート前から非休職のため復職取消できません')
+    return AVAILABLE
+  },
 
   inputs: [
     { field: 'leaveOfAbsenceSign', required: false, readOnly: true, inputType: 'checkbox', label: '休職フラグ（復元）' },
@@ -225,6 +232,96 @@ export const returnFromLeaveCancelDef: EditOperation = {
           : r
       ),
       label: `復職取消: ${personName(row)}`,
+    }
+  },
+}
+
+// ── 退職 ─────────────────────────────────────────────────────────────────────
+
+export const resignationDef: EditOperation = {
+  id:          'Resignation',
+  label:       '4/1付退職',
+  group:       'person',
+  badge:       'negative',
+
+  description: '4/1付で退職（または解任済み）として登録します。設定後は他の操作がロックされます。',
+
+  operationRole: {
+    kind:                'lock',
+    isActive:            (row) => row.transferReason === TR.TERMINATION,
+    isActiveThisSession: (row) => row.transferReason === TR.TERMINATION,
+  },
+
+  availableFor: () => AVAILABLE,
+
+  inputs: [
+    { field: 'transferReason', required: true,  readOnly: true, options: [TR.TERMINATION] },
+    { field: 'memo',           required: false },
+  ],
+
+  onOpen: (row) => ({
+    transferReason: TR.TERMINATION,
+    memo:           row.memo as string | undefined,
+  }),
+
+  onValidate(ctx, rowId, values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    if (!values.transferReason) return fail('異動事由は必須です')
+    return ok()
+  },
+
+  onSubmit(ctx, rowId, values) {
+    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? { ...r, transferReason: values.transferReason, memo: values.memo as string | undefined }
+          : r
+      ),
+      label: `退職: ${personName(row)}`,
+    }
+  },
+}
+
+// ── 退職取消 ─────────────────────────────────────────────────────────────────
+
+export const resignationCancelDef: EditOperation = {
+  id:          'ResignationCancel',
+  label:       '退職取消',
+  group:       'person',
+  badge:       'neutral',
+
+  description: '4/1付退職を取り消します。',
+
+  operationRole: { kind: 'lockCancel', of: 'Resignation' },
+
+  availableFor: () => AVAILABLE,
+
+  inputs: [
+    { field: 'transferReason', required: false, readOnly: true },
+    { field: 'memo',           required: false },
+  ],
+
+  onOpen: (row) => ({
+    transferReason: undefined,
+    memo:           row.memo as string | undefined,
+  }),
+
+  onValidate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  onSubmit(ctx, rowId, values) {
+    return {
+      updatedList: ctx.allocationList.map(r =>
+        r.rowId === rowId
+          ? { ...r, transferReason: undefined, memo: values.memo as string | undefined }
+          : r
+      ),
+      label: '退職取消',
     }
   },
 }
@@ -449,9 +546,53 @@ export const noChangeCancelDef: EditOperation = {
   },
 }
 
+// ── 組織割当リセット ─────────────────────────────────────────────────────────
+
+export const resetToBeforeDef: EditOperation = {
+  id:          'ResetToBefore',
+  label:       '組織割当リセット',
+  group:       'person',
+  badge:       'negative',
+
+  description: '⚠ 警告：全ての after 項目を before（インポート前）の値に戻します。未割当の旧組織から誤って割り当てた行を元に戻すときに使います。実行するとセッション内の変更がすべて失われ、組織「未割当」状態に戻ります。',
+
+  availableFor: (row) =>
+    row.userId ? AVAILABLE : unavailable('人物がアサインされていない行には使えません'),
+
+  inputs: [
+    { field: 'departmentCode', required: false, readOnly: true, label: '現在の組織（リセット後は旧組織コードに戻ります）' },
+    { field: 'memo',           required: false },
+  ],
+
+  onOpen: (row) => ({
+    departmentCode: row.departmentCode as string | undefined,
+    memo:           row.memo           as string | undefined,
+  }),
+
+  onValidate(ctx, rowId, _values) {
+    if (!ctx.allocationList.find(r => r.rowId === rowId))
+      return fail(`行が見つかりません (rowId: ${rowId})`)
+    return ok()
+  },
+
+  onSubmit(ctx, rowId, _values) {
+    const row    = ctx.allocationList.find(r => r.rowId === rowId)!
+    const reset: Partial<AllocationRow> = {}
+    for (const { after, before } of FIELD_METADATA) {
+      ;(reset as Record<string, unknown>)[after] = row[before as keyof AllocationRow]
+    }
+    return {
+      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...reset } : r),
+      label:       `組織割当リセット: ${personName(row)}`,
+    }
+  },
+}
+
 export const DEFS: EditOperation[] = [
   leaveOfAbsenceDef,         leaveOfAbsenceCancelDef,
   returnFromLeaveDef,        returnFromLeaveCancelDef,
+  resignationDef,            resignationCancelDef,
   employmentTransferDef,     employmentTransferCancelDef,
   noChangeDef,               noChangeCancelDef,
+  resetToBeforeDef,
 ]

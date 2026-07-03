@@ -26,17 +26,15 @@ export function reDeriveOrgSubFieldsForList(
 ): AllocationRow[] {
   return allocationList.map(r => {
     if (!r.departmentCode) return r
-    const derived = deriveOrgSubFields(r.departmentCode as string, masters)
+    const { location: _l, costCenter: _cc, ...structural } = deriveOrgSubFields(r.departmentCode as string, masters)
     const unchanged =
-      r.businessUnit === derived.businessUnit &&
-      r.division     === derived.division     &&
-      r.subDivision  === derived.subDivision  &&
-      r.group        === derived.group        &&
-      r.team         === derived.team         &&
-      r.location     === derived.location     &&
-      r.costCenter   === derived.costCenter
+      r.businessUnit === structural.businessUnit &&
+      r.division     === structural.division     &&
+      r.subDivision  === structural.subDivision  &&
+      r.group        === structural.group        &&
+      r.team         === structural.team
     if (unchanged) return r
-    return { ...r, ...derived }
+    return { ...r, ...structural }
   })
 }
 

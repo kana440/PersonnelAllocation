@@ -7,8 +7,10 @@ import { orgRestructureDef }  from '@personnel/domain/commands/defs/orgTransferD
 import { TR }                 from '@personnel/domain/transferReasonLabels'
 import { appService }         from '../../../application/HRApplicationService'
 import { AssignOrgModal }    from './AssignOrgModal'
+import { AfterInitWizard }   from '../../setup/AfterInitWizard'
 import { VirtualUnmappedList } from './VirtualUnmappedList'
 import type { TreeNode }      from './OrgTreeNode'
+import type { OrgMappingGroup } from '../../../application/setup/afterInit'
 
 interface PickerTarget { label: string; rowIds: number[]; orgName: string }
 
@@ -48,9 +50,10 @@ function buildTree(
 export function UnmappedOrgSection() {
   const { allocationList, afterOrganizations, beforeOrganizations, persons } = useScopedStore()
 
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set())
-  const [pickerFor,      setPickerFor]      = useState<PickerTarget | null>(null)
-  const [collapsed,      setCollapsed]      = useState(false)
+  const [selectedRowIds,   setSelectedRowIds]   = useState<Set<number>>(new Set())
+  const [pickerFor,        setPickerFor]        = useState<PickerTarget | null>(null)
+  const [bulkMapOpen,      setBulkMapOpen]      = useState(false)
+  const [collapsed,        setCollapsed]        = useState(false)
   const [expandedOrgIds, setExpandedOrgIds] = useState<Set<string>>(new Set())
   const initializedRef = useRef(false)
 
@@ -155,6 +158,21 @@ export function UnmappedOrgSection() {
     })
   }
 
+  const handleBulkConfirm = (groups: OrgMappingGroup[]) => {
+    const commands = groups
+      .filter(g => g.newOrgCode)
+      .flatMap(g => g.rowIds.map(rowId =>
+        bindOperation(orgRestructureDef, rowId, {
+          departmentCode: g.newOrgCode!,
+          transferReason: TR.DIV_TRANSFER_RESTRUCTURE,
+        })
+      ))
+    if (commands.length > 0) {
+      appService.executeBatch('旧組織一括マップ', commands)
+    }
+    setBulkMapOpen(false)
+  }
+
   return (
     <>
       <div className="border border-dashed border-orange-200 rounded">
@@ -165,6 +183,12 @@ export function UnmappedOrgSection() {
           <span>旧組織（未割当）</span>
           <span className="flex items-center gap-1.5">
             <span className="font-normal text-orange-500">{totalCount}名</span>
+            <button
+              onClick={e => { e.stopPropagation(); setBulkMapOpen(true) }}
+              className="text-[10px] px-1.5 py-0.5 rounded border border-orange-300 text-orange-600 hover:bg-orange-100 transition-colors whitespace-nowrap"
+            >
+              一括マップ
+            </button>
             <span className="text-orange-400">{collapsed ? '▸' : '▾'}</span>
           </span>
         </button>
@@ -185,6 +209,20 @@ export function UnmappedOrgSection() {
           </div>
         )}
       </div>
+
+      {bulkMapOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-12 pb-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl p-6">
+            <AfterInitWizard
+              rowsToGroup={unresolvedRows}
+              afterOrganizations={afterOrganizations}
+              beforeOrganizations={beforeOrganizations}
+              onConfirm={handleBulkConfirm}
+              onCancel={() => setBulkMapOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {pickerFor && (
         <AssignOrgModal

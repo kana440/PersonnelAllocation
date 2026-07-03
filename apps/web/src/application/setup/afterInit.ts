@@ -77,12 +77,10 @@ function lca(seeds: Organization[], byId: Map<string, Organization>): Organizati
 // ── グループ化 ────────────────────────────────────────────────────────────────
 
 export function buildOrgMappingGroups(
-  allocationList: AllocationRow[],
+  rowsToGroup: AllocationRow[],
   afterOrganizations: Organization[],
   beforeOrganizations: Organization[],
-  masters: AllMasters,
 ): OrgMappingGroup[] {
-  const uninit          = allocationList.filter(r => isUninitializedRow(r, masters))
   const afterOrgByCode  = buildOrgMap(afterOrganizations)
   const beforeOrgByCode = buildOrgMap(beforeOrganizations)
   const afterById       = new Map(afterOrganizations.map(o => [o.id, o]))
@@ -99,7 +97,7 @@ export function buildOrgMappingGroups(
 
   // prevDepartmentCode でグループ化（割り当て行）
   const groupMap = new Map<string | null, number[]>()
-  for (const r of uninit) {
+  for (const r of rowsToGroup) {
     const key = r.prevDepartmentCode ?? null
     const existing = groupMap.get(key)
     if (existing) existing.push(r.rowId)

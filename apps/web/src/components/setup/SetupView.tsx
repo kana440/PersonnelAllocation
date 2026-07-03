@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_MASTERS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
 import type { ImportedWorkbookResult } from '../../infrastructure/excel/engine'
-import { isUninitializedRow } from '../../application/setup/afterInit'
+import { isUninitializedRow, applyAfterInit } from '../../application/setup/afterInit'
 import { SetupHelp } from './SetupHelp'
 import { AfterInitWizard } from './AfterInitWizard'
 import { ModeSelectStep } from './ModeSelectStep'
@@ -169,8 +169,20 @@ export function SetupView({ onReady }: Props) {
         )}
         {phase.kind === 'after-init' && (
           <AfterInitWizard
-            result={phase.result}
-            onComplete={handleAfterInitComplete}
+            rowsToGroup={phase.result.allocationList.filter(r => isUninitializedRow(r, phase.result.masters))}
+            afterOrganizations={phase.result.afterOrganizations}
+            beforeOrganizations={phase.result.beforeOrganizations}
+            onConfirm={(groups) => {
+              const newList = applyAfterInit(phase.result.allocationList, groups)
+              handleAfterInitComplete({ ...phase.result, allocationList: newList })
+            }}
+            footerNote={
+              <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
+                コピーされる項目：ポジション / 組織 / 職位 / 等級 / 雇用形態 / 職種 / 勤務地 など全 after 項目
+                <br />
+                <span className="text-gray-500">異動事由は空欄のまま（変更なし = 変更種別に出ない）</span>
+              </div>
+            }
           />
         )}
         {phase.kind === 'error' && (

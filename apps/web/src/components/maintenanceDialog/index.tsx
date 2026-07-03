@@ -4,11 +4,13 @@ import { appService } from '../../application/HRApplicationService'
 import {
   computeManagerNameChanges,
   computeOrgSubFieldChanges,
+  computeOrgCCLocationWarnings,
   mergePersonChanges,
   groupByOrg,
 } from './previewComputer'
 import { OrgPreviewTree } from './OrgPreviewTree'
 import { PositionCodeAssignmentDialog } from '../positionCodeAssignment'
+import { JobTypeRemapDialog } from './JobTypeRemapDialog'
 import type { OperationDef, OrgPreview } from './types'
 
 interface Props {
@@ -17,10 +19,11 @@ interface Props {
 
 export function MaintenanceDialog({ onClose }: Props) {
   const store = useStore()
-  const [selected,      setSelected]      = useState<Set<string>>(new Set())
-  const [codeAssignOpen, setCodeAssignOpen] = useState(false)
-  const [executing,     setExecuting]     = useState(false)
-  const [doneResults,   setDoneResults]   = useState<Array<{ label: string; count: number }> | null>(null)
+  const [selected,        setSelected]        = useState<Set<string>>(new Set())
+  const [codeAssignOpen,  setCodeAssignOpen]  = useState(false)
+  const [jobTypeRemapOpen, setJobTypeRemapOpen] = useState(false)
+  const [executing,       setExecuting]       = useState(false)
+  const [doneResults,     setDoneResults]     = useState<Array<{ label: string; count: number }> | null>(null)
 
   const unassignedCount = useMemo(
     () => store.getUnassignedPositions().length,
@@ -47,7 +50,10 @@ export function MaintenanceDialog({ onClose }: Props) {
         label:       '組織サブフィールド 再導出',
         description: '組織コードをもとに、ビジネスユニット / 事業部 / 部 / グループ / チームを組織マスタから再導出します。組織移動後などにサブフィールドがずれているときに使います。',
         kind:        'auto',
-        computeChanges: () => computeOrgSubFieldChanges(allocationList, afterOrganizations, masters),
+        computeChanges: () => mergePersonChanges([
+          computeOrgSubFieldChanges(allocationList, afterOrganizations, masters),
+          computeOrgCCLocationWarnings(allocationList, afterOrganizations, masters),
+        ]),
         execute:     () => store.reDeriveOrgSubFields(),
       },
     ]
@@ -198,7 +204,57 @@ export function MaintenanceDialog({ onClose }: Props) {
 
               <div className="mx-4 border-t border-gray-100 my-2" />
 
-              {/* ── Section 2: ポジションコード割当 ─────────────────── */}
+              {/* ── Section 2: 一括変換 ──────────────────────────────── */}
+              <div className="px-4 pb-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-gray-700">一括変換</span>
+                </div>
+                {(() => {
+                  const { allocationList, masters } = appService.getSnapshot()
+                  const validFam = new Set(masters.jobFamilies.map(f => f.label))
+                  const validTyp = new Set(masters.jobTypes.map(t => t.label))
+                  const errorCount = allocationList.filter(r => {
+                    const fam = (r.jobFamily as string | undefined) ?? ''
+                    const typ = (r.jobType  as string | undefined) ?? ''
+                    return (fam !== '' && !validFam.has(fam)) || (typ !== '' && !validTyp.has(typ))
+                  }).length
+                  return (
+                    <div
+                      onClick={() => setJobTypeRemapOpen(true)}
+                      className="rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 p-3 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <span className="text-base leading-none flex-shrink-0">🔄</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-semibold text-gray-800">ジョブタイプ一括変換</span>
+                            {errorCount > 0 ? (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-red-100 text-red-700">
+                                {errorCount}件エラー
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">対象なし</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                            マスタに存在しない旧ジョブタイプ・ジョブファミリーを新しい値に一括変換します。
+                            ファミリーを選んでから候補の中でタイプを指定してください。
+                          </p>
+                          <div className="mt-2">
+                            <span className="text-xs text-blue-600 font-medium underline">
+                              クリックして変換ダイアログを開く →
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="mx-4 border-t border-gray-100 my-2" />
+
+              {/* ── Section 3: ポジションコード割当 ─────────────────── */}
               <div className="px-4 pb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs font-bold text-gray-700">ポジションコード割当</span>
@@ -285,6 +341,9 @@ export function MaintenanceDialog({ onClose }: Props) {
 
       {codeAssignOpen && (
         <PositionCodeAssignmentDialog onClose={() => setCodeAssignOpen(false)} />
+      )}
+      {jobTypeRemapOpen && (
+        <JobTypeRemapDialog onClose={() => setJobTypeRemapOpen(false)} />
       )}
     </>
   )

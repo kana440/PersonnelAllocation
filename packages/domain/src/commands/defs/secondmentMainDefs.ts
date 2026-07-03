@@ -24,7 +24,8 @@ export const secondmentOutSFDef: EditOperation = {
   supportsLeaveVacant: true,
 
   operationRole: {
-    kind:                'lock',
+    kind:        'softLock',
+    ownedFields: ['transferReason', 'concurrentType', 'officialPositionCode', 'localJobTitle', 'location'],
     isActive:            (row) => row.concurrentType === '出向箱',
     isActiveThisSession: (row) => row.concurrentType === '出向箱' && row.prevConcurrentType !== '出向箱',
   },
@@ -107,7 +108,8 @@ export const secondmentOutNonSFDef: EditOperation = {
   supportsLeaveVacant: true,
 
   operationRole: {
-    kind:                'lock',
+    kind:        'softLock',
+    ownedFields: ['transferReason', 'concurrentType', 'officialPositionCode', 'localJobTitle', 'location'],
     isActive:            (row) => row.concurrentType === '出向箱',
     isActiveThisSession: (row) => row.concurrentType === '出向箱' && row.prevConcurrentType !== '出向箱',
   },

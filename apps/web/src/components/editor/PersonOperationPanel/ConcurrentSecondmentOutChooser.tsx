@@ -84,7 +84,7 @@ export function ConcurrentSecondmentOutChooser({ row, masters, onSelectNonSF, on
               {isDetected
                 ? <>自動判定：<span className="font-semibold">{autoSF ? 'SF統合先' : 'SF外'}</span>
                     {isOverriding && <span className="text-amber-600 ml-1">（手動で上書き中）</span>}</>
-                : 'マスタ未登録のため自動判定できません。下のボタンで手動選択してください。'}
+                : <>マスタ未登録のため自動判定できません。<br />マスタにない場合はSFで会社を個別登録してください。登録後のコード・会社名を入力してください。</>}
             </div>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[11px] font-medium">
               <button

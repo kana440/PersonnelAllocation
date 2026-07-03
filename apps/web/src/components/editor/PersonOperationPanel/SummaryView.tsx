@@ -82,6 +82,8 @@ const SECTIONS: Section[] = [
       { id: 'LeaveOfAbsenceCancel',     shortLabel: '休職取消',       cancel: true },
       { id: 'ReturnFromLeave',          shortLabel: '復職' },
       { id: 'ReturnFromLeaveCancel',    shortLabel: '復職取消',       cancel: true },
+      { id: 'Resignation',              shortLabel: '退職' },
+      { id: 'ResignationCancel',        shortLabel: '退職取消',       cancel: true },
       { id: 'EmploymentTransfer',       shortLabel: '移籍' },
       { id: 'EmploymentTransferCancel', shortLabel: '移籍取消',       cancel: true },
       { id: 'NoChange',                 shortLabel: '変更なし' },
@@ -115,6 +117,13 @@ const SECTIONS: Section[] = [
       { id: 'ConcurrentSecondmentInReleaseSF',     shortLabel: 'SF\n兼務受入解除' },
       { id: 'ConcurrentSecondmentInReleaseNonSF',  shortLabel: 'SF外\n兼務受入解除' },
       { id: 'ConcurrentSecondmentInCancel',        shortLabel: '兼務受入\n取消',   cancel: true },
+    ],
+  },
+  // ── リセット ───────────────────────────────────────────────────────────────
+  {
+    label: 'リセット',
+    ops: [
+      { id: 'ResetToBefore', shortLabel: '割当\nリセット' },
     ],
   },
 ]

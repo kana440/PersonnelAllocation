@@ -39,7 +39,7 @@ export class BulkMoveToOrgOperation implements EditCommand {
     const sourceCode = sourceOrg.externalCode!
     const targetCode = targetOrg.externalCode ?? ''
 
-    const orgSubFields = deriveOrgSubFields(targetCode, ctx.masters)
+    const { location: _l, costCenter: _cc, ...orgSubFields } = deriveOrgSubFields(targetCode, ctx.masters)
     const updatedList = ctx.allocationList.map(r =>
       r.departmentCode === sourceCode
         ? { ...r, departmentCode: targetCode, ...orgSubFields }

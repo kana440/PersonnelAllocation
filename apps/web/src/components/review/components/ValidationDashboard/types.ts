@@ -7,5 +7,7 @@ export interface IssueInstance {
 export interface IssueGroup {
   /** グループキー（= message）。確認キーのプレフィックスとして使用 */
   message:   string
+  /** このバリデーション問題が対象とするフィールド（一括修正で使用） */
+  field:     string
   instances: IssueInstance[]
 }

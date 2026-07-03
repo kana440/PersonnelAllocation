@@ -1,7 +1,7 @@
 import type { AllocationRow }  from '@personnel/domain/allocationRow'
 import type { Organization }   from '@personnel/domain/schemas'
 import type { AllMasters }   from '@personnel/domain/masters/aggregate'
-import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList } from '@personnel/domain/commands/orgHelpers'
+import { reDeriveManagerNamesForList, reDeriveOrgSubFieldsForList, deriveOrgSubFields } from '@personnel/domain/commands/orgHelpers'
 import type { PersonChange, OrgPreview } from './types'
 import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 
@@ -67,6 +67,52 @@ export function computeOrgSubFieldChanges(
       departmentCode: row.departmentCode ?? '',
       orgName:        orgNameFor(row.departmentCode, afterOrganizations),
       changes,
+    })
+  }
+  return result
+}
+
+/**
+ * 組織マスタに値があるのに行の CC/勤務場所と異なる行を検出する（自動上書きしない警告用）。
+ * マスタ値が空の場合は差分なしとみなす。
+ */
+export function computeOrgCCLocationWarnings(
+  allocationList: AllocationRow[],
+  afterOrganizations: Organization[],
+  masters: AllMasters,
+): PersonChange[] {
+  const result: PersonChange[] = []
+  for (const row of allocationList) {
+    if (!row.departmentCode) continue
+    const derived = deriveOrgSubFields(row.departmentCode as string, masters)
+    const warnings: PersonChange['changes'] = []
+
+    if (derived.costCenter && derived.costCenter !== (row.costCenter ?? '')) {
+      warnings.push({
+        field:  'costCenter',
+        label:  'コストセンター',
+        before: String(row.costCenter ?? '（空）'),
+        after:  derived.costCenter,
+        kind:   'warning',
+      })
+    }
+    if (derived.location && derived.location !== (row.location ?? '')) {
+      warnings.push({
+        field:  'location',
+        label:  '勤務場所',
+        before: String(row.location ?? '（空）'),
+        after:  derived.location,
+        kind:   'warning',
+      })
+    }
+    if (warnings.length === 0) continue
+    result.push({
+      rowId:          row.rowId,
+      userId:         row.userId ?? '',
+      name:           [row.lastName, row.firstName].filter(Boolean).join(' ') || String(row.positionCode ?? ''),
+      departmentCode: row.departmentCode ?? '',
+      orgName:        orgNameFor(row.departmentCode, afterOrganizations),
+      changes:        warnings,
     })
   }
   return result

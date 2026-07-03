@@ -1,10 +1,12 @@
-import { useMemo }                  from 'react'
+import { useMemo, useState }        from 'react'
 import { useAcknowledgmentStore }   from '../../../../infrastructure/acknowledgmentStore'
 import { makeWarningKey }           from '@personnel/domain/acknowledgment'
 import type { ReviewRow }           from '../../hooks/useReviewData'
 import type { IssueGroup }          from './types'
 import { ErrorGroup }               from './ErrorGroup'
 import { WarningGroup }             from './WarningGroup'
+import { BulkFieldEditModal }       from '../BulkFieldEditModal'
+import { JOB_PAIR_FIELD }           from '../BulkFieldEditModal/helpers'
 
 interface Props {
   rows:        ReviewRow[]
@@ -15,6 +17,8 @@ export function ValidationDashboard({ rows, onDrillDown }: Props) {
   const { _items, acknowledge, unacknowledge } = useAcknowledgmentStore()
   const acknowledged = useMemo(() => new Set(_items.keys()), [_items])
 
+  const [bulkTarget, setBulkTarget] = useState<{ field: string; rowIds: number[] } | null>(null)
+
   const { errorGroups, warningGroups } = useMemo(() => {
     const errors  = new Map<string, IssueGroup>()
     const warnings = new Map<string, IssueGroup>()
@@ -23,7 +27,7 @@ export function ValidationDashboard({ rows, onDrillDown }: Props) {
       for (const issue of issues) {
         const map = issue.level === 'error' ? errors : warnings
         if (!map.has(issue.message)) {
-          map.set(issue.message, { message: issue.message, instances: [] })
+          map.set(issue.message, { message: issue.message, field: issue.field as string, instances: [] })
         }
         map.get(issue.message)!.instances.push({
           rowId:      row.rowId,
@@ -31,6 +35,21 @@ export function ValidationDashboard({ rows, onDrillDown }: Props) {
           orgCode:    (row.departmentCode as string | undefined) ?? '',
         })
       }
+    }
+
+    // jobFamily + jobType を1つのペアエラーグループに統合
+    const familyGroup = errors.get([...errors.values()].find(g => g.field === 'jobFamily')?.message ?? '')
+    const typeGroup   = errors.get([...errors.values()].find(g => g.field === 'jobType')?.message ?? '')
+    if (familyGroup && typeGroup) {
+      const mergedById = new Map<number, IssueGroup['instances'][0]>()
+      ;[...familyGroup.instances, ...typeGroup.instances].forEach(i => mergedById.set(i.rowId, i))
+      errors.delete(familyGroup.message)
+      errors.delete(typeGroup.message)
+      errors.set(JOB_PAIR_FIELD, {
+        message:   'ジョブタイプ・ジョブファミリーが無効です',
+        field:     JOB_PAIR_FIELD,
+        instances: [...mergedById.values()],
+      })
     }
 
     return {
@@ -64,6 +83,7 @@ export function ValidationDashboard({ rows, onDrillDown }: Props) {
   }
 
   return (
+    <>
     <div className="flex flex-col h-full overflow-hidden">
       {/* サマリーバー */}
       <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 bg-gray-50 text-[11px]">
@@ -99,7 +119,12 @@ export function ValidationDashboard({ rows, onDrillDown }: Props) {
             </div>
             <div className="space-y-2">
               {errorGroups.map(g => (
-                <ErrorGroup key={g.message} group={g} onDrillDown={() => onDrillDown(true)} />
+                <ErrorGroup
+                  key={g.message}
+                  group={g}
+                  onDrillDown={() => onDrillDown(true)}
+                  onBulkEdit={() => setBulkTarget({ field: g.field, rowIds: g.instances.map(i => i.rowId) })}
+                />
               ))}
             </div>
           </section>
@@ -146,5 +171,14 @@ export function ValidationDashboard({ rows, onDrillDown }: Props) {
         )}
       </div>
     </div>
+
+    {bulkTarget && (
+      <BulkFieldEditModal
+        field={bulkTarget.field}
+        rowIds={bulkTarget.rowIds}
+        onClose={() => setBulkTarget(null)}
+      />
+    )}
+    </>
   )
 }

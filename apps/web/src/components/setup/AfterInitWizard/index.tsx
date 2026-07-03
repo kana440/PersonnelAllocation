@@ -1,9 +1,8 @@
 import React, { useState, useMemo } from 'react'
-import type { ImportedWorkbookResult } from '../../../infrastructure/excel/types'
+import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { Organization }  from '@personnel/domain/schemas'
 import {
   buildOrgMappingGroups,
-  applyAfterInit,
-  isUninitializedRow,
 } from '../../../application/setup/afterInit'
 import { OrgGroupRow } from './OrgGroupRow'
 import type { OrgMappingGroup } from '../../../application/setup/afterInit'
@@ -46,27 +45,33 @@ function SectionHeader({ sectionKey }: { sectionKey: string }) {
 // ── AfterInitWizard ─────────────────────────────────────────────────────────
 
 interface Props {
-  result:      ImportedWorkbookResult
-  onComplete:  (modifiedResult: ImportedWorkbookResult) => void
+  /** マッピング対象行（呼び出し元でフィルタ済み） */
+  rowsToGroup:         AllocationRow[]
+  afterOrganizations:  Organization[]
+  beforeOrganizations: Organization[]
+  onConfirm:           (groups: OrgMappingGroup[]) => void
+  onCancel?:           () => void
+  /** ボタン直前に差し込む任意のノート（SETUP 専用の "コピーされる項目" 等） */
+  footerNote?:         React.ReactNode
 }
 
-export function AfterInitWizard({ result, onComplete }: Props) {
-  const { allocationList, afterOrganizations, beforeOrganizations, masters } = result
-
+export function AfterInitWizard({
+  rowsToGroup,
+  afterOrganizations,
+  beforeOrganizations,
+  onConfirm,
+  onCancel,
+  footerNote,
+}: Props) {
   const initialGroups = useMemo(
-    () => buildOrgMappingGroups(allocationList, afterOrganizations, beforeOrganizations, masters),
+    () => buildOrgMappingGroups(rowsToGroup, afterOrganizations, beforeOrganizations),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
   const [groups, setGroups] = useState<OrgMappingGroup[]>(initialGroups)
 
-  const uninitCount = useMemo(
-    () => allocationList.filter(r => isUninitializedRow(r, masters)).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
-
+  const rowCount        = rowsToGroup.length
   const totalOrgCount   = groups.filter(g => g.prevCode !== null).length
   const selectedCount   = groups.filter(g => g.prevCode !== null && !!g.newOrgCode).length
   const unselectedCount = totalOrgCount - selectedCount
@@ -105,18 +110,13 @@ export function AfterInitWizard({ result, onComplete }: Props) {
     return result
   }, [groups])
 
-  const handleSubmit = () => {
-    const newList = applyAfterInit(allocationList, groups)
-    onComplete({ ...result, allocationList: newList })
-  }
-
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-bold text-gray-800">旧情報からの初期設定</h2>
+        <h2 className="text-base font-bold text-gray-800">旧組織 → 新組織 マッピング</h2>
         <p className="mt-1 text-sm text-gray-600">
-          <span className="font-semibold text-orange-600">{uninitCount} 行</span>
-          のポジション・職務情報が未入力です。旧データをコピーして初期化します。
+          <span className="font-semibold text-orange-600">{rowCount} 行</span>
+          を対象に旧組織を新組織に対応づけます。
         </p>
       </div>
 
@@ -165,23 +165,27 @@ export function AfterInitWizard({ result, onComplete }: Props) {
         ))}
       </div>
 
-      {/* コピーされる項目の注記 */}
-      <div className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
-        コピーされる項目：ポジション / 組織 / 職位 / 等級 / 雇用形態 / 職種 / 勤務地 など全 after 項目
-        <br />
-        <span className="text-gray-500">異動事由は空欄のまま（変更なし = 変更種別に出ない）</span>
-      </div>
+      {footerNote}
 
       <button
-        onClick={handleSubmit}
+        onClick={() => onConfirm(groups)}
         className="w-full py-3 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
       >
-        旧情報をコピーして開始 →
+        マッピングを適用 →
       </button>
+
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="w-full py-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          キャンセル
+        </button>
+      )}
 
       {unselectedCount > 0 && (
         <p className="text-center text-xs text-gray-400">
-          「後で設定」の行は開始後に「未設定」セクションから組織を割り当てられます。
+          「後で設定」の行は「未割当」セクションから組織を割り当てられます。
         </p>
       )}
     </div>

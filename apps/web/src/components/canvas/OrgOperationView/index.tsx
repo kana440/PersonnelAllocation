@@ -415,6 +415,7 @@ export function OrgOperationView() {
         orgsByCode={afterOrgByCode}
         visible={absencePanelVisible}
         containerRef={canvasRef}
+        onCardDoubleClick={enterOperationPanel}
       />
     </OrgViewContext.Provider>
   )
