@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Organization }       from '@personnel/domain/schemas'
 import { isSecondmentOrg }         from '@personnel/domain/rules/derive'
 import { useOrgView }              from '../OrgViewContext'
@@ -25,7 +25,14 @@ interface TreeWindowProps {
   isSelected?: boolean
 }
 
+const _twTotalRenders = { count: 0 }
+
 export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
+  const _rc = useRef(0); _rc.current++
+  _twTotalRenders.count++
+  if (_rc.current === 1) console.log(`[PERF] TreeWindow mount #${_twTotalRenders.count} panel=${panel.orgId}`)
+  if (_rc.current === 2) console.log(`[PERF] TreeWindow re-render (2nd) panel=${panel.orgId}, total re-renders so far=${_twTotalRenders.count}`)
+
   const {
     organizations, positionTreeByOrgId,
     dragOverOrgId, handleDragOver, handleDragLeave, handleDrop,

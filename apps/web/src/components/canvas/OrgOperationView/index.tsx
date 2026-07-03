@@ -29,6 +29,7 @@ import { PatternDialogs }      from './PatternDialogs'
 import { FloatingAbsencePanel } from '../FloatingAbsencePanel'
 
 export function OrgOperationView() {
+  const _rc = useRef(0); _rc.current++; if (_rc.current <= 5 || _rc.current % 50 === 0) console.log(`[PERF] OrgOperationView render #${_rc.current}`)
   const store = useScopedStore()
   const {
     afterOrganizations: allAfterOrgsUnscoped,
