@@ -45,8 +45,7 @@ export function OrgTreePanel({
   useLayoutEffect(() => {
     const el = panelRef.current
     if (!el) return
-    let _phCount = 0
-    const ro = new ResizeObserver(() => { _phCount++; if (_phCount <= 2) console.log(`[PERF] setPanelHeight panel=${panel.id} call#${_phCount}`); setPanelHeight(panel.id, el.offsetHeight) })
+    const ro = new ResizeObserver(() => { setPanelHeight(panel.id, el.offsetHeight) })
     ro.observe(el)
     return () => ro.disconnect()
   }, [panel.id, setPanelHeight])
