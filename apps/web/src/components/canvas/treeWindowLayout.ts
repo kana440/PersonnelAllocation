@@ -43,26 +43,36 @@ export function computeLayout(
   panelHeights:     Record<string, number>,
   windowW = WINDOW_W,
 ): Map<string, { x: number; y: number }> {
-  // standalone パネル同士の親子関係 Map（パネルツリー）
   const standaloneByOrgId = buildPanelByOrgIdMap(standalonePanels)
+
+  // O(N) で子パネル Map を事前構築（元の filter は O(N) × N ノード = O(N²)）
+  const childrenByOrgId = new Map<string, PanelDef[]>()
+  for (const p of standalonePanels) {
+    const parentOrgId = orgById.get(p.orgId)?.parentId
+    if (!parentOrgId) continue
+    const arr = childrenByOrgId.get(parentOrgId)
+    if (arr) arr.push(p)
+    else childrenByOrgId.set(parentOrgId, [p])
+  }
 
   const getParent = (p: PanelDef): PanelDef | undefined => {
     const parentOrgId = orgById.get(p.orgId)?.parentId
     return parentOrgId ? standaloneByOrgId.get(parentOrgId) : undefined
   }
+  const getChildren = (p: PanelDef): PanelDef[] => childrenByOrgId.get(p.orgId) ?? []
+  const getPanelH   = (p: PanelDef) => panelHeights[p.id] ?? EST_WIN_H
 
-  const getChildren = (p: PanelDef): PanelDef[] =>
-    standalonePanels.filter(c => orgById.get(c.orgId)?.parentId === p.orgId)
-
-  const getPanelH = (p: PanelDef) => panelHeights[p.id] ?? EST_WIN_H
-
-  const subtreeW = (p: PanelDef, visited = new Set<string>()): number => {
-    if (visited.has(p.id)) return windowW
-    const next = new Set(visited); next.add(p.id)
+  // subtreeW をメモ化して O(N) に（元は各ノードで再帰的に再計算）
+  const subtreeWCache = new Map<string, number>()
+  const subtreeW = (p: PanelDef): number => {
+    const cached = subtreeWCache.get(p.id)
+    if (cached !== undefined) return cached
     const children = getChildren(p)
-    if (children.length === 0) return windowW
-    const total = children.reduce((s, c, i) => s + subtreeW(c, next) + (i ? H_GAP : 0), 0)
-    return Math.max(windowW, total)
+    const w = children.length === 0
+      ? windowW
+      : Math.max(windowW, children.reduce((s, c, i) => s + subtreeW(c) + (i ? H_GAP : 0), 0))
+    subtreeWCache.set(p.id, w)
+    return w
   }
 
   const posMap  = new Map<string, { x: number; y: number }>()

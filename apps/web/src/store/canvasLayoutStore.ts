@@ -181,12 +181,31 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
 
   // ── パネル実測高さ ──────────────────────────────────────────────
   panelHeights: {},
-  setPanelHeight: (panelId, height) => {
-    set(s => {
-      if (s.panelHeights[panelId] === height) return s
-      return { panelHeights: { ...s.panelHeights, [panelId]: height } }
-    })
-  },
+  setPanelHeight: (() => {
+    // ResizeObserver は同フレーム内で多数発火するため、rAF でバッチ更新して
+    // computeLayout の再実行回数を最小化する
+    const pending = new Map<string, number>()
+    let scheduled = false
+    return (panelId: string, height: number) => {
+      pending.set(panelId, height)
+      if (scheduled) return
+      scheduled = true
+      requestAnimationFrame(() => {
+        scheduled = false
+        if (pending.size === 0) return
+        console.log(`[PERF] setPanelHeight batch flush: ${pending.size} panels`)
+        set(s => {
+          let changed = false
+          let next = s.panelHeights
+          for (const [id, h] of pending) {
+            if (next[id] !== h) { if (!changed) { next = { ...next }; changed = true }; next[id] = h }
+          }
+          pending.clear()
+          return changed ? { panelHeights: next } : s
+        })
+      })
+    }
+  })(),
 
   // ── キャンバススクロール要求（組織パネル）──────────────────────
   scrollToOrgId: null,
