@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { useStore }           from '../../../store/useStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { ComparisonSplitView }  from '../ComparisonSplitView'
@@ -38,7 +38,10 @@ export function OrgOperationView() {
     undoHistory,
     masters,
   } = useStore()
-  const { comparisonMode, toggleComparisonMode, panelViewMode, setPanelViewMode } = useCanvasLayoutStore()
+  const comparisonMode      = useCanvasLayoutStore(s => s.comparisonMode)
+  const toggleComparisonMode = useCanvasLayoutStore(s => s.toggleComparisonMode)
+  const panelViewMode       = useCanvasLayoutStore(s => s.panelViewMode)
+  const setPanelViewMode    = useCanvasLayoutStore(s => s.setPanelViewMode)
   const { compactGroupById, setCompactGroupById } = useCanvasDisplayStore()
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
@@ -54,7 +57,7 @@ export function OrgOperationView() {
   const persons        = (isHistoryPreviewMode && previewPersons)            ? previewPersons            : scopedPersons
   const allocationList = (isHistoryPreviewMode && previewAllocationList)     ? previewAllocationList     : scopedAllocList
 
-  const organizations = allAfterOrgs.filter(o => !o.isAbandoned)
+  const organizations = useMemo(() => allAfterOrgs.filter(o => !o.isAbandoned), [allAfterOrgs])
   const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList, masters })
 
   // ── UI state ──────────────────────────────────────────────────────────────

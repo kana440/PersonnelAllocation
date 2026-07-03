@@ -32,15 +32,10 @@ export function TreeWindowCanvas() {
   const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()
 
   // ── O(1) Map（organizations が変わるときのみ再構築）──────────────
-  const orgById = useMemo(() => {
-    const t = performance.now(); const r = buildOrgByIdMap(organizations)
-    console.log(`[PERF:Canvas] orgById ${(performance.now()-t).toFixed(1)}ms, orgs=${organizations.length}`)
-    return r
-  }, [organizations])
+  const orgById = useMemo(() => buildOrgByIdMap(organizations), [organizations])
 
   // ── フィルタ用計算 ─────────────────────────────────────────────
   const memberOrgIds = useMemo(() => {
-    const t = performance.now()
     const ids = new Set<string>()
     for (const [orgId, pos] of positionTreeByOrgId) {
       if (pos.length > 0) ids.add(orgId)
@@ -48,16 +43,11 @@ export function TreeWindowCanvas() {
     for (const [orgId, members] of afterMembersByOrgId) {
       if (members.length > 0) ids.add(orgId)
     }
-    console.log(`[PERF:Canvas] memberOrgIds ${(performance.now()-t).toFixed(1)}ms, count=${ids.size}`)
     return ids
   }, [positionTreeByOrgId, afterMembersByOrgId])
 
   // org → 全子孫マップ（サブツリーフィルタ用）
-  const subtreeMap = useMemo(() => {
-    const t = performance.now(); const r = buildSubtreeMap(organizations)
-    console.log(`[PERF:Canvas] subtreeMap ${(performance.now()-t).toFixed(1)}ms`)
-    return r
-  }, [organizations])
+  const subtreeMap = useMemo(() => buildSubtreeMap(organizations), [organizations])
 
   // 出向アンカーの強制表示セット
   const secondmentOrgIds = useMemo(() => {
@@ -76,16 +66,14 @@ export function TreeWindowCanvas() {
   }, [globalFilters.secondmentAnchors, organizations, masters])
 
   // Pass 1: 通常フィルタ（出向展開なし）
-  const primaryFilteredPanels = useMemo(() => {
-    const t = performance.now()
-    const r = applyCanvasFilters({
+  const primaryFilteredPanels = useMemo(
+    () => applyCanvasFilters({
       panels, filterCards, globalFilters,
       allOrgs: organizations, orgMasterEntries: masters.orgMasterEntries,
       memberOrgIds, secondmentOrgIds, subtreeMap,
-    })
-    console.log(`[PERF:Canvas] primaryFilteredPanels ${(performance.now()-t).toFixed(1)}ms, panels=${panels.length}→${r.length}`)
-    return r
-  }, [panels, filterCards, globalFilters, organizations, masters.orgMasterEntries, memberOrgIds, secondmentOrgIds, subtreeMap])
+    }),
+    [panels, filterCards, globalFilters, organizations, masters.orgMasterEntries, memberOrgIds, secondmentOrgIds, subtreeMap],
+  )
 
   // Pass 2: 「出向組織含む」が ON のとき、表示中の各組織の出向者用組織を追加
   const relatedSecondmentOrgIds = useMemo(() => {
@@ -116,20 +104,17 @@ export function TreeWindowCanvas() {
 
   // ── スタンドアロンパネルと表示座標 ───────────────────────────────
   const standalonePanels = useMemo(() => {
-    const t = performance.now()
     const panelByOrgId = buildPanelByOrgIdMap(filteredPanels)
-    const r = filteredPanels.filter(p => isStandaloneWindow(p, panelByOrgId, orgById))
-    console.log(`[PERF:Canvas] standalonePanels ${(performance.now()-t).toFixed(1)}ms, filtered=${filteredPanels.length}→standalone=${r.length}`)
-    return r
+    return filteredPanels.filter(p => isStandaloneWindow(p, panelByOrgId, orgById))
   }, [filteredPanels, orgById])
 
   const displayPanels = useMemo(() => {
-    const t = performance.now()
-    const r = autoArrange
-      ? (() => { const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW); return standalonePanels.map(p => { const pos = posMap.get(p.id); return pos ? { ...p, ...pos } : p }) })()
-      : standalonePanels
-    console.log(`[PERF:Canvas] displayPanels ${(performance.now()-t).toFixed(1)}ms, count=${r.length}`)
-    return r
+    if (!autoArrange) return standalonePanels
+    const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW)
+    return standalonePanels.map(p => {
+      const pos = posMap.get(p.id)
+      return pos ? { ...p, ...pos } : p
+    })
   }, [autoArrange, standalonePanels, orgById, panelHeights, winW])
 
   const connections = useMemo(
