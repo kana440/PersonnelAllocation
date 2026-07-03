@@ -16,6 +16,7 @@ import { applyCanvasFilters, buildSubtreeMap } from './FilterBar/filterLogic'
 import { findSecondmentOrgCode } from '@personnel/domain/commands/helpers'
 
 export function TreeWindowCanvas() {
+  const _rc = useRef(0); _rc.current++; if (_rc.current <= 3 || _rc.current % 20 === 0) console.log(`[PERF] TreeWindowCanvas render #${_rc.current}`)
   const {
     panels, setPositions,
     autoArrange, setAutoArrange,
@@ -110,7 +111,9 @@ export function TreeWindowCanvas() {
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
+    const t = performance.now()
     const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW)
+    console.log(`[PERF] computeLayout ${(performance.now()-t).toFixed(1)}ms panels=${standalonePanels.length}`)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
