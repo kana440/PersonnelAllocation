@@ -77,6 +77,8 @@ export function usePersonSelection({ persons, allocationList, selectPerson, sele
     { ctrl, shift }: { ctrl: boolean; shift: boolean },
     rowId?: number,
   ) => {
+    const t0 = performance.now()
+    console.log('[perf] handlePersonClick start', { personId, rowId })
     if (ctrl) {
       setSelectedPersonIds(prev => {
         const next = new Set(prev)
@@ -104,7 +106,9 @@ export function usePersonSelection({ persons, allocationList, selectPerson, sele
       }
     } else {
       setSelectedPersonIds(new Set())
+      console.log('[perf] before handleSelectPerson (store update)', performance.now() - t0, 'ms')
       handleSelectPerson(personId, rowId)
+      console.log('[perf] after handleSelectPerson (sync done)', performance.now() - t0, 'ms')
       lastClickRef.current = { personId, panelId }
     }
   }, [handleSelectPerson])

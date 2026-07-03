@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState, useRef } from 'react'
+import { useMemo, useCallback, useEffect, useState, useRef, memo } from 'react'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useStore }             from '../../store/useStore'
 import { useOrgView }           from './OrgViewContext'
@@ -15,7 +15,9 @@ import { FilterBar }           from './FilterBar'
 import { applyCanvasFilters, buildSubtreeMap } from './FilterBar/filterLogic'
 import { findSecondmentOrgCode } from '@personnel/domain/commands/helpers'
 
-export function TreeWindowCanvas() {
+// memo: OrgOperationView が selectedCardRowId 等の変化で再レンダーしても、
+// context が変わらない限りここは再レンダーしない（props なし）
+export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   const {
     panels, setPositions,
     autoArrange, setAutoArrange,
@@ -337,4 +339,4 @@ export function TreeWindowCanvas() {
       </div>
     </div>
   )
-}
+})

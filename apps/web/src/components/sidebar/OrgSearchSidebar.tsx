@@ -64,17 +64,22 @@ export function OrgSearchSidebar() {
 
   useEffect(() => {
     if (!selectedCardRowId) return
+    const t0 = performance.now()
+    console.log('[perf] OrgSearchSidebar effect start (selectedCardRowId changed)', selectedCardRowId)
     const row = allocationList.find(r => r.rowId === selectedCardRowId)
     if (!row?.departmentCode) return
     const personOrg = afterOrgByCode.get(row.departmentCode)
       ?? viewOrgs.find(o => o.id === row.departmentCode)
     if (!personOrg) return
     expandToOrg(personOrg.id)
+    console.log('[perf] after expandToOrg', performance.now() - t0, 'ms')
     openCanvasPanel(personOrg.id)
+    console.log('[perf] after openCanvasPanel', performance.now() - t0, 'ms')
     requestScrollToRow(selectedCardRowId)
     const id = selectedCardRowId
     // 展開反映後にスクロール
     setTimeout(() => treeRef.current?.scrollToRowId(id), 0)
+    console.log('[perf] OrgSearchSidebar effect done', performance.now() - t0, 'ms')
   }, [selectedCardRowId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const orgSearchLower = normalizeSearch(orgSearch.trim())

@@ -63,32 +63,33 @@ export function TreeNode({
   let childSection: React.ReactNode = null
 
   if (childOrgs.length > 0) {
-    const needsCollapse   = childOrgs.length > CHILD_COLLAPSE_THRESHOLD
-    const visibleChildren = needsCollapse && !showAllChildren
-      ? childOrgs.slice(0, CHILD_SHOW_COUNT)
-      : childOrgs
-    const hiddenCount = childOrgs.length - visibleChildren.length
+    if (childrenMode === 'windowed') {
+      // ── 展開（windowed）モード ──────────────────────────────
+      // 展開済み（青）は常に先頭に表示。折りたたみは閉じた子だけに適用。
+      const openChildren   = childOrgs.filter(c => panels.find(p => p.orgId === c.id)?.open ?? false)
+      const closedChildren = childOrgs.filter(c => !(panels.find(p => p.orgId === c.id)?.open ?? false))
+      const needsCollapse  = closedChildren.length > CHILD_COLLAPSE_THRESHOLD
+      const visibleClosed  = needsCollapse && !showAllChildren
+        ? closedChildren.slice(0, CHILD_SHOW_COUNT)
+        : closedChildren
+      const hiddenCount    = closedChildren.length - visibleClosed.length
 
-    childSection = (
-      <div className="mt-1 pt-1 border-t border-gray-100 space-y-0.5">
-        {visibleChildren.map(child => {
-          const childPanel = panels.find(p => p.orgId === child.id)
-          const isOpen     = childPanel?.open ?? false
-
-          // ── 展開（windowed）モード ──────────────────────────────
-          if (childrenMode === 'windowed') {
-            if (isOpen) {
-              const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
-              return (
-                <ChildChip
-                  key={child.id}
-                  child={child}
-                  count={count}
-                  variant="windowed"
-                  onClick={() => { setOrgOpen(child.id, false); selectOrg(orgId) }}
-                />
-              )
-            }
+      childSection = (
+        <div className="mt-1 pt-1 border-t border-gray-100 space-y-0.5">
+          {openChildren.map(child => {
+            const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
+            return (
+              <ChildChip
+                key={child.id}
+                child={child}
+                count={count}
+                variant="windowed"
+                onClick={() => { setOrgOpen(child.id, false); selectOrg(orgId) }}
+              />
+            )
+          })}
+          {visibleClosed.map(child => {
+            const childPanel = panels.find(p => p.orgId === child.id)
             const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
             return (
               <ChildChip
@@ -99,73 +100,100 @@ export function TreeNode({
                 onClick={() => { childPanel ? setOrgOpen(child.id, true) : addPanel(child.id); selectOrg(child.id) }}
               />
             )
-          }
+          })}
+          {needsCollapse && !showAllChildren && (
+            <button
+              onClick={() => setShowAllChildren(true)}
+              className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-[8px]">▶</span>
+              他 {hiddenCount} 件（全 {closedChildren.length} 件）
+            </button>
+          )}
+          {needsCollapse && showAllChildren && (
+            <button
+              onClick={() => setShowAllChildren(false)}
+              className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-[8px]">▲</span>
+              折りたたむ
+            </button>
+          )}
+        </div>
+      )
+    } else {
+      // ── リスト（inline）モード ──────────────────────────────
+      // デフォルト展開。collapsedOrgs に入っているものだけチップ。
+      const needsCollapse   = childOrgs.length > CHILD_COLLAPSE_THRESHOLD
+      const visibleChildren = needsCollapse && !showAllChildren
+        ? childOrgs.slice(0, CHILD_SHOW_COUNT)
+        : childOrgs
+      const hiddenCount = childOrgs.length - visibleChildren.length
 
-          // ── リスト（inline）モード ──────────────────────────────
-          // デフォルト展開。collapsedOrgs に入っているものだけチップ。
-          const collapsed = collapsedOrgs
-            ? collapsedOrgs.has(child.id)
-            : localCollapsed.has(child.id)
-          const isInlineOpen = !collapsed
-          const childPanelId = childPanel?.id ?? panelId
+      childSection = (
+        <div className="mt-1 pt-1 border-t border-gray-100 space-y-0.5">
+          {visibleChildren.map(child => {
+            const childPanel   = panels.find(p => p.orgId === child.id)
+            const collapsed    = collapsedOrgs ? collapsedOrgs.has(child.id) : localCollapsed.has(child.id)
+            const isInlineOpen = !collapsed
+            const childPanelId = childPanel?.id ?? panelId
 
-          if (isInlineOpen) {
+            if (isInlineOpen) {
+              return (
+                <InlineOrgSection
+                  key={child.id}
+                  child={child}
+                  childPanelId={childPanelId}
+                  onNavigate={onNavigate}
+                  onCollapse={() => {
+                    if (onOrgCollapse) onOrgCollapse(child.id)
+                    else setLocalCollapsed(prev => new Set([...prev, child.id]))
+                    selectOrg(orgId)
+                  }}
+                  isSelected={selectedOrgId === child.id}
+                  collapsedOrgs={collapsedOrgs}
+                  onOrgCollapse={onOrgCollapse}
+                  onOrgExpand={onOrgExpand}
+                />
+              )
+            }
+
+            const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
             return (
-              <InlineOrgSection
+              <ChildChip
                 key={child.id}
                 child={child}
-                childPanelId={childPanelId}
-                onNavigate={onNavigate}
-                onCollapse={() => {
-                  if (onOrgCollapse) onOrgCollapse(child.id)
-                  else setLocalCollapsed(prev => new Set([...prev, child.id]))
-                  selectOrg(orgId)
+                count={count}
+                variant="closed"
+                onClick={() => {
+                  if (onOrgExpand) onOrgExpand(child.id)
+                  else setLocalCollapsed(prev => { const s = new Set(prev); s.delete(child.id); return s })
+                  selectOrg(child.id)
                 }}
-                isSelected={selectedOrgId === child.id}
-                collapsedOrgs={collapsedOrgs}
-                onOrgCollapse={onOrgCollapse}
-                onOrgExpand={onOrgExpand}
               />
             )
-          }
-
-          const count = subtreeRowCount(child.id, childrenByOrgId, id => positionTreeByOrgId.get(id)?.length ?? 0)
-          return (
-            <ChildChip
-              key={child.id}
-              child={child}
-              count={count}
-              variant="closed"
-              onClick={() => {
-                if (onOrgExpand) onOrgExpand(child.id)
-                else setLocalCollapsed(prev => { const s = new Set(prev); s.delete(child.id); return s })
-                selectOrg(child.id)
-              }}
-            />
-          )
-        })}
-
-        {/* 子組織が多いとき: もっと見る / 折りたたむ */}
-        {needsCollapse && !showAllChildren && (
-          <button
-            onClick={() => setShowAllChildren(true)}
-            className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            <span className="text-[8px]">▶</span>
-            他 {hiddenCount} 件（全 {childOrgs.length} 件）
-          </button>
-        )}
-        {needsCollapse && showAllChildren && (
-          <button
-            onClick={() => setShowAllChildren(false)}
-            className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            <span className="text-[8px]">▲</span>
-            折りたたむ
-          </button>
-        )}
-      </div>
-    )
+          })}
+          {needsCollapse && !showAllChildren && (
+            <button
+              onClick={() => setShowAllChildren(true)}
+              className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-[8px]">▶</span>
+              他 {hiddenCount} 件（全 {childOrgs.length} 件）
+            </button>
+          )}
+          {needsCollapse && showAllChildren && (
+            <button
+              onClick={() => setShowAllChildren(false)}
+              className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-[8px]">▲</span>
+              折りたたむ
+            </button>
+          )}
+        </div>
+      )
+    }
   }
 
   const body = (isRoot !== false) && (

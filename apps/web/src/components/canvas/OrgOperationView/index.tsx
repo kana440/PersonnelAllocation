@@ -42,11 +42,12 @@ export function OrgOperationView() {
   const toggleComparisonMode = useCanvasLayoutStore(s => s.toggleComparisonMode)
   const panelViewMode       = useCanvasLayoutStore(s => s.panelViewMode)
   const setPanelViewMode    = useCanvasLayoutStore(s => s.setPanelViewMode)
-  const { compactGroupById, setCompactGroupById } = useCanvasDisplayStore()
+  const compactGroupById    = useCanvasDisplayStore(s => s.compactGroupById)
+  const setCompactGroupById = useCanvasDisplayStore(s => s.setCompactGroupById)
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
-    selectPerson, selectedCardRowId, selectCard, saveRow,
+    selectPerson, selectCard, saveRow,
     operationPanelRowId, enterOperationPanel,
     assignPersonToVacantPosition,
     assigneeWarnings,
@@ -207,13 +208,16 @@ export function OrgOperationView() {
     ? (undoHistory.find(e => e.index === historyPreviewPosition)?.label ?? '') : ''
 
   // ── Context value ─────────────────────────────────────────────────────────
-  const ctxValue: OrgViewContextValue = {
+  // selectedCardRowId は除外: クリックのたびに全 RowCard が Context 経由で再レンダーされるのを防ぐ。
+  // RowCard は useStore(s => s.selectedCardRowId === row.rowId) で直接購読する。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ctxValue: OrgViewContextValue = useMemo(() => ({
     organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
     dropGapBelowRowId, setDropGapBelowRowId,
-    openDropIntent:  isHistoryPreviewMode ? () => {} : (s) => {
+    openDropIntent:  isHistoryPreviewMode ? () => {} : (s: import('../hooks/useDropIntent').DropIntentState) => {
       if (s.fromAbsence && s.fromRowId) {
         const toOrg = organizations.find(o => o.id === s.toOrgId)
         if (toOrg) saveRow(s.fromRowId, { departmentCode: toOrg.externalCode ?? toOrg.id, transferReason: undefined })
@@ -221,7 +225,7 @@ export function OrgOperationView() {
       }
       setDropIntentState(s)
     },
-    openBandDrop:    isHistoryPreviewMode ? () => {} : (s) => setBandDropOpState(s),
+    openBandDrop:    isHistoryPreviewMode ? () => {} : (s: import('../hooks/useDropIntent').DropOpState) => setBandDropOpState(s),
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition:  isHistoryPreviewMode ? () => {} : handleAddPosition,
     handleSecondmentIn: isHistoryPreviewMode ? () => {} : handleSecondmentIn,
@@ -230,13 +234,28 @@ export function OrgOperationView() {
     setConfirmDialog:    isHistoryPreviewMode ? () => {} : setConfirmDialog,
     isSelectMode, selectedPersonIds,
     handlePersonClick, addPersonsToSelection, clearSelection,
-    selectedCardRowId, selectCard,
+    selectCard,
     isHistoryPreviewMode,
     handlePersonDoubleClick, handleRowDoubleClick,
     handleDropPositionOnPosition, handleReorderRow,
     expandedChipIds: new Set(),
     toggleChip: () => {},
-  }
+  // deps: selectedCardRowId は意図的に除外（RowCard は store 直接購読に移行済み）
+  }), [
+    organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId,
+    dragOverOrgId, setDragOverOrgId, highlightedOrgId,
+    dragOverVacantRowId, setDragOverVacantRowId,
+    dropPersonRowId, setDropPersonRowId,
+    dropGapBelowRowId, setDropGapBelowRowId,
+    isHistoryPreviewMode, saveRow, setDropIntentState, setBandDropOpState,
+    handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
+    handleAddPosition, handleSecondmentIn, topPositionCodeOfOrg,
+    setBulkMoveSourceId, setConfirmDialog,
+    isSelectMode, selectedPersonIds,
+    handlePersonClick, addPersonsToSelection, clearSelection,
+    selectCard, handlePersonDoubleClick, handleRowDoubleClick,
+    handleDropPositionOnPosition, handleReorderRow,
+  ])
 
   return (
     <OrgViewContext.Provider value={ctxValue}>

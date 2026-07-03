@@ -78,7 +78,6 @@ export interface OrgViewContextValue {
   handlePersonClick:        (personId: string, panelId: string, mods: { ctrl: boolean; shift: boolean }, rowId?: number) => void
   addPersonsToSelection:    (ids: Set<string>) => void
   clearSelection:           () => void
-  selectedCardRowId:        number | null
   selectCard:               (rowId: number | null) => void
   isHistoryPreviewMode:         boolean
   handlePersonDoubleClick:      (id: string) => void

@@ -8,7 +8,7 @@ import type { PanelDef }           from '../../../store/canvasLayoutStore'
 import { useStore }                from '../../../store/useStore'
 import { OrgTreePanel }            from '../core/OrgTreePanel'
 import { OrgTreeNode }             from '../core/OrgTreeNode'
-import { OrgTreeControls, getDescOrgIds } from '../core/OrgTreeControls'
+import { OrgTreeControls } from '../core/OrgTreeControls'
 import type { OrgTreeConfig, PanelTreeAdapter } from '../core/types'
 import { TreeWindowHeader }        from './TreeWindowHeader'
 import { AddRowDropdown }          from '../AddRowDropdown'
@@ -54,13 +54,13 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const selectOrg = useStore(s => s.selectOrg)
   const selectedOrgId = useStore(s => s.selectedOrgId)
 
-  // ── 初回マウント時: メンバー/ポジションを持つ子孫 org を自動展開 ──────
+  // ── 初回マウント時: 直接メンバー/ポジションを持つ子孫 org を自動展開 ──────
   const hasAutoExpanded = useRef(false)
   useEffect(() => {
     if (hasAutoExpanded.current) return
     hasAutoExpanded.current = true
 
-    // サブツリーに items を持つ org かを O(N) でメモ化チェック
+    // サブツリーに items を持つ org かを O(N) でメモ化チェック（再帰の枝刈りに使用）
     const memo = new Map<string, boolean>()
     const hasSubtreeItems = (id: string): boolean => {
       const cached = memo.get(id)
@@ -71,7 +71,20 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
       return result
     }
 
-    const idsToOpen = getDescOrgIds(panel.orgId, childrenByOrgId, hasSubtreeItems)
+    // 直接 items を持つ org のみ open にする（中間組織は除外）
+    // ただし再帰はサブツリーに items がある枝だけ辿る
+    const idsToOpen: string[] = []
+    const collect = (orgId: string) => {
+      for (const child of childrenByOrgId.get(orgId) ?? []) {
+        if (!hasSubtreeItems(child.id)) continue
+        if ((positionTreeByOrgId.get(child.id)?.length ?? 0) > 0) {
+          idsToOpen.push(child.id)
+        }
+        collect(child.id)
+      }
+    }
+    collect(panel.orgId)
+
     if (idsToOpen.length > 0) addPanelsBatch(idsToOpen)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

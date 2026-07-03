@@ -34,7 +34,7 @@ export function RowCard({
 }: RowCardProps) {
   const { row, person, depth, activePatterns, externalManagerKind } = entry
   const {
-    isSelectMode, selectedPersonIds, selectedCardRowId,
+    isSelectMode, selectedPersonIds,
     handlePersonClick,
     handleRowDoubleClick,
     dragOverVacantRowId, setDragOverVacantRowId,
@@ -48,6 +48,9 @@ export function RowCard({
     positionTreeByOrgId,
   } = useOrgView()
 
+  // selectedCardRowId: コンテキスト経由をやめてストア直接購読 → このカードが選択状態か否かだけ比較
+  // これにより他のカードのクリックでこのカードが再レンダーされない
+  const isCardSelected   = useStore(s => !isVacant && !isSelectMode && s.selectedCardRowId === row.rowId)
   const displayFields    = useCanvasDisplayStore(s => s.displayFields)
   const hiddenBadgeTypes = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
   const masters       = useStore(s => s.masters)
@@ -100,9 +103,9 @@ export function RowCard({
   const isVacant           = !person
   const isConcurrent       = row.concurrentType === '兼務'
   const isOnLeave          = !!row.leaveOfAbsenceSign
-  const isSelected         = !isVacant && (
-    isSelectMode ? selectedPersonIds.has(person!.id) : selectedCardRowId === row.rowId
-  )
+  const isSelected         = isSelectMode
+    ? (!isVacant && selectedPersonIds.has(person!.id))
+    : isCardSelected
   const isDropTarget       = isVacant && dragOverVacantRowId === row.rowId
   const isPersonDropTarget = !isVacant && !isSelectMode && dropPersonRowId   === row.rowId
   const isGapDropTarget    = !isVacant && !isSelectMode && dropGapBelowRowId === row.rowId

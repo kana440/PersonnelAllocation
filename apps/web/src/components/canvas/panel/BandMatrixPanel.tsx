@@ -18,7 +18,7 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
   const masters             = useStore(s => s.masters)
   const allocationList      = useStore(s => s.allocationList)
   const showVacantPositions = useCanvasLayoutStore(s => s.showVacantPositions)
-  const { compactGroupById }         = useCanvasDisplayStore()
+  const compactGroupById             = useCanvasDisplayStore(s => s.compactGroupById)
   const { positionTreeByOrgId, openBandDrop, isHistoryPreviewMode } = useOrgView()
 
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
