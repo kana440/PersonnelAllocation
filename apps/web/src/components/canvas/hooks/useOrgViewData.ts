@@ -79,6 +79,7 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters 
   }, [allocationList])
 
   const positionTreeByOrgId = useMemo((): Map<string, PositionEntry[]> => {
+    const t = performance.now()
     const result = new Map<string, PositionEntry[]>()
     for (const [orgId, rows] of afterOrgRowsById) {
       // 同一 org 内の positionCode セット（外部上司判定用）
@@ -103,6 +104,7 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters 
         }
       }))
     }
+    console.log(`[PERF:OrgView] positionTreeByOrgId ${(performance.now()-t).toFixed(1)}ms, orgs=${result.size}`)
     return result
   }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes])
 

@@ -99,34 +99,6 @@ export function SetupView({ onReady }: Props) {
     if (role === 'assignee' && memberOrgIds.length > 0) focusOrg(memberOrgIds[0])
   }, [focusOrg])
 
-  const runLoadSequence = useCallback(async (
-    result: ImportedWorkbookResult,
-    role: 'admin' | 'assignee',
-    assigneeName: string | null,
-  ) => {
-    const t0 = performance.now()
-    console.log('[PERF] tick 開始')
-    await tick()
-    console.log(`[PERF] tick 完了 ${(performance.now() - t0).toFixed(1)}ms`)
-
-    const t1 = performance.now()
-    console.log('[PERF] loadExcelData 開始', { rows: result.allocationList.length })
-    await loadExcelData(result)
-    console.log(`[PERF] loadExcelData 完了 ${(performance.now() - t1).toFixed(1)}ms`)
-
-    const t2 = performance.now()
-    console.log('[PERF] initCanvas 開始', { orgs: result.afterOrganizations.length })
-    initCanvas(result, role, assigneeName)
-    console.log(`[PERF] initCanvas 完了 ${(performance.now() - t2).toFixed(1)}ms`)
-
-    const t3 = performance.now()
-    console.log('[PERF] onReady 開始（メインアプリマウント）')
-    onReady()
-    console.log(`[PERF] onReady 完了 ${(performance.now() - t3).toFixed(1)}ms`)
-
-    console.log(`[PERF] 合計 ${(performance.now() - t0).toFixed(1)}ms`)
-  }, [loadExcelData, initCanvas, onReady])
-
   // 管理者として開く
   const handleSelectAdmin = useCallback(async () => {
     if (phase.kind !== 'mode-select') return
@@ -134,8 +106,11 @@ export function SetupView({ onReady }: Props) {
     setUserSession({ role: 'admin', assigneeName: null })
     const needsInit = proceedOrInitWizard(result, 'admin', null)
     if (needsInit) return
-    await runLoadSequence(result, 'admin', null)
-  }, [phase, setUserSession, proceedOrInitWizard, runLoadSequence])
+    await tick()
+    await loadExcelData(result)
+    initCanvas(result, 'admin', null)
+    onReady()
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, initCanvas, onReady])
 
   // 担当者として開く（AssigneeSelectStep からの選択確定）
   const handleAssigneeSelect = useCallback(async (assigneeName: string) => {
@@ -145,16 +120,22 @@ export function SetupView({ onReady }: Props) {
     setUserSession({ role: 'assignee', assigneeName: resolvedName })
     const needsInit = proceedOrInitWizard(result, 'assignee', resolvedName)
     if (needsInit) return
-    await runLoadSequence(result, 'assignee', resolvedName)
-  }, [phase, setUserSession, proceedOrInitWizard, runLoadSequence])
+    await tick()
+    await loadExcelData(result)
+    initCanvas(result, 'assignee', resolvedName)
+    onReady()
+  }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, initCanvas, onReady])
 
   // after-init ウィザード完了
   const handleAfterInitComplete = useCallback(async (modifiedResult: ImportedWorkbookResult) => {
     if (phase.kind !== 'after-init') return
     const { role, assigneeName } = phase
     setPhase({ kind: 'loading', progress: `データ適用中... (${modifiedResult.allocationRowCount.toLocaleString()} 行)` })
-    await runLoadSequence(modifiedResult, role, assigneeName)
-  }, [phase, runLoadSequence])
+    await tick()
+    await loadExcelData(modifiedResult)
+    initCanvas(modifiedResult, role, assigneeName)
+    onReady()
+  }, [phase, loadExcelData, initCanvas, onReady])
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
