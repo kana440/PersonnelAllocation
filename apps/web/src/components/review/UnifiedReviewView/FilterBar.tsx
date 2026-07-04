@@ -160,45 +160,49 @@ export function FilterBar({
         )}
       </div>
 
-      {/* ── Row C: 問題フィルタ + 一括修正（問題がある場合のみ）── */}
+      {/* ── Row C: 問題バッジチップ + 一括修正（問題がある場合のみ）── */}
       {issueGroups.length > 0 && (
-        <div className="flex items-center gap-2 px-2 pb-1.5 border-t border-gray-100 pt-1">
-          <span className="text-[9px] font-semibold text-red-600 flex-shrink-0 whitespace-nowrap">
-            問題 {totalIssueRows}件
+        <div className="flex items-start gap-1 px-2 pb-1.5 border-t border-gray-100 pt-1 flex-wrap">
+          <span className="text-[9px] font-semibold text-red-600 flex-shrink-0 whitespace-nowrap mt-0.5 mr-0.5">
+            問題 {totalIssueRows}件:
           </span>
-          <select
-            value={filter.activeIssueMessage}
-            onChange={e => set({ activeIssueMessage: e.target.value })}
-            className={`flex-1 text-[10px] border rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 min-w-0 ${
-              filter.activeIssueMessage
-                ? 'border-red-300 focus:ring-red-300 text-red-700'
-                : 'border-gray-300 focus:ring-gray-300 text-gray-600'
-            }`}
-          >
-            <option value="">カテゴリを選択...</option>
-            {issueGroups.map(g => (
-              <option key={g.message} value={g.message} title={g.message}>
-                {g.level === 'error' ? '[E]' : '[W]'} {g.resolutionDef?.shortLabel ?? getIssueShortLabel(g.message)} ({g.rowIds.length})
-              </option>
-            ))}
-          </select>
-          {filter.activeIssueMessage && (
-            <button
-              onClick={() => set({ activeIssueMessage: '' })}
-              className="flex-shrink-0 text-[9px] text-gray-400 hover:text-gray-600"
-            >×</button>
+          {issueGroups.map(g => {
+            const active = filter.activeIssueMessage === g.message
+            const isError = g.level === 'error'
+            return (
+              <button
+                key={g.message}
+                title={`${g.message}（${g.rowIds.length}件）`}
+                onClick={() => set({ activeIssueMessage: active ? '' : g.message })}
+                className={`px-1.5 py-0.5 rounded border text-[9px] font-medium transition-all whitespace-nowrap ${
+                  active
+                    ? isError
+                      ? 'bg-red-600 text-white border-red-600'
+                      : 'bg-amber-500 text-white border-amber-500'
+                    : isError
+                      ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                {isError ? '⚠' : '!'} {g.resolutionDef?.shortLabel ?? getIssueShortLabel(g.message)}
+                <span className="ml-0.5 opacity-70">{g.rowIds.length}</span>
+              </button>
+            )
+          })}
+          {selectedGroup && (
+            <>
+              <button
+                onClick={() => set({ activeIssueMessage: '' })}
+                className="text-[9px] text-gray-400 hover:text-gray-600 mt-0.5"
+              >×</button>
+              <button
+                onClick={() => onOpenBulkModal(selectedGroup)}
+                className="px-2.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap bg-blue-600 text-white hover:bg-blue-700 transition-colors ml-auto flex-shrink-0"
+              >
+                一括修正 →
+              </button>
+            </>
           )}
-          <button
-            onClick={() => { if (selectedGroup) onOpenBulkModal(selectedGroup) }}
-            disabled={!selectedGroup}
-            className={`flex-shrink-0 px-2.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap transition-colors ${
-              selectedGroup
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            一括修正 →
-          </button>
         </div>
       )}
     </div>

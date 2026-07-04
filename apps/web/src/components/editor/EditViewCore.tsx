@@ -1,24 +1,25 @@
-import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
-import { LeftSidebar }   from '../sidebar/LeftSidebar'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { CanvasLayout }  from '../canvas/CanvasLayout'
 import { FloatingEditor } from './FloatingEditor'
 import { HistoryPanel }  from '../history/HistoryPanel'
-import { BottomPanel }   from './BottomPanel'
-import { AIChatDrawer }  from '../ai/AIChatDrawer'
 import { MaintenanceDialog }        from '../maintenanceDialog'
 import { MasterBrowserPanel }     from '../masterBrowser'
 import { StrictnessSettingsPanel }  from '../settings/StrictnessSettingsPanel'
+import { ReviewPane }               from './ReviewPane'
+import { OrgPersonNav }             from '../layout/OrgPersonNav'
+import { FloatingAIChat }           from '../layout/FloatingAIChat'
 import { useStore }          from '../../store/useStore'
 import { useResizablePanel } from '../../hooks/useResizablePanel'
 
-const BOTTOM_MIN       = 36
-const BOTTOM_MAX_RATIO = 0.65
-const BOTTOM_DEFAULT   = 220
-const BOTTOM_COLLAPSED = 36
+/**
+ * メイン表示モード:
+ *   'canvas' — 左:OrgPersonNav + 右:CanvasLayout（組織図）
+ *   'review' — 全幅 ReviewPane（詳細表 Before/After）
+ */
+type MainViewMode = 'canvas' | 'review'
 
-const SIDEBAR_MIN = 140;  const SIDEBAR_MAX = 480;  const SIDEBAR_DEFAULT = 192
-const CHAT_MIN    = 240;  const CHAT_MAX    = 600;  const CHAT_DEFAULT    = 320
-const HISTORY_MIN = 160;  const HISTORY_MAX = 400;  const HISTORY_DEFAULT = 220
+const STRIP_W     = 280
+const HISTORY_MIN = 160; const HISTORY_MAX = 400; const HISTORY_DEFAULT = 220
 
 interface HeaderButtonProps {
   onClick:       () => void
@@ -47,13 +48,9 @@ export function HeaderButton({
 }
 
 interface Props {
-  /** タイトルエリア（← 戻るボタン・アプリ名・スコープ等） */
   headerLeft:  ReactNode
-  /** STEP1 専用の中間ボタン群（マージ・担当者割当・分割エクスポート等） */
   headerMid?:  ReactNode
-  /** 右端のアクションボタン（STEP1: 管理+クリア、STEP2: 提出） */
   headerRight: ReactNode
-  /** ヘッダー直下のバナー（STEP2 の差し戻しコメント等） */
   topBanner?:  ReactNode
 }
 
@@ -64,51 +61,13 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const canRedo        = useStore(s => s.canRedo)
   const masterWarnings = useStore(s => s.masterWarnings)
 
-  const [isTreeOpen,    setIsTreeOpen]    = useState(true)
-  const [isChatOpen,    setIsChatOpen]    = useState(true)
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  const [excelCollapsed,         setExcelCollapsed]         = useState(false)
+  const [mainViewMode,           setMainViewMode]           = useState<MainViewMode>('canvas')
+  const [isHistoryOpen,          setIsHistoryOpen]          = useState(false)
   const [maintenanceOpen,        setMaintenanceOpen]        = useState(false)
-  const [masterBrowserOpen,    setMasterBrowserOpen]    = useState(false)
+  const [masterBrowserOpen,      setMasterBrowserOpen]      = useState(false)
   const [strictnessSettingsOpen, setStrictnessSettingsOpen] = useState(false)
 
-  const prevBottomHeightRef  = useRef(BOTTOM_DEFAULT)
-  const excelCollapsedRef    = useRef(excelCollapsed)
-
-  const [sidebarWidth,  , handleSidebarResizeStart]  = useResizablePanel(SIDEBAR_DEFAULT, { min: SIDEBAR_MIN,  max: SIDEBAR_MAX,  axis: 'x' })
-  const [chatWidth,     , handleChatResizeStart]     = useResizablePanel(CHAT_DEFAULT,    { min: CHAT_MIN,     max: CHAT_MAX,     axis: 'x', invert: true })
-  const [historyWidth,  , handleHistoryResizeStart]  = useResizablePanel(HISTORY_DEFAULT, { min: HISTORY_MIN,  max: HISTORY_MAX,  axis: 'x', invert: true })
-  const [bottomHeight, setBottomHeight, handleResizeStart] = useResizablePanel(
-    BOTTOM_DEFAULT,
-    { min: BOTTOM_MIN, max: () => window.innerHeight * BOTTOM_MAX_RATIO, axis: 'y', invert: true },
-  )
-
-  // excelCollapsed が変わったら ref に同期（subscribe クロージャが常に最新値を参照できるように）
-  useEffect(() => { excelCollapsedRef.current = excelCollapsed }, [excelCollapsed])
-
-  const toggleExcelCollapse = useCallback(() => {
-    if (excelCollapsed) {
-      setBottomHeight(prevBottomHeightRef.current)
-      setExcelCollapsed(false)
-    } else {
-      prevBottomHeightRef.current = bottomHeight > BOTTOM_COLLAPSED ? bottomHeight : BOTTOM_DEFAULT
-      setBottomHeight(BOTTOM_COLLAPSED)
-      setExcelCollapsed(true)
-    }
-  }, [excelCollapsed, bottomHeight, setBottomHeight])
-
-  // Canvas でカードを選択したとき折りたたまれていれば自動展開
-  // useStore() 全体を subscribe せず命令型にすることで EditViewCore 自体の再レンダーを防ぐ
-  useEffect(() => {
-    return useStore.subscribe((state, prev) => {
-      if (state.selectedCardRowId === prev.selectedCardRowId) return
-      if (!state.selectedCardRowId) return
-      if (!excelCollapsedRef.current) return
-      setBottomHeight(prevBottomHeightRef.current > BOTTOM_COLLAPSED ? prevBottomHeightRef.current : BOTTOM_DEFAULT)
-      setExcelCollapsed(false)
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [historyWidth, , handleHistoryResizeStart] = useResizablePanel(HISTORY_DEFAULT, { min: HISTORY_MIN, max: HISTORY_MAX, axis: 'x', invert: true })
 
   // Ctrl+Z / Ctrl+Y
   useEffect(() => {
@@ -127,6 +86,11 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo, canUndo, canRedo])
 
+  // Canvas でカードをダブルクリック → 操作パネルが開くので Canvas モードに留まる
+  const handleDoubleClick = useCallback((_rowId: number) => {
+    setMainViewMode('canvas')
+  }, [])
+
   return (
     <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
 
@@ -135,30 +99,47 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
         {headerMid}
         <div className="ml-auto flex items-center gap-2">
           <HeaderButton onClick={undo} disabled={!canUndo} title="元に戻す (Ctrl+Z)">
-            <span>↩</span><span>Undo</span>
+            <span>&#x21A9;</span><span>Undo</span>
           </HeaderButton>
           <HeaderButton onClick={redo} disabled={!canRedo} title="やり直し (Ctrl+Y)">
-            <span>Redo</span><span>↪</span>
+            <span>Redo</span><span>&#x21AA;</span>
           </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />
-          <HeaderButton
-            onClick={toggleExcelCollapse}
-            active={!excelCollapsed}
-            activeClass="bg-emerald-600 text-white"
-            title="レビューパネルを開閉する"
-          >
-            <span>🔍</span><span>レビュー</span>
-          </HeaderButton>
+
+          {/* Canvas / 詳細表（ReviewPane）切替 */}
+          <div className="flex rounded overflow-hidden border border-gray-600">
+            <button
+              onClick={() => setMainViewMode('canvas')}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
+                mainViewMode === 'canvas'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+              title="組織図キャンバス"
+            >
+              🗺 Canvas
+            </button>
+            <button
+              onClick={() => setMainViewMode('review')}
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
+                mainViewMode === 'review'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+              title="詳細レビュー表（Before/After全列）"
+            >
+              📊 詳細表
+            </button>
+          </div>
+
+          <div className="w-px h-4 bg-gray-600" />
           <HeaderButton
             onClick={() => setIsHistoryOpen(o => !o)}
             active={isHistoryOpen}
             activeClass="bg-indigo-600 text-white"
             title="操作履歴パネル"
           >
-            <span>⏱</span><span>履歴</span>
-          </HeaderButton>
-          <HeaderButton onClick={() => setIsChatOpen(o => !o)} active={isChatOpen}>
-            <span>💬</span><span>AI アシスタント</span>
+            <span>&#x23F1;</span><span>履歴</span>
           </HeaderButton>
           <div className="w-px h-4 bg-gray-600" />
           <HeaderButton
@@ -194,59 +175,51 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
       {topBanner}
 
       {maintenanceOpen        && <MaintenanceDialog        onClose={() => setMaintenanceOpen(false)} />}
-      {masterBrowserOpen    && <MasterBrowserPanel     onClose={() => setMasterBrowserOpen(false)} />}
+      {masterBrowserOpen      && <MasterBrowserPanel       onClose={() => setMasterBrowserOpen(false)} />}
       {strictnessSettingsOpen && <StrictnessSettingsPanel  onClose={() => setStrictnessSettingsOpen(false)} />}
 
-      {/* 上段: サイドバー + キャンバス + AI チャット + 履歴 */}
-      <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5 pb-0">
+      {/* メインエリア */}
+      <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5">
 
-        {isTreeOpen ? (
-          <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: sidebarWidth }}>
-            <LeftSidebar />
-            <div className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10" onMouseDown={handleSidebarResizeStart} />
-          </div>
-        ) : (
-          <div className="flex-shrink-0 w-7 bg-white rounded-lg shadow flex flex-col items-center py-2 gap-1 cursor-pointer hover:bg-blue-50 transition-colors" onClick={() => setIsTreeOpen(true)} title="サイドバーを展開">
-            <span className="text-gray-400 text-xs">▶</span>
-            <span className="text-xs font-semibold text-blue-600" style={{ writingMode: 'vertical-rl', letterSpacing: '0.08em' }}>組織</span>
+        {/* 左: OrgPersonNav — Canvas モードのみ表示 */}
+        {mainViewMode === 'canvas' && (
+          <div
+            className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col"
+            style={{ width: STRIP_W }}
+          >
+            <OrgPersonNav onDoubleClick={handleDoubleClick} />
           </div>
         )}
 
+        {/* 右: Canvas（組織図） または ReviewPane（詳細表・全幅） */}
         <div className="flex-1 bg-white rounded-lg shadow overflow-hidden min-w-0">
-          <CanvasLayout />
+          {mainViewMode === 'canvas' ? (
+            <CanvasLayout />
+          ) : (
+            <ReviewPane onBackToCanvas={() => setMainViewMode('canvas')} />
+          )}
         </div>
 
-        {isChatOpen && (
-          <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: chatWidth }}>
-            <div className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 transition-colors z-10" onMouseDown={handleChatResizeStart} />
-            <AIChatDrawer onClose={() => setIsChatOpen(false)} />
-          </div>
-        )}
-
+        {/* 履歴パネル（折りたたみ式） */}
         {isHistoryOpen ? (
           <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: historyWidth }}>
             <div className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-300 transition-colors z-10" onMouseDown={handleHistoryResizeStart} />
             <HistoryPanel onClose={() => setIsHistoryOpen(false)} />
           </div>
         ) : (
-          <div className="flex-shrink-0 w-7 bg-white rounded-lg shadow flex flex-col items-center py-2 gap-1 cursor-pointer hover:bg-indigo-50 transition-colors" onClick={() => setIsHistoryOpen(true)} title="操作履歴を展開">
-            <span className="text-gray-400 text-xs">◀</span>
+          <div
+            className="flex-shrink-0 w-7 bg-white rounded-lg shadow flex flex-col items-center py-2 gap-1 cursor-pointer hover:bg-indigo-50 transition-colors"
+            onClick={() => setIsHistoryOpen(true)}
+            title="操作履歴を展開"
+          >
+            <span className="text-gray-400 text-xs">&#x25C4;</span>
             <span className="text-xs font-semibold text-indigo-600" style={{ writingMode: 'vertical-rl', letterSpacing: '0.08em' }}>履歴</span>
           </div>
         )}
       </div>
 
-      {/* リサイズハンドル */}
-      <div className="h-2 flex-shrink-0 mx-1.5 flex items-center justify-center cursor-row-resize group" onMouseDown={handleResizeStart}>
-        <div className="w-full h-1 bg-gray-300 rounded group-hover:bg-blue-400 transition-colors" />
-      </div>
-
-      {/* 下段: レビュー/履歴パネル */}
-      <div className="flex-shrink-0 bg-white rounded-lg shadow mx-1.5 mb-1.5 overflow-hidden" style={{ height: excelCollapsed ? BOTTOM_COLLAPSED : bottomHeight }}>
-        <BottomPanel isCollapsed={excelCollapsed} onToggleCollapse={toggleExcelCollapse} />
-      </div>
-
       <FloatingEditor />
+      <FloatingAIChat />
     </div>
   )
 }

@@ -45,11 +45,11 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
 
   const {
     showVacantPositions, toggleShowVacantPositions,
-    panelViewMode,
+    canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
     showVacantPositions:       s.showVacantPositions,
     toggleShowVacantPositions: s.toggleShowVacantPositions,
-    panelViewMode:             s.panelViewMode,
+    canvasPanelStyle:             s.canvasPanelStyle,
   })))
 
   const org = orgById.get(orgId)
@@ -69,7 +69,7 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
   return (
     <div
       className={`flex-shrink-0 max-h-full flex flex-col border-2 rounded-xl shadow-sm transition-colors
-        ${panelViewMode === 'band' ? 'w-52' : 'w-64'}
+        ${canvasPanelStyle === 'band' ? 'w-52' : 'w-64'}
         ${isDropTarget ? 'border-blue-400 bg-blue-50/30' : 'border-gray-200 bg-white'}`}
       onDragOver={e => handleDragOver(e, orgId)}
       onDragLeave={handleDragLeave}
@@ -133,7 +133,7 @@ export function OrgPanel({ orgId, panelId, colorIndex, onRemove }: OrgPanelProps
 
       {/* スクロール可能な本体 */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {panelViewMode === 'band'
+        {canvasPanelStyle === 'band'
           ? <BandMatrixPanel orgId={orgId} panelId={panelId} />
           : (
             <div className="p-2">

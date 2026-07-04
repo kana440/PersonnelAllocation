@@ -29,7 +29,7 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     triggerComparisonArrange,
     canvasZoom, setCanvasZoom, stepCanvasZoom,
     filterCards, globalFilters,
-    panelViewMode,
+    canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
     panels:                  s.panels,
     setPositions:            s.setPositions,
@@ -44,9 +44,9 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     stepCanvasZoom:          s.stepCanvasZoom,
     filterCards:             s.filterCards,
     globalFilters:           s.globalFilters,
-    panelViewMode:           s.panelViewMode,
+    canvasPanelStyle:           s.canvasPanelStyle,
   })))
-  const winW = VIEW_MODE_WIDTHS[panelViewMode]
+  const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
   const selectedOrgId = useStore(s => s.selectedOrgId)
   const masters       = useStore(s => s.masters)
   const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()

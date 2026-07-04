@@ -21,7 +21,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     setComparisonPosition, toggleComparisonPanelOpen,
     setComparisonChildrenMode, setComparisonOrgOpen,
     setComparisonCollapsedOrgIds, setPanelHeight,
-    comparisonPanels, panelViewMode,
+    comparisonPanels, canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
     setComparisonPosition:        s.setComparisonPosition,
     toggleComparisonPanelOpen:    s.toggleComparisonPanelOpen,
@@ -30,7 +30,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     setComparisonCollapsedOrgIds: s.setComparisonCollapsedOrgIds,
     setPanelHeight:               s.setPanelHeight,
     comparisonPanels:             s.comparisonPanels,
-    panelViewMode:                s.panelViewMode,
+    canvasPanelStyle:                s.canvasPanelStyle,
   })))
 
   // orgById はウィンドウ内ナビゲーション（breadcrumb）に使うだけ。contextに入れるほどでもないのでローカルに保つ
@@ -101,7 +101,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
   return (
     <OrgTreePanel
       panel={panel}
-      panelViewMode={panelViewMode}
+      canvasPanelStyle={canvasPanelStyle}
       windowKind="before-window"
       setPosition={setComparisonPosition}
       setPanelHeight={setPanelHeight}
@@ -133,7 +133,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
       )}
       renderBody={() => {
         if (!currentOrg) return <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>
-        if (panelViewMode === 'band') return <BeforeBandView orgId={currentRootId} beforeRowsByOrgId={beforeRowsByOrgId} />
+        if (canvasPanelStyle === 'band') return <BeforeBandView orgId={currentRootId} beforeRowsByOrgId={beforeRowsByOrgId} />
         return (
           <div className="p-1.5">
             <OrgTreeNode

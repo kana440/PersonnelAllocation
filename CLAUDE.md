@@ -136,7 +136,7 @@ interface Props {
 ```
 
 - STEP1 の `App.tsx`・STEP2 の `Step2App.tsx` がそれぞれ `EditViewCore` にスロットを渡す
-- 共通ロジック（LeftSidebar・キャンバス・AI チャット・履歴パネル）は `EditViewCore` 内に固定
+- 共通ロジック（OrgPersonNav・キャンバス・AI チャット・履歴パネル）は `EditViewCore` 内に固定
 - STEP2 専用 UI は `headerRight` か `topBanner` に配置する
 
 詳細は `docs/02-architecture.md` の「STEP1 / STEP2 共存アーキテクチャ」セクション参照。
@@ -350,14 +350,14 @@ executeOperation(op)
 
 | 状態 | スコープ | 格納場所 |
 |---|---|---|
-| `panelViewMode: PanelViewModeId` | **全パネル共通** | `canvasLayoutStore` の1変数 |
+| `canvasPanelStyle: CanvasPanelStyle` | **全パネル共通** | `canvasLayoutStore` の1変数 |
 | `childrenMode: 'windowed' \| 'inline'` | **パネル個別** | `PanelDef.childrenMode` |
 | `collapsedOrgIds: string[]` | **パネル個別** | `PanelDef.collapsedOrgIds` |
 | `open: boolean` | **パネル個別** | `PanelDef.open` |
 
-- `panelViewMode` の切り替えは `setPanelViewMode(mode)` を使う（`togglePanelViewMode` は廃止）
-- `panelViewMode` の UI コントロールは**キャンバスヘッダー（`OrgOperationView`）に置く**。各パネルヘッダーには置かない（グローバル状態なのにパネルごとにボタンを持つのは誤り）
-- パネル幅は `VIEW_MODE_WIDTHS[panelViewMode]` で取得する（`=== 'band' ? 208 : 288` のハードコードをしない）
+- `canvasPanelStyle` の切り替えは `setCanvasPanelStyle(style)` を使う（`togglePanelViewMode` は廃止済み）
+- `canvasPanelStyle` の UI コントロールは**キャンバスヘッダー（`OrgOperationView`）に置く**。各パネルヘッダーには置かない（グローバル状態なのにパネルごとにボタンを持つのは誤り）
+- パネル幅は `VIEW_MODE_WIDTHS[canvasPanelStyle]` で取得する（`=== 'band' ? 208 : 288` のハードコードをしない）
 
 ---
 
@@ -403,7 +403,7 @@ components/foo/
 
 ```
 canvas/core/
-  types.ts            ← PanelTreeAdapter・OrgTreeConfig・PanelViewModeId 等の型
+  types.ts            ← PanelTreeAdapter・OrgTreeConfig・CanvasPanelStyle 等の型
   OrgTreeNode.tsx     ← ストア非依存な再帰ノード（Prop で完結）
   OrgTreeControls.tsx ← 展開/折りたたみコントロールバー
   OrgTreePanel.tsx    ← パネルシェル（ドラッグ・ResizeObserver）
@@ -461,26 +461,26 @@ for (const org of beforeOrganizations) {
 `apps/web/src/components/common/OrgPickerModal` を使う。階層ツリー表示・検索・追加済み表示を統一提供する。
 インラインのドロップダウンで代替しない。
 
-**左サイドバー構造**:
+**メイン表示モードと画面構成**:
+
+| `mainViewMode` | 左パネル | 右パネル |
+|---|---|---|
+| `'canvas'`（デフォルト） | `OrgPersonNav`（280px固定）| `CanvasLayout`（組織図） |
+| `'review'` | なし | `ReviewPane`（全幅・詳細表） |
+
 ```
-LeftSidebar（sidebar/LeftSidebar.tsx）
-  通常モード: OrgSearchSidebar のみ
-  比較モード: タブ切り替え
-    ├── 新組織タブ → OrgSearchSidebar（組織ツリー・人物一覧）
-    └── 旧組織タブ → BeforeOrgSearchSidebar（旧組織ツリー）
-
-OrgSearchSidebar（sidebar/OrgSearchSidebar.tsx）
-  ├── 検索インプット（組織名・人名）
-  ├── VirtualOrgTree（組織ツリー + 人物一覧、flex-1）
-  └── UnmappedOrgSection（旧組織・未割当、下部固定・最大 45% 高さ）
-        └── VirtualUnmappedList（仮想スクロール）
+EditViewCore
+  Canvas モード:
+    ├── OrgPersonNav（layout/OrgPersonNav/）  ← 人物・組織ナビゲーション
+    │     ├── 検索・フィルタバー
+    │     └── OrgSection × N → PersonRow × N
+    └── CanvasLayout（canvas/CanvasLayout/）  ← 組織図キャンバス
+  Review モード（全幅）:
+    └── ReviewPane（editor/ReviewPane.tsx）   ← 詳細 Before/After 表
+          └── UnifiedReviewView（review/UnifiedReviewView/）
 ```
 
-**「未設定」vs「未割当」の区別**（紛らわしいので注意）:
-- `UnassignedCard`（組織**未設定**）: `departmentCode` が空の行。`canvas/StripBar/UnassignedCard.tsx` に定義。
-- `UnmappedOrgSection`（旧組織・**未割当**）: `departmentCode` が新組織マスタに存在しない行。`OrgSearchSidebar` 下部に常時表示。
-
-**注意**: `canvas/StripBar/index.tsx`（`PanelTabContent`）と `canvas/LeftPalette/index.tsx`（`LeftPalette`）は現在どこからもインポートされていない孤立コンポーネント。混同しないこと。
+**「未設定」のポジション**: `UnassignedCard`（`departmentCode` が空の行）は `canvas/UnassignedCard.tsx` に定義。
 
 - 組織パネルの状態は `canvasLayoutStore` が管理し、Excel 読み込み時にリセットされる
 
@@ -617,9 +617,9 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 - `useStore()` / `useCanvasLayoutStore()` をセレクタなしで呼ぶ（`canvasZoom` 等の高頻度更新で 2000 コンポーネントが毎フレーム再レンダーされフリーズする。複数フィールドは `useShallow`、単一フィールドは `s => s.field`、イベントハンドラ内のみなら `getState()` を使う）
 - 複数の org パネルを `addPanel` を N 回呼んで追加する（`addPanelsBatch(orgIds)` を使う）
 - キャンバスの `after/TreeWindow` / `before/BeforeTreeWindow` を直接コピーして新コンテキストを作る（`core/` の `OrgTreeNode` + `OrgTreePanel` を使って `renderItems` クロージャだけ差し替える）
-- `togglePanelViewMode` を使う（廃止。`setPanelViewMode(mode)` を使う）
-- パネル幅を `=== 'band' ? 208 : 288` とハードコードする（`VIEW_MODE_WIDTHS[panelViewMode]` を使う）
-- `panelViewMode` の切り替えボタンをパネルヘッダーに置く（グローバル状態のコントロールはキャンバスヘッダー `OrgOperationView` に置く）
+- `setPanelViewMode` / `togglePanelViewMode` を使う（廃止。`setCanvasPanelStyle(style)` を使う）
+- パネル幅を `=== 'band' ? 208 : 288` とハードコードする（`VIEW_MODE_WIDTHS[canvasPanelStyle]` を使う）
+- `canvasPanelStyle` の切り替えボタンをパネルヘッダーに置く（グローバル状態のコントロールはキャンバスヘッダー `OrgOperationView` に置く）
 
 ---
 

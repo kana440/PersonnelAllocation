@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import type { PanelDef } from '../../../store/canvasLayoutStore'
 import { useStore } from '../../../store/useStore'
@@ -7,7 +8,15 @@ export function useCanvasPanelNav(
   viewOrgs: Organization[],
   _selectPerson: (id: string) => void,  // 後方互換のため残存（未使用）
 ) {
-  const { panels, setOrgOpen, addPanel, setCollapsedOrgIds, requestScrollToRow } = useCanvasLayoutStore()
+  const { panels, setOrgOpen, addPanel, setCollapsedOrgIds, requestScrollToRow } = useCanvasLayoutStore(
+    useShallow(s => ({
+      panels:             s.panels,
+      setOrgOpen:         s.setOrgOpen,
+      addPanel:           s.addPanel,
+      setCollapsedOrgIds: s.setCollapsedOrgIds,
+      requestScrollToRow: s.requestScrollToRow,
+    }))
+  )
   const selectOrg  = useStore(s => s.selectOrg)
   const selectCard = useStore(s => s.selectCard)
 

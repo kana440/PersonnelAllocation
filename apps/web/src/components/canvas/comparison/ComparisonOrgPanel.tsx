@@ -44,7 +44,7 @@ export function ComparisonOrgPanel({
   onRequestMap,
 }: Props) {
   const { masters }     = useStore()
-  const { panelViewMode } = useCanvasLayoutStore()
+  const { canvasPanelStyle } = useCanvasLayoutStore()
   const [movedOutOpen, setMovedOutOpen] = useState(false)
 
   const beforeOrg = beforeOrgs.find(o => o.id === beforeOrgId)
@@ -69,7 +69,7 @@ export function ComparisonOrgPanel({
 
   // バンド別グループ（band モード用）: stayed + moved-in のみ表示（転出は省略）
   const bandGroups = useMemo(() => {
-    if (panelViewMode !== 'band') return []
+    if (canvasPanelStyle !== 'band') return []
     const groups = new Map<string, PersonComparisonEntry[]>()
     for (const entry of [...stayed, ...movedIn]) {
       const band = (entry.row.positionBand as string | undefined) ?? '(未設定)'
@@ -84,10 +84,10 @@ export function ComparisonOrgPanel({
         return lvB - lvA
       })
       .map(([band, items]) => ({ band, items }))
-  }, [panelViewMode, stayed, movedIn, masters.jobLevels])
+  }, [canvasPanelStyle, stayed, movedIn, masters.jobLevels])
 
   return (
-    <div className={`flex-shrink-0 border-2 border-gray-300 rounded-lg bg-white flex flex-col ${panelViewMode === 'band' ? 'w-44' : 'w-56'}`}>
+    <div className={`flex-shrink-0 border-2 border-gray-300 rounded-lg bg-white flex flex-col ${canvasPanelStyle === 'band' ? 'w-44' : 'w-56'}`}>
       {/* ヘッダー */}
       <div className="px-2.5 py-1.5 border-b border-gray-300 bg-gray-50 rounded-t-lg">
         <div className="flex items-center gap-1 mb-0.5">
@@ -118,7 +118,7 @@ export function ComparisonOrgPanel({
       </div>
 
       {/* 本体 */}
-      {panelViewMode === 'band' ? (
+      {canvasPanelStyle === 'band' ? (
         <div className="p-1.5 flex-1">
           {bandGroups.length === 0
             ? <p className="text-[10px] text-gray-400 text-center py-2">データなし</p>

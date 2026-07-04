@@ -2,7 +2,7 @@ import type React from 'react'
 import type { Organization }  from '@personnel/domain/schemas'
 import type { ChildrenMode, PanelDef } from '../../../store/canvasLayoutStore'
 
-export type { PanelViewModeId } from '../../../store/canvasLayoutStore'
+export type { CanvasPanelStyle } from '../../../store/canvasLayoutStore'
 
 // ── ツリーノードに渡す子組織操作アダプタ ─────────────────────────────
 export interface PanelTreeAdapter {

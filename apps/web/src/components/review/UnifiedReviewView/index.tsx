@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../../../store/useStore'
+import { useReviewFilterStore } from '../../../store/reviewFilterStore'
 import { useReviewData } from '../hooks/useReviewData'
 import { BEFORE_AFTER_FIELD_PAIRS } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
@@ -12,7 +13,7 @@ import { filterRows, buildIssueGroups } from './helpers'
 import { FilterBar }          from './FilterBar'
 import { UnifiedTable }       from './UnifiedTable'
 import { SelectionActionBar } from './SelectionActionBar'
-import { DEFAULT_FILTER, type ViewMode, type UnifiedFilter, type DisplayField, type IssueGroupDef } from './types'
+import { type DisplayField, type IssueGroupDef } from './types'
 
 const ALL_DISPLAY_FIELDS: DisplayField[] = BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => ({
   afterKey: String(afterKey),
@@ -43,15 +44,24 @@ export function UnifiedReviewView() {
     persons:                 s.persons,
   })))
 
-  const [viewMode,    setViewMode]    = useState<ViewMode>('diff')
-  const [filter,      setFilter]      = useState<UnifiedFilter>(DEFAULT_FILTER)
-  const [searchInput, setSearchInput] = useState('')
-  const [bulkModal,   setBulkModal]   = useState<IssueGroupDef | null>(null)
+  const [bulkModal, setBulkModal] = useState<IssueGroupDef | null>(null)
 
+  const { filter, searchInput, viewMode, setFilter, setSearchInput, setViewMode, patchFilter } =
+    useReviewFilterStore(useShallow(s => ({
+      filter:          s.filter,
+      searchInput:     s.searchInput,
+      viewMode:        s.viewMode,
+      setFilter:       s.setFilter,
+      setSearchInput:  s.setSearchInput,
+      setViewMode:     s.setViewMode,
+      patchFilter:     s.patchFilter,
+    })))
+
+  // searchInput → filter.searchText のデバウンス（200ms）
   useEffect(() => {
-    const t = setTimeout(() => setFilter(f => ({ ...f, searchText: searchInput })), 200)
+    const t = setTimeout(() => patchFilter({ searchText: searchInput }), 200)
     return () => clearTimeout(t)
-  }, [searchInput])
+  }, [searchInput, patchFilter])
 
   const orgPathMap = useMemo(() => buildOrgPathMap(afterOrganizations), [afterOrganizations])
 

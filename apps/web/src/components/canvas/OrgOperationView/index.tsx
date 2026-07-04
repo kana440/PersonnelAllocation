@@ -40,8 +40,8 @@ export function OrgOperationView() {
   } = useStore()
   const comparisonMode      = useCanvasLayoutStore(s => s.comparisonMode)
   const toggleComparisonMode = useCanvasLayoutStore(s => s.toggleComparisonMode)
-  const panelViewMode       = useCanvasLayoutStore(s => s.panelViewMode)
-  const setPanelViewMode    = useCanvasLayoutStore(s => s.setPanelViewMode)
+  const canvasPanelStyle       = useCanvasLayoutStore(s => s.canvasPanelStyle)
+  const setCanvasPanelStyle    = useCanvasLayoutStore(s => s.setCanvasPanelStyle)
   const compactGroupById    = useCanvasDisplayStore(s => s.compactGroupById)
   const setCompactGroupById = useCanvasDisplayStore(s => s.setCompactGroupById)
   const {
@@ -316,9 +316,9 @@ export function OrgOperationView() {
               ] as const).map(({ id, label }) => (
                 <button
                   key={id}
-                  onClick={() => setPanelViewMode(id)}
+                  onClick={() => setCanvasPanelStyle(id)}
                   className={`px-2 py-0.5 transition-colors ${
-                    panelViewMode === id
+                    canvasPanelStyle === id
                       ? 'bg-blue-600 text-white'
                       : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
@@ -327,7 +327,7 @@ export function OrgOperationView() {
             </div>
 
             {/* コンパクトビューのグループ単位 */}
-            {!comparisonMode && panelViewMode === 'band' && (
+            {!comparisonMode && canvasPanelStyle === 'band' && (
               <select
                 value={compactGroupById}
                 onChange={e => setCompactGroupById(e.target.value)}

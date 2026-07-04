@@ -11,3 +11,19 @@ export function normalizeSearch(s: string): string {
 export function matchesSearch(target: string, query: string): boolean {
   return normalizeSearch(target).includes(normalizeSearch(query))
 }
+
+/**
+ * 氏名検索用の正規化。normalizeSearch に加えて:
+ * - スペース除去（「田中 太郎」と「田中太郎」を同一視）
+ * - ひらがな→カタカナ変換（ふりがなの入力方式を統一）
+ *
+ * クエリと対象の両方に同じ関数を適用することで、
+ * 「スペースなし入力」「ひらがなでのふりがな検索」が成立する。
+ */
+export function normalizeName(s: string): string {
+  return s
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .toLowerCase()
+}

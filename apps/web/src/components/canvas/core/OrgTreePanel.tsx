@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type React from 'react'
-import type { PanelDef, PanelViewModeId } from '../../../store/canvasLayoutStore'
+import type { PanelDef, CanvasPanelStyle } from '../../../store/canvasLayoutStore'
 import { VIEW_MODE_WIDTHS, useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { scheduleHeightUpdate } from './panelHeightBatcher'
 
 interface Props {
   panel:          PanelDef
-  panelViewMode:  PanelViewModeId
+  canvasPanelStyle:  CanvasPanelStyle
   isSelected?:    boolean
   /** データ属性: 'window' → after 側, 'before-window' → before 側 */
   windowKind:     'window' | 'before-window'
@@ -30,7 +30,7 @@ interface Props {
 }
 
 export function OrgTreePanel({
-  panel, panelViewMode, isSelected, windowKind,
+  panel, canvasPanelStyle, isSelected, windowKind,
   setPosition, setPanelHeight,
   renderHeader, renderControls, renderBody,
   dragHandlersOuter,
@@ -77,7 +77,7 @@ export function OrgTreePanel({
   const borderClass   = isDragOver
     ? 'border-blue-400'
     : isSelected ? 'border-blue-400 ring-2 ring-blue-200' : 'border-gray-400'
-  const panelWidth    = VIEW_MODE_WIDTHS[panelViewMode]
+  const panelWidth    = VIEW_MODE_WIDTHS[canvasPanelStyle]
 
   const dataProps = windowKind === 'window'
     ? { 'data-window': 'true' }

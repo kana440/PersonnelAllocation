@@ -29,7 +29,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const {
     panels, setPosition, toggleOpen, setOrgOpen, addPanel, addPanelsBatch,
     setChildrenMode, setCollapsedOrgIds, removeOrgPanels, setPanelHeight,
-    panelViewMode,
+    canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
     panels:             s.panels,
     setPosition:        s.setPosition,
@@ -41,7 +41,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     setCollapsedOrgIds: s.setCollapsedOrgIds,
     removeOrgPanels:    s.removeOrgPanels,
     setPanelHeight:     s.setPanelHeight,
-    panelViewMode:      s.panelViewMode,
+    canvasPanelStyle:      s.canvasPanelStyle,
   })))
 
   const masters   = useStore(s => s.masters)
@@ -177,7 +177,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   return (
     <OrgTreePanel
       panel={panel}
-      panelViewMode={panelViewMode}
+      canvasPanelStyle={canvasPanelStyle}
       isSelected={isSelected}
       windowKind="window"
       setPosition={setPosition}
@@ -220,7 +220,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
         if (!currentOrg) return <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>
         // バンドモードでも OrgTreeNode を通す（inline/windowed の子展開を維持するため）
         // renderItems だけ renderFlatItems に差し替えることで各組織ノードがバンド表示になる
-        const effectiveConfig = panelViewMode === 'band' && config.renderFlatItems
+        const effectiveConfig = canvasPanelStyle === 'band' && config.renderFlatItems
           ? { ...config, renderItems: config.renderFlatItems }
           : config
         return (

@@ -28,7 +28,7 @@ export function BeforeTreeWindowCanvas() {
     panelHeights,
     lineStyle,
     canvasZoom, stepCanvasZoom,
-    panelViewMode,
+    canvasPanelStyle,
     panels: afterPanels,  // 右側（after）のパネル一覧
   } = useCanvasLayoutStore(useShallow(s => ({
     comparisonPanels:     s.comparisonPanels,
@@ -39,10 +39,10 @@ export function BeforeTreeWindowCanvas() {
     lineStyle:            s.lineStyle,
     canvasZoom:           s.canvasZoom,
     stepCanvasZoom:       s.stepCanvasZoom,
-    panelViewMode:        s.panelViewMode,
+    canvasPanelStyle:        s.canvasPanelStyle,
     panels:               s.panels,
   })))
-  const winW = VIEW_MODE_WIDTHS[panelViewMode]
+  const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
 
   const beforeOrgByCode = useMemo(
     () => new Map(beforeOrganizations.map(o => [o.externalCode, o.id])),
