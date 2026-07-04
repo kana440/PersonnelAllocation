@@ -2,6 +2,7 @@ import { useState }  from 'react'
 import { useStore }   from '../../../store/useStore'
 import { useOrgView } from '../OrgViewContext'
 import type { PositionEntry, DragData } from '../OrgViewContext'
+import { isVacantRow } from '@personnel/domain/allocationRow'
 
 interface Props {
   entry:   PositionEntry
@@ -15,11 +16,13 @@ export function NameChip({ entry, orgId, panelId }: Props) {
   const [isDragOver, setIsDragOver] = useState(false)
 
   const { row, person } = entry
-  const isVacant     = !row.userId
+  const isVacant     = isVacantRow(row)
   const isConcurrent = (row.concurrentType as string | undefined) === '兼務'
   const name         = isVacant
     ? '空席'
-    : [row.lastName, row.firstName].filter(Boolean).join(' ')
+    : [row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || '（名前不明）'
+  // person.id === sfPersonId。SF未登録時は row.userId でフォールバック
+  const personId     = person?.id ?? row.userId
 
   const draggable = !isHistoryPreviewMode
 
@@ -73,7 +76,7 @@ export function NameChip({ entry, orgId, panelId }: Props) {
           e.dataTransfer.setData('application/x-position-drag', '')
         } else {
           const data: DragData = {
-            dragType: 'person', personId: person!.id,
+            dragType: 'person', personId: personId,
             fromOrgId: orgId, fromCompanyId: '',
             affiliationType: isConcurrent ? 'concurrent' : 'primary',
             source: 'after', fromRowId: row.rowId, rowId: row.rowId, fromPanelId: panelId,
@@ -88,8 +91,8 @@ export function NameChip({ entry, orgId, panelId }: Props) {
       onDrop={handleDrop}
       data-rowid={row.rowId}
       onClick={e => {
-        if (isVacant || isHistoryPreviewMode) return
-        handlePersonClick(person!.id, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }, row.rowId)
+        if (isVacant || isHistoryPreviewMode || !personId) return
+        handlePersonClick(personId, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }, row.rowId)
       }}
       onDoubleClick={e => {
         if (!isSelectMode && !isHistoryPreviewMode) handleRowDoubleClick(e, row.rowId)

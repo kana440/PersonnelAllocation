@@ -80,21 +80,25 @@ export const jobTypeChangeDef: EditOperation = {
     _managerTransferMode:        detectSubordinateMode(row, ctx),
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const { _managerTransferMode, ...cleanValues } = values
-    const label = `ジョブタイプ変更: ${personName(row)}`
-    const result = {
-      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...cleanValues } : r),
-      label,
+  createCommand(rowId, values) {
+    return {
+      kind: 'JobTypeChange',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        const { _managerTransferMode, ...cleanValues } = values
+        const label = `ジョブタイプ変更: ${personName(row)}`
+        const result = {
+          updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...cleanValues } : r),
+          label,
+        }
+        return applySubordinateTransfer(row, values, result)
+      },
     }
-    return applySubordinateTransfer(row, values, result)
   },
 }
 
@@ -129,27 +133,31 @@ export const employmentExtensionDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.transferReason) return fail('変更事由は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              ...computeEmploymentExtensionAfter(),
-              transferReason: values.transferReason as AllocationRow['transferReason'],
-              ...(values.memo !== undefined ? { memo: values.memo as AllocationRow['memo'] } : {}),
-            }
-          : r
-      ),
-      label: `雇用延長: ${personName(row)}`,
+      kind: 'EmploymentExtension',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.transferReason) return fail('変更事由は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  ...computeEmploymentExtensionAfter(),
+                  transferReason: values.transferReason as AllocationRow['transferReason'],
+                  ...(values.memo !== undefined ? { memo: values.memo as AllocationRow['memo'] } : {}),
+                }
+              : r
+          ),
+          label: `雇用延長: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -180,21 +188,25 @@ export const employmentTypeChangeDef: EditOperation = {
     employmentType: row.employmentType as string | undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.employmentType) return fail('雇用タイプは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const changes = Object.fromEntries(
-      Object.entries(values).filter(([, v]) => v !== undefined)
-    )
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
-      label: `雇用タイプ変更: ${personName(row)}`,
+      kind: 'EmploymentTypeChange',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.employmentType) return fail('雇用タイプは必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        const changes = Object.fromEntries(
+          Object.entries(values).filter(([, v]) => v !== undefined)
+        )
+        return {
+          updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...changes } : r),
+          label: `雇用タイプ変更: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -223,26 +235,30 @@ export const employmentExtensionCancelDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              ...preserve(row),
-              transferReason: undefined,
-              memo:           values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: `雇用延長取消: ${personName(row)}`,
+      kind: 'EmploymentExtensionCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  ...preserve(row),
+                  transferReason: undefined,
+                  memo:           values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: `雇用延長取消: ${personName(row)}`,
+        }
+      },
     }
   },
 }

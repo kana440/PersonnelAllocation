@@ -75,7 +75,7 @@ export { subordinateHandoffDef, moveToVacantPositionDef } from './positionMoveDe
 
 import type { EditOperation, AvailabilityResult } from './types'
 import { AVAILABLE } from './types'
-import type { EditCommand, DomainContext } from '../types'
+import type { EditCommand } from '../types'
 import type { AllocationRow } from '../../allocationRow'
 import type { AllMasters } from '../../masters/aggregate'
 import { DEFS as promotion }       from './promotionDefs'
@@ -181,9 +181,5 @@ export function bindOperation(
   rowId:  number,
   values: Partial<AllocationRow>,
 ): EditCommand {
-  return {
-    kind:     op.id,
-    validate: (ctx: DomainContext) => op.onValidate(ctx, rowId, values),
-    apply:    (ctx: DomainContext) => op.onSubmit(ctx, rowId, values),
-  }
+  return op.createCommand(rowId, values)
 }

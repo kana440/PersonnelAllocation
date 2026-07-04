@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useStore } from '../../../store/useStore'
 import { useChatStore } from '../../../store/useChatStore'
+import { useRowSelectionStore } from '../../../store/rowSelectionStore'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
 interface Person {
@@ -28,7 +29,9 @@ interface Return {
 
 export function usePersonSelection({ persons, allocationList, selectPerson, selectCard }: Deps): Return {
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set())
-  const selectedPersonIdRef = useRef(useStore.getState().selectedPersonId)
+  const selectedPersonIdRef  = useRef(useStore.getState().selectedPersonId)
+  const isSyncingToReviewRef = useRef(false)
+
   // track latest selectedPersonId for shift-click
   useEffect(() => {
     return useStore.subscribe(s => {
@@ -39,9 +42,8 @@ export function usePersonSelection({ persons, allocationList, selectPerson, sele
   const lastClickRef = useRef<{ personId: string; panelId: string } | null>(null)
   const isSelectMode = selectedPersonIds.size > 0
 
-  // sync selected persons to AI chat context
+  // Canvas → Review: selectedPersonIds → rowSelectionStore に反映
   useEffect(() => {
-    if (selectedPersonIds.size === 0) return
     const rowIds = [...selectedPersonIds].flatMap(personId => {
       const p = persons.find(q => q.id === personId)
       if (!p?.sfPersonId) return []
@@ -49,8 +51,34 @@ export function usePersonSelection({ persons, allocationList, selectPerson, sele
       const primary = rows.find(r => !r.concurrentType) ?? rows[0]
       return primary ? [primary.rowId] : []
     })
-    if (rowIds.length > 0) useChatStore.getState().setChatContext(rowIds)
+    isSyncingToReviewRef.current = true
+    if (selectedPersonIds.size === 0) {
+      useRowSelectionStore.getState().clearSelection()
+      useChatStore.getState().setChatContext([])
+    } else {
+      useRowSelectionStore.getState().setRows(rowIds)
+      if (rowIds.length > 0) useChatStore.getState().setChatContext(rowIds)
+    }
+    isSyncingToReviewRef.current = false
   }, [selectedPersonIds, persons, allocationList])
+
+  // Review → Canvas: rowSelectionStore の変化を selectedPersonIds に反映（ループ防止フラグあり）
+  useEffect(() => {
+    return useRowSelectionStore.subscribe(state => {
+      if (isSyncingToReviewRef.current) return
+      const personIds = new Set<string>()
+      for (const rowId of state.selectedRowIds) {
+        const row = allocationList.find(r => r.rowId === rowId)
+        if (!row?.userId) continue
+        const person = persons.find(p => p.sfPersonId === (row.userId as string))
+        if (person) personIds.add(person.id)
+      }
+      setSelectedPersonIds(prev => {
+        if (prev.size === personIds.size && [...personIds].every(id => prev.has(id))) return prev
+        return personIds
+      })
+    })
+  }, [allocationList, persons])
 
   const handleSelectPerson = useCallback((personId: string, rowId?: number) => {
     selectPerson(personId)

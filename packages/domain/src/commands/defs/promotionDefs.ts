@@ -261,20 +261,24 @@ export const promotionDef: EditOperation = {
     }
   },
 
-  onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.positionBand)
-      return fail('ポジションバンドは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const { _managerTransferMode, _currentJobClass: _jc1, ...cleanValues } = values
-    const label = `昇格: ${personName(row)}`
-    const result = new DirectEditOperation(rowId, cleanValues, label).apply(ctx)
-    return applySubordinateTransfer(row, values, result)
+  createCommand(rowId, values) {
+    return {
+      kind: 'Promotion',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.positionBand)
+          return fail('ポジションバンドは必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        const { _managerTransferMode, _currentJobClass: _jc1, ...cleanValues } = values
+        const label = `昇格: ${personName(row)}`
+        const result = new DirectEditOperation(rowId, cleanValues, label).apply(ctx)
+        return applySubordinateTransfer(row, values, result)
+      },
+    }
   },
 }
 
@@ -376,22 +380,26 @@ export const demotionDef: EditOperation = {
     }
   },
 
-  onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.positionBand)
-      return fail('ポジションバンドは必須です')
-    if (!values.demotionReason)
-      return fail('降格理由は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const { _managerTransferMode, _currentJobClass: _jc2, ...cleanValues } = values
-    const label = `降格: ${personName(row)}`
-    const result = new DirectEditOperation(rowId, cleanValues, label).apply(ctx)
-    return applySubordinateTransfer(row, values, result)
+  createCommand(rowId, values) {
+    return {
+      kind: 'Demotion',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.positionBand)
+          return fail('ポジションバンドは必須です')
+        if (!values.demotionReason)
+          return fail('降格理由は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        const { _managerTransferMode, _currentJobClass: _jc2, ...cleanValues } = values
+        const label = `降格: ${personName(row)}`
+        const result = new DirectEditOperation(rowId, cleanValues, label).apply(ctx)
+        return applySubordinateTransfer(row, values, result)
+      },
+    }
   },
 }
 
@@ -426,15 +434,19 @@ export const titleChangeDef: EditOperation = {
     localJobTitle:        row.localJobTitle                  as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return new DirectEditOperation(rowId, values, `役職名変更: ${personName(row)}`).apply(ctx)
+  createCommand(rowId, values) {
+    return {
+      kind: 'TitleChange',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return new DirectEditOperation(rowId, values, `役職名変更: ${personName(row)}`).apply(ctx)
+      },
+    }
   },
 }
 
@@ -629,64 +641,66 @@ export const mpTrackSwitchDef: EditOperation = {
     }
   },
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.band) return fail('切替後のバンドを選択してください')
+  createCommand(rowId, values) {
+    return {
+      kind: 'MpTrackSwitch',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.band) return fail('切替後のバンドを選択してください')
 
-    const matrix = getMpMatrix(ctx.masters)
-    const found  = findMpAlternatives(
-      row.positionBand         as string | undefined,
-      row.officialPositionCode as string | undefined,
-      matrix,
-    )
-    if (found) {
-      const isValid = found.alternatives.some(e => e.jobLevel === values.band)
-      if (!isValid) return fail('選択したバンドはM職P職切替の対象外です')
-      return ok()
-    }
-
-    // フォールバックバリデーション
-    const originalBand = row.band as string | undefined
-    if (values.band === originalBand) return fail('現在と同じバンドです')
-    const origEntry = ctx.masters.jobLevels.find(e => e.label === originalBand || e.code === originalBand)
-    const newEntry  = ctx.masters.jobLevels.find(e => e.label === values.band   || e.code === values.band)
-    if (!origEntry?.promotionDemotionBand || !newEntry?.promotionDemotionBand)
-      return fail('バンドの読み替え情報がありません')
-    if (origEntry.promotionDemotionBand !== newEntry.promotionDemotionBand)
-      return fail('同一レベルのバンドを選択してください')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const { _managerTransferMode, _currentJobClass: _jc, _currentWarningLevel: _wl, ...cleanValues } = values
-    const result = new DirectEditOperation(
-      rowId,
-      {
-        transferReason:       cleanValues.transferReason,
-        memo:                 cleanValues.memo,
-        band:                 cleanValues.band,
-        positionBand:         cleanValues.band,
-        officialPositionCode: cleanValues.officialPositionCode,
-        localJobTitle:        cleanValues.localJobTitle,
-      },
-      `M職P職切替: ${personName(row)}`,
-    ).apply(ctx)
-
-    // M→P 切替で「外す」を選択した場合: 部下の上司参照をクリアする
-    if (_managerTransferMode === '外す（マネージャーから外れる）') {
-      const posCode = row.positionCode as string | undefined
-      if (posCode) {
-        const updatedList = result.updatedList.map(r =>
-          (r.managerPositionCode as string | undefined) === posCode
-            ? { ...r, managerPositionCode: undefined, managerName: undefined }
-            : r
+        const matrix = getMpMatrix(ctx.masters)
+        const found  = findMpAlternatives(
+          row.positionBand         as string | undefined,
+          row.officialPositionCode as string | undefined,
+          matrix,
         )
-        return { ...result, updatedList }
-      }
+        if (found) {
+          const isValid = found.alternatives.some(e => e.jobLevel === values.band)
+          if (!isValid) return fail('選択したバンドはM職P職切替の対象外です')
+          return ok()
+        }
+
+        const originalBand = row.band as string | undefined
+        if (values.band === originalBand) return fail('現在と同じバンドです')
+        const origEntry = ctx.masters.jobLevels.find(e => e.label === originalBand || e.code === originalBand)
+        const newEntry  = ctx.masters.jobLevels.find(e => e.label === values.band   || e.code === values.band)
+        if (!origEntry?.promotionDemotionBand || !newEntry?.promotionDemotionBand)
+          return fail('バンドの読み替え情報がありません')
+        if (origEntry.promotionDemotionBand !== newEntry.promotionDemotionBand)
+          return fail('同一レベルのバンドを選択してください')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        const { _managerTransferMode, _currentJobClass: _jc, _currentWarningLevel: _wl, ...cleanValues } = values
+        const result = new DirectEditOperation(
+          rowId,
+          {
+            transferReason:       cleanValues.transferReason,
+            memo:                 cleanValues.memo,
+            band:                 cleanValues.band,
+            positionBand:         cleanValues.band,
+            officialPositionCode: cleanValues.officialPositionCode,
+            localJobTitle:        cleanValues.localJobTitle,
+          },
+          `M職P職切替: ${personName(row)}`,
+        ).apply(ctx)
+
+        if (_managerTransferMode === '外す（マネージャーから外れる）') {
+          const posCode = row.positionCode as string | undefined
+          if (posCode) {
+            const updatedList = result.updatedList.map(r =>
+              (r.managerPositionCode as string | undefined) === posCode
+                ? { ...r, managerPositionCode: undefined, managerName: undefined }
+                : r
+            )
+            return { ...result, updatedList }
+          }
+        }
+        return result
+      },
     }
-    return result
   },
 }
 

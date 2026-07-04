@@ -110,42 +110,46 @@ export const orgTransferDef: EditOperation = {
     }
   },
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.departmentCode) return fail('組織コードは必須です')
-    const srcIsSecondment = isSecondmentOrg(row.departmentCode as string ?? '', ctx.masters)
-    const tgtIsSecondment = isSecondmentOrg(values.departmentCode as string, ctx.masters)
-    if (!srcIsSecondment && tgtIsSecondment)
-      return fail('通常組織から出向者用組織への異動は「本務出向」操作を使用してください')
-    if (srcIsSecondment && !tgtIsSecondment)
-      return fail('出向者用組織から通常組織への異動は「本務出向解除」操作を使用してください')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string
-    const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
-    const { location: _l, costCenter: _cc, ...orgSubFields } = deriveOrgSubFields(deptCode, ctx.masters)
-    const managerFields = values.managerPositionCode !== undefined
-      ? { managerPositionCode: values.managerPositionCode, managerName: values.managerName }
-      : {}
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              departmentCode: deptCode,
-              ...orgSubFields,
-              location:   values.location   as string | undefined,
-              costCenter: values.costCenter as string | undefined,
-              ...managerFields,
-              memo: values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: `別組織へ異動: ${personName(row)} → ${orgName}`,
+      kind: 'OrgTransfer',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.departmentCode) return fail('組織コードは必須です')
+        const srcIsSecondment = isSecondmentOrg(row.departmentCode as string ?? '', ctx.masters)
+        const tgtIsSecondment = isSecondmentOrg(values.departmentCode as string, ctx.masters)
+        if (!srcIsSecondment && tgtIsSecondment)
+          return fail('通常組織から出向者用組織への異動は「本務出向」操作を使用してください')
+        if (srcIsSecondment && !tgtIsSecondment)
+          return fail('出向者用組織から通常組織への異動は「本務出向解除」操作を使用してください')
+        return ok()
+      },
+      apply(ctx) {
+        const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+        const deptCode = values.departmentCode as string
+        const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
+        const { location: _l, costCenter: _cc, ...orgSubFields } = deriveOrgSubFields(deptCode, ctx.masters)
+        const managerFields = values.managerPositionCode !== undefined
+          ? { managerPositionCode: values.managerPositionCode, managerName: values.managerName }
+          : {}
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  departmentCode: deptCode,
+                  ...orgSubFields,
+                  location:   values.location   as string | undefined,
+                  costCenter: values.costCenter as string | undefined,
+                  ...managerFields,
+                  memo: values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: `別組織へ異動: ${personName(row)} → ${orgName}`,
+        }
+      },
     }
   },
 }
@@ -228,38 +232,42 @@ export const orgRestructureDef: EditOperation = {
     }
   },
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.departmentCode) return fail('組織コードは必須です')
-    const srcIsSecondment = isSecondmentOrg(row.departmentCode as string ?? '', ctx.masters)
-    const tgtIsSecondment = isSecondmentOrg(values.departmentCode as string, ctx.masters)
-    if (!srcIsSecondment && tgtIsSecondment)
-      return fail('通常組織から出向者用組織への変更は「本務出向」操作を使用してください')
-    if (srcIsSecondment && !tgtIsSecondment)
-      return fail('出向者用組織から通常組織への変更は「本務出向解除」操作を使用してください')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string
-    const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
-    const { location: _l, costCenter: _cc, ...orgSubFields } = deriveOrgSubFields(deptCode, ctx.masters)
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              departmentCode: deptCode,
-              ...orgSubFields,
-              location:   values.location   as string | undefined,
-              costCenter: values.costCenter as string | undefined,
-              memo: values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: `組織コード変更: ${personName(row)} → ${orgName}`,
+      kind: 'OrgRestructure',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.departmentCode) return fail('組織コードは必須です')
+        const srcIsSecondment = isSecondmentOrg(row.departmentCode as string ?? '', ctx.masters)
+        const tgtIsSecondment = isSecondmentOrg(values.departmentCode as string, ctx.masters)
+        if (!srcIsSecondment && tgtIsSecondment)
+          return fail('通常組織から出向者用組織への変更は「本務出向」操作を使用してください')
+        if (srcIsSecondment && !tgtIsSecondment)
+          return fail('出向者用組織から通常組織への変更は「本務出向解除」操作を使用してください')
+        return ok()
+      },
+      apply(ctx) {
+        const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+        const deptCode = values.departmentCode as string
+        const orgName  = ctx.afterOrganizations.find(o => o.externalCode === deptCode)?.name ?? deptCode
+        const { location: _l, costCenter: _cc, ...orgSubFields } = deriveOrgSubFields(deptCode, ctx.masters)
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  departmentCode: deptCode,
+                  ...orgSubFields,
+                  location:   values.location   as string | undefined,
+                  costCenter: values.costCenter as string | undefined,
+                  memo: values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: `組織コード変更: ${personName(row)} → ${orgName}`,
+        }
+      },
     }
   },
 }

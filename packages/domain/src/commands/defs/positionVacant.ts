@@ -272,40 +272,47 @@ export function withLeavePositionVacant(baseDef: EditOperation): EditOperation {
   return {
     ...baseDef,
     supportsLeaveVacant: undefined,  // 二重ラップ防止
-    onSubmit(ctx, rowId, values) {
-      const row        = ctx.allocationList.find(r => r.rowId === rowId)
-      const oldPosCode = row?.positionCode as string | undefined
-
-      if (!oldPosCode || !row) {
-        return baseDef.onSubmit(ctx, rowId, values)
-      }
-
-      const baseResult = baseDef.onSubmit(ctx, rowId, values)
-
-      // 新しい rowId / posCode を衝突なく採番
-      const maxRowId     = Math.max(0, ...baseResult.updatedList.map(r => r.rowId))
-      const vacantRowId  = maxRowId + 1
-      const newPosCode   = `_pos_${maxRowId + 2}`
-
-      // 移動した人に新ポジションコードを付与
-      const updatedWithNewPos = baseResult.updatedList.map(r =>
-        r.rowId === rowId ? { ...r, positionCode: newPosCode } : r
-      )
-
-      // 元ポジションの属性（position/both binding）を引き継いだ空席行を作成
-      const vacantRow = {
-        rowId: vacantRowId,
-        ...Object.fromEntries(
-          afterKeysByBinding('position').map(k => [k, (row as Record<string, unknown>)[k as string]])
-        ),
-        ...Object.fromEntries(
-          afterKeysByBinding('both').map(k => [k, (row as Record<string, unknown>)[k as string]])
-        ),
-      } as AllocationRow
-
+    createCommand(rowId, values) {
+      const baseCmd = baseDef.createCommand(rowId, values)
       return {
-        updatedList: [...updatedWithNewPos, vacantRow],
-        label: `${baseResult.label}（元ポジション空席）`,
+        kind: baseCmd.kind,
+        validate: (ctx) => baseCmd.validate(ctx),
+        apply(ctx) {
+          const row        = ctx.allocationList.find(r => r.rowId === rowId)
+          const oldPosCode = row?.positionCode as string | undefined
+
+          if (!oldPosCode || !row) {
+            return baseCmd.apply(ctx)
+          }
+
+          const baseResult = baseCmd.apply(ctx)
+
+          // 新しい rowId / posCode を衝突なく採番
+          const maxRowId    = Math.max(0, ...baseResult.updatedList.map(r => r.rowId))
+          const vacantRowId = maxRowId + 1
+          const newPosCode  = `_pos_${maxRowId + 2}`
+
+          // 移動した人に新ポジションコードを付与
+          const updatedWithNewPos = baseResult.updatedList.map(r =>
+            r.rowId === rowId ? { ...r, positionCode: newPosCode } : r
+          )
+
+          // 元ポジションの属性（position/both binding）を引き継いだ空席行を作成
+          const vacantRow = {
+            rowId: vacantRowId,
+            ...Object.fromEntries(
+              afterKeysByBinding('position').map(k => [k, (row as Record<string, unknown>)[k as string]])
+            ),
+            ...Object.fromEntries(
+              afterKeysByBinding('both').map(k => [k, (row as Record<string, unknown>)[k as string]])
+            ),
+          } as AllocationRow
+
+          return {
+            updatedList: [...updatedWithNewPos, vacantRow],
+            label: `${baseResult.label}（元ポジション空席）`,
+          }
+        },
       }
     },
   }

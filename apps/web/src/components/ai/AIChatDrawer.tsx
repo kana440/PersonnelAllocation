@@ -94,6 +94,10 @@ export function AIChatDrawer({ onClose }: Props) {
     return { rowId, name }
   })
 
+  const MAX_VISIBLE_BADGES = 3
+  const visibleBadges = badgeItems.slice(0, MAX_VISIBLE_BADGES)
+  const hiddenBadgeCount = badgeItems.length - MAX_VISIBLE_BADGES
+
   // スキルパネルが開いているときはチャット UI を非表示にする
   if (showSkills) {
     return (
@@ -255,8 +259,8 @@ export function AIChatDrawer({ onClose }: Props) {
           <AIContextSuggestions onSuggest={handleSuggest} compact />
         )}
         {badgeItems.length > 0 && (
-          <div className="px-2 pt-1.5 flex flex-wrap gap-1">
-            {badgeItems.map(({ rowId, name }) => (
+          <div className="px-2 pt-1.5 flex flex-wrap gap-1 items-center">
+            {visibleBadges.map(({ rowId, name }) => (
               <div
                 key={rowId}
                 className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 text-xs text-blue-700 max-w-full overflow-hidden"
@@ -271,6 +275,11 @@ export function AIChatDrawer({ onClose }: Props) {
                 </button>
               </div>
             ))}
+            {hiddenBadgeCount > 0 && (
+              <span className="inline-flex items-center bg-blue-100 text-blue-600 text-xs rounded-full px-2 py-0.5 font-medium">
+                +{hiddenBadgeCount}人
+              </span>
+            )}
           </div>
         )}
         <div className="p-2 flex gap-2">

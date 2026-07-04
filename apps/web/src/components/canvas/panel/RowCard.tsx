@@ -6,6 +6,7 @@ import { useStore }              from '../../../store/useStore'
 import { CanvasFieldDiff }       from '../toolbar/CanvasFieldDiff'
 import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 import { isInternalPosCode, getPositionTitle, getEmpBorderClass } from './helpers'
+import { isVacantRow } from '@personnel/domain/allocationRow'
 
 const DEST_BADGE_COLORS = [
   'bg-blue-100 text-blue-700',
@@ -50,8 +51,7 @@ export function RowCard({
 
   // selectedCardRowId: コンテキスト経由をやめてストア直接購読 → このカードが選択状態か否かだけ比較
   // これにより他のカードのクリックでこのカードが再レンダーされない
-  // person は entry から先に取得済みなので isVacant の代わりに使用（TDZ 回避）
-  const isCardSelected   = useStore(s => person != null && !isSelectMode && s.selectedCardRowId === row.rowId)
+  const isCardSelected   = useStore(s => !isVacantRow(row) && !isSelectMode && s.selectedCardRowId === row.rowId)
   const displayFields    = useCanvasDisplayStore(s => s.displayFields)
   const hiddenBadgeTypes = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
   const masters       = useStore(s => s.masters)
@@ -101,11 +101,15 @@ export function RowCard({
     })
   }
 
-  const isVacant           = !person
+  const isVacant           = isVacantRow(row)
+  // person.id === sfPersonId。SF未登録時は row.userId でフォールバック。名前のみ行は undefined
+  const personId           = person?.id ?? (row.userId || undefined)
+  // 表示名: SFマスタ→姓名フィールド→userId の順でフォールバック
+  const displayName        = person?.name ?? ([row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || '（名前不明）')
   const isConcurrent       = row.concurrentType === '兼務'
   const isOnLeave          = !!row.leaveOfAbsenceSign
   const isSelected         = isSelectMode
-    ? (!isVacant && selectedPersonIds.has(person!.id))
+    ? (!isVacant && !!personId && selectedPersonIds.has(personId))
     : isCardSelected
   const isDropTarget       = isVacant && dragOverVacantRowId === row.rowId
   const isPersonDropTarget = !isVacant && !isSelectMode && dropPersonRowId   === row.rowId
@@ -159,7 +163,7 @@ export function RowCard({
             e.dataTransfer.setData('application/x-position-drag', '')
           } else {
             const data: DragData = {
-              dragType: 'person', personId: person!.id,
+              dragType: 'person', personId: personId,
               fromOrgId: orgId, fromCompanyId: '',
               affiliationType: isConcurrent ? 'concurrent' : 'primary',
               source: 'after', fromRowId: row.rowId, rowId: row.rowId, fromPanelId: panelId,
@@ -169,13 +173,13 @@ export function RowCard({
           e.dataTransfer.effectAllowed = 'move'
         } : undefined}
         onClick={e => {
-          if (isVacant || isHistoryPreviewMode) return
-          handlePersonClick(person!.id, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }, row.rowId)
+          if (isVacant || isHistoryPreviewMode || !personId) return
+          handlePersonClick(personId, panelId, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }, row.rowId)
         }}
         onContextMenu={e => {
-          if ((e.ctrlKey || e.metaKey) && !isVacant && !isHistoryPreviewMode) {
+          if ((e.ctrlKey || e.metaKey) && !isVacant && !isHistoryPreviewMode && personId) {
             e.preventDefault()
-            handlePersonClick(person!.id, panelId, { ctrl: true, shift: false })
+            handlePersonClick(personId, panelId, { ctrl: true, shift: false })
           }
         }}
         onDoubleClick={e => {
@@ -255,7 +259,7 @@ export function RowCard({
             </span>
           ) : (
             <>
-              <span className="font-semibold text-gray-800 truncate leading-tight min-w-0">{person!.name}</span>
+              <span className="font-semibold text-gray-800 truncate leading-tight min-w-0">{displayName}</span>
               {row.groupEmployeeId && (
                 <span className="flex-shrink-0 text-[9px] text-gray-300 font-mono">{row.groupEmployeeId}</span>
               )}
@@ -271,7 +275,7 @@ export function RowCard({
               </span>
             )
           })}
-          {isSelectMode && !isVacant && (
+          {isSelectMode && !isVacant && !!personId && (
             <span className={`flex-shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] font-bold ${
               isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
             }`}>{isSelected ? '✓' : ''}</span>

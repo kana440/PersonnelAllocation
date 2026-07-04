@@ -147,10 +147,10 @@ export function createDiagnoseMethods(service: HRApplicationService) {
           relatedDefs.push({ defId: id, defLabel: def.label, kind: 'single', available: false, unavailableReason: avail.reason })
           continue
         }
-        // available → onValidate を試行
+        // available → validate を試行
         try {
           const initValues   = def.onOpen(row, ctx)
-          const vResult      = def.onValidate(ctx, rowId, initValues)
+          const vResult      = def.createCommand(rowId, initValues).validate(ctx)
           if (!vResult.ok) {
             const msg = vResult.errors[0]?.message ?? '不明なエラー'
             relatedDefs.push({ defId: id, defLabel: def.label, kind: 'single', available: true, validatePassed: false, validateError: msg })

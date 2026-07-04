@@ -3,6 +3,7 @@ import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocatio
 import { getGroupedFieldOptions } from '@personnel/domain/rules/options'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { ValidationResolutionDef } from '@personnel/domain/rules/resolve'
 import { useStore } from '../../../../store/useStore'
 import { appService } from '../../../../application/HRApplicationService'
 import {
@@ -13,9 +14,10 @@ import {
 import { RecordRow } from './RecordRow'
 
 interface Props {
-  field:   string
-  rowIds:  number[]
-  onClose: () => void
+  field:          string
+  rowIds:         number[]
+  resolutionDef?: ValidationResolutionDef
+  onClose:        () => void
 }
 
 function resolveLabel(field: string): string {
@@ -102,10 +104,10 @@ function ColPickerDropdown({ visibleFields, onToggle }: ColPickerProps) {
 
 // ── メインコンポーネント ────────────────────────────────────────────────────
 
-export function BulkFieldEditModal({ field, rowIds, onClose }: Props) {
+export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Props) {
   const { allocationList, afterOrganizations, masters } = useStore()
   const mode   = getModalMode(field)
-  const label  = resolveLabel(field)
+  const label  = resolutionDef?.label ?? resolveLabel(field)
   const isPair = field === JOB_PAIR_FIELD
 
   // Esc で閉じる
@@ -182,7 +184,12 @@ export function BulkFieldEditModal({ field, rowIds, onClose }: Props) {
     return getGroupedFieldOptions(field, targetRows[0], masters).valid
   }, [field, isPair, targetRows, masters])
 
-  const [newValue, setNewValue] = useState('')
+  const suggestedValue = useMemo(() => {
+    if (!resolutionDef || targetRows.length === 0) return ''
+    return resolutionDef.suggestValue?.(targetRows[0]) ?? ''
+  }, [resolutionDef, targetRows])
+
+  const [newValue, setNewValue] = useState(() => suggestedValue)
 
   // ── Pair モード ────────────────────────────────────────────────────────────
   const jobFamilyOptions = useMemo(() => {
@@ -211,8 +218,13 @@ export function BulkFieldEditModal({ field, rowIds, onClose }: Props) {
   const handleApply = () => {
     if (!canApply) return
     if (mode === 'bulk') {
+      const values = { [field]: newValue }
       appService.executeBatch(`${label} 一括修正`,
-        filteredRows.map(r => new DirectEditOperation(r.rowId, { [field]: newValue }, `${label} 一括修正`)))
+        filteredRows.map(r =>
+          resolutionDef
+            ? resolutionDef.createCommand(r.rowId, values)
+            : new DirectEditOperation(r.rowId, values, `${label} 一括修正`)
+        ))
     } else if (mode === 'pair') {
       appService.executeBatch(`${label} 一括修正`,
         filteredRows.map(r => new DirectEditOperation(r.rowId,

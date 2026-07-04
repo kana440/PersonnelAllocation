@@ -300,8 +300,32 @@ operationRole: {
 |---|---|---|
 | フォームを開いたとき | `onOpen(row, ctx)` | 初期フィールド値を計算する（プレビュー用・UndoStack 非対象） |
 | フィールド変更時 | `onFieldChange?.[field](value, ctx)` | 操作固有のサイドエフェクトを返す。`deriveFieldUpdates` の後に実行される |
-| 実行ボタン押下前 | `onValidate(ctx, rowId, values)` | バリデーションを実行する |
-| バリデーション通過後 | `onSubmit(ctx, rowId, values)` | 新しい状態を返す純粋関数 |
+| 実行ボタン押下 or ドライラン | `createCommand(rowId, values)` | `validate(ctx)` / `apply(ctx)` を持つ `EditCommand` を返す |
+
+### `createCommand` の設計意図
+
+以前の設計では `onValidate(ctx, rowId, values)` / `onSubmit(ctx, rowId, values)` が分離されていた。
+現設計では **`createCommand(rowId, values): EditCommand`** が両方を束縛したオブジェクトを返す。
+
+```typescript
+// EditOperation から EditCommand を生成（副作用なし）
+const cmd = def.createCommand(rowId, values)
+
+// バリデーションのみ（ドライラン）
+const result = cmd.validate(ctx)  // apply() を呼ばなくても検証できる
+
+// 実行
+if (result.ok) appService.executeOperation(cmd)
+```
+
+**これにより以下が可能になる**：
+
+- **UI ドライラン**: `QuickEditDialog` でフォーム変更のたびに `createCommand().apply(ctx)` を呼び、
+  副作用フィールド（昇格サイン等）の変化をプレビューしてユーザーに確認を求める。
+- **AI ドライラン**: AI ツールが操作を提案する前に `validate(ctx)` を呼んで安全に事前検証できる。
+  実行に失敗するような提案を AI が確信を持って出さなくなる。
+- **バッチ修正**: `ValidationResolutionDef.createCommand` と同一インターフェースのため、
+  問題フィールドの一括修正フローが `EditOperation` と共通のコードパスで動く。
 
 ### `FieldChangeEffect` 型
 
@@ -317,8 +341,51 @@ type FieldChangeEffect = {
 }
 ```
 
-**注意**: `EditCommand` の `validate(ctx)` / `apply(ctx)` メソッド名は変更しない。
-`EditOperation` の `onValidate` / `onSubmit` とは別概念。
+---
+
+## ValidationResolutionDef（バリデーション問題の一括修正定義）
+
+`packages/domain/src/rules/resolve/` で管理する。
+バリデーション問題（`ValidationIssue`）を「どのフィールドをどう変えれば解決できるか」と対応させる定義群。
+
+```typescript
+interface ValidationResolutionDef {
+  id:         string
+  shortLabel: string                   // ≤8文字。フィルタバッジ・セレクト用
+  field:      keyof AllocationRow      // 修正対象フィールド
+  level:      'error' | 'warning'
+  match(issue: ValidationIssue): boolean
+  suggestValue?(row: AllocationRow): string | undefined   // 自動提案値（省略可）
+  createCommand(rowId: number, values: Partial<AllocationRow>): EditCommand
+}
+```
+
+**`EditOperation` との対応関係**:
+
+| 概念 | 役割 |
+|---|---|
+| `EditOperation` | UI フォーム全体のメタデータ（availableFor / inputs / onOpen / createCommand） |
+| `ValidationResolutionDef` | 問題解決に特化した軽量バージョン（match / suggestValue / createCommand のみ） |
+
+どちらも `createCommand(rowId, values): EditCommand` を返す点で統一されている。
+
+**使用フロー**:
+
+```typescript
+// 1. 問題を ResolutionDef に照合
+const def = [...RESOLUTION_DEFS].reverse().find(d => d.match(issue))
+
+// 2. ドライラン（UI での確認表示に使う）
+const preview = dryRunResolution(def, row, suggestedValue, ctx)
+// → { ok, updatedRow, changedFields } を返す（apply() を副作用なしで実行）
+
+// 3. 確定したら実行
+const cmd = def.createCommand(rowId, { [def.field]: confirmedValue })
+if (cmd.validate(ctx).ok) appService.executeOperation(cmd)
+```
+
+`RESOLUTION_DEFS` は後ろから検索することで、汎用定義より特化定義が先にマッチする。
+（例: `officialPositionCode` の error 全般 → `officialPos-error`、出向関連の同フィールド → `officialPos-secondment`）
 
 ---
 

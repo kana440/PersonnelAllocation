@@ -41,40 +41,44 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
     memo:           row.memo           as string | undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId) return fail('人が配属されていない行に兼務出向を追加できません')
-    if (row.concurrentType === '兼務') return fail('兼務行には兼務出向を追加できません')
-    if (!values.secondmentToCompany)   return fail('出向先会社は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const src      = ctx.allocationList.find(r => r.rowId === rowId)!
-    const newRowId = nextRowId(ctx.allocationList)
-    const posClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
-    const deptCode  = (values.departmentCode as string | undefined) ?? ''
-    const orgSub    = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-    const newRow: AllocationRow = {
-      ...src,
-      ...posClears,
-      ...orgSub,
-      rowId:                   newRowId,
-      positionCode:            `_pos_${newRowId}`,
-      departmentCode:          deptCode,
-      concurrentType:          '兼務',
-      concurrentReason:        values.concurrentReason as string | undefined,
-      secondmentToCompany:     values.secondmentToCompany as string,
-      memo:                    values.memo as string | undefined,
-      prevDepartmentCode:      undefined,
-      prevPositionCode:        undefined,
-      prevConcurrentType:      undefined,
-      prevSecondmentToCompany: undefined,
-    } as AllocationRow
+  createCommand(rowId, values) {
     return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `兼務出向追加: ${personName(src)} → ${values.secondmentToCompany as string}`,
+      kind: 'ConcurrentSecondmentOutNonSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.userId) return fail('人が配属されていない行に兼務出向を追加できません')
+        if (row.concurrentType === '兼務') return fail('兼務行には兼務出向を追加できません')
+        if (!values.secondmentToCompany)   return fail('出向先会社は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const src      = ctx.allocationList.find(r => r.rowId === rowId)!
+        const newRowId = nextRowId(ctx.allocationList)
+        const posClears = Object.fromEntries(afterKeysByBinding('position').map(k => [k, undefined]))
+        const deptCode  = (values.departmentCode as string | undefined) ?? ''
+        const orgSub    = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+        const newRow: AllocationRow = {
+          ...src,
+          ...posClears,
+          ...orgSub,
+          rowId:                   newRowId,
+          positionCode:            `_pos_${newRowId}`,
+          departmentCode:          deptCode,
+          concurrentType:          '兼務',
+          concurrentReason:        values.concurrentReason as string | undefined,
+          secondmentToCompany:     values.secondmentToCompany as string,
+          memo:                    values.memo as string | undefined,
+          prevDepartmentCode:      undefined,
+          prevPositionCode:        undefined,
+          prevConcurrentType:      undefined,
+          prevSecondmentToCompany: undefined,
+        } as AllocationRow
+        return {
+          updatedList: [...ctx.allocationList, newRow],
+          label: `兼務出向追加: ${personName(src)} → ${values.secondmentToCompany as string}`,
+        }
+      },
     }
   },
 }
@@ -128,37 +132,41 @@ export const concurrentSecondmentInNewDef: EditOperation = {
     concurrentType: '兼務',
   }),
 
-  onValidate(_ctx, _rowId, values) {
-    if (!values.lastName)              return fail('姓は必須です')
-    if (!values.firstName)             return fail('名は必須です')
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    if (!values.departmentCode)        return fail('受入先組織コードは必須です')
-    if (!values.employmentType)        return fail('雇用タイプは必須です')
-    if (!values.concurrentReason)      return fail('兼務理由は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, _rowId, values) {
-    const newRowId = nextRowId(ctx.allocationList)
-    const orgSub   = values.departmentCode
-      ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-      : {}
-    const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
-    const name     = [values.lastName, values.firstName].filter(Boolean).join(' ')
-    const newRow: AllocationRow = {
-      ...orgSub,
-      ...formVals,
-      rowId:                newRowId,
-      positionCode:         `_pos_${newRowId}`,
-      departmentCode:       (values.departmentCode as string) || '',
-      concurrentType:       '兼務',
-      transferReason:       TR.CONCURRENT_SECONDMENT_IN,
-      trainingPositionFlag: '0',
-      userId:               (values.userId as string | undefined) || undefined,
-    } as AllocationRow
+  createCommand(_rowId, values) {
     return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `兼務出向受入（新規）: ${name} ← ${values.secondmentFromCompany as string ?? ''}`,
+      kind: 'ConcurrentSecondmentInNew',
+      validate() {
+        if (!values.lastName)              return fail('姓は必須です')
+        if (!values.firstName)             return fail('名は必須です')
+        if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
+        if (!values.departmentCode)        return fail('受入先組織コードは必須です')
+        if (!values.employmentType)        return fail('雇用タイプは必須です')
+        if (!values.concurrentReason)      return fail('兼務理由は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const newRowId = nextRowId(ctx.allocationList)
+        const orgSub   = values.departmentCode
+          ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
+          : {}
+        const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
+        const name     = [values.lastName, values.firstName].filter(Boolean).join(' ')
+        const newRow: AllocationRow = {
+          ...orgSub,
+          ...formVals,
+          rowId:                newRowId,
+          positionCode:         `_pos_${newRowId}`,
+          departmentCode:       (values.departmentCode as string) || '',
+          concurrentType:       '兼務',
+          transferReason:       TR.CONCURRENT_SECONDMENT_IN,
+          trainingPositionFlag: '0',
+          userId:               (values.userId as string | undefined) || undefined,
+        } as AllocationRow
+        return {
+          updatedList: [...ctx.allocationList, newRow],
+          label: `兼務出向受入（新規）: ${name} ← ${values.secondmentFromCompany as string ?? ''}`,
+        }
+      },
     }
   },
 }
@@ -180,17 +188,21 @@ export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (row.concurrentType !== '兼務' || !row.secondmentToCompany)
-      return fail('兼務出向行ではありません（concurrentType=兼務 かつ secondmentToCompany が必要）')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向解除: ${personName(row)}` }
+  createCommand(rowId) {
+    return {
+      kind: 'ConcurrentSecondmentOutReleaseSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (row.concurrentType !== '兼務' || !row.secondmentToCompany)
+          return fail('兼務出向行ではありません（concurrentType=兼務 かつ secondmentToCompany が必要）')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向解除: ${personName(row)}` }
+      },
+    }
   },
 }
 
@@ -211,17 +223,21 @@ export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (row.concurrentType !== '兼務' || !row.secondmentToCompany)
-      return fail('兼務出向行ではありません（concurrentType=兼務 かつ secondmentToCompany が必要）')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向解除: ${personName(row)}` }
+  createCommand(rowId) {
+    return {
+      kind: 'ConcurrentSecondmentOutReleaseNonSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (row.concurrentType !== '兼務' || !row.secondmentToCompany)
+          return fail('兼務出向行ではありません（concurrentType=兼務 かつ secondmentToCompany が必要）')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向解除: ${personName(row)}` }
+      },
+    }
   },
 }
 
@@ -242,17 +258,21 @@ export const concurrentSecondmentInReleaseSFDef: EditOperation = {
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (row.concurrentType !== '兼務' || !row.secondmentFromCompany)
-      return fail('兼務出向受入行ではありません（concurrentType=兼務 かつ secondmentFromCompany が必要）')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入解除: ${personName(row)}` }
+  createCommand(rowId) {
+    return {
+      kind: 'ConcurrentSecondmentInReleaseSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (row.concurrentType !== '兼務' || !row.secondmentFromCompany)
+          return fail('兼務出向受入行ではありません（concurrentType=兼務 かつ secondmentFromCompany が必要）')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入解除: ${personName(row)}` }
+      },
+    }
   },
 }
 
@@ -273,17 +293,21 @@ export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (row.concurrentType !== '兼務' || !row.secondmentFromCompany)
-      return fail('兼務出向受入行ではありません（concurrentType=兼務 かつ secondmentFromCompany が必要）')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入解除: ${personName(row)}` }
+  createCommand(rowId) {
+    return {
+      kind: 'ConcurrentSecondmentInReleaseNonSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (row.concurrentType !== '兼務' || !row.secondmentFromCompany)
+          return fail('兼務出向受入行ではありません（concurrentType=兼務 かつ secondmentFromCompany が必要）')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入解除: ${personName(row)}` }
+      },
+    }
   },
 }
 
@@ -322,21 +346,25 @@ export const concurrentSecondmentInCancelDef: EditOperation = {
     concurrentReason:             row.concurrentReason,
   }),
 
-  onValidate(ctx, rowId) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId) {
-    const row  = ctx.allocationList.find(r => r.rowId === rowId)!
-    const name = personName(row)
-    if (getDirectSubordinates(row, ctx.allocationList).length > 0) {
-      return {
-        updatedList: ctx.allocationList.map(r => r.rowId === rowId ? vacatePosition(r) : r),
-        label: `兼務出向受入取消（空席化）: ${name}`,
-      }
+  createCommand(rowId) {
+    return {
+      kind: 'ConcurrentSecondmentInCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row  = ctx.allocationList.find(r => r.rowId === rowId)!
+        const name = personName(row)
+        if (getDirectSubordinates(row, ctx.allocationList).length > 0) {
+          return {
+            updatedList: ctx.allocationList.map(r => r.rowId === rowId ? vacatePosition(r) : r),
+            label: `兼務出向受入取消（空席化）: ${name}`,
+          }
+        }
+        return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${name}` }
+      },
     }
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `兼務出向受入取消: ${name}` }
   },
 }
 

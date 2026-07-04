@@ -7,6 +7,7 @@ import type { DragData }        from '../OrgViewContext'
 import { NameChip }             from './NameChip'
 import type { PositionEntry }   from '../OrgViewContext'
 import { promotionDef, demotionDef } from '@personnel/domain/commands/defs/promotionDefs'
+import { isVacantRow } from '@personnel/domain/allocationRow'
 import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from './compactGroupDefs'
 
 interface Props {
@@ -38,7 +39,7 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
   const groups = useMemo(() => {
     const visible = showVacantPositions
       ? entries
-      : entries.filter((e: PositionEntry) => !!e.row.userId)
+      : entries.filter((e: PositionEntry) => !isVacantRow(e.row))
 
     const map = new Map<string, PositionEntry[]>()
     for (const entry of visible) {
@@ -64,7 +65,7 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
     e.stopPropagation()
 
     const row = allocationList.find(r => r.rowId === data.rowId)
-    if (!row || !row.userId) return
+    if (!row || isVacantRow(row)) return
 
     const fromBand = row.positionBand as string | undefined
     if (!fromBand || fromBand === toKey) return

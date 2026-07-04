@@ -14,15 +14,15 @@ runOperationScenarios('昇格 — availableFor', promotionDef, [
   },
   {
     id: 'promo-avail-2',
-    desc: '出向受入行 → 表示されない',
+    desc: '出向受入行 → 表示される（昇格は全雇用タイプ対象）',
     row: { employmentType: '出向受入社員' },
-    expect: { available: false },
+    expect: { available: true },
   },
   {
     id: 'promo-avail-3',
-    desc: '雇用延長行 → 表示されない',
+    desc: '雇用延長行 → 表示される（昇格は全雇用タイプ対象）',
     row: { employmentType: '雇用延長社員' },
-    expect: { available: false },
+    expect: { available: true },
   },
 ])
 
@@ -90,9 +90,9 @@ runOperationScenarios('降格 — availableFor', demotionDef, [
   },
   {
     id: 'demo-avail-2',
-    desc: '出向受入行 → 表示されない',
+    desc: '出向受入行 → 表示される（降格は全雇用タイプ対象）',
     row: { employmentType: '出向受入社員' },
-    expect: { available: false },
+    expect: { available: true },
   },
 ])
 

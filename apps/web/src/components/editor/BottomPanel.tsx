@@ -4,15 +4,15 @@ import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 import { exportToXlsx } from '../../infrastructure/excel/engine'
 import { useReviewData } from '../review/hooks/useReviewData'
 import { ChangeDigest }        from '../review/components/ChangeDigest'
-import { AttributeGrid }       from '../review/components/AttributeGrid'
 import { ValidationDashboard } from '../review/components/ValidationDashboard'
 import { ExcelPreview }        from './ExcelPreview'
 import { ExportOrgDialog }     from './ExportOrgDialog'
+import { UnifiedReviewView }   from '../review/UnifiedReviewView'
 
-type Tab = 'digest' | 'grid' | 'validation' | 'excel'
+type Tab = 'unified' | 'digest' | 'validation' | 'excel'
 
 const TABS: { id: Tab; shortLabel: string; fullLabel: string }[] = [
-  { id: 'grid',       shortLabel: '変更\n一覧', fullLabel: '変更一覧' },
+  { id: 'unified',    shortLabel: '一覧',       fullLabel: '変更一覧（統合）' },
   { id: 'digest',     shortLabel: '集計',       fullLabel: '集計' },
   { id: 'validation', shortLabel: '問題',       fullLabel: '問題確認' },
   { id: 'excel',      shortLabel: 'Excel',      fullLabel: 'Excel形式' },
@@ -27,8 +27,8 @@ export function BottomPanel({ isCollapsed, onToggleCollapse }: Props) {
   const data  = useReviewData()
   const store = useScopedStore()
 
-  const [activeTab,        setActiveTab]        = useState<Tab>('digest')
-  const [gridNav,          setGridNav]          = useState<{ filterKind?: string; changedOnly: boolean }>({ changedOnly: false })
+  const [activeTab,        setActiveTab]        = useState<Tab>('unified')
+  const [, setGridNav] = useState<{ filterKind?: string; changedOnly: boolean }>({ changedOnly: false })
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
 
   // エクスポート用に Excel 行を計算
@@ -62,7 +62,7 @@ export function BottomPanel({ isCollapsed, onToggleCollapse }: Props) {
     const found = TABS.find(t => t.id === tab)
     if (!found) return
     setActiveTab(found.id)
-    if (found.id === 'grid') setGridNav({ filterKind, changedOnly: filterKind !== undefined })
+    if (found.id === 'unified' && filterKind) setGridNav({ filterKind, changedOnly: filterKind !== undefined })
   }
 
   return (
@@ -114,7 +114,7 @@ export function BottomPanel({ isCollapsed, onToggleCollapse }: Props) {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id)
-                    if (tab.id === 'grid') setGridNav({ changedOnly: false })
+                    if (tab.id === 'unified') setGridNav({ changedOnly: false })
                   }}
                   title={tab.fullLabel}
                   className={`flex-1 flex flex-col items-center justify-center border-b border-gray-200 transition-colors relative px-1 py-1 ${
@@ -134,18 +134,14 @@ export function BottomPanel({ isCollapsed, onToggleCollapse }: Props) {
 
           {/* ── タブコンテンツ ── */}
           <div className="flex-1 overflow-hidden min-h-0">
+            {activeTab === 'unified' && (
+              <UnifiedReviewView />
+            )}
             {activeTab === 'digest' && (
               <ChangeDigest data={data} onSelectTab={handleSelectTab} activeTab={activeTab} />
             )}
-            {activeTab === 'grid' && (
-              <AttributeGrid
-                rows={data.rows}
-                filterKind={gridNav.filterKind}
-                defaultChangedOnly={gridNav.changedOnly}
-              />
-            )}
             {activeTab === 'validation' && (
-              <ValidationDashboard rows={data.rows} onDrillDown={() => setActiveTab('grid')} />
+              <ValidationDashboard rows={data.rows} onDrillDown={() => setActiveTab('unified')} />
             )}
             {activeTab === 'excel' && (
               <ExcelPreview showExport={false} />

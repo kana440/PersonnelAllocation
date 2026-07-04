@@ -73,7 +73,7 @@ apps/web/src/ports/                              ← インターフェース定
 packages/domain/src/                             ← ドメイン層（外部依存ゼロ。Zod のみ可）
   allocationRow.ts        ← AllocationRow 型・FIELD_METADATA
   context.ts              ← DomainContext・RowContext（全ドメイン処理の共通コンテキスト）
-  masters/                ← マスタデータ型定義・集約（AllCodeLists）
+  masters/                ← マスタデータ型定義・集約（AllMasters・EMPTY_MASTERS）
   fieldConstraints.ts     ← FIELD_CONSTRAINTS（許容値制約の単一定義ソース）
   rules/                  ← ルール・バリデーション・導出・選択肢（統合）
     field.ts              ←   FieldRule・FIELD_RULES（フィールド単位の3軸宣言）
@@ -151,10 +151,11 @@ interface Props {
 
 | 名称 | コード上の実体 | 意味 |
 |---|---|---|
-| `EditCommand` | `packages/domain/src/commands/types.ts` | 単行の原子操作。UndoStack 差分単位 |
+| `EditCommand` | `packages/domain/src/commands/types.ts` | 単行の原子操作。`validate(ctx)` / `apply(ctx)` を持つ純粋オブジェクト。UndoStack 差分単位 |
 | `EditScenario` | `packages/domain/src/commands/scenarios.ts` | 複合操作。1件でも複数件でも同じ構造 |
 | `EditPattern` | `packages/domain/src/patterns/editPatterns.ts` | 操作の分類ラベル。表示・集計・メニュー用 |
-| `EditOperation` | `packages/domain/src/commands/defs/` | メニュー条件・フォーム定義・ライフサイクル（`onOpen`/`onFieldChange`/`onValidate`/`onSubmit`） |
+| `EditOperation` | `packages/domain/src/commands/defs/` | メニュー条件・フォーム定義。`onOpen`/`onFieldChange`/`createCommand` を持つ |
+| `ValidationResolutionDef` | `packages/domain/src/rules/resolve/` | バリデーション問題の解決定義。`match`/`suggestValue`/`createCommand` を持つ |
 | `MultiRowOperationDef` | `packages/domain/src/commands/defs/index.ts` | 2行以上を同時に操作するフォーム定義（例：SF外本務出向の出向元＋受入行2行セット） |
 | `SecondmentOutChooser` | `apps/web/src/components/editor/PersonOperationPanel/SecondmentOutChooser.tsx` | 本務出向の SF/非SF 判定ルーティングステップ（会社名入力・手動切り替え付き） |
 
@@ -221,7 +222,9 @@ export const leaveOfAbsenceDef: EditOperation = {
 export const leaveOfAbsenceCancelDef: EditOperation = {
   availableFor: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
   inputs: [],   // 確認なしで即実行
-  onSubmit: (ctx, rowId) => new DirectEditOperation(rowId, { leaveOfAbsenceSign: undefined, transferReason: undefined }, '休職取消').apply(ctx),
+  createCommand(rowId) {
+    return new DirectEditOperation(rowId, { leaveOfAbsenceSign: undefined, transferReason: undefined }, '休職取消')
+  },
 }
 ```
 
@@ -574,21 +577,21 @@ const rows = await db.select({
 
 詳細は `apps/server/CLAUDE.md` の「Drizzle ORM のキー命名規則」を参照。
 
-### codeLists の受け取り方
+### masters の受け取り方
 
-サーバーが返す `codeLists` は `Record<string, unknown[]>` であり `AllCodeLists` 全フィールドを保証しない
+サーバーが返す `masters` は `Partial<AllMasters>` であり全フィールドを保証しない
 （例: `orgMasterEntries` はサーバー側が除外して保存するため返却されない）。
 
-**受け取り後は必ず `EMPTY_CODE_LISTS` とマージしてから `appService` に渡す**。
+**受け取り後は必ず `EMPTY_MASTERS` とマージしてから `appService` に渡す**。
 
 ```typescript
-import { EMPTY_CODE_LISTS, type AllCodeLists } from '@personnel/domain/masters/aggregate'
+import { EMPTY_MASTERS, type AllMasters } from '@personnel/domain/masters/aggregate'
 
-// ❌ NG（受け取った codeLists をそのまま cast → 未定義キーがあるとランタイムクラッシュ）
-codeLists: masters.codeLists as AllCodeLists
+// ❌ NG（受け取った masters をそのまま cast → 未定義キーがあるとランタイムクラッシュ）
+masters: serverResponse.masters as AllMasters
 
-// ✅ OK（EMPTY_CODE_LISTS をベースにして undefined キーを空配列で埋める）
-codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>) }
+// ✅ OK（EMPTY_MASTERS をベースにして undefined キーをデフォルト値で埋める）
+masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) }
 ```
 
 ### ApiXxx インターフェースとクエリのフィールド同期
@@ -608,7 +611,7 @@ codeLists: { ...EMPTY_CODE_LISTS, ...(masters.codeLists as Partial<AllCodeLists>
 - `EditCommand` を使わず `HRApplicationService` に直接ドメインロジックを書く
 - バリデーションとオプション絞り込みを別々に実装する（`FIELD_CONSTRAINTS` を使う）
 - `ApiXxx` インターフェースを snake_case で定義する（Drizzle の返却型と不一致になる）
-- サーバーから受け取った `codeLists` を `EMPTY_CODE_LISTS` とマージせず使う
+- サーバーから受け取った `masters` を `EMPTY_MASTERS` とマージせず使う
 - React の `map()` 内で `<>` フラグメントを key なしで使う（必ず `<React.Fragment key={...}>` を使う）
 - キャンバスコンポーネントで `organizations.find(o => o.id === x)` を書く（Map を使う）
 - `useStore()` / `useCanvasLayoutStore()` をセレクタなしで呼ぶ（`canvasZoom` 等の高頻度更新で 2000 コンポーネントが毎フレーム再レンダーされフリーズする。複数フィールドは `useShallow`、単一フィールドは `s => s.field`、イベントハンドラ内のみなら `getState()` を使う）

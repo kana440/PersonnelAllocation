@@ -1,4 +1,4 @@
-import type { AllocationRow } from '@personnel/domain/allocationRow'
+import { type AllocationRow, isVacantRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
 
 /**
@@ -21,7 +21,7 @@ export function getAllMemberOrgIds(
   const codeToId = new Map(afterOrganizations.map(o => [o.externalCode ?? o.id, o.id]))
   const orgIdSet = new Set<string>()
   for (const row of allocationList) {
-    if (!row.userId || !row.departmentCode) continue
+    if (isVacantRow(row) || !row.departmentCode) continue
     const orgId = codeToId.get(row.departmentCode)
     if (orgId) orgIdSet.add(orgId)
   }
@@ -42,7 +42,7 @@ export function getAssigneeOrgIds(
   for (const row of allocationList) {
     const rowAssignee = row.assignee?.trim() ?? ''
     if (assigneeName === null ? rowAssignee !== '' : rowAssignee !== assigneeName) continue
-    if (!row.userId || !row.departmentCode) continue
+    if (isVacantRow(row) || !row.departmentCode) continue
     const orgId = codeToId.get(row.departmentCode)
     if (orgId) orgIdSet.add(orgId)
   }

@@ -47,28 +47,32 @@ export const leaveOfAbsenceDef: EditOperation = {
     memo:               row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId) return fail('人が配属されていない行に休職を設定できません')
-    if (row.leaveOfAbsenceSign) return fail('すでに休職中です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              leaveOfAbsenceSign: values.leaveOfAbsenceSign as string,
-              transferReason:     values.transferReason as string,
-              ...(values.memo !== undefined ? { memo: values.memo } : {}),
-            }
-          : r
-      ),
-      label: `休職: ${personName(row)}`,
+      kind: 'LeaveOfAbsence',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row)        return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.userId) return fail('人が配属されていない行に休職を設定できません')
+        if (row.leaveOfAbsenceSign) return fail('すでに休職中です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  leaveOfAbsenceSign: values.leaveOfAbsenceSign as string,
+                  transferReason:     values.transferReason as string,
+                  ...(values.memo !== undefined ? { memo: values.memo } : {}),
+                }
+              : r
+          ),
+          label: `休職: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -101,25 +105,29 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
     memo:               row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              leaveOfAbsenceSign: undefined,
-              transferReason:     undefined,
-              memo:               values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: '休職取消',
+      kind: 'LeaveOfAbsenceCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  leaveOfAbsenceSign: undefined,
+                  transferReason:     undefined,
+                  memo:               values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: '休職取消',
+        }
+      },
     }
   },
 }
@@ -157,27 +165,31 @@ export const returnFromLeaveDef: EditOperation = {
     memo:               row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)                    return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.leaveOfAbsenceSign) return fail('休職中ではないため復職できません')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              leaveOfAbsenceSign: undefined,
-              transferReason:     values.transferReason as string | undefined,
-              ...(values.memo !== undefined ? { memo: values.memo } : {}),
-            }
-          : r
-      ),
-      label: `復職: ${personName(row)}`,
+      kind: 'ReturnFromLeave',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row)                    return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.leaveOfAbsenceSign) return fail('休職中ではないため復職できません')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  leaveOfAbsenceSign: undefined,
+                  transferReason:     values.transferReason as string | undefined,
+                  ...(values.memo !== undefined ? { memo: values.memo } : {}),
+                }
+              : r
+          ),
+          label: `復職: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -210,28 +222,32 @@ export const returnFromLeaveCancelDef: EditOperation = {
     memo:               row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)                         return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (row.leaveOfAbsenceSign)       return fail('現在休職中のため復職取消できません')
-    if (!row.prevLeaveOfAbsenceSign)  return fail('元から休職中ではないため復職取消できません')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              leaveOfAbsenceSign: row.prevLeaveOfAbsenceSign,  // before 状態に戻す
-              transferReason:     undefined,
-              memo:               values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: `復職取消: ${personName(row)}`,
+      kind: 'ReturnFromLeaveCancel',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row)                         return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (row.leaveOfAbsenceSign)       return fail('現在休職中のため復職取消できません')
+        if (!row.prevLeaveOfAbsenceSign)  return fail('元から休職中ではないため復職取消できません')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  leaveOfAbsenceSign: row.prevLeaveOfAbsenceSign,  // before 状態に戻す
+                  transferReason:     undefined,
+                  memo:               values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: `復職取消: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -264,22 +280,26 @@ export const resignationDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.transferReason) return fail('異動事由は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, transferReason: values.transferReason, memo: values.memo as string | undefined }
-          : r
-      ),
-      label: `退職: ${personName(row)}`,
+      kind: 'Resignation',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.transferReason) return fail('異動事由は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? { ...r, transferReason: values.transferReason, memo: values.memo as string | undefined }
+              : r
+          ),
+          label: `退職: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -308,20 +328,24 @@ export const resignationCancelDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, transferReason: undefined, memo: values.memo as string | undefined }
-          : r
-      ),
-      label: '退職取消',
+      kind: 'ResignationCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? { ...r, transferReason: undefined, memo: values.memo as string | undefined }
+              : r
+          ),
+          label: '退職取消',
+        }
+      },
     }
   },
 }
@@ -375,35 +399,39 @@ export const employmentTransferDef: EditOperation = {
     memo:                 row.memo                 as string | undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.transferReason) return fail('異動事由は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              transferReason:       values.transferReason,
-              lastName:             values.lastName             as string | undefined,
-              firstName:            values.firstName            as string | undefined,
-              employeeNumber:       values.employeeNumber       as string | undefined,
-              departmentCode:       values.departmentCode       as string | undefined,
-              employmentType:       values.employmentType       as string | undefined,
-              band:                 values.band                 as string | undefined,
-              payGrade:             values.payGrade             as string | undefined,
-              officialPositionCode: values.officialPositionCode as string | undefined,
-              localJobTitle:        values.localJobTitle        as string | undefined,
-              memo:                 values.memo                 as string | undefined,
-            }
-          : r
-      ),
-      label: `移籍: ${personName(row)}`,
+      kind: 'EmploymentTransfer',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.transferReason) return fail('異動事由は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  transferReason:       values.transferReason,
+                  lastName:             values.lastName             as string | undefined,
+                  firstName:            values.firstName            as string | undefined,
+                  employeeNumber:       values.employeeNumber       as string | undefined,
+                  departmentCode:       values.departmentCode       as string | undefined,
+                  employmentType:       values.employmentType       as string | undefined,
+                  band:                 values.band                 as string | undefined,
+                  payGrade:             values.payGrade             as string | undefined,
+                  officialPositionCode: values.officialPositionCode as string | undefined,
+                  localJobTitle:        values.localJobTitle        as string | undefined,
+                  memo:                 values.memo                 as string | undefined,
+                }
+              : r
+          ),
+          label: `移籍: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -432,24 +460,28 @@ export const employmentTransferCancelDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              transferReason: undefined,
-              memo:           values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: '移籍取消',
+      kind: 'EmploymentTransferCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  transferReason: undefined,
+                  memo:           values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: '移籍取消',
+        }
+      },
     }
   },
 }
@@ -483,22 +515,26 @@ export const noChangeDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!values.transferReason) return fail('変更なし事由は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, ...preserve(row), transferReason: values.transferReason, memo: values.memo }
-          : r
-      ),
-      label: `変更なし: ${personName(row)}`,
+      kind: 'NoChange',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!values.transferReason) return fail('変更なし事由は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? { ...r, ...preserve(row), transferReason: values.transferReason, memo: values.memo }
+              : r
+          ),
+          label: `変更なし: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -527,21 +563,25 @@ export const noChangeCancelDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, ...preserve(row), transferReason: undefined, memo: values.memo as string | undefined }
-          : r
-      ),
-      label: `変更なし取消: ${personName(row)}`,
+      kind: 'NoChangeCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? { ...r, ...preserve(row), transferReason: undefined, memo: values.memo as string | undefined }
+              : r
+          ),
+          label: `変更なし取消: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -569,21 +609,25 @@ export const resetToBeforeDef: EditOperation = {
     memo:           row.memo           as string | undefined,
   }),
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, _values) {
-    const row    = ctx.allocationList.find(r => r.rowId === rowId)!
-    const reset: Partial<AllocationRow> = {}
-    for (const { after, before } of FIELD_METADATA) {
-      ;(reset as Record<string, unknown>)[after] = row[before as keyof AllocationRow]
-    }
+  createCommand(rowId) {
     return {
-      updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...reset } : r),
-      label:       `組織割当リセット: ${personName(row)}`,
+      kind: 'ResetToBefore',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row    = ctx.allocationList.find(r => r.rowId === rowId)!
+        const reset: Partial<AllocationRow> = {}
+        for (const { after, before } of FIELD_METADATA) {
+          ;(reset as Record<string, unknown>)[after] = row[before as keyof AllocationRow]
+        }
+        return {
+          updatedList: ctx.allocationList.map(r => r.rowId === rowId ? { ...r, ...reset } : r),
+          label:       `組織割当リセット: ${personName(row)}`,
+        }
+      },
     }
   },
 }

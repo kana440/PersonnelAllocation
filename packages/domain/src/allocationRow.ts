@@ -18,6 +18,16 @@ export type AllocationRow = AllocationList & {
   _leaveSourceVacant?: string
 }
 
+/**
+ * 空席かどうかを判定する。userId・lastName・firstName のいずれかがあれば「人あり」と見なす。
+ * - userId なし + 姓名あり → 人あり（ID確認待ち運用に対応）
+ * - userId あり + SF未登録 → 人あり（IDが確認済みであれば十分）
+ * - userId・姓名 いずれも空 → 空席
+ */
+export function isVacantRow(row: { userId?: string; lastName?: string; firstName?: string }): boolean {
+  return !row.userId && !row.lastName && !row.firstName
+}
+
 // ── FieldBinding ──────────────────────────────────────────────────────────────
 // 各フィールドがポジション・人のどれに属するかを示す。
 // 操作時（移動・削除・紐付け解除）のコピー/リセット挙動を決定する。

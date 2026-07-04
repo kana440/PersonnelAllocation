@@ -5,7 +5,7 @@ import { FIELD_METADATA } from '../../allocationRow'
  * afterConstraint: 'preserve' の実装。
  * after フィールドを全て対応する before 値にコピーした差分オブジェクトを返す。
  *
- * operationRole に afterConstraint: 'preserve' を宣言した onSubmit で使う:
+ * operationRole に afterConstraint: 'preserve' を宣言した createCommand().apply() で使う:
  *   { ...r, ...preserve(row), <固有フィールド> }
  */
 export function preserve(row: AllocationRow): Partial<AllocationRow> {

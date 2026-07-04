@@ -51,39 +51,41 @@ export const subordinateHandoffDef: EditOperation = {
     memo:                undefined,
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    const srcPosCode = row.positionCode as string | undefined
-    if (!srcPosCode) return fail('ポジションコードが設定されていません')
-    const targetPosCode = values.managerPositionCode as string | undefined
-    if (!targetPosCode) return fail('引継先ポジションを選択してください')
-    if (targetPosCode === srcPosCode) return fail('引継先に自分自身は選択できません')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row        = ctx.allocationList.find(r => r.rowId === rowId)!
-    const srcPosCode = row.positionCode as string | undefined
-    const targetPos  = values.managerPositionCode as string | undefined
-    const targetName = values.managerName as string | undefined
-
-    // 配下メンバーの上司ポジションを引継先に変更
-    let updatedList = ctx.allocationList.map(r => {
-      if ((r.managerPositionCode as string | undefined) === srcPosCode && r.rowId !== rowId) {
-        return { ...r, managerPositionCode: targetPos, managerName: targetName }
-      }
-      return r
-    })
-
-    // 統合元が空きポジションなら行を削除
-    if (isVacantPosition(row)) {
-      updatedList = updatedList.filter(r => r.rowId !== rowId)
-    }
-
+  createCommand(rowId, values) {
     return {
-      updatedList,
-      label: `部下引継: ${personName(row)} → ${targetPos ?? ''}`,
+      kind: 'SubordinateHandoff',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        const srcPosCode = row.positionCode as string | undefined
+        if (!srcPosCode) return fail('ポジションコードが設定されていません')
+        const targetPosCode = values.managerPositionCode as string | undefined
+        if (!targetPosCode) return fail('引継先ポジションを選択してください')
+        if (targetPosCode === srcPosCode) return fail('引継先に自分自身は選択できません')
+        return ok()
+      },
+      apply(ctx) {
+        const row        = ctx.allocationList.find(r => r.rowId === rowId)!
+        const srcPosCode = row.positionCode as string | undefined
+        const targetPos  = values.managerPositionCode as string | undefined
+        const targetName = values.managerName as string | undefined
+
+        let updatedList = ctx.allocationList.map(r => {
+          if ((r.managerPositionCode as string | undefined) === srcPosCode && r.rowId !== rowId) {
+            return { ...r, managerPositionCode: targetPos, managerName: targetName }
+          }
+          return r
+        })
+
+        if (isVacantPosition(row)) {
+          updatedList = updatedList.filter(r => r.rowId !== rowId)
+        }
+
+        return {
+          updatedList,
+          label: `部下引継: ${personName(row)} → ${targetPos ?? ''}`,
+        }
+      },
     }
   },
 }
@@ -130,32 +132,36 @@ export const moveToVacantPositionDef: EditOperation = {
     _leaveSourceVacant: countSubordinates(row, ctx.allocationList) > 0 ? '1' : '',
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!(row.userId as string | undefined)) return fail('人が割り当てられていない行です')
-    const targetPosCode = values._targetPositionCode as string | undefined
-    if (!targetPosCode) return fail('移動先の空きポジションを選択してください')
-    const targetRow = ctx.allocationList.find(r => (r.positionCode as string | undefined) === targetPosCode)
-    if (!targetRow) return fail(`指定されたポジションが見つかりません: ${targetPosCode}`)
-    if (!isVacantPosition(targetRow)) return fail('指定されたポジションは空きポジションではありません')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row           = ctx.allocationList.find(r => r.rowId === rowId)!
-    const targetPosCode = values._targetPositionCode as string | undefined
-    const targetRow     = ctx.allocationList.find(r => (r.positionCode as string | undefined) === targetPosCode)!
-    const leaveSourceVacant = !!(values._leaveSourceVacant as string | undefined)
-
-    const { updatedList } = assignPersonToVacant(row, targetRow, ctx, {
-      leaveSourceVacant,
-      overrideBand: undefined,
-    })
-
+  createCommand(rowId, values) {
     return {
-      updatedList,
-      label: `空Pos移動: ${personName(row)} → ${targetPosCode ?? ''}`,
+      kind: 'MoveToVacantPosition',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!(row.userId as string | undefined)) return fail('人が割り当てられていない行です')
+        const targetPosCode = values._targetPositionCode as string | undefined
+        if (!targetPosCode) return fail('移動先の空きポジションを選択してください')
+        const targetRow = ctx.allocationList.find(r => (r.positionCode as string | undefined) === targetPosCode)
+        if (!targetRow) return fail(`指定されたポジションが見つかりません: ${targetPosCode}`)
+        if (!isVacantPosition(targetRow)) return fail('指定されたポジションは空きポジションではありません')
+        return ok()
+      },
+      apply(ctx) {
+        const row           = ctx.allocationList.find(r => r.rowId === rowId)!
+        const targetPosCode = values._targetPositionCode as string | undefined
+        const targetRow     = ctx.allocationList.find(r => (r.positionCode as string | undefined) === targetPosCode)!
+        const leaveSourceVacant = !!(values._leaveSourceVacant as string | undefined)
+
+        const { updatedList } = assignPersonToVacant(row, targetRow, ctx, {
+          leaveSourceVacant,
+          overrideBand: undefined,
+        })
+
+        return {
+          updatedList,
+          label: `空Pos移動: ${personName(row)} → ${targetPosCode ?? ''}`,
+        }
+      },
     }
   },
 }

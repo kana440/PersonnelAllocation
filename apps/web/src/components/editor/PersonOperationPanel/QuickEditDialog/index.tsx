@@ -136,9 +136,9 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
     })
   }, [def, row, ctx, resolveCtx, profile])
 
-  // バリデーション（def.onValidate: 操作固有。issues: FIELD_CONSTRAINTS 等の共通バリデーション）
+  // バリデーション（操作固有。issues: FIELD_CONSTRAINTS 等の共通バリデーション）
   const validation = useMemo(
-    () => def.onValidate(ctx, row.rowId, values),
+    () => def.createCommand(row.rowId, values).validate(ctx),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [values, row.rowId],
   )
@@ -147,7 +147,7 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
   const previewResult = useMemo(() => {
     if (!validation.ok) return null
     try {
-      return def.onSubmit(ctx, row.rowId, values)
+      return def.createCommand(row.rowId, values).apply(ctx)
     } catch { return null }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, validation.ok, row.rowId])

@@ -63,37 +63,41 @@ export const secondmentOutSFDef: EditOperation = {
     location:             '出向',
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)                        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId)                 return fail('人が配属されていない行に本務出向を設定できません')
-    if (!isMainAssignment(row))      return fail('本務行のみ対象です')
-    if (!values.secondmentToCompany) return fail('出向先会社は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string | undefined
-    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              secondmentToCompany:  values.secondmentToCompany as string,
-              departmentCode:       deptCode,
-              ...orgSub,
-              transferReason:       TR.SECONDMENT_OUT,
-              concurrentType:       '出向箱',
-              officialPositionCode: '出向者',
-              localJobTitle:        undefined,
-              location:             '出向',
-              memo:                 values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: `本務出向: ${personName(row)} → ${values.secondmentToCompany as string}`,
+      kind: 'SecondmentOutSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row)                        return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.userId)                 return fail('人が配属されていない行に本務出向を設定できません')
+        if (!isMainAssignment(row))      return fail('本務行のみ対象です')
+        if (!values.secondmentToCompany) return fail('出向先会社は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+        const deptCode = values.departmentCode as string | undefined
+        const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  secondmentToCompany:  values.secondmentToCompany as string,
+                  departmentCode:       deptCode,
+                  ...orgSub,
+                  transferReason:       TR.SECONDMENT_OUT,
+                  concurrentType:       '出向箱',
+                  officialPositionCode: '出向者',
+                  localJobTitle:        undefined,
+                  location:             '出向',
+                  memo:                 values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: `本務出向: ${personName(row)} → ${values.secondmentToCompany as string}`,
+        }
+      },
     }
   },
 }
@@ -147,37 +151,41 @@ export const secondmentOutNonSFDef: EditOperation = {
     location:             '出向',
   }),
 
-  onValidate(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row)                        return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.userId)                 return fail('人が配属されていない行に本務出向を設定できません')
-    if (!isMainAssignment(row))      return fail('本務行のみ対象です')
-    if (!values.secondmentToCompany) return fail('出向先会社は必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row      = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = values.departmentCode as string | undefined
-    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              secondmentToCompany:  values.secondmentToCompany as string,
-              departmentCode:       deptCode,
-              ...orgSub,
-              transferReason:       TR.SECONDMENT_OUT,
-              concurrentType:       '出向箱',
-              officialPositionCode: '出向者',
-              localJobTitle:        undefined,
-              location:             '出向',
-              memo:                 values.memo as string | undefined,
-            }
-          : r
-      ),
-      label: `本務出向: ${personName(row)} → ${values.secondmentToCompany as string}`,
+      kind: 'SecondmentOutNonSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row)                        return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.userId)                 return fail('人が配属されていない行に本務出向を設定できません')
+        if (!isMainAssignment(row))      return fail('本務行のみ対象です')
+        if (!values.secondmentToCompany) return fail('出向先会社は必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+        const deptCode = values.departmentCode as string | undefined
+        const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  secondmentToCompany:  values.secondmentToCompany as string,
+                  departmentCode:       deptCode,
+                  ...orgSub,
+                  transferReason:       TR.SECONDMENT_OUT,
+                  concurrentType:       '出向箱',
+                  officialPositionCode: '出向者',
+                  localJobTitle:        undefined,
+                  location:             '出向',
+                  memo:                 values.memo as string | undefined,
+                }
+              : r
+          ),
+          label: `本務出向: ${personName(row)} → ${values.secondmentToCompany as string}`,
+        }
+      },
     }
   },
 }
@@ -232,36 +240,40 @@ export const secondmentInNewDef: EditOperation = {
     concurrentType: '本務',
   }),
 
-  onValidate(_ctx, _rowId, values) {
-    if (!values.lastName)              return fail('姓は必須です')
-    if (!values.firstName)             return fail('名は必須です')
-    if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
-    if (!values.departmentCode)        return fail('受入先組織コードは必須です')
-    if (!values.employmentType)        return fail('雇用タイプは必須です')
-    return ok()
-  },
-
-  onSubmit(ctx, _rowId, values) {
-    const newRowId = nextRowId(ctx.allocationList)
-    const orgSub   = values.departmentCode
-      ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
-      : {}
-    const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
-    const name     = [values.lastName, values.firstName].filter(Boolean).join(' ')
-    const newRow: AllocationRow = {
-      ...orgSub,
-      ...formVals,
-      rowId:                newRowId,
-      positionCode:         `_pos_${newRowId}`,
-      departmentCode:       (values.departmentCode as string) || '',
-      concurrentType:       '本務',
-      transferReason:       TR.SECONDMENT_IN,
-      trainingPositionFlag: '0',
-      userId:               (values.userId as string | undefined) || undefined,
-    } as AllocationRow
+  createCommand(_rowId, values) {
     return {
-      updatedList: [...ctx.allocationList, newRow],
-      label: `本務出向受入（新規）: ${name} ← ${values.secondmentFromCompany as string ?? ''}`,
+      kind: 'SecondmentInNew',
+      validate() {
+        if (!values.lastName)              return fail('姓は必須です')
+        if (!values.firstName)             return fail('名は必須です')
+        if (!values.secondmentFromCompany) return fail('出向元会社は必須です')
+        if (!values.departmentCode)        return fail('受入先組織コードは必須です')
+        if (!values.employmentType)        return fail('雇用タイプは必須です')
+        return ok()
+      },
+      apply(ctx) {
+        const newRowId = nextRowId(ctx.allocationList)
+        const orgSub   = values.departmentCode
+          ? deriveOrgSubFields(values.departmentCode as string, ctx.masters)
+          : {}
+        const formVals = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== ''))
+        const name     = [values.lastName, values.firstName].filter(Boolean).join(' ')
+        const newRow: AllocationRow = {
+          ...orgSub,
+          ...formVals,
+          rowId:                newRowId,
+          positionCode:         `_pos_${newRowId}`,
+          departmentCode:       (values.departmentCode as string) || '',
+          concurrentType:       '本務',
+          transferReason:       TR.SECONDMENT_IN,
+          trainingPositionFlag: '0',
+          userId:               (values.userId as string | undefined) || undefined,
+        } as AllocationRow
+        return {
+          updatedList: [...ctx.allocationList, newRow],
+          label: `本務出向受入（新規）: ${name} ← ${values.secondmentFromCompany as string ?? ''}`,
+        }
+      },
     }
   },
 }
@@ -291,32 +303,39 @@ const outReleaseOnOpen = (row: AllocationRow, ctx: { allocationList: AllocationR
   secondmentToCompany:  undefined,
 })
 
-const outReleaseOnSubmit = (
-  ctx: { allocationList: AllocationRow[]; masters: AllMasters },
-  rowId: number,
-  values: Record<string, unknown>,
-) => {
-  const row      = ctx.allocationList.find(r => r.rowId === rowId)!
-  const deptCode = values.departmentCode as string | undefined
-  const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+function createOutReleaseCommand(rowId: number, values: Partial<AllocationRow>, kind: string) {
   return {
-    updatedList: ctx.allocationList.map(r =>
-      r.rowId === rowId
-        ? {
-            ...r,
-            departmentCode:       deptCode,
-            ...orgSub,
-            officialPositionCode: values.officialPositionCode as string | undefined,
-            localJobTitle:        values.localJobTitle        as string | undefined,
-            location:             values.location             as string | undefined,
-            transferReason:       TR.SECONDMENT_OUT_RELEASE,
-            concurrentType:       '本務',
-            secondmentToCompany:  undefined,
-            memo:                 values.memo                 as string | undefined,
-          }
-        : r
-    ),
-    label: `本務出向解除: ${personName(row)}`,
+    kind,
+    validate(ctx: { allocationList: AllocationRow[] }) {
+      const row = ctx.allocationList.find(r => r.rowId === rowId)
+      if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+      if (!row.prevSecondmentToCompany) return fail('出向先が設定されていないため出向解除できません')
+      return ok()
+    },
+    apply(ctx: { allocationList: AllocationRow[]; masters: AllMasters }) {
+      const row      = ctx.allocationList.find(r => r.rowId === rowId)!
+      const deptCode = values.departmentCode as string | undefined
+      const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+      return {
+        updatedList: ctx.allocationList.map(r =>
+          r.rowId === rowId
+            ? {
+                ...r,
+                departmentCode:       deptCode,
+                ...orgSub,
+                officialPositionCode: values.officialPositionCode as string | undefined,
+                localJobTitle:        values.localJobTitle        as string | undefined,
+                location:             values.location             as string | undefined,
+                transferReason:       TR.SECONDMENT_OUT_RELEASE,
+                concurrentType:       '本務',
+                secondmentToCompany:  undefined,
+                memo:                 values.memo                 as string | undefined,
+              }
+            : r
+        ),
+        label: `本務出向解除: ${personName(row)}`,
+      }
+    },
   }
 }
 
@@ -338,14 +357,7 @@ export const secondmentOutReleaseSFDef: EditOperation = {
   inputs: [...outReleaseInputs],
   onOpen: outReleaseOnOpen,
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.prevSecondmentToCompany) return fail('出向先が設定されていないため出向解除できません')
-    return ok()
-  },
-
-  onSubmit: outReleaseOnSubmit,
+  createCommand: (rowId, values) => createOutReleaseCommand(rowId, values, 'SecondmentOutReleaseSF'),
 }
 
 // ── 本務出向解除（SF未導入先） ────────────────────────────────────────────────
@@ -366,14 +378,7 @@ export const secondmentOutReleaseNonSFDef: EditOperation = {
   inputs: [...outReleaseInputs],
   onOpen: outReleaseOnOpen,
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.prevSecondmentToCompany) return fail('出向先が設定されていないため出向解除できません')
-    return ok()
-  },
-
-  onSubmit: outReleaseOnSubmit,
+  createCommand: (rowId, values) => createOutReleaseCommand(rowId, values, 'SecondmentOutReleaseNonSF'),
 }
 
 // ── 出向受入解除 共通ヘルパー（本務・兼務共用） ────────────────────────────────
@@ -404,27 +409,31 @@ export const secondmentInReleaseSFDef: EditOperation = {
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.prevSecondmentFromCompany) return fail('出向元が設定されていないため出向受入解除できません')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              transferReason:               values.transferReason,
-              secondmentFromCompany:        undefined,
-              secondmentFromEmployeeNumber: undefined,
-            }
-          : r
-      ),
-      label: `本務出向受入解除: ${personName(row)}`,
+      kind: 'SecondmentInReleaseSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.prevSecondmentFromCompany) return fail('出向元が設定されていないため出向受入解除できません')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  transferReason:               values.transferReason,
+                  secondmentFromCompany:        undefined,
+                  secondmentFromEmployeeNumber: undefined,
+                }
+              : r
+          ),
+          label: `本務出向受入解除: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -446,27 +455,31 @@ export const secondmentInReleaseNonSFDef: EditOperation = {
   inputs: [...inReleaseInputs],
   onOpen: (row) => ({ ...inReleaseInitial(), memo: row.memo as string | undefined }),
 
-  onValidate(ctx, rowId, _values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
-    if (!row.prevSecondmentFromCompany) return fail('出向元が設定されていないため出向受入解除できません')
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? {
-              ...r,
-              transferReason:               values.transferReason,
-              secondmentFromCompany:        undefined,
-              secondmentFromEmployeeNumber: undefined,
-            }
-          : r
-      ),
-      label: `本務出向受入解除: ${personName(row)}`,
+      kind: 'SecondmentInReleaseNonSF',
+      validate(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)
+        if (!row) return fail(`行が見つかりません (rowId: ${rowId})`)
+        if (!row.prevSecondmentFromCompany) return fail('出向元が設定されていないため出向受入解除できません')
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? {
+                  ...r,
+                  transferReason:               values.transferReason,
+                  secondmentFromCompany:        undefined,
+                  secondmentFromEmployeeNumber: undefined,
+                }
+              : r
+          ),
+          label: `本務出向受入解除: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -508,21 +521,25 @@ export const secondmentInCancelDef: EditOperation = {
     employmentType:               row.employmentType,
   }),
 
-  onValidate(ctx, rowId) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId) {
-    const row  = ctx.allocationList.find(r => r.rowId === rowId)!
-    const name = personName(row)
-    if (getDirectSubordinates(row, ctx.allocationList).length > 0) {
-      return {
-        updatedList: ctx.allocationList.map(r => r.rowId === rowId ? vacatePosition(r) : r),
-        label: `本務出向受入取消（空席化）: ${name}`,
-      }
+  createCommand(rowId) {
+    return {
+      kind: 'SecondmentInCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row  = ctx.allocationList.find(r => r.rowId === rowId)!
+        const name = personName(row)
+        if (getDirectSubordinates(row, ctx.allocationList).length > 0) {
+          return {
+            updatedList: ctx.allocationList.map(r => r.rowId === rowId ? vacatePosition(r) : r),
+            label: `本務出向受入取消（空席化）: ${name}`,
+          }
+        }
+        return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${name}` }
+      },
     }
-    return { updatedList: ctx.allocationList.filter(r => r.rowId !== rowId), label: `本務出向受入取消: ${name}` }
   },
 }
 

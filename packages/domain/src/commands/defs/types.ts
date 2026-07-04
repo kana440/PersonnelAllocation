@@ -1,6 +1,6 @@
 import type { AllocationRow }  from '../../allocationRow'
 import type { AllMasters }   from '../../masters/aggregate'
-import type { DomainContext, ValidationResult, OperationResult } from '../types'
+import type { DomainContext, EditCommand } from '../types'
 import type { OperationBadge } from './badge'
 import type { FieldRule, Profile } from '../../rules/field'
 
@@ -189,10 +189,10 @@ export interface OperationInput {
  * 業務操作の統合定義。OperationDef（UI メタデータ）と EditCommand（ロジック）を統合した概念。
  *
  * - availableFor / inputs / onOpen: UI・AI 向けメタデータ
- * - onValidate / onSubmit: ドメインロジック（DomainContext + rowId + values を受け取る純粋関数）
+ * - createCommand: rowId + values を束縛した EditCommand を返す純粋ファクトリ
  *
  * bindOperation(op, rowId, values) で EditCommand（パラメータ束縛済み）に変換できる。
- * UI は onSubmit() をドライランして inputs 外フィールドの変化を検出し、確認ダイアログを表示する。
+ * UI は createCommand().apply(ctx) をドライランして inputs 外フィールドの変化を検出し、確認ダイアログを表示する。
  */
 export interface EditOperation {
   /** 操作 ID */
@@ -208,7 +208,7 @@ export interface EditOperation {
   readonly description?: string
 
   /**
-   * true のとき onSubmit() ドライランによる副作用警告を表示しない。
+   * true のとき createCommand().apply() ドライランによる副作用警告を表示しない。
    * 昇格サイン等の自動付与など、副作用が操作名から自明な場合に設定する。
    */
   readonly suppressSideEffectWarning?: boolean
@@ -243,7 +243,7 @@ export interface EditOperation {
   /**
    * 簡易ダイアログ（QuickEditDialog）用の最小入力フィールド群。
    * 定義されている場合、SummaryView から操作を選択すると QuickEditDialog が開く。
-   * これらのフィールドだけで onValidate が通るように設計すること。
+   * これらのフィールドだけで createCommand().validate() が通るように設計すること。
    * 定義されていない場合は OperationFormView（詳細モード）に直行する。
    */
   readonly quickInputs?: OperationInput[]
@@ -276,15 +276,11 @@ export interface EditOperation {
   readonly onFieldChange?: Partial<Record<keyof AllocationRow, (value: string, ctx: DomainContext, currentValues?: Partial<AllocationRow>) => FieldChangeEffect>>
 
   /**
-   * 現在の状態と入力値に対してバリデーションを実行する。
-   * HRApplicationService.executeOperation() が onSubmit() 前に呼ぶ。
+   * rowId と values を束縛した EditCommand を返す。
+   * validate(ctx) / apply(ctx) を持つ純粋コマンドオブジェクト。
+   * bindOperation(def, rowId, values) はこれを呼び出すアダプタ。
    */
-  onValidate(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): ValidationResult
-
-  /**
-   * バリデーション通過後、新しい状態を返す純粋関数。
-   */
-  onSubmit(ctx: DomainContext, rowId: number, values: Partial<AllocationRow>): OperationResult
+  createCommand(rowId: number, values: Partial<AllocationRow>): EditCommand
 }
 
 /** 後方互換エイリアス */

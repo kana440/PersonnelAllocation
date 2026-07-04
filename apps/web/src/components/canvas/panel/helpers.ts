@@ -1,5 +1,5 @@
 import type { Organization } from '@personnel/domain/schemas'
-import type { AllocationRow } from '@personnel/domain/allocationRow'
+import { type AllocationRow, isVacantRow } from '@personnel/domain/allocationRow'
 
 /**
  * ポジションコードとマネージャーポジションコードの関係から、行を DFS 順に並べて depth を付与する。
@@ -103,7 +103,7 @@ export function getEmpBorderClass(
   row:      AllocationRow,
   empTypes: Array<{ label: string; isRegularEmployee: boolean; isSecondmentAcceptance: boolean }>,
 ): string {
-  if (!row.userId) return 'border-l-gray-200'
+  if (isVacantRow(row)) return 'border-l-gray-200'
   const entry = empTypes.find(e => e.label === row.employmentType)
   if (!entry) return row.employmentType ? 'border-l-amber-400' : 'border-l-gray-300'
   if (entry.isRegularEmployee)      return 'border-l-blue-500'

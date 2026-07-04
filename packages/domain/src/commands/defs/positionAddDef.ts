@@ -53,21 +53,25 @@ export const managerChangeDef: EditOperation = {
     }
   },
 
-  onValidate(ctx, rowId, _values) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId))
-      return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId, values) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
+  createCommand(rowId, values) {
     return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === rowId
-          ? { ...r, managerPositionCode: values.managerPositionCode, managerName: values.managerName, memo: values.memo as string | undefined }
-          : r
-      ),
-      label: `上司変更: ${personName(row)}`,
+      kind: 'ManagerChange',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId))
+          return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        return {
+          updatedList: ctx.allocationList.map(r =>
+            r.rowId === rowId
+              ? { ...r, managerPositionCode: values.managerPositionCode, managerName: values.managerName, memo: values.memo as string | undefined }
+              : r
+          ),
+          label: `上司変更: ${personName(row)}`,
+        }
+      },
     }
   },
 }
@@ -108,29 +112,31 @@ export const addEmptyPositionDef: EditOperation = {
     memo:           row.memo as string | undefined,
   }),
 
-  onValidate(_ctx, _rowId, _values) {
-    return ok()
-  },
-
-  onSubmit(ctx, _rowId, values) {
-    const newRowId = nextRowId(ctx.allocationList)
-    const deptCode = (values.departmentCode as string | undefined) ?? ''
-    const posCode  = ((values.positionCode as string | undefined) ?? '').trim() || `_pos_${newRowId}`
-    const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
-
-    const newRow: AllocationRow = {
-      ...orgSub,
-      rowId:                newRowId,
-      departmentCode:       deptCode,
-      positionCode:         posCode,
-      transferReason:       values.transferReason as string | undefined,
-      memo:                 values.memo           as string | undefined,
-      trainingPositionFlag: '0',
-    } as AllocationRow
-
+  createCommand(_rowId, values) {
     return {
-      updatedList: [...ctx.allocationList, newRow],
-      label:       `ポジション追加: ${deptCode}`,
+      kind: 'AddEmptyPosition',
+      validate: () => ok(),
+      apply(ctx) {
+        const newRowId = nextRowId(ctx.allocationList)
+        const deptCode = (values.departmentCode as string | undefined) ?? ''
+        const posCode  = ((values.positionCode as string | undefined) ?? '').trim() || `_pos_${newRowId}`
+        const orgSub   = deptCode ? deriveOrgSubFields(deptCode, ctx.masters) : {}
+
+        const newRow: AllocationRow = {
+          ...orgSub,
+          rowId:                newRowId,
+          departmentCode:       deptCode,
+          positionCode:         posCode,
+          transferReason:       values.transferReason as string | undefined,
+          memo:                 values.memo           as string | undefined,
+          trainingPositionFlag: '0',
+        } as AllocationRow
+
+        return {
+          updatedList: [...ctx.allocationList, newRow],
+          label:       `ポジション追加: ${deptCode}`,
+        }
+      },
     }
   },
 }
@@ -167,17 +173,21 @@ export const addEmptyPositionCancelDef: EditOperation = {
     memo:           row.memo,
   }),
 
-  onValidate(ctx, rowId) {
-    if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
-    return ok()
-  },
-
-  onSubmit(ctx, rowId) {
-    const row = ctx.allocationList.find(r => r.rowId === rowId)!
-    const deptCode = (row.departmentCode as string | undefined) ?? ''
+  createCommand(rowId) {
     return {
-      updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
-      label: `ポジション追加取消: ${deptCode}`,
+      kind: 'AddEmptyPositionCancel',
+      validate(ctx) {
+        if (!ctx.allocationList.find(r => r.rowId === rowId)) return fail(`行が見つかりません (rowId: ${rowId})`)
+        return ok()
+      },
+      apply(ctx) {
+        const row = ctx.allocationList.find(r => r.rowId === rowId)!
+        const deptCode = (row.departmentCode as string | undefined) ?? ''
+        return {
+          updatedList: ctx.allocationList.filter(r => r.rowId !== rowId),
+          label: `ポジション追加取消: ${deptCode}`,
+        }
+      },
     }
   },
 }

@@ -80,9 +80,9 @@ runOperationScenarios('昇格操作', promotionDef, [
   },
   {
     id: 'OP-promo-2',
-    desc: '出向受入行 → メニューに表示されない',
+    desc: '出向受入行 → メニューに表示される（昇格は全雇用タイプ対象）',
     row: { employmentType: '出向受入社員' },
-    expect: { available: false },
+    expect: { available: true },
   },
 
   // --- validate のテスト ---
