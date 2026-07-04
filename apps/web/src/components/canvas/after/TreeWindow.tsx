@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { isSecondmentOrg }         from '@personnel/domain/rules/derive'
 import { useOrgView }              from '../OrgViewContext'
@@ -27,7 +27,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   } = useOrgView()
 
   const {
-    panels, setPosition, toggleOpen, setOrgOpen, addPanel, addPanelsBatch,
+    panels, setPosition, toggleOpen, setOrgOpen, addPanel,
     setChildrenMode, setCollapsedOrgIds, removeOrgPanels, setPanelHeight,
     canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
@@ -36,7 +36,6 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     toggleOpen:         s.toggleOpen,
     setOrgOpen:         s.setOrgOpen,
     addPanel:           s.addPanel,
-    addPanelsBatch:     s.addPanelsBatch,
     setChildrenMode:    s.setChildrenMode,
     setCollapsedOrgIds: s.setCollapsedOrgIds,
     removeOrgPanels:    s.removeOrgPanels,
@@ -47,38 +46,6 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const masters   = useStore(s => s.masters)
   const selectOrg = useStore(s => s.selectOrg)
   const selectedOrgId = useStore(s => s.selectedOrgId)
-
-  // ── 初回マウント時: 直接メンバー/ポジションを持つ子孫 org を自動展開 ──────
-  const hasAutoExpanded = useRef(false)
-  useEffect(() => {
-    if (hasAutoExpanded.current) return
-    hasAutoExpanded.current = true
-
-    // サブツリーに items を持つ org かを O(N) でメモ化チェック（再帰の枝刈りに使用）
-    const memo = new Map<string, boolean>()
-    const hasSubtreeItems = (id: string): boolean => {
-      const cached = memo.get(id)
-      if (cached !== undefined) return cached
-      const direct = (positionTreeByOrgId.get(id)?.length ?? 0) > 0
-      const result = direct || (childrenByOrgId.get(id) ?? []).some(c => hasSubtreeItems(c.id))
-      memo.set(id, result)
-      return result
-    }
-
-    // チップボタンの人数（配下サブツリー全体）が 0 超なら open、0 なら closed
-    // initPanelsForOrgs と同じ判定基準にする
-    const idsToOpen: string[] = []
-    const collect = (orgId: string) => {
-      for (const child of childrenByOrgId.get(orgId) ?? []) {
-        if (!hasSubtreeItems(child.id)) continue
-        idsToOpen.push(child.id)   // サブツリーにメンバーがいれば open
-        collect(child.id)
-      }
-    }
-    collect(panel.orgId)
-
-    if (idsToOpen.length > 0) addPanelsBatch(idsToOpen)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getItemCount = useCallback((id: string) => positionTreeByOrgId.get(id)?.length ?? 0, [positionTreeByOrgId])
 

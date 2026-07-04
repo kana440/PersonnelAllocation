@@ -15,6 +15,7 @@ import type { SecondmentInValues } from '../modals/SecondmentInAddModal'
 import type { EditPattern }    from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }        from '../CanvasModals'
 import { TreeWindowCanvas }    from '../TreeWindowCanvas'
+import { CanvasQuickSearch }   from '../CanvasQuickSearch'
 import { DisplayFieldCombobox } from '../toolbar/DisplayFieldCombobox'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { COMPACT_GROUP_DEFS }    from '../panel/compactGroupDefs'
@@ -280,6 +281,7 @@ export function OrgOperationView() {
           {comparisonMode && (
             <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded flex-shrink-0">比較モード</span>
           )}
+          {!comparisonMode && !isHistoryPreviewMode && <CanvasQuickSearch />}
           <div className="flex-1" />
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {!comparisonMode && <DisplayFieldCombobox />}

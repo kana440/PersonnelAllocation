@@ -12,9 +12,6 @@ import {
   buildPanelByOrgIdMap, buildOrgByIdMap,
 } from './treeWindowLayout'
 import { VIEW_MODE_WIDTHS } from '../../store/canvasLayoutStore'
-import { FilterBar }           from './FilterBar'
-import { applyCanvasFilters, buildSubtreeMap } from './FilterBar/filterLogic'
-import { findSecondmentOrgCode } from '@personnel/domain/commands/helpers'
 
 // memo: OrgOperationView が selectedCardRowId 等の変化で再レンダーしても、
 // context が変わらない限りここは再レンダーしない（props なし）
@@ -28,7 +25,6 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     panelHeights,
     triggerComparisonArrange,
     canvasZoom, setCanvasZoom, stepCanvasZoom,
-    filterCards, globalFilters,
     canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
     panels:                  s.panels,
@@ -42,91 +38,20 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     canvasZoom:              s.canvasZoom,
     setCanvasZoom:           s.setCanvasZoom,
     stepCanvasZoom:          s.stepCanvasZoom,
-    filterCards:             s.filterCards,
-    globalFilters:           s.globalFilters,
     canvasPanelStyle:           s.canvasPanelStyle,
   })))
   const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
   const selectedOrgId = useStore(s => s.selectedOrgId)
-  const masters       = useStore(s => s.masters)
-  const { organizations, afterMembersByOrgId, positionTreeByOrgId } = useOrgView()
+  const { organizations } = useOrgView()
 
   // ── O(1) Map（organizations が変わるときのみ再構築）──────────────
   const orgById = useMemo(() => buildOrgByIdMap(organizations), [organizations])
 
-  // ── フィルタ用計算 ─────────────────────────────────────────────
-  const memberOrgIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const [orgId, pos] of positionTreeByOrgId) {
-      if (pos.length > 0) ids.add(orgId)
-    }
-    for (const [orgId, members] of afterMembersByOrgId) {
-      if (members.length > 0) ids.add(orgId)
-    }
-    return ids
-  }, [positionTreeByOrgId, afterMembersByOrgId])
-
-  // org → 全子孫マップ（サブツリーフィルタ用）
-  const subtreeMap = useMemo(() => buildSubtreeMap(organizations), [organizations])
-
-  // 出向アンカーの強制表示セット
-  const secondmentOrgIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const anchorId of globalFilters.secondmentAnchors) {
-      ids.add(anchorId)
-      const anchor = organizations.find(o => o.id === anchorId)
-      if (!anchor?.externalCode) continue
-      const code = findSecondmentOrgCode(anchor.externalCode, organizations, masters)
-      if (code) {
-        const sOrg = organizations.find(o => o.externalCode === code)
-        if (sOrg) ids.add(sOrg.id)
-      }
-    }
-    return ids
-  }, [globalFilters.secondmentAnchors, organizations, masters])
-
-  // Pass 1: 通常フィルタ（出向展開なし）
-  const primaryFilteredPanels = useMemo(
-    () => applyCanvasFilters({
-      panels, filterCards, globalFilters,
-      allOrgs: organizations, orgMasterEntries: masters.orgMasterEntries,
-      memberOrgIds, secondmentOrgIds, subtreeMap,
-    }),
-    [panels, filterCards, globalFilters, organizations, masters.orgMasterEntries, memberOrgIds, secondmentOrgIds, subtreeMap],
-  )
-
-  // Pass 2: 「出向組織含む」が ON のとき、表示中の各組織の出向者用組織を追加
-  const relatedSecondmentOrgIds = useMemo(() => {
-    if (!globalFilters.includeRelatedSecondmentOrgs) return new Set<string>()
-    const ids = new Set<string>()
-    for (const panel of primaryFilteredPanels) {
-      const org = organizations.find(o => o.id === panel.orgId)
-      if (!org?.externalCode) continue
-      const code = findSecondmentOrgCode(org.externalCode, organizations, masters)
-      if (code) {
-        const sOrg = organizations.find(o => o.externalCode === code)
-        if (sOrg) ids.add(sOrg.id)
-      }
-    }
-    return ids
-  }, [primaryFilteredPanels, globalFilters.includeRelatedSecondmentOrgs, organizations, masters])
-
-  const filteredPanels = useMemo(() => {
-    if (!globalFilters.includeRelatedSecondmentOrgs || relatedSecondmentOrgIds.size === 0) {
-      return primaryFilteredPanels
-    }
-    const extra = panels.filter(p =>
-      relatedSecondmentOrgIds.has(p.orgId) &&
-      !primaryFilteredPanels.some(pp => pp.orgId === p.orgId),
-    )
-    return [...primaryFilteredPanels, ...extra]
-  }, [primaryFilteredPanels, relatedSecondmentOrgIds, panels, globalFilters.includeRelatedSecondmentOrgs])
-
   // ── スタンドアロンパネルと表示座標 ───────────────────────────────
   const standalonePanels = useMemo(() => {
-    const panelByOrgId = buildPanelByOrgIdMap(filteredPanels)
-    return filteredPanels.filter(p => isStandaloneWindow(p, panelByOrgId, orgById))
-  }, [filteredPanels, orgById])
+    const panelByOrgId = buildPanelByOrgIdMap(panels)
+    return panels.filter(p => isStandaloneWindow(p, panelByOrgId, orgById))
+  }, [panels, orgById])
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
@@ -204,8 +129,6 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
 
   return (
     <div className="flex flex-col h-full">
-      <FilterBar />
-
       <div className="relative flex-1 min-h-0">
       {/* ツールバー（右上固定） */}
       <div className="absolute top-2 right-3 z-10 flex items-center gap-2">

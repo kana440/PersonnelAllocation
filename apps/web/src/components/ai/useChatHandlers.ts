@@ -48,10 +48,9 @@ export function useChatHandlers({
   } = useChatStore()
 
   const buildCurrentSystemPrompt = useCallback((highlightSkills?: Skill[]) => {
-    const { scopeOrgId, afterOrganizations, selectedOrgId } = useStore.getState()
+    const { afterOrganizations, selectedOrgId } = useStore.getState()
     const { chatContextRowIds } = useChatStore.getState()
     const { activeSkills } = useSkillStore.getState()
-    const scopeOrg    = scopeOrgId    ? afterOrganizations.find(o => o.id === scopeOrgId)    : null
     const selectedOrg = selectedOrgId ? afterOrganizations.find(o => o.id === selectedOrgId) : null
     const rowCtxs  = chatContextRowIds
       .map(id => aiTools.getRowContext(id))
@@ -63,8 +62,8 @@ export function useChatHandlers({
       warningCount:  reviewSummary.warningCount,
     }
     const base = buildSystemPrompt(
-      scopeOrg?.name,
-      scopeOrg?.externalCode ?? undefined,
+      undefined,
+      undefined,
       rowCtxs.length > 0 ? rowCtxs : undefined,
       session,
       selectedOrg?.name,

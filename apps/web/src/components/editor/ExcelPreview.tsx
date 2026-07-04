@@ -146,18 +146,10 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm])
 
-  const scopeOrg = store.scopeOrgId
-    ? store.afterOrganizations.find(o => o.id === store.scopeOrgId) ?? null
-    : null
-
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
 
   const handleExport = () => {
-    if (scopeOrg) {
-      setExportDialogOpen(true)   // scope active → show org selection dialog
-    } else {
-      exportToXlsx(rows, store.effectiveDate)  // no scope → direct download
-    }
+    exportToXlsx(rows, store.effectiveDate)
   }
 
   // ── 仮想スクロールの計算 ──────────────────────────────────────
@@ -236,11 +228,6 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
 
         {showExport && (
           <div className="ml-auto flex items-center gap-2">
-            {scopeOrg && (
-              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-                スコープ: {scopeOrg.name}（{rows.length}行）
-              </span>
-            )}
             <button
               onClick={handleExport}
               disabled={rows.length === 0}
@@ -256,7 +243,7 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
             afterOrgs={store.afterOrganizations}
             rows={rows}
             effectiveDate={store.effectiveDate}
-            scopeOrg={scopeOrg}
+            scopeOrg={null}
             onClose={() => setExportDialogOpen(false)}
           />
         )}

@@ -12,35 +12,15 @@ interface Props {
   onChange:           (prevCode: string | null, newOrgCode: string | null) => void
 }
 
-/** スコープ組織の配下 ID セットを構築（BFS） */
-function buildSubtreeIds(rootId: string, allOrgs: Organization[]): Set<string> {
-  const childrenOf = new Map<string, string[]>()
-  for (const o of allOrgs) {
-    if (o.parentId) {
-      const arr = childrenOf.get(o.parentId) ?? []
-      arr.push(o.id)
-      childrenOf.set(o.parentId, arr)
-    }
-  }
-  const result = new Set<string>()
-  const queue = [rootId]
-  while (queue.length > 0) {
-    const id = queue.shift()!
-    result.add(id)
-    for (const child of childrenOf.get(id) ?? []) queue.push(child)
-  }
-  return result
-}
 
 export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Props) {
-  const { prevCode, prevOrgName, prevOrgPath, newOrgCode, matchConfidence, scopeOrgId, rowIds } = group
+  const { prevCode, prevOrgName, prevOrgPath, newOrgCode, matchConfidence, rowIds } = group
 
   const activeOrgs = allOrgs.filter(o => !o.isAbandoned)
   const isNewHire  = prevCode === null
 
   const [search,  setSearch]  = useState('')
   const [open,    setOpen]    = useState(false)
-  const [showAll, setShowAll] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -55,16 +35,6 @@ export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Pro
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
-
-  const subtreeIds = useMemo(
-    () => (scopeOrgId && !showAll) ? buildSubtreeIds(scopeOrgId, allOrgs) : null,
-    [scopeOrgId, allOrgs, showAll],
-  )
-
-  const scopeOrg = useMemo(
-    () => scopeOrgId ? (allOrgs.find(o => o.id === scopeOrgId) ?? null) : null,
-    [scopeOrgId, allOrgs],
-  )
 
   const selectedOrg = useMemo(
     () => activeOrgs.find(o => (o.externalCode ?? o.id) === newOrgCode) ?? null,
@@ -93,21 +63,13 @@ export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Pro
   }, [initialProposalOrg, allOrgs])
 
   const suggestions = useMemo(() => {
-    const pool = subtreeIds
-      ? activeOrgs.filter(o => subtreeIds.has(o.id))
-      : activeOrgs
+    const pool = activeOrgs
 
     if (search.trim()) {
       const results = pool.filter(o =>
         matchesSearch(o.name, search) ||
         (o.externalCode ? matchesSearch(o.externalCode, search) : false),
       )
-      if (results.length === 0 && subtreeIds) {
-        return activeOrgs.filter(o =>
-          matchesSearch(o.name, search) ||
-          (o.externalCode ? matchesSearch(o.externalCode, search) : false),
-        )
-      }
       return results
     }
 
@@ -115,13 +77,12 @@ export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Pro
     return [...pool]
       .sort((a, b) => orgNameSimilarity(b.name, base) - orgNameSimilarity(a.name, base))
       .slice(0, 15)
-  }, [activeOrgs, search, prevOrgName, subtreeIds])
+  }, [activeOrgs, search, prevOrgName])
 
   const select = (code: string | null) => {
     onChange(prevCode, code)
     setSearch('')
     setOpen(false)
-    setShowAll(false)
   }
 
   const confidenceBadge =
@@ -178,19 +139,6 @@ export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Pro
         <span className="flex-shrink-0 text-gray-400 mt-1">→</span>
         <div className="flex-1 min-w-0">
 
-          {/* スコープラベル（未マッチかつスコープあり） */}
-          {matchConfidence === 'none' && scopeOrg && (
-            <div className="text-[10px] text-blue-500 mb-0.5 flex items-center gap-0.5">
-              <span>📍</span>
-              <span className="truncate">{scopeOrg.name}</span>
-              {showAll && (
-                <button
-                  onClick={() => setShowAll(false)}
-                  className="ml-auto flex-shrink-0 text-blue-400 hover:text-blue-600"
-                >絞込</button>
-              )}
-            </div>
-          )}
 
           {/* コンボボックス本体（relative はここで切る） */}
           <div className="relative">
@@ -267,22 +215,6 @@ export function OrgGroupRow({ group, allOrgs, initialNewOrgCode, onChange }: Pro
                   })
                 )}
 
-                {subtreeIds && !showAll && (
-                  <button
-                    onMouseDown={e => { e.preventDefault(); setShowAll(true) }}
-                    className="w-full text-center px-2 py-1.5 text-[10px] text-blue-500 hover:bg-blue-50 border-t border-gray-100"
-                  >
-                    全組織から検索 ({activeOrgs.length}件)
-                  </button>
-                )}
-                {showAll && (
-                  <button
-                    onMouseDown={e => { e.preventDefault(); setShowAll(false) }}
-                    className="w-full text-center px-2 py-1.5 text-[10px] text-gray-400 hover:bg-gray-50 border-t border-gray-100"
-                  >
-                    絞り込みに戻す
-                  </button>
-                )}
               </div>
             )}
           </div>

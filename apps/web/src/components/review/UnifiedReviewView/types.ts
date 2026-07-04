@@ -10,6 +10,8 @@ export interface UnifiedFilter {
   issuesOnly:         boolean
   activePatterns:     Set<EditPattern>
   activeIssueMessage: string   // single-select; '' = none
+  /** 詳細条件（フィールドごとの AND 絞り込み）。値が空文字/undefined のフィールドは無視 */
+  fieldConditions:    Partial<Record<string, string>>
 }
 
 export const DEFAULT_FILTER: UnifiedFilter = {
@@ -19,6 +21,7 @@ export const DEFAULT_FILTER: UnifiedFilter = {
   issuesOnly:         false,
   activePatterns:     new Set(),
   activeIssueMessage: '',
+  fieldConditions:    {},
 }
 
 export interface IssueGroupDef {

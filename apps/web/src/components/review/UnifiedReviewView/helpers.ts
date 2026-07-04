@@ -81,6 +81,15 @@ export function filterRows(
     if (tokens.length > 0)
       list = list.filter(r => rowMatchesTokens(r, tokens, filter.searchField, orgPathMap))
   }
+  // 詳細条件: フィールドごとに AND 絞り込み（各フィールド内は OR）
+  if (filter.fieldConditions) {
+    for (const [field, cond] of Object.entries(filter.fieldConditions)) {
+      if (!cond?.trim()) continue
+      const tokens = parseSearchTokens(cond)
+      if (tokens.length === 0) continue
+      list = list.filter(r => rowMatchesTokens(r, tokens, field, orgPathMap))
+    }
+  }
   return list
 }
 

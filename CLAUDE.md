@@ -409,7 +409,7 @@ canvas/core/
   OrgTreePanel.tsx    ← パネルシェル（ドラッグ・ResizeObserver）
 ```
 
-**`PanelTreeAdapter`** パターン: `OrgTreeNode` はストアを一切参照しない。`adapter.openOrg` / `adapter.closeOrg` / `adapter.addPanel?` を通じて抽象化する。after 側は `addPanel` あり、before 側は `undefined`（初期化時に全パネル作成済みのため不要）。
+**`PanelTreeAdapter`** パターン: `OrgTreeNode` はストアを一切参照しない。`adapter.openOrg` / `adapter.closeOrg` / `adapter.addPanel?` を通じて抽象化する。after 側は `addPanel` あり（`removeOrgPanels` で削除されたパネルの再追加やナビゲーション時に使用）、before 側は `undefined`（全パネルは `BeforeTreeWindowCanvas` 初期化時に一括作成済みのため不要）。after 側は mount 時に `addPanelsBatch` で人のいる子孫を全て自動展開する（`TreeWindow.tsx` の初回 useEffect）。
 
 **`OrgTreeConfig`** パターン: ツリーの「中身」（カード描写・ヘッダー色・ドラッグ有無）は `OrgTreeConfig` オブジェクトとしてクロージャで渡す。新しいビューコンテキストを追加するとき、`OrgTreeNode` 本体は変更しない。
 

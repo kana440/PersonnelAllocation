@@ -1,10 +1,9 @@
 import { create } from 'zustand/react'
 import {
-  makeFilterCard, makeFilterRule, DEFAULT_GLOBAL_FILTERS,
+  makeFilterCard, DEFAULT_GLOBAL_FILTERS,
   type FilterCard, type GlobalFilters,
 } from '../components/canvas/FilterBar/types'
 import type { Organization } from '@personnel/domain/schemas'
-import { computeLca } from '../components/canvas/FilterBar/filterLogic'
 
 // 'collapsed' を廃止: 'windowed' | 'inline' の2択
 export type ChildrenMode = 'windowed' | 'inline'
@@ -276,20 +275,7 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
         isRoot || hasSubtreeMembers(orgId),
       )
     })
-    // LCA フィルタカードをパネルと同じ set() で確定する（別コールだと clearPanels のタイミングで消える可能性があるため）
-    // LCA が root（会社レベル、parentId = null）のときはフィルタを追加しない
-    // → hasMembers: true のみで制御し、空の会社パネルを出さない
-    let filterCards: FilterCard[] = []
-    if (memberOrgIds && memberOrgIds.length > 0 && orgById) {
-      const lcaId = computeLca(memberOrgIds, orgById)
-      const lcaOrg = lcaId ? orgById.get(lcaId) : null
-      if (lcaId && lcaOrg && lcaOrg.parentId !== null && lcaOrg.name) {
-        filterCards = [makeFilterCard({
-          rules: [makeFilterRule({ field: 'orgName', operator: 'in', values: [lcaOrg.name], subtree: true })],
-        })]
-      }
-    }
-    set({ panels, filterCards, globalFilters: DEFAULT_GLOBAL_FILTERS })
+    set({ panels, filterCards: [], globalFilters: DEFAULT_GLOBAL_FILTERS })
   },
 
   setCollapsedOrgIds: (panelId, ids) => {

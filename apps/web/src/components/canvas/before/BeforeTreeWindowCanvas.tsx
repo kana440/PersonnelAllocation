@@ -29,7 +29,6 @@ export function BeforeTreeWindowCanvas() {
     lineStyle,
     canvasZoom, stepCanvasZoom,
     canvasPanelStyle,
-    panels: afterPanels,  // 右側（after）のパネル一覧
   } = useCanvasLayoutStore(useShallow(s => ({
     comparisonPanels:     s.comparisonPanels,
     comparisonOrgMapping: s.comparisonOrgMapping,
@@ -40,19 +39,9 @@ export function BeforeTreeWindowCanvas() {
     canvasZoom:           s.canvasZoom,
     stepCanvasZoom:       s.stepCanvasZoom,
     canvasPanelStyle:        s.canvasPanelStyle,
-    panels:               s.panels,
   })))
   const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
 
-  const beforeOrgByCode = useMemo(
-    () => new Map(beforeOrganizations.map(o => [o.externalCode, o.id])),
-    [beforeOrganizations],
-  )
-  // afterOrgId → beforeOrgId の逆引き Map
-  const afterIdToBeforeId = useMemo(
-    () => new Map(Object.entries(comparisonOrgMapping).map(([bId, aId]) => [aId, bId])),
-    [comparisonOrgMapping],
-  )
   // beforeOrg の O(1) ルックアップ
   const beforeOrgById = useMemo(() => buildOrgByIdMap(beforeOrganizations), [beforeOrganizations])
 
@@ -68,69 +57,26 @@ export function BeforeTreeWindowCanvas() {
     return m
   }, [beforeOrganizations])
 
-  // 右側パネル (afterPanels) に対応する before-org の ID セットを計算（O(N)）
-  const syncedOpenOrgIds = useMemo(() => {
-    const result = new Set<string>()
-    for (const p of afterPanels) {
-      const afterOrg = afterOrganizations.find(o => o.id === p.orgId)
-      if (!afterOrg) continue
-      // 同じ externalCode の before-org を優先
-      const beforeId = afterOrg.externalCode ? beforeOrgByCode.get(afterOrg.externalCode) : undefined
-      if (beforeId) { result.add(beforeId); continue }
-      // comparisonOrgMapping 逆引き
-      const byMapping = afterIdToBeforeId.get(p.orgId)
-      if (byMapping) result.add(byMapping)
-    }
-    return result
-  }, [afterPanels, afterOrganizations, beforeOrgByCode, afterIdToBeforeId])
-
-  // syncedOpenOrgIds とその祖先を含む展開済み ID セット
-  // root 以外の org が synced されている場合、その祖先も open にしないと
-  // isStandaloneWindow で standalone にならず表示されない
-  const expandedOpenIds = useMemo(() => {
-    const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
-    const orgIdSet  = new Set(viewOrgs.map(o => o.id))
-    const orgById   = new Map(viewOrgs.map(o => [o.id, o]))
-
-    // 常にルート org を含める（synced がなければルートのみ）
-    const roots = new Set(viewOrgs.filter(o => !o.parentId || !orgIdSet.has(o.parentId)).map(o => o.id))
-    const result = new Set(roots)
-
-    // synced org とその全祖先を追加
-    for (const orgId of syncedOpenOrgIds) {
-      result.add(orgId)
-      let cur = orgById.get(orgId)?.parentId
-      while (cur) {
-        result.add(cur)
-        cur = orgById.get(cur)?.parentId
-      }
-    }
-    return result
-  }, [beforeOrganizations, syncedOpenOrgIds])
-
-  // 比較モード開始時にパネルを初期化
+  // 比較モード開始時にパネルを初期化（After の initPanelsForOrgs と同じ判定: isRoot || subtreeCount > 0）
   // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
   useEffect(() => {
     if (comparisonPanels.length > 0) return  // guard: 既に初期化済み
     const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
+    const orgIdSet = new Set(viewOrgs.map(o => o.id))
     const ids = viewOrgs.map(o => o.id)
     if (ids.length === 0) return
-    initComparisonPanels(ids, expandedOpenIds)
-  }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 右側パネルが追加されたら対応する before-org パネルを自動展開（祖先も含めて open）
-  useEffect(() => {
-    if (comparisonPanels.length === 0) return  // 未初期化はスキップ
-    for (const orgId of expandedOpenIds) {
-      const p = comparisonPanels.find(cp => cp.orgId === orgId)
-      if (p && !p.open) setComparisonOrgOpen(orgId, true)
+    const openIds = new Set<string>()
+    for (const org of viewOrgs) {
+      const isRoot = !org.parentId || !orgIdSet.has(org.parentId)
+      if (isRoot || (beforeSubtreeCountByOrgId.get(org.id) ?? 0) > 0) openIds.add(org.id)
     }
-  }, [expandedOpenIds]) // eslint-disable-line react-hooks/exhaustive-deps
+    initComparisonPanels(ids, openIds)
+  }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // orgId → その org に所属していた rows を O(N+3000) で構築
   const beforeRowsByOrgId = useMemo(() => {
     // externalCode → orgId の Map を先に構築
-    const codeToOrgId = new Map(beforeOrganizations.map(o => [o.externalCode, o.id]))
+    const codeToOrgId = new Map(beforeOrganizations.map(o => [o.externalCode ?? o.id, o.id]))
     const map = new Map<string, typeof allocationList>()
     for (const row of allocationList) {
       if (!row.userId || !row.prevDepartmentCode) continue
@@ -467,7 +413,6 @@ export function BeforeTreeWindowCanvas() {
 
               {/* ウィンドウ群 */}
               {displayPanels.map(panel => {
-                if ((beforeSubtreeCountByOrgId.get(panel.orgId) ?? 0) === 0) return null
                 return (
                   <div
                     key={panel.id}

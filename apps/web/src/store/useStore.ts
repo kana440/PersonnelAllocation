@@ -7,7 +7,6 @@ import { appService } from '../application/HRApplicationService'
 import type { DomainSnapshot } from '../application/HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
-import { getDescendantOrgIds } from '@personnel/domain/rules/options/orgTree'
 import type { ImportMode, AssigneeImportMode, MergeResult } from '../application/importMerge'
 import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 import { DEFAULT_SESSION } from '../application/userSession'
@@ -72,9 +71,6 @@ interface UIState {
   previousViewState:    PreviousViewState | null
   mainCanvasMode:       '組織図' | 'レポートライン'
   expandedChipIds:      Set<string>
-  scopeOrgId:           string | null    // 主after-org（org chart フォーカス用、setScopeWithMappingが計算）
-  beforeScopeOrgId:     string | null    // スコープ選択の旧組織ID
-  afterScopeOrgIds:     string[]         // beforeScopeOrgId + orgMapping から導出したafter-org ID一覧
   orgMapping:           Map<string, string[]>  // 旧組織ID → 新組織IDリスト
   userSession:          UserSession             // 現在のユーザーセッション（ロール + 担当者名）
   adminAssigneeFilter:  string | null          // 管理者モードでの担当者プレビューフィルタ（UI表示用）
@@ -155,15 +151,6 @@ interface Actions {
   toggleChip:               (orgId: string) => void
   selectPersonAndFocusOrg:  (personId: string) => void
 
-  // 作業スコープ（後方互換：MergeImportButton 等が直接 after-org ID で呼ぶ）
-  setScopeOrgId: (id: string | null) => void
-
-  // スコープ + org マッピングを一括設定（SetupView / ScopeMappingDialog が使う）
-  setScopeWithMapping: (params: {
-    beforeOrgId:    string | null
-    mapping:        Map<string, string[]>
-  }) => void
-
   // 組織マッピング（旧組織ID → 新組織IDリスト）
   setOrgMapping: (mapping: Map<string, string[]>) => void
 
@@ -203,9 +190,6 @@ export const useStore = create<AppState>()((set, get) => {
     operationPanelInitialView:  'summary' as const,
     mainCanvasMode:       '組織図',
     expandedChipIds:      new Set<string>(),
-    scopeOrgId:           null,
-    beforeScopeOrgId:     null,
-    afterScopeOrgIds:     [],
     orgMapping:           new Map<string, string[]>(),
     userSession:          DEFAULT_SESSION,
     adminAssigneeFilter:  null,
@@ -342,70 +326,6 @@ export const useStore = create<AppState>()((set, get) => {
       }
 
       set({ selectedPersonId: personId, selectedCardRowId: row?.rowId ?? null, workspaceMode: 'org', focusedOrgId: newFocusedOrgId, expandedChipIds: newExpanded })
-    },
-
-    setScopeOrgId: (id) => {
-      const { focusedOrgId, afterOrganizations } = get()
-      let newFocusedOrgId = focusedOrgId
-      if (id) {
-        const scopeIds = getDescendantOrgIds(id, afterOrganizations)
-        if (!focusedOrgId || !scopeIds.has(focusedOrgId)) {
-          newFocusedOrgId = id
-        }
-      }
-      set({ scopeOrgId: id, focusedOrgId: newFocusedOrgId })
-    },
-
-    setScopeWithMapping: ({ beforeOrgId, mapping }) => {
-      const { beforeOrganizations, afterOrganizations, focusedOrgId } = get()
-
-      let afterScopeOrgIds: string[] = []
-      let primaryAfterOrgId: string | null = null
-
-      if (beforeOrgId) {
-        const beforeScopeIds = getDescendantOrgIds(beforeOrgId, beforeOrganizations)
-        const afterIdSet = new Set<string>()
-
-        for (const bId of beforeScopeIds) {
-          let afterIds = mapping.get(bId) ?? []
-          // マッピング未設定の場合は externalCode で fallback
-          if (afterIds.length === 0 && !mapping.has(bId)) {
-            const bOrg = beforeOrganizations.find(o => o.id === bId)
-            const aOrg = bOrg?.externalCode
-              ? afterOrganizations.find(o => o.externalCode === bOrg.externalCode)
-              : undefined
-            if (aOrg) afterIds = [aOrg.id]
-          }
-          for (const aId of afterIds) {
-            getDescendantOrgIds(aId, afterOrganizations).forEach(id => afterIdSet.add(id))
-          }
-        }
-        afterScopeOrgIds = Array.from(afterIdSet)
-
-        // org chart フォーカス用: ルートの before-org に対応する最初の after-org
-        const rootAfterIds = mapping.get(beforeOrgId) ?? []
-        primaryAfterOrgId = rootAfterIds[0] ?? null
-        if (!primaryAfterOrgId) {
-          const bOrg = beforeOrganizations.find(o => o.id === beforeOrgId)
-          primaryAfterOrgId = bOrg?.externalCode
-            ? (afterOrganizations.find(o => o.externalCode === bOrg!.externalCode)?.id ?? null)
-            : null
-        }
-      }
-
-      const afterScopeIdSet = new Set(afterScopeOrgIds)
-      let newFocusedOrgId = focusedOrgId
-      if (primaryAfterOrgId && (!focusedOrgId || !afterScopeIdSet.has(focusedOrgId))) {
-        newFocusedOrgId = primaryAfterOrgId
-      }
-
-      set({
-        beforeScopeOrgId: beforeOrgId,
-        afterScopeOrgIds,
-        scopeOrgId:       primaryAfterOrgId,
-        orgMapping:       mapping,
-        focusedOrgId:     newFocusedOrgId,
-      })
     },
 
     setOrgMapping: (mapping) => set({ orgMapping: mapping }),

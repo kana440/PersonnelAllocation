@@ -27,51 +27,7 @@ export interface OrgMappingGroup {
   newOrgCode:      string | null
   autoMatched:     boolean
   matchConfidence: MatchConfidence
-  /**
-   * 未マッチ組織のUI絞り込み用スコープ（新組織ツリーのノードID）。
-   * マッチ済み兄弟の新組織を seeds として LCA を計算した結果。
-   * null = スコープ推論できず（全件表示）。
-   */
-  scopeOrgId:      string | null
   rowIds:          number[]
-}
-
-// ── LCA ───────────────────────────────────────────────────────────────────────
-
-/** 祖先チェーン（self → parent → ... → root） */
-function ancestorChain(org: Organization, byId: Map<string, Organization>): Organization[] {
-  const chain: Organization[] = []
-  let cur: Organization | undefined = org
-  while (cur) {
-    chain.push(cur)
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined
-  }
-  return chain
-}
-
-/**
- * seeds の最近共通祖先（LCA）を返す。
- * seeds が 1 件のときは「その親」（兄弟を探せるスコープ）を返す。
- */
-function lca(seeds: Organization[], byId: Map<string, Organization>): Organization | null {
-  if (seeds.length === 0) return null
-  if (seeds.length === 1) {
-    return seeds[0].parentId ? (byId.get(seeds[0].parentId) ?? null) : null
-  }
-
-  // 2件目以降の祖先セット
-  const restSets = seeds.slice(1).map(seed => {
-    const set = new Set<string>()
-    let cur: Organization | undefined = seed
-    while (cur) { set.add(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined }
-    return set
-  })
-
-  // 1件目の祖先チェーンを上に辿り、全 restSets に含まれる最初のものが LCA
-  for (const org of ancestorChain(seeds[0], byId)) {
-    if (restSets.every(s => s.has(org.id))) return org
-  }
-  return null
 }
 
 // ── グループ化 ────────────────────────────────────────────────────────────────
@@ -83,7 +39,6 @@ export function buildOrgMappingGroups(
 ): OrgMappingGroup[] {
   const afterOrgByCode  = buildOrgMap(afterOrganizations)
   const beforeOrgByCode = buildOrgMap(beforeOrganizations)
-  const afterById       = new Map(afterOrganizations.map(o => [o.id, o]))
   const beforeById      = new Map(beforeOrganizations.map(o => [o.id, o]))
 
   // 新組織: 正規化名 → 候補リスト（廃止除く）
@@ -128,24 +83,6 @@ export function buildOrgMappingGroups(
     }
   }
 
-  // ── LCA スコープ推論 ───────────────────────────────────────────────────────
-  // 旧親 ID → その配下でマッチ済みの新組織リスト
-  const parentToSeeds = new Map<string, Organization[]>()
-  for (const [prevCode, result] of matchResults) {
-    const beforeOrg = beforeOrgByCode.get(prevCode)
-    if (!beforeOrg?.parentId) continue
-    const list = parentToSeeds.get(beforeOrg.parentId) ?? []
-    list.push(result.newOrg)
-    parentToSeeds.set(beforeOrg.parentId, list)
-  }
-
-  // 旧親 ID → LCA の新組織 ID
-  const parentToScopeId = new Map<string, string>()
-  for (const [parentId, seeds] of parentToSeeds) {
-    const scope = lca(seeds, afterById)
-    if (scope) parentToScopeId.set(parentId, scope.id)
-  }
-
   // ── グループ生成 ──────────────────────────────────────────────────────────
   const groups: OrgMappingGroup[] = []
 
@@ -171,14 +108,6 @@ export function buildOrgMappingGroups(
     const confidence = match?.confidence ?? 'none'
     const newOrgCode = match ? (match.newOrg.externalCode ?? match.newOrg.id) : null
 
-    // スコープ: マッチ済みは自組織の親、未マッチは旧親グループの LCA
-    let scopeOrgId: string | null = null
-    if (match?.newOrg.parentId) {
-      scopeOrgId = match.newOrg.parentId
-    } else if (beforeOrg?.parentId) {
-      scopeOrgId = parentToScopeId.get(beforeOrg.parentId) ?? null
-    }
-
     groups.push({
       prevCode,
       prevOrgName,
@@ -186,7 +115,6 @@ export function buildOrgMappingGroups(
       newOrgCode,
       autoMatched:     confidence !== 'none',
       matchConfidence: confidence,
-      scopeOrgId,
       rowIds,
     })
   }
