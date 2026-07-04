@@ -8,6 +8,7 @@ import { create } from 'zustand/react'
  */
 export type UICommand =
   | { type: 'openOperation'; rowId: number; operationId: string; prefill?: Record<string, string> }
+  | { type: 'setMainViewMode'; mode: 'canvas' | 'review' }
 
 interface UICommandState {
   command:  UICommand | null

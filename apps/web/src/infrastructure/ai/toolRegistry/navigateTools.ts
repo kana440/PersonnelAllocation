@@ -9,12 +9,15 @@
 // このファイルの execute 関数も更新が必要。変更前に AI 開発者に連絡すること。
 
 import type { ReadEntry, NavigateEntry } from './types'
-import { aiTools }            from '../../../application/aiTools'
-import { useStore }           from '../../../store/useStore'
-import { useUICommandStore }  from '../../../store/uiCommandStore'
-import { useFormStateStore }  from '../../../store/formStateStore'
-import { ALL_EDIT_OPERATIONS } from '@personnel/domain/commands/defs'
-import type { AllocationRow }  from '@personnel/domain/allocationRow'
+import { aiTools }                  from '../../../application/aiTools'
+import { useStore }                 from '../../../store/useStore'
+import { useUICommandStore }        from '../../../store/uiCommandStore'
+import { useFormStateStore }        from '../../../store/formStateStore'
+import { useCanvasLayoutStore }     from '../../../store/canvasLayoutStore'
+import { useCanvasDisplayStore }    from '../../../store/canvasDisplayStore'
+import { COMPACT_GROUP_DEFS }       from '../../../components/canvas/panel/compactGroupDefs'
+import { ALL_EDIT_OPERATIONS }      from '@personnel/domain/commands/defs'
+import type { AllocationRow }       from '@personnel/domain/allocationRow'
 
 export const NAVIGATE_TOOLS: Array<ReadEntry | NavigateEntry> = [
 
@@ -223,6 +226,117 @@ export const NAVIGATE_TOOLS: Array<ReadEntry | NavigateEntry> = [
 
       const extra = results.length > 1 ? `（他 ${results.length - 1} 件ヒット）` : ''
       return { ok: true, message: `${target.name} にフォーカスしました${extra}`, rowId }
+    },
+  },
+
+  // ── ui_set_main_view ───────────────────────────────────────────────────────
+  // 主画面を「組織図（canvas）」か「表形式（review）」に切り替える。
+  {
+    kind: 'navigate',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_set_main_view',
+        description:
+          '主画面を「組織図」か「表形式（比較形式/並列形式）」に切り替える。' +
+          'UIの表示モードを変更するのみで、データは一切変更しない。' +
+          '「組織図を見せて」「表形式で確認したい」「一覧表に切り替えて」のようなリクエストに使う。' +
+          '組織図モード（canvas）では組織パネルとキャンバスが表示される。' +
+          '表形式モード（review）ではBefore/After比較形式の一覧表が表示される。',
+        parameters: {
+          type: 'object',
+          required: ['mode'],
+          properties: {
+            mode: {
+              type: 'string',
+              enum: ['canvas', 'review'],
+              description: "'canvas'=組織図、'review'=表形式（比較形式/並列形式）",
+            },
+          },
+        },
+      },
+    },
+    execute: (args) => {
+      const mode = args.mode as 'canvas' | 'review'
+      useUICommandStore.getState().dispatch({ type: 'setMainViewMode', mode })
+      const label = mode === 'canvas' ? '組織図' : '表形式'
+      return { ok: true, message: `${label}に切り替えました` }
+    },
+  },
+
+  // ── ui_set_canvas_display ─────────────────────────────────────────────────
+  // 組織図の表示設定（パネルスタイル・コンパクトグループ・比較モード）を変更する。
+  {
+    kind: 'navigate',
+    definition: {
+      type: 'function',
+      function: {
+        name: 'ui_set_canvas_display',
+        description:
+          '組織図の表示設定を変更する。UIの表示のみ変更・データは変更しない。' +
+          '変更したいパラメータだけ渡せばよい（省略したものは変更されない）。\n' +
+          '\n' +
+          'パネルスタイル（panelStyle）:\n' +
+          "  'tree'    = ツリー表示（デフォルト）: 組織階層を展開したカード表示\n" +
+          "  'band'    = コンパクト表示: バンド/役職/勤務場所などでグループ表示\n" +
+          '\n' +
+          'コンパクトグループ（compactGroupId、panelStyle=band のときのみ有効）:\n' +
+          "  'positionBand'       = バンド別\n" +
+          "  'location'           = 勤務場所別\n" +
+          "  'officialPositionCode' = 役職別\n" +
+          "  'jobType'            = ジョブタイプ別\n" +
+          "  'concurrentType'     = 本務/兼務別\n" +
+          '\n' +
+          '旧体制との比較（comparisonMode）:\n' +
+          '  true = 旧組織（before）パネルを並べて表示\n' +
+          '  false = 新組織（after）のみ表示\n' +
+          '\n' +
+          '「バンド別で見せて」「旧体制との比較を有効にして」「ツリー表示に戻して」のリクエストに使う。',
+        parameters: {
+          type: 'object',
+          properties: {
+            panelStyle: {
+              type: 'string',
+              enum: ['tree', 'band'],
+              description: "パネル表示スタイル。'tree'=ツリー、'band'=コンパクト",
+            },
+            compactGroupId: {
+              type: 'string',
+              enum: ['positionBand', 'location', 'officialPositionCode', 'jobType', 'concurrentType'],
+              description: 'コンパクト表示のグループ単位（panelStyle=band のときのみ有効）',
+            },
+            comparisonMode: {
+              type: 'boolean',
+              description: '旧体制との比較表示を有効（true）または無効（false）にする',
+            },
+          },
+        },
+      },
+    },
+    execute: (args) => {
+      const canvasStore  = useCanvasLayoutStore.getState()
+      const displayStore = useCanvasDisplayStore.getState()
+      const changed: string[] = []
+
+      if (args.panelStyle !== undefined) {
+        const style = args.panelStyle as 'tree' | 'band'
+        canvasStore.setCanvasPanelStyle(style)
+        changed.push(`パネルスタイル → ${style === 'tree' ? 'ツリー' : 'コンパクト'}`)
+      }
+      if (args.compactGroupId !== undefined) {
+        const gid = args.compactGroupId as string
+        const def = COMPACT_GROUP_DEFS.find(d => d.id === gid)
+        displayStore.setCompactGroupById(gid)
+        changed.push(`グループ単位 → ${def?.label ?? gid}別`)
+      }
+      if (args.comparisonMode !== undefined) {
+        const want = args.comparisonMode as boolean
+        if (canvasStore.comparisonMode !== want) canvasStore.toggleComparisonMode()
+        changed.push(`旧体制比較 → ${want ? 'ON' : 'OFF'}`)
+      }
+
+      if (changed.length === 0) return { ok: false, message: '変更するパラメータがありません' }
+      return { ok: true, message: changed.join('、') + ' に変更しました' }
     },
   },
 

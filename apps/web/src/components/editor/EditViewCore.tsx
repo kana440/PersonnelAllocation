@@ -12,6 +12,7 @@ import { useStore }                 from '../../store/useStore'
 import { useCanvasLayoutStore }     from '../../store/canvasLayoutStore'
 import { useCanvasDisplayStore }    from '../../store/canvasDisplayStore'
 import { useReviewFilterStore }     from '../../store/reviewFilterStore'
+import { useUICommandStore }        from '../../store/uiCommandStore'
 import { useResizablePanel }        from '../../hooks/useResizablePanel'
 import { toAllocationRows }         from '../../infrastructure/allocationListMapper'
 import { exportToXlsx }            from '../../infrastructure/excel/engine'
@@ -119,6 +120,19 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [undo, redo, canUndo, canRedo])
+
+  // AI からの setMainViewMode コマンドを受け取る
+  const uiCommand      = useUICommandStore(s => s.command)
+  const clearUICommand = useUICommandStore(s => s.clear)
+  useEffect(() => {
+    if (uiCommand?.type !== 'setMainViewMode') return
+    if (uiCommand.mode === 'review') {
+      const { selectedCardRowId } = useStore.getState()
+      useReviewFilterStore.getState().setPendingScrollRowId(selectedCardRowId)
+    }
+    setMainViewMode(uiCommand.mode)
+    clearUICommand()
+  }, [uiCommand, clearUICommand])
 
   const handleDoubleClick = useCallback((_rowId: number) => {
     setMainViewMode('canvas')

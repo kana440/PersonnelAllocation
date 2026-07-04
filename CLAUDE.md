@@ -351,13 +351,17 @@ executeOperation(op)
 | 状態 | スコープ | 格納場所 |
 |---|---|---|
 | `canvasPanelStyle: CanvasPanelStyle` | **全パネル共通** | `canvasLayoutStore` の1変数 |
+| `comparisonMode: boolean` | **全パネル共通** | `canvasLayoutStore` の1変数 |
+| `compactGroupById: string` | **全パネル共通** | `canvasDisplayStore` の1変数 |
 | `childrenMode: 'windowed' \| 'inline'` | **パネル個別** | `PanelDef.childrenMode` |
 | `collapsedOrgIds: string[]` | **パネル個別** | `PanelDef.collapsedOrgIds` |
 | `open: boolean` | **パネル個別** | `PanelDef.open` |
 
 - `canvasPanelStyle` の切り替えは `setCanvasPanelStyle(style)` を使う（`togglePanelViewMode` は廃止済み）
-- `canvasPanelStyle` の UI コントロールは**キャンバスヘッダー（`OrgOperationView`）に置く**。各パネルヘッダーには置かない（グローバル状態なのにパネルごとにボタンを持つのは誤り）
+- `canvasPanelStyle` の UI コントロールは**ビュー切替バー（`EditViewCore`）に置く**。各パネルヘッダーには置かない（グローバル状態なのにパネルごとにボタンを持つのは誤り）
 - パネル幅は `VIEW_MODE_WIDTHS[canvasPanelStyle]` で取得する（`=== 'band' ? 208 : 288` のハードコードをしない）
+- 旧体制との比較表示は `toggleComparisonMode()` でトグル。UI はチェックボックス「旧体制と比較」（`EditViewCore` のビュー切替バーに配置）
+- コンパクト表示時のグループ単位は `canvasDisplayStore` の `compactGroupById` で管理。`CompactGroupDef.getPrevKey` が定義されていれば before 側グループには `prevXxx` フィールドを使う（例: バンド = `prevPositionBand`）
 
 ---
 
@@ -383,6 +387,55 @@ application/aiTools/
 - `index.ts` — 集約・ルーティング（`execute` / `confirm` / `render` / `navigate` / `read` の5種）
 
 ツール名プレフィックス規約: `find*/get*` = 読み取り系、`propose_*` = ドメイン変更、`ui_*` = ナビゲーション専用
+
+### ToolEntry の種別と安全性
+
+| kind | 副作用 | Fast Path | 説明 |
+|---|---|---|---|
+| `read` | なし | ✅ | ドメインデータを参照するのみ |
+| `render` | Widget 表示のみ | ✅ | チャット UI にウィジェットを表示 |
+| `navigate` | UI 表示のみ | ✅ | 画面モード・フォーカス・フォームを操作。データ変更なし |
+| `execute` | ドメイン変更あり | ❌ | ユーザー確認なしで即時実行 |
+| `confirm` | ドメイン変更あり | ❌ | ユーザーの確認後に実行 |
+
+`getSafeDefinitions()` は read/render/navigate のみを返す。Fast Path（意図分類・説明応答）ではドメイン変更ツールは公開されない。
+
+### navigate ツールの現在セット（`ui_*` プレフィックス）
+
+| ツール | 用途 |
+|---|---|
+| `ui_set_main_view` | 組織図（canvas）↔ 表形式（review）を切り替え |
+| `ui_set_canvas_display` | ツリー/コンパクト・グループ単位・旧体制比較を制御 |
+| `ui_show_person` | 氏名/IDで人物を検索してキャンバスにフォーカス |
+| `ui_focus_row` | rowId でカードにフォーカス |
+| `ui_open_operation` | 操作フォームを開き値を事前入力（ユーザーが送信） |
+| `ui_get_form_state` | 現在開いているフォームの入力値を読む（read 種別） |
+| `ui_suggest_form_field` | フォームの特定フィールドに値をセット |
+
+**navigate ツール追加の判断基準**: AI が実行しなければ達成できない・ドメイン変更を伴わない・自然言語で明確に要求できるアクション。詳細は `specs/G4-ai/03-ai-ui-policy.md` の「navigate ツールの設計指針」参照。
+
+### AI → UI コマンドパターン（`mainViewMode` のような local state の制御）
+
+React local state（`EditViewCore` の `mainViewMode` など）は Zustand 経由で AI から読めない。
+この場合は `uiCommandStore` の dispatch → `useEffect` で受け取るパターンを使う：
+
+```typescript
+// 1. uiCommandStore.ts に UICommand 型を追加
+type UICommand = ... | { type: 'setMainViewMode'; mode: 'canvas' | 'review' }
+
+// 2. コンポーネントで useEffect 購読
+const cmd = useUICommandStore(s => s.command)
+useEffect(() => {
+  if (cmd?.type !== 'setMainViewMode') return
+  setMainViewMode(cmd.mode)
+  clearCommand()
+}, [cmd])
+
+// 3. navigateTools.ts で dispatch
+useUICommandStore.getState().dispatch({ type: 'setMainViewMode', mode })
+```
+
+Zustand ストアに直接アクセスできる値（`comparisonMode`・`canvasPanelStyle` 等）は dispatch 不要で `getState()` から直接変更できる。
 
 ---
 

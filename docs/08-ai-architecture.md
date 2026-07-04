@@ -74,6 +74,39 @@ text chunk    → ストリーミング表示
 | 現状のファイル | 役割 | 再設計後 |
 |---|---|---|
 | `agentRunner.ts` | ツール use ループ | Intent Classifier + Tier ルーター に拡張 |
-| `toolRegistry.ts` | ツール定義 | そのまま（登録漏れを修正） |
+| `toolRegistry/` | ツール定義・ルーティング | readTools / renderTools / navigateTools / operationTools の4ファイル分割済み |
 | `scenarios/` | mock ベースの文言 | Wizard ステップ定義に転換 |
 | `aiTools/` | ツール実装 | そのまま（`getFieldOptions` 登録を追加） |
+
+---
+
+## navigate ツール（UIナビゲーション専用）
+
+`kind: 'navigate'` のツールはドメインデータを変更しない。Fast Path でも安全に実行できる。
+
+### AI → UI コマンドの2パターン
+
+```
+パターン1: Zustand ストアを直接変更（canvasLayoutStore / canvasDisplayStore 等）
+  navigateTools.ts → useCanvasLayoutStore.getState().setCanvasPanelStyle(...)
+  → ストア変更 → React が自動的に再レンダー
+
+パターン2: uiCommandStore dispatch（React local state の制御）
+  navigateTools.ts → useUICommandStore.getState().dispatch({ type: 'setMainViewMode', mode })
+  → EditViewCore の useEffect が購読 → setMainViewMode(mode)
+  例: mainViewMode は EditViewCore の local useState のため直接変更不可
+```
+
+### 現在の navigate ツール一覧
+
+| ツール | 実装パターン | 用途 |
+|---|---|---|
+| `ui_set_main_view` | dispatch（mainViewMode は local state） | 組織図/表形式の切り替え |
+| `ui_set_canvas_display` | 直接 getState() | ツリー/コンパクト・グループ・比較モード制御 |
+| `ui_show_person` | 直接 getState() | 人物検索+フォーカス |
+| `ui_focus_row` | 直接 getState() | rowId フォーカス |
+| `ui_open_operation` | dispatch（操作フォームは PersonOperationPanel local state） | フォームを開く+事前入力 |
+| `ui_get_form_state` | formStateStore 読み取り（kind: read） | フォーム現在値取得 |
+| `ui_suggest_form_field` | formStateStore 書き込み | フォームフィールド設定 |
+
+設計指針（いつツールを追加すべきか）は `specs/G4-ai/03-ai-ui-policy.md` の「navigate ツールの設計指針」参照。
