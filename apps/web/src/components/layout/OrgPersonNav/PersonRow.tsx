@@ -4,11 +4,12 @@ import type { CompactPersonRow } from './useCompactData'
 
 interface Props {
   row:           CompactPersonRow
+  fromOrgId:     string | null
   onFocus:       (rowId: number) => void
   onDoubleClick: (rowId: number) => void
 }
 
-export function PersonRow({ row, onFocus, onDoubleClick }: Props) {
+export function PersonRow({ row, fromOrgId, onFocus, onDoubleClick }: Props) {
   const isChecked = useRowSelectionStore(s => s.selectedRowIds.has(row.rowId))
   const toggleRow = useRowSelectionStore(s => s.toggleRow)
 
@@ -25,6 +26,20 @@ export function PersonRow({ row, onFocus, onDoubleClick }: Props) {
   return (
     <div
       className={`flex items-center gap-1.5 px-2 py-1 cursor-pointer transition-colors ${baseBg}`}
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('application/json', JSON.stringify({
+          dragType:        'person',
+          personId:        row.userId,
+          fromOrgId:       fromOrgId ?? '',
+          fromCompanyId:   '',
+          affiliationType: row.isConcurrent ? 'concurrent' : 'primary',
+          source:          'sidebar',
+          fromRowId:       row.rowId,
+          rowId:           row.rowId,
+        }))
+        e.dataTransfer.effectAllowed = 'move'
+      }}
       onClick={() => onFocus(row.rowId)}
       onDoubleClick={() => onDoubleClick(row.rowId)}
     >

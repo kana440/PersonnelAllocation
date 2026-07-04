@@ -9,9 +9,13 @@ import { ReviewPane }               from './ReviewPane'
 import { OrgPersonNav }             from '../layout/OrgPersonNav'
 import { FloatingAIChat }           from '../layout/FloatingAIChat'
 import { useStore }                 from '../../store/useStore'
+import { useCanvasLayoutStore }     from '../../store/canvasLayoutStore'
+import { useCanvasDisplayStore }    from '../../store/canvasDisplayStore'
+import { useReviewFilterStore }     from '../../store/reviewFilterStore'
 import { useResizablePanel }        from '../../hooks/useResizablePanel'
 import { toAllocationRows }         from '../../infrastructure/allocationListMapper'
 import { exportToXlsx }            from '../../infrastructure/excel/engine'
+import { COMPACT_GROUP_DEFS }       from '../canvas/panel/compactGroupDefs'
 
 type MainViewMode = 'canvas' | 'review'
 
@@ -64,6 +68,18 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
   const effectiveDate       = useStore(s => s.effectiveDate)
 
+  // ── ビュー操作（組織図） ─────────────────────────────────────────
+  const canvasPanelStyle    = useCanvasLayoutStore(s => s.canvasPanelStyle)
+  const setCanvasPanelStyle = useCanvasLayoutStore(s => s.setCanvasPanelStyle)
+  const comparisonMode      = useCanvasLayoutStore(s => s.comparisonMode)
+  const toggleComparisonMode = useCanvasLayoutStore(s => s.toggleComparisonMode)
+  const compactGroupById    = useCanvasDisplayStore(s => s.compactGroupById)
+  const setCompactGroupById = useCanvasDisplayStore(s => s.setCompactGroupById)
+
+  // ── ビュー操作（表形式） ─────────────────────────────────────────
+  const viewMode    = useReviewFilterStore(s => s.viewMode)
+  const setViewMode = useReviewFilterStore(s => s.setViewMode)
+
   const [mainViewMode,           setMainViewMode]           = useState<MainViewMode>('canvas')
   const [isHistoryOpen,          setIsHistoryOpen]          = useState(false)
   const [maintenanceOpen,        setMaintenanceOpen]        = useState(false)
@@ -72,6 +88,7 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const [settingsMenuOpen,       setSettingsMenuOpen]       = useState(false)
 
   const settingsRef = useRef<HTMLDivElement>(null)
+
 
   const [navWidth,     , handleNavResizeStart]     = useResizablePanel(NAV_DEFAULT,     { min: NAV_MIN,     max: NAV_MAX,     axis: 'x' })
   const [historyWidth, , handleHistoryResizeStart] = useResizablePanel(HISTORY_DEFAULT, { min: HISTORY_MIN, max: HISTORY_MAX, axis: 'x', invert: true })
@@ -200,7 +217,14 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
           ] as const).map(({ mode, label }) => (
             <button
               key={mode}
-              onClick={() => setMainViewMode(mode)}
+              onClick={() => {
+                if (mode === 'review') {
+                  // 表形式マウント前にスクロール先を確定しておく（ペイント前に反映するため）
+                  const { selectedCardRowId } = useStore.getState()
+                  useReviewFilterStore.getState().setPendingScrollRowId(selectedCardRowId)
+                }
+                setMainViewMode(mode)
+              }}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 mainViewMode === mode
                   ? 'border-blue-600 text-blue-700'
@@ -209,6 +233,69 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
             >{label}</button>
           ))}
         </div>
+        {/* ── コンテキスト依存のビュー操作 ── */}
+        <div className="flex items-center gap-2 ml-4">
+          {mainViewMode === 'canvas' && (
+            <>
+              {/* ツリー / コンパクト */}
+              <div className="flex items-stretch border border-gray-300 rounded overflow-hidden text-xs font-medium">
+                {([
+                  { id: 'tree', label: 'ツリー' },
+                  { id: 'band', label: 'コンパクト' },
+                ] as const).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setCanvasPanelStyle(id)}
+                    className={`px-2.5 py-1 transition-colors ${
+                      canvasPanelStyle === id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
+              {/* コンパクト時のグループ単位 */}
+              {canvasPanelStyle === 'band' && (
+                <select
+                  value={compactGroupById}
+                  onChange={e => setCompactGroupById(e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white text-gray-600 cursor-pointer"
+                  title="コンパクトビューのグループ単位"
+                >
+                  {COMPACT_GROUP_DEFS.map(d => (
+                    <option key={d.id} value={d.id}>{d.label}別</option>
+                  ))}
+                </select>
+              )}
+              {/* 旧体制との比較 */}
+              <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-gray-600 px-1">
+                <input
+                  type="checkbox"
+                  checked={comparisonMode}
+                  onChange={toggleComparisonMode}
+                  className="accent-indigo-600 w-3.5 h-3.5"
+                />
+                旧体制と比較
+              </label>
+            </>
+          )}
+          {mainViewMode === 'review' && (
+            /* 比較形式 / Excel形式 */
+            <div className="flex items-stretch border border-gray-300 rounded overflow-hidden text-xs font-medium">
+              {([
+                { id: 'diff',          label: '比較形式' },
+                { id: 'side-by-side',  label: 'Excel形式' },
+              ] as const).map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setViewMode(id)}
+                  className={`px-2.5 py-1 transition-colors ${
+                    viewMode === id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="ml-auto pr-1">
           <button
             onClick={handleExport}

@@ -46,15 +46,21 @@ export function UnifiedReviewView() {
 
   const [bulkModal, setBulkModal] = useState<IssueGroupDef | null>(null)
 
-  const { filter, searchInput, viewMode, setFilter, setSearchInput, setViewMode, patchFilter } =
+  // 組織図→表切替時: キャンバス選択行（selectedCardRowId）を表の selectedRowId に同期する
+  useEffect(() => {
+    const { selectedCardRowId } = useStore.getState()
+    if (selectedCardRowId !== null) selectRow(selectedCardRowId)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // マウント時のみ
+
+  const { filter, searchInput, viewMode, setFilter, setSearchInput, patchFilter } =
     useReviewFilterStore(useShallow(s => ({
-      filter:          s.filter,
-      searchInput:     s.searchInput,
-      viewMode:        s.viewMode,
-      setFilter:       s.setFilter,
-      setSearchInput:  s.setSearchInput,
-      setViewMode:     s.setViewMode,
-      patchFilter:     s.patchFilter,
+      filter:         s.filter,
+      searchInput:    s.searchInput,
+      viewMode:       s.viewMode,
+      setFilter:      s.setFilter,
+      setSearchInput: s.setSearchInput,
+      patchFilter:    s.patchFilter,
     })))
 
   // searchInput → filter.searchText のデバウンス（200ms）
@@ -112,8 +118,6 @@ export function UnifiedReviewView() {
         onFilterChange={setFilter}
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
         summary={data.summary}
         issueGroups={issueGroups}
         searchFields={SEARCH_FIELDS}

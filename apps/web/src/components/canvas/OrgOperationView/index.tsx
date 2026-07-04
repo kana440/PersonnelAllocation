@@ -17,8 +17,6 @@ import { CanvasModals }        from '../CanvasModals'
 import { TreeWindowCanvas }    from '../TreeWindowCanvas'
 import { CanvasQuickSearch }   from '../CanvasQuickSearch'
 import { DisplayFieldCombobox } from '../toolbar/DisplayFieldCombobox'
-import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
-import { COMPACT_GROUP_DEFS }    from '../panel/compactGroupDefs'
 import { OrgViewContext }      from '../OrgViewContext'
 import type { OrgViewContextValue } from '../OrgViewContext'
 import { useOrgDrag }          from '../hooks/useOrgDrag'
@@ -39,12 +37,7 @@ export function OrgOperationView() {
     undoHistory,
     masters,
   } = useStore()
-  const comparisonMode      = useCanvasLayoutStore(s => s.comparisonMode)
-  const toggleComparisonMode = useCanvasLayoutStore(s => s.toggleComparisonMode)
-  const canvasPanelStyle       = useCanvasLayoutStore(s => s.canvasPanelStyle)
-  const setCanvasPanelStyle    = useCanvasLayoutStore(s => s.setCanvasPanelStyle)
-  const compactGroupById    = useCanvasDisplayStore(s => s.compactGroupById)
-  const setCompactGroupById = useCanvasDisplayStore(s => s.setCompactGroupById)
+  const comparisonMode = useCanvasLayoutStore(s => s.comparisonMode)
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
@@ -310,44 +303,6 @@ export function OrgOperationView() {
               </button>
             )}
 
-            {/* 表示形式セグメント */}
-            <div className="flex items-stretch border border-gray-300 rounded overflow-hidden text-xs font-medium">
-              {([
-                { id: 'tree', label: 'ツリー' },
-                { id: 'band', label: 'コンパクト' },
-              ] as const).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => setCanvasPanelStyle(id)}
-                  className={`px-2 py-0.5 transition-colors ${
-                    canvasPanelStyle === id
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                >{label}</button>
-              ))}
-            </div>
-
-            {/* コンパクトビューのグループ単位 */}
-            {!comparisonMode && canvasPanelStyle === 'band' && (
-              <select
-                value={compactGroupById}
-                onChange={e => setCompactGroupById(e.target.value)}
-                className="text-xs border border-gray-300 rounded px-1.5 py-0.5 bg-white text-gray-600 cursor-pointer"
-                title="コンパクトビューのグループ単位"
-              >
-                {COMPACT_GROUP_DEFS.map(d => (
-                  <option key={d.id} value={d.id}>{d.label}別</option>
-                ))}
-              </select>
-            )}
-
-            <button
-              onClick={toggleComparisonMode}
-              className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
-                comparisonMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-              }`}
-            >{comparisonMode ? '比較終了' : '比較'}</button>
           </div>
         </div>
 

@@ -5,7 +5,7 @@ import { makeWarningKey } from '@personnel/domain/acknowledgment'
 import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 import { getIssueShortLabel } from './helpers'
 
-const MAX_VISIBLE = 3
+const MAX_SHOW = 3
 
 interface Props { rowId: number; issues: ValidationIssue[] }
 
@@ -17,19 +17,19 @@ export function IssueCell({ rowId, issues }: Props) {
 
   if (issues.length === 0) {
     return (
-      <td className="px-2 py-1.5 text-xs border-b border-gray-100">
+      <td className="px-2 py-1.5 text-xs border-b border-gray-100 overflow-hidden">
         <span className="text-gray-300">—</span>
       </td>
     )
   }
 
-  const visible     = expanded ? issues : issues.slice(0, MAX_VISIBLE)
-  const hiddenCount = issues.length - MAX_VISIBLE
+  const shown      = expanded ? issues : issues.slice(0, MAX_SHOW)
+  const hiddenCount = issues.length - MAX_SHOW
 
   return (
     <td className="px-2 py-1.5 text-xs border-b border-gray-100">
       <div className="flex flex-wrap gap-0.5 items-center">
-        {visible.map((issue, i) => {
+        {shown.map((issue, i) => {
           if (issue.level === 'error') {
             return (
               <span
@@ -46,7 +46,7 @@ export function IssueCell({ rowId, issues }: Props) {
           return (
             <button
               key={i}
-              onClick={() => acked ? unacknowledge(wkey) : acknowledge(wkey)}
+              onClick={e => { e.stopPropagation(); acked ? unacknowledge(wkey) : acknowledge(wkey) }}
               title={issue.message}
               className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded border text-[9px] whitespace-nowrap transition-colors ${
                 acked
@@ -61,15 +61,15 @@ export function IssueCell({ rowId, issues }: Props) {
         })}
         {!expanded && hiddenCount > 0 && (
           <button
-            onClick={() => setExpanded(true)}
-            className="inline-block px-1 py-0.5 rounded border text-[9px] bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 whitespace-nowrap"
+            onClick={e => { e.stopPropagation(); setExpanded(true) }}
+            className="inline-block px-1 py-0.5 rounded border text-[9px] bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 whitespace-nowrap"
           >
-            他{hiddenCount}件
+            +{hiddenCount}件
           </button>
         )}
-        {expanded && issues.length > MAX_VISIBLE && (
+        {expanded && issues.length > MAX_SHOW && (
           <button
-            onClick={() => setExpanded(false)}
+            onClick={e => { e.stopPropagation(); setExpanded(false) }}
             className="inline-block px-1 py-0.5 rounded border text-[9px] bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 whitespace-nowrap"
           >
             ▲

@@ -2,12 +2,14 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { AllMasters }    from '@personnel/domain/masters/aggregate'
 
 export interface CompactGroupDef {
-  id:       string
-  label:    string
-  /** AllocationRow からグループキーを取り出す */
-  getKey:   (row: AllocationRow) => string
+  id:          string
+  label:       string
+  /** AllocationRow からグループキーを取り出す（after 状態） */
+  getKey:      (row: AllocationRow) => string
+  /** AllocationRow からグループキーを取り出す（before/prev 状態。省略時は getKey にフォールバック） */
+  getPrevKey?: (row: AllocationRow) => string
   /** グループキー配列を表示順に並び替える。(未設定) は末尾 */
-  sortKeys: (keys: string[], masters: AllMasters) => string[]
+  sortKeys:    (keys: string[], masters: AllMasters) => string[]
 }
 
 const UNSET = '(未設定)'
@@ -24,9 +26,10 @@ function byMasterOrder(keys: string[], labels: string[]): string[] {
 
 export const COMPACT_GROUP_DEFS: CompactGroupDef[] = [
   {
-    id:       'positionBand',
-    label:    'バンド',
-    getKey:   row => (row.positionBand as string | undefined) ?? UNSET,
+    id:         'positionBand',
+    label:      'バンド',
+    getKey:     row => (row.positionBand as string | undefined) ?? UNSET,
+    getPrevKey: row => (row.prevPositionBand as string | undefined) ?? (row.positionBand as string | undefined) ?? UNSET,
     sortKeys: (keys, masters) => {
       const levelMap = new Map(
         masters.jobLevels.map(e => [e.label, e.promotionDemotionWarningLevel ?? -1])
@@ -39,27 +42,31 @@ export const COMPACT_GROUP_DEFS: CompactGroupDef[] = [
     },
   },
   {
-    id:       'location',
-    label:    '勤務場所',
-    getKey:   row => (row.location as string | undefined) ?? UNSET,
+    id:         'location',
+    label:      '勤務場所',
+    getKey:     row => (row.location as string | undefined) ?? UNSET,
+    getPrevKey: row => (row.prevLocation as string | undefined) ?? (row.location as string | undefined) ?? UNSET,
     sortKeys: (keys, masters) => byMasterOrder(keys, masters.workLocations.map(e => e.label)),
   },
   {
-    id:       'officialPositionCode',
-    label:    '役職',
-    getKey:   row => (row.officialPositionCode as string | undefined) ?? UNSET,
+    id:         'officialPositionCode',
+    label:      '役職',
+    getKey:     row => (row.officialPositionCode as string | undefined) ?? UNSET,
+    getPrevKey: row => (row.prevOfficialPositionCode as string | undefined) ?? (row.officialPositionCode as string | undefined) ?? UNSET,
     sortKeys: (keys, masters) => byMasterOrder(keys, masters.officialPositions.map(e => e.label)),
   },
   {
-    id:       'jobType',
-    label:    'ジョブタイプ',
-    getKey:   row => (row.jobType as string | undefined) ?? UNSET,
+    id:         'jobType',
+    label:      'ジョブタイプ',
+    getKey:     row => (row.jobType as string | undefined) ?? UNSET,
+    getPrevKey: row => (row.prevJobType as string | undefined) ?? (row.jobType as string | undefined) ?? UNSET,
     sortKeys: (keys, masters) => byMasterOrder(keys, masters.jobTypes.map(e => e.label)),
   },
   {
-    id:       'concurrentType',
-    label:    '本務/兼務',
-    getKey:   row => (row.concurrentType as string | undefined) ?? '本務',
+    id:         'concurrentType',
+    label:      '本務/兼務',
+    getKey:     row => (row.concurrentType as string | undefined) ?? '本務',
+    getPrevKey: row => (row.prevConcurrentType as string | undefined) ?? (row.concurrentType as string | undefined) ?? '本務',
     sortKeys: (keys) => {
       const order: Record<string, number> = { '本務': 0, '兼務': 1 }
       return [...keys].sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99))

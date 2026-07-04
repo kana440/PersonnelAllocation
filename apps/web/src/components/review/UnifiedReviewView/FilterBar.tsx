@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { ReviewData } from '../hooks/useReviewData'
-import type { UnifiedFilter, IssueGroupDef, SearchFieldOption, ViewMode } from './types'
+import type { UnifiedFilter, IssueGroupDef, SearchFieldOption } from './types'
 import { getIssueShortLabel, PATTERN_CHIP_DEFS, parseSearchTokens } from './helpers'
 
 type NavMode = 'all' | 'changes' | 'issues'
@@ -11,8 +11,6 @@ interface Props {
   onFilterChange:      (next: UnifiedFilter) => void
   searchInput:         string
   onSearchInputChange: (v: string) => void
-  viewMode:            ViewMode
-  onViewModeChange:    (m: ViewMode) => void
   summary:             ReviewData['summary']
   issueGroups:         IssueGroupDef[]
   searchFields:        SearchFieldOption[]
@@ -24,7 +22,7 @@ interface Props {
 
 export function FilterBar({
   filter, onFilterChange, searchInput, onSearchInputChange,
-  viewMode, onViewModeChange, summary, issueGroups,
+  summary, issueGroups,
   searchFields, filteredCount, totalRows, changedCount,
   onOpenBulkModal,
 }: Props) {
@@ -72,18 +70,8 @@ export function FilterBar({
   return (
     <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50">
 
-      {/* ── Row A: 表示モード + モード切り替え + 件数 ── */}
+      {/* ── Row A: モード切り替え + 件数 ── */}
       <div className="flex items-center gap-2 px-2 py-1.5 flex-wrap">
-        {/* 表示モード */}
-        <div className="flex rounded overflow-hidden border border-gray-300 flex-shrink-0">
-          <button onClick={() => onViewModeChange('diff')}
-            className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'diff' ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-          >コンパクト</button>
-          <button onClick={() => onViewModeChange('side-by-side')}
-            className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${viewMode === 'side-by-side' ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
-          >Excel形式</button>
-        </div>
-
         {/* モード切り替え */}
         <div className="flex rounded overflow-hidden border border-gray-200 flex-shrink-0">
           {(['all', 'changes', 'issues'] as const).map(m => (

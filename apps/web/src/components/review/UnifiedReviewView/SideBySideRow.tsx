@@ -21,9 +21,9 @@ const v = (val: unknown) =>
     ? String(val)
     : undefined
 
-const tdM = 'px-2 py-1.5 text-xs whitespace-nowrap border-b border-gray-100'
-const tdA = 'px-2 py-1.5 text-xs whitespace-nowrap border-b border-gray-100 bg-green-50'
-const tdB = 'px-2 py-1.5 text-xs whitespace-nowrap border-b border-gray-100 bg-blue-50'
+const tdM = 'px-2 py-1.5 text-xs whitespace-nowrap overflow-hidden border-b border-gray-100'
+const tdA = 'px-2 py-1.5 text-xs whitespace-nowrap overflow-hidden border-b border-gray-100 bg-green-50'
+const tdB = 'px-2 py-1.5 text-xs whitespace-nowrap overflow-hidden border-b border-gray-100 bg-blue-50'
 
 export function SideBySideRow({
   reviewRow, allDisplayFields, rowIndex,
@@ -60,7 +60,7 @@ export function SideBySideRow({
         />
       </td>
       {/* 担当者 */}
-      <td className="px-2 py-1.5 text-xs whitespace-nowrap border-b border-gray-100 bg-purple-50 border-r border-purple-100 font-medium text-purple-900 text-[10px]">
+      <td className="px-2 py-1.5 text-xs whitespace-nowrap overflow-hidden border-b border-gray-100 bg-purple-50 border-r border-purple-100 font-medium text-purple-900 text-[10px]">
         {row.assignee || <span className="text-gray-300">—</span>}
       </td>
       {/* No / メタ */}
@@ -85,7 +85,7 @@ export function SideBySideRow({
       <td className={`${tdM} text-center border-r border-gray-200`}>{v(row.payGradeChangeSign) ?? ''}</td>
       {/* 変更種別 */}
       <td className={tdM}>
-        <div className="flex flex-wrap gap-0.5">
+        <div className="flex flex-nowrap gap-0.5 overflow-hidden">
           {PATTERN_CHIP_DEFS
             .filter(d => activePatterns.has(d.key))
             .map(d => (

@@ -21,7 +21,7 @@ interface Props {
 const v = (val: unknown) =>
   val !== undefined && val !== null && val !== '' ? String(val) : undefined
 
-const td = 'px-2 py-1 text-xs whitespace-nowrap border-b border-gray-100'
+const td = 'px-2 py-1 text-xs whitespace-nowrap overflow-hidden border-b border-gray-100'
 
 export function DiffModeRow({
   reviewRow, allDisplayFields, rowIndex,
@@ -61,7 +61,7 @@ export function DiffModeRow({
         />
       </td>
       {/* 担当者 */}
-      <td className="px-2 py-1 text-xs whitespace-nowrap border-b border-gray-100 bg-purple-50 border-r border-purple-100 font-medium text-purple-900 text-[10px]">
+      <td className="px-2 py-1 text-xs whitespace-nowrap overflow-hidden border-b border-gray-100 bg-purple-50 border-r border-purple-100 font-medium text-purple-900 text-[10px]">
         {row.assignee || <span className="text-gray-300">—</span>}
       </td>
       {/* No */}
@@ -94,7 +94,7 @@ export function DiffModeRow({
       <td className={`${td} text-center border-r border-gray-200`}>{v(row.payGradeChangeSign) ?? ''}</td>
       {/* 変更種別 */}
       <td className={td}>
-        <div className="flex flex-wrap gap-0.5">
+        <div className="flex flex-nowrap gap-0.5 overflow-hidden">
           {PATTERN_CHIP_DEFS
             .filter(d => activePatterns.has(d.key))
             .map(d => (

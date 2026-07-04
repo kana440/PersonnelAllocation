@@ -93,6 +93,7 @@ export const OrgSection = memo(function OrgSection({ section, onOrgClick, onPers
               <PersonRow
                 key={row.rowId}
                 row={row}
+                fromOrgId={section.orgId}
                 onFocus={onPersonFocus}
                 onDoubleClick={onDoubleClick}
               />

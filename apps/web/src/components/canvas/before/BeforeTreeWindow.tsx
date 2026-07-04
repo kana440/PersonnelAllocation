@@ -6,6 +6,8 @@ import { BeforeRowCard }            from './BeforeRowCard'
 import { buildPositionDepthList }   from '../panel/helpers'
 import { useCanvasLayoutStore }     from '../../../store/canvasLayoutStore'
 import type { PanelDef }            from '../../../store/canvasLayoutStore'
+import { useCanvasDisplayStore }    from '../../../store/canvasDisplayStore'
+import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from '../panel/compactGroupDefs'
 import { OrgTreePanel }             from '../core/OrgTreePanel'
 import { OrgTreeNode }              from '../core/OrgTreeNode'
 import { OrgTreeControls }          from '../core/OrgTreeControls'
@@ -16,6 +18,10 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
     beforeOrganizations, beforeRowsByOrgId,
     childrenByOrgId, beforeSubtreeCountByOrgId,
   } = useBeforeOrgView()
+
+  const compactGroupById = useCanvasDisplayStore(s => s.compactGroupById)
+  const groupDef = COMPACT_GROUP_DEFS.find(d => d.id === compactGroupById)
+    ?? COMPACT_GROUP_DEFS.find(d => d.id === DEFAULT_COMPACT_GROUP_ID)!
 
   const {
     setComparisonPosition, toggleComparisonPanelOpen,
@@ -133,7 +139,7 @@ export function BeforeTreeWindow({ panel }: { panel: PanelDef }) {
       )}
       renderBody={() => {
         if (!currentOrg) return <div className="text-xs text-gray-400 text-center py-4">組織が見つかりません</div>
-        if (canvasPanelStyle === 'band') return <BeforeBandView orgId={currentRootId} beforeRowsByOrgId={beforeRowsByOrgId} />
+        if (canvasPanelStyle === 'band') return <BeforeGroupView orgId={currentRootId} beforeRowsByOrgId={beforeRowsByOrgId} groupDef={groupDef} />
         return (
           <div className="p-1.5">
             <OrgTreeNode
@@ -213,45 +219,44 @@ function BeforeTreeHeader({ panel, rootPath, orgById, currentOrg, totalCount, on
   )
 }
 
-// ── before 側バンドビュー ─────────────────────────────────────────────
+// ── before 側グループビュー（コンパクト表示） ────────────────────────
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import type { CompactGroupDef } from '../panel/compactGroupDefs'
 import { useStore }           from '../../../store/useStore'
 
-function BeforeBandView({ orgId, beforeRowsByOrgId }: {
+function BeforeGroupView({ orgId, beforeRowsByOrgId, groupDef }: {
   orgId:             string
   beforeRowsByOrgId: Map<string, AllocationRow[]>
+  groupDef:          CompactGroupDef
 }) {
-  const rows              = beforeRowsByOrgId.get(orgId) ?? []
-  const selectCard        = useStore(s => s.selectCard)
-  const selectedCardRowId = useStore(s => s.selectedCardRowId)
-  const masters           = useStore(s => s.masters)
+  const rows               = beforeRowsByOrgId.get(orgId) ?? []
+  const selectCard         = useStore(s => s.selectCard)
+  const selectedCardRowId  = useStore(s => s.selectedCardRowId)
+  const masters            = useStore(s => s.masters)
   const requestScrollToRow = useCanvasLayoutStore(s => s.requestScrollToRow)
 
-  const bandGroups = useMemo(() => {
-    const groups = new Map<string, AllocationRow[]>()
+  const getKey = groupDef.getPrevKey ?? groupDef.getKey
+
+  const groups = useMemo(() => {
+    const map = new Map<string, AllocationRow[]>()
     for (const row of rows) {
       if (!row.userId) continue
-      const band = (row.prevPositionBand as string | undefined) ?? (row.positionBand as string | undefined) ?? '(未設定)'
-      const arr  = groups.get(band)
+      const key = getKey(row)
+      const arr = map.get(key)
       if (arr) arr.push(row)
-      else groups.set(band, [row])
+      else map.set(key, [row])
     }
-    return [...groups.entries()]
-      .sort(([bandA], [bandB]) => {
-        const lvA = masters.jobLevels.find((e: { label: string; promotionDemotionWarningLevel: number }) => e.label === bandA)?.promotionDemotionWarningLevel ?? -1
-        const lvB = masters.jobLevels.find((e: { label: string; promotionDemotionWarningLevel: number }) => e.label === bandB)?.promotionDemotionWarningLevel ?? -1
-        return lvB - lvA
-      })
-      .map(([band, items]) => ({ band, items }))
-  }, [rows, masters.jobLevels])
+    const sortedKeys = groupDef.sortKeys([...map.keys()], masters)
+    return sortedKeys.map(key => ({ key, items: map.get(key)! }))
+  }, [rows, getKey, groupDef, masters])
 
-  if (bandGroups.length === 0) return <p className="text-[10px] text-gray-400 text-center py-3">メンバーなし</p>
+  if (groups.length === 0) return <p className="text-[10px] text-gray-400 text-center py-3">メンバーなし</p>
 
   return (
     <div className="p-1.5 space-y-1.5">
-      {bandGroups.map(({ band, items }) => (
-        <div key={band}>
-          <div className="text-[9px] font-semibold text-gray-400 tracking-wider mb-0.5 px-0.5 leading-none">{band}</div>
+      {groups.map(({ key, items }) => (
+        <div key={key}>
+          <div className="text-[9px] font-semibold text-gray-400 tracking-wider mb-0.5 px-0.5 leading-none">{key}</div>
           <div className="flex flex-wrap gap-1">
             {items.map(row => {
               const name       = [row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || ''

@@ -127,6 +127,10 @@ interface CanvasLayoutState {
   scrollToBeforeRowRequest: { rowId: number; seq: number } | null
   requestScrollToBeforeRow: (rowId: number | null) => void
 
+  /** キャンバス外側スクロールコンテナの保存位置（表示切替後の即時復元に使用） */
+  canvasScrollPos:     { left: number; top: number }
+  saveCanvasScrollPos: (left: number, top: number) => void
+
   // ── 比較モード ──────────────────────────────────────────────────
   comparisonMode:               boolean
   comparisonPanels:             PanelDef[]
@@ -350,6 +354,9 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     const seq = (get().scrollToRowRequest?.seq ?? -1) + 1
     set({ scrollToRowRequest: { rowId, seq } })
   },
+
+  canvasScrollPos:     { left: 0, top: 0 },
+  saveCanvasScrollPos: (left, top) => set({ canvasScrollPos: { left, top } }),
 
   scrollToBeforeRowRequest: null,
   requestScrollToBeforeRow: (rowId) => {

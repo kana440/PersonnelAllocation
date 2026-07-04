@@ -9,11 +9,13 @@ import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { IssueGroupDef } from '../../review/UnifiedReviewView/types'
 
 export interface CompactPersonRow {
-  rowId:      number
-  name:       string
-  patterns:   Set<EditPattern>
-  hasChanges: boolean
-  hasIssues:  boolean
+  rowId:       number
+  name:        string
+  patterns:    Set<EditPattern>
+  hasChanges:  boolean
+  hasIssues:   boolean
+  userId:      string | undefined
+  isConcurrent: boolean
 }
 
 export interface CompactOrgSection {
@@ -38,7 +40,14 @@ export function useCompactData(): CompactData {
   // useScopedStore() はセレクタなしで全ストアを購読するため使わない
   const afterOrganizations  = useStore(s => s.afterOrganizations)
   const beforeOrganizations = useStore(s => s.organizations)
+  const persons             = useStore(s => s.persons)
   const reviewData = useReviewData()
+
+  // SF Person ID → Person UUID のルックアップ（ドラッグ用）
+  const personUUIDBysfId = useMemo(
+    () => new Map(persons.filter(p => p.sfPersonId).map(p => [p.sfPersonId!, p.id])),
+    [persons],
+  )
 
   const searchInput    = useReviewFilterStore(s => s.searchInput)
   const showOldOrg     = useReviewFilterStore(s => s.showOldOrg)
@@ -115,16 +124,18 @@ export function useCompactData(): CompactData {
       }
 
       return [{
-        rowId:      row.rowId,
+        rowId:        row.rowId,
         name,
-        patterns:   rowPatterns,
-        hasChanges: rr.changes.diffCount > 0,
-        hasIssues:  issues.length > 0,
-        _orgCode:   orgCode,
+        patterns:     rowPatterns,
+        hasChanges:   rr.changes.diffCount > 0,
+        hasIssues:    issues.length > 0,
+        userId:       row.userId ? (personUUIDBysfId.get(row.userId as string) ?? row.userId as string) : undefined,
+        isConcurrent: row.concurrentType === '兼務',
+        _orgCode:     orgCode,
       }] as (CompactPersonRow & { _orgCode: string | undefined })[]
     })
   }, [reviewData.rows, searchTokens, showOldOrg, afterPathMap, beforePathMap,
-      activePatterns, issuesOnly, changedOnly, activeIssueMessage])
+      activePatterns, issuesOnly, changedOnly, activeIssueMessage, personUUIDBysfId])
 
   const sections = useMemo(() => {
     const normalMap   = new Map<string, CompactOrgSection>()
