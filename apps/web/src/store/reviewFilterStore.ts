@@ -10,6 +10,8 @@ interface ReviewFilterState {
 
   /** 表形式に切り替える直前にセットし、UnifiedTable のマウント時に一度だけ消費する */
   pendingScrollRowId: number | null
+  /** 組織セクションへのスクロール先。表形式マウント時に一度だけ消費する */
+  pendingScrollOrgId: string | null
   /** viewMode ごとのスクロール位置。アンマウント後も保持し復元に使う */
   scrollTopByMode:    Record<ViewMode, number>
 
@@ -20,6 +22,7 @@ interface ReviewFilterState {
   setViewMode:           (m: ViewMode)                    => void
   setShowMembersOnly:    (v: boolean)                     => void
   setPendingScrollRowId: (id: number | null)              => void
+  setPendingScrollOrgId: (id: string | null)              => void
   setScrollTopByMode:    (mode: ViewMode, top: number)    => void
 }
 
@@ -30,6 +33,7 @@ export const useReviewFilterStore = create<ReviewFilterState>(set => ({
   viewMode:        'diff',
   showMembersOnly: true,
   pendingScrollRowId: null,
+  pendingScrollOrgId: null,
   scrollTopByMode:    { diff: 0, 'side-by-side': 0 },
 
   setFilter:          (filter)          => set({ filter }),
@@ -39,5 +43,6 @@ export const useReviewFilterStore = create<ReviewFilterState>(set => ({
   setViewMode:        (viewMode)        => set({ viewMode }),
   setShowMembersOnly: (showMembersOnly) => set({ showMembersOnly }),
   setPendingScrollRowId: (id)           => set({ pendingScrollRowId: id }),
+  setPendingScrollOrgId: (id)           => set({ pendingScrollOrgId: id }),
   setScrollTopByMode: (mode, top)       => set(s => ({ scrollTopByMode: { ...s.scrollTopByMode, [mode]: top } })),
 }))

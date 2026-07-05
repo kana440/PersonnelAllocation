@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { importFromFile, importFromUrl, SHEET_ALLOCATION, SHEET_MASTERS, SHEET_ORG_MASTER, SHEET_ORG_MASTER_OLD } from '../../infrastructure/excel/engine'
@@ -8,10 +8,14 @@ import { SetupHelp } from './SetupHelp'
 import { AfterInitWizard } from './AfterInitWizard'
 import { ModeSelectStep } from './ModeSelectStep'
 import { getAssigneeOrgIds, getAllMemberOrgIds } from './panelInit'
+import { workspaceStore } from '../../infrastructure/workspace'
+import type { WorkspaceMeta } from '../../infrastructure/workspace'
 
 const LOCAL_SAMPLE_FILES = ['sample.xlsm']
 
 type Phase =
+  | { kind: 'checking' }
+  | { kind: 'resume'; entries: WorkspaceMeta[] }
   | { kind: 'idle' }
   | { kind: 'sample-select'; files: string[] }
   | { kind: 'loading'; progress: string }
@@ -24,10 +28,20 @@ interface Props {
 }
 
 export function SetupView({ onReady }: Props) {
-  const { loadExcelData, setUserSession, focusOrg } = useStore()
+  const { loadExcelData, loadWorkspace, setUserSession, focusOrg } = useStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [phase, setPhase]     = useState<Phase>({ kind: 'idle' })
+  const [phase, setPhase]     = useState<Phase>({ kind: 'checking' })
   const [showHelp, setShowHelp] = useState(false)
+
+  // 起動時に保存済みワークスペースを確認
+  useEffect(() => {
+    let cancelled = false
+    workspaceStore.list().then(entries => {
+      if (cancelled) return
+      setPhase(entries.length > 0 ? { kind: 'resume', entries } : { kind: 'idle' })
+    })
+    return () => { cancelled = true }
+  }, [])
 
   const tick = () => new Promise<void>(r => setTimeout(r, 0))
 
@@ -126,6 +140,23 @@ export function SetupView({ onReady }: Props) {
     onReady()
   }, [phase, setUserSession, proceedOrInitWizard, loadExcelData, initCanvas, onReady])
 
+  // 前回セッションを再開
+  const handleResume = useCallback(async (id: string) => {
+    setPhase({ kind: 'loading', progress: '前回のセッションを読み込み中...' })
+    const payload = await workspaceStore.load(id)
+    if (!payload) { setPhase({ kind: 'error', message: 'セッションデータの読み込みに失敗しました。新しいファイルを開いてください。' }); return }
+    await loadWorkspace(payload)
+    const { role, assigneeName } = payload.userSession
+    const orgIds      = payload.afterOrganizations.map(o => o.id)
+    const memberOrgIds = role === 'assignee'
+      ? getAssigneeOrgIds(payload.allocationList, payload.afterOrganizations, assigneeName)
+      : getAllMemberOrgIds(payload.allocationList, payload.afterOrganizations)
+    const orgById = new Map(payload.afterOrganizations.map(o => [o.id, o]))
+    useCanvasLayoutStore.getState().initPanelsForOrgs(orgIds, memberOrgIds, orgById)
+    if (role === 'assignee' && memberOrgIds.length > 0) focusOrg(memberOrgIds[0])
+    onReady()
+  }, [loadWorkspace, focusOrg, onReady])
+
   // after-init ウィザード完了
   const handleAfterInitComplete = useCallback(async (modifiedResult: ImportedWorkbookResult) => {
     if (phase.kind !== 'after-init') return
@@ -143,6 +174,14 @@ export function SetupView({ onReady }: Props) {
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm" onChange={handleFile} className="hidden" />
 
       <div className="w-full max-w-lg bg-white rounded-xl shadow-lg p-8">
+        {phase.kind === 'checking' && <LoadingView progress="確認中..." />}
+        {phase.kind === 'resume' && (
+          <ResumeView
+            entries={phase.entries}
+            onResume={handleResume}
+            onNewFile={() => setPhase({ kind: 'idle' })}
+          />
+        )}
         {phase.kind === 'idle' && (
           <IdleView
             onFileClick={() => fileInputRef.current?.click()}
@@ -330,6 +369,55 @@ function ErrorView({ message, onBack }: { message: string; onBack: () => void })
         className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
       >
         ← 戻る
+      </button>
+    </div>
+  )
+}
+
+// ── 前回セッション再開 ──────────────────────────────────────────────────
+
+function ResumeView({ entries, onResume, onNewFile }: {
+  entries:    WorkspaceMeta[]
+  onResume:   (id: string) => void
+  onNewFile:  () => void
+}) {
+  const entry = entries[0]!
+  const savedAt = new Date(entry.savedAt)
+  const dateStr = savedAt.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
+  const timeStr = savedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+  const roleLabel = entry.role === 'admin' ? '管理者' : `担当者（${entry.assigneeName ?? ''}）`
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-base font-bold text-gray-800">前回の続きから再開</h2>
+        <p className="mt-1 text-sm text-gray-500">前回の編集セッションが保存されています。</p>
+      </div>
+
+      <div className="border border-blue-200 rounded-xl p-4 bg-blue-50 space-y-1.5">
+        <div className="text-sm font-medium text-blue-800">{entry.effectiveDate} 基準</div>
+        <div className="text-xs text-blue-600">{roleLabel} ・ {entry.rowCount.toLocaleString()} 行</div>
+        <div className="text-xs text-gray-400">{dateStr} {timeStr} 保存</div>
+      </div>
+
+      <button
+        onClick={() => onResume(entry.id)}
+        className="w-full py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+      >
+        再開する
+      </button>
+
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400">または</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
+
+      <button
+        onClick={onNewFile}
+        className="w-full py-2 text-sm text-gray-500 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+      >
+        新しいファイルを開く
       </button>
     </div>
   )

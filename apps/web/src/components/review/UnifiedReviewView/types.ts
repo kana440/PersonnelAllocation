@@ -43,3 +43,17 @@ export interface DisplayField {
   prevKey:  string
   label:    string
 }
+
+/** 組織ヘッダー行 or データ行の判別型（混合仮想スクロール用） */
+export type OrgTableItem =
+  | {
+      kind:      'org-header'
+      orgId:     string | null
+      orgName:   string
+      orgPath:   string
+      rowCount:  number
+    }
+  | {
+      kind:      'row'
+      reviewRow: import('../hooks/useReviewData').ReviewRow
+    }

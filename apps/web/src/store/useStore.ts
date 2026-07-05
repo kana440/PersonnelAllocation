@@ -11,6 +11,7 @@ import type { ImportMode, AssigneeImportMode, MergeResult } from '../application
 import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 import { DEFAULT_SESSION } from '../application/userSession'
 import type { UserSession } from '../application/userSession'
+import type { PersistedPayload } from '../infrastructure/workspace'
 
 // ── org ナビゲーションヘルパー（ストアアクション用）───────────────
 function buildIdMap(orgs: Organization[]): Map<string, Organization> {
@@ -79,7 +80,8 @@ interface UIState {
 // ── アクション ────────────────────────────────────────────────────
 interface Actions {
   // データロード
-  loadExcelData: (result: import('../infrastructure/excel/types').ImportedWorkbookResult) => Promise<void>
+  loadExcelData:  (result: import('../infrastructure/excel/types').ImportedWorkbookResult) => Promise<void>
+  loadWorkspace:  (payload: PersistedPayload) => Promise<void>
 
   // 行の直接編集
   editRow:   (rowId: number, changes: AfterValues) => void
@@ -206,6 +208,34 @@ export const useStore = create<AppState>()((set, get) => {
       await save(result.masters)
       set({ isLoading: false, selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
       // パネルをリセット（SetupView でモード別に再構築する）
+      const { clearPanels } = await import('../store/canvasLayoutStore').then(m => ({
+        clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
+      }))
+      clearPanels()
+      acknowledgmentStore.clear()
+    },
+
+    loadWorkspace: async (payload) => {
+      const { save } = await import('../store/masterStore').then(m => ({ save: m.useMasterStore.getState().save }))
+      appService.loadExcelData({
+        allocationList:      payload.allocationList,
+        beforeOrganizations: payload.beforeOrganizations,
+        afterOrganizations:  payload.afterOrganizations,
+        masters:             payload.masters,
+      })
+      await save(payload.masters)
+      set({
+        isLoading:          false,
+        effectiveDate:      payload.effectiveDate,
+        userSession:        payload.userSession,
+        selectedOrgId:      null,
+        selectedPersonId:   null,
+        selectedCardRowId:  null,
+        selectedCardSource: null,
+        selectedRowId:      null,
+        focusedOrgId:       null,
+        expandedChipIds:    new Set(),
+      })
       const { clearPanels } = await import('../store/canvasLayoutStore').then(m => ({
         clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
       }))

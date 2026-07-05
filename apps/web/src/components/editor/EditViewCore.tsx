@@ -127,8 +127,10 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   useEffect(() => {
     if (uiCommand?.type !== 'setMainViewMode') return
     if (uiCommand.mode === 'review') {
-      const { selectedCardRowId } = useStore.getState()
-      useReviewFilterStore.getState().setPendingScrollRowId(selectedCardRowId)
+      const { selectedCardRowId, selectedOrgId } = useStore.getState()
+      const filterStore = useReviewFilterStore.getState()
+      filterStore.setPendingScrollRowId(selectedCardRowId)
+      if (!selectedCardRowId && selectedOrgId) filterStore.setPendingScrollOrgId(selectedOrgId)
     }
     setMainViewMode(uiCommand.mode)
     clearUICommand()
@@ -234,8 +236,10 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
               onClick={() => {
                 if (mode === 'review') {
                   // 表形式マウント前にスクロール先を確定しておく（ペイント前に反映するため）
-                  const { selectedCardRowId } = useStore.getState()
-                  useReviewFilterStore.getState().setPendingScrollRowId(selectedCardRowId)
+                  const { selectedCardRowId, selectedOrgId } = useStore.getState()
+                  const filterStore = useReviewFilterStore.getState()
+                  filterStore.setPendingScrollRowId(selectedCardRowId)
+                  if (!selectedCardRowId && selectedOrgId) filterStore.setPendingScrollOrgId(selectedOrgId)
                 }
                 setMainViewMode(mode)
               }}

@@ -13,6 +13,7 @@ interface Props {
 export function NameChip({ entry, orgId, panelId }: Props) {
   const { isHistoryPreviewMode } = useStore()
   const { setDragOverOrgId, isSelectMode, handlePersonClick, handleRowDoubleClick, openDropIntent } = useOrgView()
+  const isCardSelected = useStore(s => !isVacantRow(entry.row) && !isSelectMode && s.selectedCardRowId === entry.row.rowId)
   const [isDragOver, setIsDragOver] = useState(false)
 
   const { row, person } = entry
@@ -26,11 +27,13 @@ export function NameChip({ entry, orgId, panelId }: Props) {
 
   const draggable = !isHistoryPreviewMode
 
-  const chipClass = isVacant
-    ? 'border-gray-300 bg-gray-50 text-gray-400 border-dashed italic'
-    : isConcurrent
-      ? 'border-purple-400 bg-purple-50 text-gray-700'
-      : 'border-blue-400 bg-white text-gray-800 hover:bg-blue-50'
+  const chipClass = isCardSelected
+    ? 'border-yellow-400 ring-1 ring-yellow-300 bg-yellow-50 text-gray-800'
+    : isVacant
+      ? 'border-gray-300 bg-gray-50 text-gray-400 border-dashed italic'
+      : isConcurrent
+        ? 'border-purple-400 bg-purple-50 text-gray-700'
+        : 'border-blue-400 bg-white text-gray-800 hover:bg-blue-50'
 
   const handleDragOver = !isVacant && !isHistoryPreviewMode ? (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/json')) return
@@ -97,7 +100,7 @@ export function NameChip({ entry, orgId, panelId }: Props) {
       onDoubleClick={e => {
         if (!isSelectMode && !isHistoryPreviewMode) handleRowDoubleClick(e, row.rowId)
       }}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 cursor-pointer select-none transition-colors ${chipClass} ${isDragOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50' : ''}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border border-l-2 cursor-pointer select-none transition-colors ${chipClass} ${isDragOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50' : ''}`}
     >
       {name}
     </div>

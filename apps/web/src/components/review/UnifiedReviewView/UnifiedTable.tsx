@@ -1,18 +1,18 @@
-import { useRef, useState, useEffect, useLayoutEffect } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import type { ReviewRow } from '../hooks/useReviewData'
-import type { ViewMode, DisplayField } from './types'
+import type { ViewMode, DisplayField, OrgTableItem } from './types'
 import { DiffModeRow }              from './DiffModeRow'
 import { SideBySideRow }            from './SideBySideRow'
 import { useRowSelectionStore }     from '../../../store/rowSelectionStore'
 import { useReviewFilterStore }     from '../../../store/reviewFilterStore'
 
+const ORG_H   = 30   // 組織セクションヘッダー行の高さ
 const DIFF_ROW_H = 42
 const SBS_ROW_H  = 33
 const ROW_BUFFER = 20
 
 interface Props {
-  rows:                  ReviewRow[]
+  items:                 OrgTableItem[]
   viewMode:              ViewMode
   allDisplayFields:      DisplayField[]
   onFieldEdit:           (rowId: number, field: string, value: string) => void
@@ -20,12 +20,24 @@ interface Props {
   selectedRowId:         number | null
   onRowClick:            (rowId: number) => void
   onRowDoubleClick:      (rowId: number) => void
+  onOrgClick:            (orgId: string) => void
+}
+
+/** 累積高さ配列から scrollTop に対応する先頭 index を二分探索で返す */
+function findStartIdx(scrollTop: number, cumulative: number[]): number {
+  let lo = 0, hi = cumulative.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (cumulative[mid] <= scrollTop) lo = mid + 1
+    else hi = mid
+  }
+  return Math.max(0, lo - 1)
 }
 
 export function UnifiedTable({
-  rows, viewMode, allDisplayFields,
+  items, viewMode, allDisplayFields,
   onFieldEdit, transferReasonOptions,
-  selectedRowId, onRowClick, onRowDoubleClick,
+  selectedRowId, onRowClick, onRowDoubleClick, onOrgClick,
 }: Props) {
   const ROW_H = viewMode === 'diff' ? DIFF_ROW_H : SBS_ROW_H
 
@@ -34,10 +46,24 @@ export function UnifiedTable({
   const [vpHeight,  setVpHeight]  = useState(400)
 
   // useLayoutEffect 内で最新値を読むためのリーフ参照（deps に入れない）
-  const rowsRef         = useRef(rows)
-  rowsRef.current       = rows
+  const itemsRef         = useRef(items)
+  itemsRef.current       = items
   const selectedRowIdRef = useRef(selectedRowId)
   selectedRowIdRef.current = selectedRowId
+
+  // 各 item の高さと累積高さを事前計算
+  const cumulative = useMemo(() => {
+    const cum = new Array(items.length + 1)
+    cum[0] = 0
+    for (let i = 0; i < items.length; i++) {
+      cum[i + 1] = cum[i] + (items[i].kind === 'org-header' ? ORG_H : ROW_H)
+    }
+    return cum
+  }, [items, ROW_H])
+
+  // cumulative も ref で保持してレイアウトエフェクト内で読む
+  const cumulativeRef = useRef(cumulative)
+  cumulativeRef.current = cumulative
 
   const { selectedRowIds, toggleRow, toggleAll } = useRowSelectionStore(
     useShallow(s => ({ selectedRowIds: s.selectedRowIds, toggleRow: s.toggleRow, toggleAll: s.toggleAll }))
@@ -46,7 +72,6 @@ export function UnifiedTable({
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    // RAF デバウンス: ResizeObserver ループが起きても1フレームで収束させる
     let raf = 0
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(raf)
@@ -59,9 +84,6 @@ export function UnifiedTable({
   // ── スクロール位置管理 ──────────────────────────────────────────────
   const prevViewModeRef = useRef<ViewMode | null>(null)
 
-  // マウント時: pendingScrollRowId（切替前にセット済）に即ジャンプ、なければ保存位置を復元
-  // viewMode 変化時: 行高さが変わるため選択行へ即ジャンプ
-  // どちらも useLayoutEffect でペイント前に確定 → スクロールアニメが見えない
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -70,53 +92,70 @@ export function UnifiedTable({
 
     if (isMount) {
       const store = useReviewFilterStore.getState()
-      const pending = store.pendingScrollRowId
-      if (pending !== null) {
-        const idx = rowsRef.current.findIndex(r => r.row.rowId === pending)
-        if (idx >= 0) el.scrollTop = Math.max(0, idx * ROW_H - el.clientHeight / 2)
+      const pendingRowId = store.pendingScrollRowId
+      const pendingOrgId = store.pendingScrollOrgId
+
+      if (pendingRowId !== null) {
+        const idx = itemsRef.current.findIndex(
+          item => item.kind === 'row' && item.reviewRow.row.rowId === pendingRowId
+        )
+        if (idx >= 0) el.scrollTop = Math.max(0, cumulativeRef.current[idx] - el.clientHeight / 2)
         store.setPendingScrollRowId(null)
+      } else if (pendingOrgId !== null) {
+        const idx = itemsRef.current.findIndex(
+          item => item.kind === 'org-header' && item.orgId === pendingOrgId
+        )
+        if (idx >= 0) el.scrollTop = Math.max(0, cumulativeRef.current[idx] - el.clientHeight / 4)
+        store.setPendingScrollOrgId(null)
       } else {
         el.scrollTop = store.scrollTopByMode[viewMode] ?? 0
       }
     } else {
-      // viewMode 変化: 選択行へ即再ジャンプ（行高さが変わったため）
+      // viewMode 変化: 行高さが変わるため選択行へ再ジャンプ
       const selId = selectedRowIdRef.current
       if (selId !== null) {
-        const idx = rowsRef.current.findIndex(r => r.row.rowId === selId)
-        if (idx >= 0) el.scrollTop = Math.max(0, idx * ROW_H - el.clientHeight / 2)
+        const idx = itemsRef.current.findIndex(
+          item => item.kind === 'row' && item.reviewRow.row.rowId === selId
+        )
+        if (idx >= 0) el.scrollTop = Math.max(0, cumulativeRef.current[idx] - el.clientHeight / 2)
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode]) // ROW_H は viewMode からの派生値なので viewMode のみで十分
+  }, [viewMode])
 
-  const startIdx    = Math.max(0, Math.floor(scrollTop / ROW_H) - ROW_BUFFER)
-  const endIdx      = Math.min(rows.length, Math.ceil((scrollTop + vpHeight) / ROW_H) + ROW_BUFFER)
-  const paddingTop  = startIdx * ROW_H
-  const paddingBot  = (rows.length - endIdx) * ROW_H
-  const visibleRows = rows.slice(startIdx, endIdx)
-  const n           = allDisplayFields.length
+  const totalHeight = cumulative[items.length]
+
+  const startIdx   = Math.max(0, findStartIdx(scrollTop, cumulative) - ROW_BUFFER)
+  const endIdx     = Math.min(items.length, findStartIdx(scrollTop + vpHeight, cumulative) + 1 + ROW_BUFFER)
+  const paddingTop = cumulative[startIdx]
+  const paddingBot = totalHeight - cumulative[endIdx]
+  const visibleItems = items.slice(startIdx, endIdx)
+
+  const n = allDisplayFields.length
 
   // diff:  チェック(1) + 担当者(1) + 本人情報11列 + 変更種別(1) + 差分統合列(n) + 除外(1) + 問題(1) = 16 + n
   // sbs:   チェック(1) + 担当者(1) + 本人情報11列 + 変更種別(1) + After(n) + Before(n) + 除外(1)  = 15 + 2n
   const COL_SPAN = viewMode === 'diff' ? 16 + n : 15 + 2 * n
 
-  // 列幅定数 — table-layout:fixed で仮想スクロール時のカラム幅再計算フリッカーを防ぐ
-  const STATIC_W   = 876  // 静的14列の合計px
-  const DIFF_DYN_W = 120  // diff モード動的列（1フィールド）
-  const SBS_DYN_W  = 96   // sbs モード動的列（after/before 各1フィールド）
+  const STATIC_W   = 876
+  const DIFF_DYN_W = 120
+  const SBS_DYN_W  = 96
   const tableWidth = viewMode === 'diff'
-    ? STATIC_W + n * DIFF_DYN_W + 384  // 384 = 除外(64)+問題(320)
-    : STATIC_W + n * SBS_DYN_W * 2 + 64  // 64 = 除外
+    ? STATIC_W + n * DIFF_DYN_W + 384
+    : STATIC_W + n * SBS_DYN_W * 2 + 64
 
   const thD = 'px-2 py-1.5 text-left font-medium text-gray-600 border-b border-gray-200 text-[10px] whitespace-nowrap bg-gray-100 overflow-hidden'
   const thM = 'px-2 py-1.5 text-left font-medium text-white border-b border-indigo-700 text-[10px] whitespace-nowrap bg-indigo-700 overflow-hidden'
   const thA = 'px-2 py-1.5 text-left font-medium text-white border-b border-green-700 text-[10px] whitespace-nowrap bg-green-800 overflow-hidden'
   const thB = 'px-2 py-1.5 text-left font-medium text-white border-b border-blue-700 text-[10px] whitespace-nowrap bg-blue-800 overflow-hidden'
 
-
-  const filteredRowIds = rows.map(r => r.row.rowId)
-  const allChecked     = filteredRowIds.length > 0 && filteredRowIds.every(id => selectedRowIds.has(id))
-  const someChecked    = filteredRowIds.some(id => selectedRowIds.has(id))
+  // チェックボックス用の rowId 一覧（org-header を除く）
+  const filteredRowIds = useMemo(
+    () => items.flatMap(item => item.kind === 'row' ? [item.reviewRow.row.rowId] : []),
+    [items]
+  )
+  const allChecked = filteredRowIds.length > 0 && filteredRowIds.every(id => selectedRowIds.has(id))
+  const someChecked = filteredRowIds.some(id => selectedRowIds.has(id))
 
   return (
     <div
@@ -130,36 +169,35 @@ export function UnifiedTable({
     >
       <table className="text-xs border-collapse [table-layout:fixed]" style={{ width: tableWidth }}>
         <colgroup>
-          <col style={{ width: 28 }} />   {/* チェック */}
-          <col style={{ width: 64 }} />   {/* 担当者 */}
-          <col style={{ width: 32 }} />   {/* No */}
-          <col style={{ width: 72 }} />   {/* ユーザーID */}
-          <col style={{ width: 96 }} />   {/* グループ社員ID */}
-          <col style={{ width: 56 }} />   {/* 社員番号 */}
-          <col style={{ width: 48 }} />   {/* 姓 */}
-          <col style={{ width: 48 }} />   {/* 名 */}
-          <col style={{ width: 96 }} />   {/* 異動事由 */}
-          <col style={{ width: 80 }} />   {/* メモ */}
-          <col style={{ width: 44 }} />   {/* 昇降格 */}
-          <col style={{ width: 60 }} />   {/* 降格理由 */}
-          <col style={{ width: 56 }} />   {/* 給与等級 */}
-          <col style={{ width: 96 }} />   {/* 変更種別 */}
+          <col style={{ width: 28 }} />
+          <col style={{ width: 64 }} />
+          <col style={{ width: 32 }} />
+          <col style={{ width: 72 }} />
+          <col style={{ width: 96 }} />
+          <col style={{ width: 56 }} />
+          <col style={{ width: 48 }} />
+          <col style={{ width: 48 }} />
+          <col style={{ width: 96 }} />
+          <col style={{ width: 80 }} />
+          <col style={{ width: 44 }} />
+          <col style={{ width: 60 }} />
+          <col style={{ width: 56 }} />
+          <col style={{ width: 96 }} />
           {viewMode === 'diff' ? (
             <>
               {allDisplayFields.map((_, i) => <col key={`d${i}`} style={{ width: DIFF_DYN_W }} />)}
-              <col style={{ width: 64 }} />   {/* 除外理由 */}
-              <col style={{ width: 320 }} />  {/* 問題 */}
+              <col style={{ width: 64 }} />
+              <col style={{ width: 320 }} />
             </>
           ) : (
             <>
               {allDisplayFields.map((_, i) => <col key={`a${i}`} style={{ width: SBS_DYN_W }} />)}
               {allDisplayFields.map((_, i) => <col key={`b${i}`} style={{ width: SBS_DYN_W }} />)}
-              <col style={{ width: 64 }} />  {/* 除外理由 */}
+              <col style={{ width: 64 }} />
             </>
           )}
         </colgroup>
         <thead className="sticky top-0 z-10">
-          {/* ── グループヘッダー行 ── */}
           <tr>
             <th className="px-1.5 py-1 bg-gray-100 border-b border-gray-200 w-6">
               <input
@@ -190,7 +228,6 @@ export function UnifiedTable({
               </>
             )}
           </tr>
-          {/* ── 列ヘッダー行 ── */}
           <tr>
             <th className="px-1.5 py-1.5 bg-gray-100 border-b border-gray-200 w-6"></th>
             <th className={thD}>担当者</th>
@@ -222,14 +259,53 @@ export function UnifiedTable({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && (
+          {items.length === 0 && (
             <tr><td colSpan={COL_SPAN} className="px-4 py-8 text-center text-gray-400 text-xs">該当なし</td></tr>
           )}
           {paddingTop > 0 && (
             <tr aria-hidden><td colSpan={COL_SPAN} style={{ height: paddingTop, padding: 0 }} /></tr>
           )}
-          {visibleRows.map((rr, localIdx) => {
+          {visibleItems.map((item, localIdx) => {
             const globalIdx = startIdx + localIdx
+
+            if (item.kind === 'org-header') {
+              // 組織パスを「親パス › 葉ノード名」に分割して表示
+              const parts    = item.orgPath ? item.orgPath.split(' › ') : [item.orgName]
+              const leafName = parts.at(-1) ?? item.orgName
+              const parentPath = parts.length > 1 ? parts.slice(0, -1).join(' › ') : ''
+              return (
+                <tr
+                  key={`org-${globalIdx}`}
+                  style={{ height: ORG_H }}
+                  className={`sticky z-[5] ${item.orgId ? 'cursor-pointer hover:bg-gray-200' : 'cursor-default'}`}
+                  onClick={() => { if (item.orgId) onOrgClick(item.orgId) }}
+                >
+                  <td
+                    colSpan={COL_SPAN}
+                    className="px-3 border-b border-gray-300 bg-gray-100 overflow-hidden"
+                    style={{ height: ORG_H }}
+                  >
+                    <div className="flex items-center gap-2 h-full">
+                      <div className="min-w-0 overflow-hidden">
+                        <div className="text-[10px] font-semibold text-gray-700 truncate leading-tight">
+                          {leafName}
+                        </div>
+                        {parentPath && (
+                          <div className="text-[9px] text-gray-400 truncate leading-none">
+                            {parentPath}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-gray-400 flex-shrink-0">
+                        {item.rowCount}人
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )
+            }
+
+            const rr = item.reviewRow
             const isChecked = selectedRowIds.has(rr.row.rowId)
             return viewMode === 'diff' ? (
               <DiffModeRow

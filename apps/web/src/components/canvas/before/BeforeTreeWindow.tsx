@@ -264,7 +264,7 @@ function BeforeGroupView({ orgId, beforeRowsByOrgId, groupDef }: {
               return (
                 <div key={row.rowId} data-before-rowid={row.rowId}
                   onClick={() => { selectCard(row.rowId, 'before'); requestScrollToRow(row.rowId) }}
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border-l-2 cursor-pointer select-none transition-colors
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] border border-l-2 cursor-pointer select-none transition-colors
                     ${isSelected
                       ? 'border-yellow-400 bg-yellow-50 text-stone-800 ring-1 ring-yellow-300'
                       : 'border-stone-400 bg-stone-50 text-stone-700 hover:bg-stone-100'

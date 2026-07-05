@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { AdminView }          from './components/admin/AdminView'
 import { Features }           from './config/features'
 import { SetupView }          from './components/setup/SetupView'
@@ -11,6 +11,14 @@ import { MergeImportButton }      from './components/header/MergeImportButton'
 import { AssigneeWizard }         from './components/header/AssigneeWizard'
 import { SplitExportButton }      from './components/header/SplitExportButton'
 import { EditViewCore, HeaderButton } from './components/editor/EditViewCore'
+import { workspaceStore, buildPersistedPayload, buildWorkspaceMeta } from './infrastructure/workspace'
+import { appService } from './application/HRApplicationService'
+import { ContactPanel }          from './components/contact/ContactPanel'
+import { ContactSettingsModal }  from './components/contact/ContactSettingsModal'
+import { useContactStore }       from './store/contactStore'
+import { useSettingsStore }      from './store/settingsStore'
+import { initContactSource } from './infrastructure/contact'
+import { useShallow } from 'zustand/react/shallow'
 
 // ── 担当者割り当てウィザードボタン（管理者のみ表示）─────────────────────────
 function AssigneeWizardButton({ onOpen }: { onOpen: () => void }) {
@@ -68,17 +76,65 @@ export default function App({ onExit }: Props = {}) {
 
   const [appMode,      setAppMode]      = useState<'editor' | 'admin'>('editor')
   const [sessionReady, setSessionReady] = useState(false)
-  const [clearDialogOpen,    setClearDialogOpen]    = useState(false)
-  const [assigneeWizardOpen, setAssigneeWizardOpen] = useState(false)
+  const [clearDialogOpen,     setClearDialogOpen]     = useState(false)
+  const [assigneeWizardOpen,  setAssigneeWizardOpen]  = useState(false)
+  const [contactSettingsOpen, setContactSettingsOpen] = useState(false)
+
+  const { isPanelOpen: isContactPanelOpen, openPanel: openContactPanel, contacts } = useContactStore(
+    useShallow(s => ({ isPanelOpen: s.isPanelOpen, openPanel: s.openPanel, contacts: s.contacts }))
+  )
+  const { myEmail, contactSourceMode, setHasContactFileHandle } = useSettingsStore(
+    useShallow(s => ({ myEmail: s.myEmail, contactSourceMode: s.contactSourceMode, setHasContactFileHandle: s.setHasContactFileHandle }))
+  )
+  const isContactEnabled = !!myEmail && contactSourceMode !== null
+  const pendingContactCount = contacts.filter(c =>
+    !c.archived && c.status === 'sent' && c.requesterEmail !== myEmail
+  ).length
 
   useEffect(() => { checkStorage() }, [checkStorage])
 
+  // 起動時にIndexedDB保存済みのファイルハンドルを確認
+  useEffect(() => {
+    initContactSource().then(has => {
+      setHasContactFileHandle(has)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const saveWorkspace = useCallback(() => {
+    if (!sessionReady || appMode !== 'editor') return
+    const { effectiveDate, userSession } = useStore.getState()
+    const snapshot = appService.getSnapshot()
+    if (snapshot.allocationList.length === 0) return
+    const payload = buildPersistedPayload(snapshot, effectiveDate, userSession)
+    const meta    = buildWorkspaceMeta(payload)
+    workspaceStore.save(meta, payload).catch(console.error)
+  }, [sessionReady, appMode])
+
+  // セッション開始時に保存
   useEffect(() => {
     if (!sessionReady || appMode !== 'editor') return
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    saveWorkspace()
+  }, [sessionReady, appMode, saveWorkspace])
+
+  // タブ非表示・クローズ時に保存（visibilitychange は beforeunload より確実）
+  useEffect(() => {
+    if (!sessionReady || appMode !== 'editor') return
+    const handler = () => { if (document.visibilityState === 'hidden') saveWorkspace() }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [sessionReady, appMode, saveWorkspace])
+
+  useEffect(() => {
+    if (!sessionReady || appMode !== 'editor') return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+      saveWorkspace()
+    }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [sessionReady, appMode])
+  }, [sessionReady, appMode, saveWorkspace])
 
   if (!isChecked) return (
     <div className="flex h-screen items-center justify-center text-gray-400 text-sm">読み込み中…</div>
@@ -128,6 +184,18 @@ export default function App({ onExit }: Props = {}) {
         }
         headerRight={
           <>
+            {/* 連絡票ボタン */}
+            <HeaderButton
+              onClick={isContactEnabled ? openContactPanel : () => setContactSettingsOpen(true)}
+              active={isContactPanelOpen}
+              title={isContactEnabled ? '連絡票パネルを開く' : '連絡票の設定が必要です'}
+            >
+              <span>📋</span>
+              <span>
+                連絡票{isContactEnabled && pendingContactCount > 0 ? ` (${pendingContactCount})` : ''}
+              </span>
+            </HeaderButton>
+
             {Features.userManagement && (
               <HeaderButton
                 onClick={() => setAppMode('admin')}
@@ -146,6 +214,14 @@ export default function App({ onExit }: Props = {}) {
           </>
         }
       />
+
+      {/* 連絡票パネル（固定サイドパネル） */}
+      <ContactPanel />
+
+      {/* 連絡票設定モーダル */}
+      {contactSettingsOpen && (
+        <ContactSettingsModal onClose={() => setContactSettingsOpen(false)} />
+      )}
     </>
   )
 }

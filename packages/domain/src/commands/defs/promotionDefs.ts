@@ -198,7 +198,7 @@ export const promotionDef: EditOperation = {
     { field: 'promotionSign',      required: false, readOnly: true, inputType: 'checkbox', indicator: true },
     { field: 'payGradeChangeSign', required: false, readOnly: true, inputType: 'checkbox', indicator: true },
     // ── 最上部: 異動事由 ──────────────────────────────────────────────────
-    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_REFORM, TR.DIV_TRANSFER], optionsMode: 'suggest' },
+    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_RESTRUCTURE, TR.DIV_TRANSFER], optionsMode: 'suggest' },
     { field: 'memo',           required: false },
     // ── バンドセクション ──────────────────────────────────────────────────
     { kind: 'section', label: 'バンド' },
@@ -316,7 +316,7 @@ export const demotionDef: EditOperation = {
     { field: 'promotionSign',      required: false, readOnly: true, inputType: 'checkbox', indicator: true },
     { field: 'payGradeChangeSign', required: false, readOnly: true, inputType: 'checkbox', indicator: true },
     // ── 最上部 ────────────────────────────────────────────────────────────
-    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_REFORM, TR.DIV_TRANSFER], optionsMode: 'suggest' },
+    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_RESTRUCTURE, TR.DIV_TRANSFER], optionsMode: 'suggest' },
     { field: 'demotionReason', required: true },
     { field: 'memo',           required: false },
     // ── バンドセクション ──────────────────────────────────────────────────
@@ -416,7 +416,7 @@ export const titleChangeDef: EditOperation = {
   availableFor: () => AVAILABLE,
 
   inputs: [
-    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_REFORM, TR.DIV_TRANSFER], optionsMode: 'suggest' },
+    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_RESTRUCTURE, TR.DIV_TRANSFER], optionsMode: 'suggest' },
     { field: 'memo',           required: false },
     { kind: 'section', label: '役職情報' },
     { field: 'officialPositionCode', required: true },
@@ -538,7 +538,7 @@ export const mpTrackSwitchDef: EditOperation = {
   ],
 
   inputs: [
-    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_REFORM, TR.DIV_TRANSFER], optionsMode: 'suggest' },
+    { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_RESTRUCTURE, TR.DIV_TRANSFER], optionsMode: 'suggest' },
     { field: 'memo',           required: false },
     { kind: 'section', label: 'バンド切替' },
     {

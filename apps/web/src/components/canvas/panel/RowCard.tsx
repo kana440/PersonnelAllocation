@@ -1,3 +1,4 @@
+import { useMemo }               from 'react'
 import { useOrgView }            from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
 import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
@@ -7,6 +8,23 @@ import { CanvasFieldDiff }       from '../toolbar/CanvasFieldDiff'
 import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 import { isInternalPosCode, getPositionTitle, getEmpBorderClass } from './helpers'
 import { isVacantRow } from '@personnel/domain/allocationRow'
+import { TR_SHORT } from '@personnel/domain/transferReasonLabels'
+
+interface AutoDiffField { afterKey: string; prevKey: string; label: string; isOrg?: boolean }
+
+// 自動検出する変更フィールド定義（order = 表示順）
+const AUTO_DIFF_FIELDS: AutoDiffField[] = [
+  { afterKey: 'departmentCode',        prevKey: 'prevDepartmentCode',        label: '組織',    isOrg: true },
+  { afterKey: 'officialPositionCode',  prevKey: 'prevOfficialPositionCode',  label: '役職' },
+  { afterKey: 'positionBand',          prevKey: 'prevPositionBand',          label: 'バンド' },
+  { afterKey: 'band',                  prevKey: 'prevBand',                  label: '給与B' },
+  { afterKey: 'employmentType',        prevKey: 'prevEmploymentType',        label: '雇用' },
+  { afterKey: 'location',              prevKey: 'prevLocation',              label: '勤務地' },
+  { afterKey: 'concurrentType',        prevKey: 'prevConcurrentType',        label: '兼務区分' },
+  { afterKey: 'secondmentFromCompany', prevKey: 'prevSecondmentFromCompany', label: '出向元' },
+  { afterKey: 'secondmentToCompany',   prevKey: 'prevSecondmentToCompany',   label: '出向先' },
+  { afterKey: 'leaveOfAbsenceSign',    prevKey: 'prevLeaveOfAbsenceSign',    label: '休職' },
+]
 
 const DEST_BADGE_COLORS = [
   'bg-blue-100 text-blue-700',
@@ -35,6 +53,7 @@ export function RowCard({
 }: RowCardProps) {
   const { row, person, depth, activePatterns, externalManagerKind } = entry
   const {
+    organizations,
     isSelectMode, selectedPersonIds,
     handlePersonClick,
     handleRowDoubleClick,
@@ -51,10 +70,32 @@ export function RowCard({
 
   // selectedCardRowId: コンテキスト経由をやめてストア直接購読 → このカードが選択状態か否かだけ比較
   // これにより他のカードのクリックでこのカードが再レンダーされない
-  const isCardSelected   = useStore(s => !isVacantRow(row) && !isSelectMode && s.selectedCardRowId === row.rowId)
-  const displayFields    = useCanvasDisplayStore(s => s.displayFields)
-  const hiddenBadgeTypes = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
-  const masters       = useStore(s => s.masters)
+  const isCardSelected      = useStore(s => !isVacantRow(row) && !isSelectMode && s.selectedCardRowId === row.rowId)
+  const displayFields       = useCanvasDisplayStore(s => s.displayFields)
+  const hiddenBadgeTypes    = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
+  const masters             = useStore(s => s.masters)
+  const beforeOrganizations = useStore(s => s.beforeOrganizations)
+
+  // 自動検出変更フィールド（displayFields に含まれるものは除外して重複を防ぐ）
+  const changedFields = useMemo(() => {
+    if (isVacantRow(row)) return []
+    const r = row as Record<string, unknown>
+    return AUTO_DIFF_FIELDS
+      .filter(f => !displayFields.includes(f.afterKey))
+      .map(f => {
+        const afterRaw = String(r[f.afterKey] ?? '')
+        const prevRaw  = String(r[f.prevKey]  ?? '')
+        if (afterRaw === prevRaw || !prevRaw) return null
+        const afterVal = f.isOrg
+          ? (organizations.find(o => o.externalCode === afterRaw)?.name ?? afterRaw)
+          : afterRaw
+        const prevVal = f.isOrg
+          ? (beforeOrganizations.find(o => o.externalCode === prevRaw)?.name ?? prevRaw)
+          : prevRaw
+        return { key: f.afterKey, label: f.label, afterVal, prevVal }
+      })
+      .filter((f): f is NonNullable<typeof f> => f !== null)
+  }, [row, displayFields, organizations, beforeOrganizations])
 
   const clearDropTargets = () => {
     setDropPersonRowId(null)
@@ -248,7 +289,7 @@ export function RowCard({
           } : undefined
         }
       >
-        {/* 1行目: [兼] 氏名 社員ID [spacer] 変更バッジ右詰め */}
+        {/* 1行目: [兼] 氏名 社員ID [spacer] 異動事由 */}
         <div className="flex items-center gap-1 min-w-0">
           {isConcurrent && (
             <span className="flex-shrink-0 text-[9px] font-bold bg-purple-100 text-purple-600 px-0.5 py-0.5 rounded leading-none">兼</span>
@@ -263,18 +304,16 @@ export function RowCard({
               {row.groupEmployeeId && (
                 <span className="flex-shrink-0 text-[9px] text-gray-300 font-mono">{row.groupEmployeeId}</span>
               )}
-              {/* spacer: 残りスペースを吸収してバッジを右端へ */}
+              {/* spacer: 残りスペースを吸収して右端へ */}
               <div className="flex-1" />
             </>
           )}
-          {[...activePatterns].filter(p => !hiddenBadgeTypes.includes(EDIT_PATTERN_META[p].badge)).map(p => {
-            const meta = EDIT_PATTERN_META[p]
-            return (
-              <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none ${OPERATION_BADGE_COLORS[meta.badge]}`}>
-                {meta.label}
-              </span>
-            )
-          })}
+          {/* 異動事由: 右上に表示（TR_SHORT で短縮、なければ元の値） */}
+          {!isVacant && row.transferReason && (
+            <span className="flex-shrink-0 text-[9px] text-gray-500 bg-gray-50 border border-gray-200 px-1 py-0.5 rounded leading-none truncate max-w-[5rem]">
+              {TR_SHORT[row.transferReason as string] ?? row.transferReason as string}
+            </span>
+          )}
           {isSelectMode && !isVacant && !!personId && (
             <span className={`flex-shrink-0 w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] font-bold ${
               isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-400'
@@ -346,7 +385,48 @@ export function RowCard({
           />
         )}
 
-        {/* 3行目 (在籍時): カスタム項目 + 比較先バッジ */}
+        {/* 変更差分セクション: 変更フィールドの差分 + 変更バッジ */}
+        {!isVacant && (() => {
+          const visibleBadges = [...activePatterns].filter(p => !hiddenBadgeTypes.includes(EDIT_PATTERN_META[p].badge))
+          if (changedFields.length === 0 && visibleBadges.length === 0) return null
+          return (
+            <div className="mt-0.5 min-w-0">
+              {/* 変更フィールド差分: 項目名: 青字 ← 灰色取消 */}
+              {changedFields.map(({ key, label, afterVal, prevVal }) => (
+                <div key={key} className="text-[9px] leading-tight">
+                  <span className="text-blue-400">{label}: </span>
+                  <span className="text-blue-600 font-medium">{afterVal || '—'}</span>
+                  {prevVal && (
+                    <>
+                      <span className="text-gray-300 mx-0.5">←</span>
+                      <span className="text-gray-400 line-through">{prevVal}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+              {/* 変更バッジ: 最大3個, 4個以上は +N変更 */}
+              {visibleBadges.length > 0 && (
+                <div className="flex flex-wrap gap-0.5 mt-0.5">
+                  {visibleBadges.slice(0, 3).map(p => {
+                    const meta = EDIT_PATTERN_META[p]
+                    return (
+                      <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none ${OPERATION_BADGE_COLORS[meta.badge]}`}>
+                        {meta.label}
+                      </span>
+                    )
+                  })}
+                  {visibleBadges.length > 3 && (
+                    <span className="flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none bg-gray-100 text-gray-500">
+                      +{visibleBadges.length - 3}変更
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* 追加フィールド + 比較先バッジ */}
         {!isVacant && (displayFields.length > 0 || comparisonOrgName) && (
           <div className="mt-0.5 min-w-0">
             <CanvasFieldDiff row={row} displayFields={displayFields} isConcurrent={isConcurrent} />

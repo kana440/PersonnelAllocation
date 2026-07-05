@@ -136,7 +136,8 @@ interface Props {
 ```
 
 - STEP1 の `App.tsx`・STEP2 の `Step2App.tsx` がそれぞれ `EditViewCore` にスロットを渡す
-- 共通ロジック（OrgPersonNav・キャンバス・AI チャット・履歴パネル）は `EditViewCore` 内に固定
+- 共通ロジック（OrgPersonNav・キャンバス・履歴パネル）は `EditViewCore` 内に固定
+- **AI チャットは `FloatingAIChat`（`components/layout/FloatingAIChat.tsx`）として独立したフローティングウィジェット**。`EditViewCore` の外側（末尾）にレンダーされ、ドラッグ可能。サイドパネルではないのでレイアウト幅に影響しない
 - STEP2 専用 UI は `headerRight` か `topBanner` に配置する
 
 詳細は `docs/02-architecture.md` の「STEP1 / STEP2 共存アーキテクチャ」セクション参照。
@@ -539,6 +540,67 @@ EditViewCore
 
 ---
 
+## 連絡票機能（ContactPanel）
+
+担当者間の情報確認を管理するワークフロー。詳細: `docs/19-contact-workflow.md` / `specs/G6-workflow/02-contact-workflow.md`
+
+### キーファイル
+
+```
+apps/web/src/
+  ports/contactTypes.ts             ← ContactRecord / ContactAnchor / ContactMessage 型
+  application/ContactService.ts     ← create / submitMessage / setAnchor / syncFromSource
+  infrastructure/contact/
+    FileContactSource.ts            ← File System Access API で .xlsx 読み書き（readwrite）
+    ContactTsvSerializer.ts         ← TSV ↔ ContactRecord（16列）純粋関数
+    fileHandleDb.ts                 ← FileSystemFileHandle を IndexedDB に永続化
+    createTemplateXlsx.ts           ← テンプレート .xlsx 生成
+  store/contactStore.ts             ← Zustand（load / create / submitMessage / setAnchor）
+  components/contact/
+    ContactPanel/index.tsx          ← フローティングパネル（fixed + slide）
+    ContactPanel/ContactForm.tsx    ← 起票フォーム（D&D 受け付け・Before組織ピッカー）
+    ContactPanel/ReceivedList.tsx   ← 受信リスト（isRelevant マッチング）
+    ContactPanel/ThreadView.tsx     ← スレッド・回答入力・アンカー設定
+    ContactSettingsModal.tsx        ← 設定モーダル
+```
+
+### ContactPanel の配置ルール
+
+- `App.tsx` の `EditViewCore` **外側（末尾）** に置く（フローティングウィジェット）
+- `translate-x-*` で CSS transform を使うため、内部から `position:fixed` の子要素は**必ず `createPortal(…, document.body)`**
+- OrgPickerModal・ContactSettingsModal はすべてポータル経由
+
+### Zustand 購読パターン（連絡票は特に厳守）
+
+```typescript
+// ✅ OK — プリミティブセレクタ
+const myEmail = useSettingsStore(s => s.myEmail)
+// ✅ OK — 複数フィールドは useShallow
+const { contacts, select } = useContactStore(useShallow(s => ({ contacts: s.contacts, select: s.select })))
+// ❌ NG — セレクタがオブジェクトを返す → 毎回新インスタンス → 無限ループ
+const { myEmail } = useSettingsStore(s => ({ myEmail: s.myEmail }))
+```
+
+### アンカー / フィルタシステム
+
+- **フィルタ**（起票時）: `personName` + `beforeOrgCodeHint`（Before組織の externalCode）。受信者がマッチング判定に使う
+- **アンカー**（回答時）: `ContactAnchor = { kind: 'person', groupEmployeeId, userId } | { kind: 'position', positionCode }`。回答者が対象行を特定し、`fieldValueAtAnchor`（回答時点の値）も記録して変更検知に使う
+- **ReceivedList の `isRelevant()`**: ① 氏名マッチ（スペース除去）② Before組織サブツリーマッチ（`getDescendantOrgIds` + `prevDepartmentCode`）
+
+### キャンバス → 起票フォームへのドラッグ&ドロップ
+
+RowCard が `application/json` 形式でドラッグデータを送出（`dragType: 'person'`, `rowId` を含む）。
+ContactForm の `onDrop` で `rowId` → `allocationList` 検索 → `personName` / 宛先組織 / Before組織を自動入力。
+
+### Excel 読み書き（FileContactSource）
+
+- `showOpenFilePicker({ mode: 'readwrite' })` で handle を取得し IndexedDB に永続化
+- 起動時に handle を復元するが権限確認はユーザー操作時まで遅延（`requestPermission()`）
+- 書き込み: ExcelJS でワークブック更新 → `handle.createWritable()` → `write(buffer)` → `close()`
+- 楽観ロック: `submitMessage` 前に `readOne()` で Excel の最新スレッドを取得し `thread.length` を比較。競合時は `{ status: 'conflict' }` を返し ThreadView がバナー表示
+
+---
+
 ## 管理画面の配置方針
 
 **管理画面 UI は `apps/web` に統合する**。`apps/admin` などの別パッケージは作らない。
@@ -717,8 +779,9 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 | `specs/G3-ui/` | UI入力補助・レビュー表示仕様 | `01-row-editor-input-spec.md`, `02-review-display-spec.md` |
 | `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
 | `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |
-| `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）** | `01-assignee-workflow.md` |
+| `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）・連絡票ワークフロー（STEP1実装済み）** | `01-assignee-workflow.md`, `02-contact-workflow.md` |
 | `specs/G7-server/` | サーバー移行仕様（Phase 1 〜 3） | `01-api-spec.md`（未作成） |
+| `docs/19-contact-workflow.md` | **連絡票 実装リファレンス**（アーキテクチャ・TSV形式・アンカー/フィルタ・D&D・デバッグ） | — |
 
 ### specを読んで実装するときの手順
 
