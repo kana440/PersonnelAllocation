@@ -94,7 +94,10 @@ export function DiffModeRow({
       <td className={`${td} text-center border-r border-gray-200`}>{v(row.payGradeChangeSign) ?? ''}</td>
       {/* 変更種別 */}
       <td className={td}>
-        <div className="flex flex-nowrap gap-0.5 overflow-hidden">
+        <div className="flex flex-nowrap gap-0.5 overflow-x-auto"
+          style={{ scrollbarWidth: 'none' }}
+          onWheel={e => { e.currentTarget.scrollLeft += e.deltaY }}
+        >
           {PATTERN_CHIP_DEFS
             .filter(d => activePatterns.has(d.key))
             .map(d => (

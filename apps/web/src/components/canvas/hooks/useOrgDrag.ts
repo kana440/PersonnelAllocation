@@ -1,28 +1,26 @@
 import { useState } from 'react'
 import type { Organization } from '@personnel/domain/schemas'
-import type { Person } from '@personnel/domain/schemas'
 import type { AfterValues } from '@personnel/domain/allocationRow'
 import type { DragData } from '../OrgViewContext'
 
 interface UseOrgDragDeps {
-  organizations:                Organization[]
-  persons:                      Person[]
-  saveRow:                      (rowId: number, changes: AfterValues) => void
-  assignPersonToVacantPosition: (rowId: number, sfId: string, opts?: { leaveSourceVacant?: boolean; overrideBand?: boolean }) => void
-  openPersonMoveDialog:         (fromRowId: number | null, personId: string, toOrgId: string) => void
+  organizations:        Organization[]
+  saveRow:              (rowId: number, changes: AfterValues) => void
+  openPersonMoveDialog: (fromRowId: number | null, personId: string, toOrgId: string) => void
   /** 旧組織未割当セクションから複数行を一括ドロップしたとき呼ばれる */
-  onUnmappedBulkDrop?:          (rowIds: number[], toOrg: Organization) => void
-  /** ドラッグによる空席アサイン時にバンドが変わるかチェックする（未指定時はチェックしない） */
-  checkBandChange?:             (vacantRowId: number, sfId: string) => { from: string; to: string } | null
-  /** バンド変更確認が必要なとき呼ばれる。呼び出し側でダイアログを表示し onOverride/onKeep を呼ぶ */
-  onBandChangeRequest?:         (info: { from: string; to: string; onOverride: () => void; onKeep: () => void }) => void
+  onUnmappedBulkDrop?:  (rowIds: number[], toOrg: Organization) => void
+  /**
+   * 人を空席にドロップしたとき呼ばれる。
+   * personRowId: ドラッグ元の人行 rowId、vacantRowId: ドロップ先の空席行 rowId
+   */
+  onVacantDrop?:        (personRowId: number, vacantRowId: number) => void
   /** FloatingAbsencePanel からドラッグされた行を org に復帰させる（lockCancel + 組織設定） */
-  onAbsenceReturn?:             (fromRowId: number, toOrg: Organization) => void
+  onAbsenceReturn?:     (fromRowId: number, toOrg: Organization) => void
 }
 
 export function useOrgDrag({
-  organizations, persons, saveRow, assignPersonToVacantPosition, openPersonMoveDialog,
-  onUnmappedBulkDrop, checkBandChange, onBandChangeRequest, onAbsenceReturn,
+  organizations, saveRow, openPersonMoveDialog,
+  onUnmappedBulkDrop, onVacantDrop, onAbsenceReturn,
 }: UseOrgDragDeps) {
   const [dragOverOrgId,       setDragOverOrgId]       = useState<string | null>(null)
   const [highlightedOrgId,    setHighlightedOrgId]    = useState<string | null>(null)
@@ -85,23 +83,9 @@ export function useOrgDrag({
     e.preventDefault(); e.stopPropagation()
     let data: DragData
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
-    const person = persons.find(p => p.id === data.personId)
-    if (!person?.sfPersonId) return
-
-    const sfId = person.sfPersonId
-
-    // バンド変更チェック
-    const bandChange = checkBandChange?.(vacantRowId, sfId)
-    if (bandChange && onBandChangeRequest) {
-      onBandChangeRequest({
-        from:       bandChange.from,
-        to:         bandChange.to,
-        onOverride: () => assignPersonToVacantPosition(vacantRowId, sfId, { overrideBand: true }),
-        onKeep:     () => assignPersonToVacantPosition(vacantRowId, sfId, { overrideBand: false }),
-      })
-    } else {
-      assignPersonToVacantPosition(vacantRowId, sfId)
-    }
+    const personRowId = data.fromRowId ?? data.rowId
+    if (!personRowId) return
+    onVacantDrop?.(personRowId, vacantRowId)
   }
 
   return {

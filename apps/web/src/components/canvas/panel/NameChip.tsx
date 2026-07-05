@@ -12,7 +12,7 @@ interface Props {
 
 export function NameChip({ entry, orgId, panelId }: Props) {
   const { isHistoryPreviewMode } = useStore()
-  const { setDragOverOrgId, isSelectMode, handlePersonClick, handleRowDoubleClick, openDropIntent } = useOrgView()
+  const { setDragOverOrgId, isSelectMode, handlePersonClick, handleRowDoubleClick, openDropIntent, handleDropOnVacantSlot } = useOrgView()
   const isCardSelected = useStore(s => !isVacantRow(entry.row) && !isSelectMode && s.selectedCardRowId === entry.row.rowId)
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -30,12 +30,14 @@ export function NameChip({ entry, orgId, panelId }: Props) {
   const chipClass = isCardSelected
     ? 'border-yellow-400 ring-1 ring-yellow-300 bg-yellow-50 text-gray-800'
     : isVacant
-      ? 'border-gray-300 bg-gray-50 text-gray-400 border-dashed italic'
+      ? isDragOver
+        ? 'border-blue-400 bg-blue-50 text-blue-600 border-dashed italic'
+        : 'border-gray-300 bg-gray-50 text-gray-400 border-dashed italic'
       : isConcurrent
         ? 'border-purple-400 bg-purple-50 text-gray-700'
         : 'border-blue-400 bg-white text-gray-800 hover:bg-blue-50'
 
-  const handleDragOver = !isVacant && !isHistoryPreviewMode ? (e: React.DragEvent) => {
+  const handleDragOver = !isHistoryPreviewMode ? (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('application/json')) return
     if (e.dataTransfer.types.includes('application/x-position-drag')) return
     e.preventDefault()
@@ -43,11 +45,11 @@ export function NameChip({ entry, orgId, panelId }: Props) {
     setIsDragOver(true)
   } : undefined
 
-  const handleDragLeave = !isVacant ? (e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false)
-  } : undefined
+  }
 
-  const handleDrop = !isVacant && !isHistoryPreviewMode ? (e: React.DragEvent) => {
+  const handleDrop = !isHistoryPreviewMode ? (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
@@ -55,14 +57,20 @@ export function NameChip({ entry, orgId, panelId }: Props) {
     try { data = JSON.parse(e.dataTransfer.getData('application/json')) as DragData } catch { return }
     if (data.dragType !== 'person' || !data.personId) return
     if (data.fromRowId === row.rowId) return
-    openDropIntent({
-      fromRowId:           data.fromRowId ?? null,
-      personId:            data.personId,
-      toOrgId:             orgId,
-      fromOrgId:           data.fromOrgId,
-      dropType:            'person',
-      managerPositionCode: row.positionCode as string | undefined,
-    })
+    if (isVacant) {
+      // 空席チップへのドロップ → 空Posへ移動ダイアログを開く
+      handleDropOnVacantSlot(e, row.rowId)
+    } else {
+      // 在席チップへのドロップ → 上司変更など（既存の person drop 処理）
+      openDropIntent({
+        fromRowId:           data.fromRowId ?? null,
+        personId:            data.personId,
+        toOrgId:             orgId,
+        fromOrgId:           data.fromOrgId,
+        dropType:            'person',
+        managerPositionCode: row.positionCode as string | undefined,
+      })
+    }
   } : undefined
 
   return (

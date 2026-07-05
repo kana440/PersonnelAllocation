@@ -243,6 +243,22 @@ export function QuickEditDialog({ def, row, overrideInitial, onClose, onDetail }
               )
             }
 
+            // チェックボックス
+            if (input.inputType === 'checkbox') {
+              const checked = !!currentVal && currentVal !== '' && currentVal !== '0'
+              return (
+                <label key={fieldKey} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={e => handleChange(input.field as keyof AllocationRow, e.target.checked ? '1' : '')}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>{fieldLabel}{input.required && <span className="text-red-400 ml-0.5">*</span>}</span>
+                </label>
+              )
+            }
+
             // ドロップダウン（ComboInput）— resolveRow.getOptions でプロファイル適用済み選択肢を取得
             const { valid, invalid } = resolveResult.getOptions(fieldKey)
             return (

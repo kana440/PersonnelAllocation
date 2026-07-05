@@ -108,6 +108,16 @@ export const moveToVacantPositionDef: EditOperation = {
     return AVAILABLE
   },
 
+  // 簡易モード: 空席フラグだけ入力（変更内容は ChangePreview に表示）
+  quickInputs: [
+    {
+      field:     '_leaveSourceVacant',
+      label:     '元のポジションを空席として残す',
+      required:  false,
+      inputType: 'checkbox',
+    },
+  ],
+
   inputs: [
     {
       field:          '_targetPositionCode',
@@ -118,19 +128,45 @@ export const moveToVacantPositionDef: EditOperation = {
         isVacantPosition(candidate) &&
         candidate.positionCode !== (row.positionCode as string | undefined),
     },
+    { kind: 'section', label: '移動先ポジションの情報（参照）' },
+    { field: 'positionCode',         required: false, readOnly: true, label: 'ポジションコード' },
+    { field: 'positionBand',         required: false, readOnly: true, label: 'バンド' },
+    { field: 'officialPositionCode', required: false, readOnly: true, label: '役職' },
+    { field: 'managerPositionCode',  required: false, readOnly: true, label: '上司ポジションコード' },
+    { field: 'managerName',          required: false, readOnly: true, label: '上司名' },
+    { kind: 'section', label: '操作設定' },
     {
       field:     '_leaveSourceVacant',
       label:     '元のポジションを空席として残す',
       required:  false,
       inputType: 'checkbox',
     },
+    { field: 'transferReason', required: false },
+    { field: 'memo',           required: false },
   ],
 
   onOpen: (row, ctx) => ({
     _targetPositionCode: undefined,
-    // 部下がいる場合はデフォルトでチェック
     _leaveSourceVacant: countSubordinates(row, ctx.allocationList) > 0 ? '1' : '',
   }),
+
+  onFieldChange: {
+    // 移動先ポジションが決まったら、そのポジションの情報を readonly フィールドに転記（参照表示用）
+    _targetPositionCode: (posCode, ctx) => {
+      if (!posCode) return {}
+      const targetRow = ctx.allocationList.find(r => (r.positionCode as string | undefined) === posCode)
+      if (!targetRow) return {}
+      return {
+        setValues: {
+          positionCode:         targetRow.positionCode         as string | undefined,
+          positionBand:         targetRow.positionBand         as string | undefined,
+          officialPositionCode: targetRow.officialPositionCode as string | undefined,
+          managerPositionCode:  targetRow.managerPositionCode  as string | undefined,
+          managerName:          targetRow.managerName          as string | undefined,
+        },
+      }
+    },
+  },
 
   createCommand(rowId, values) {
     return {

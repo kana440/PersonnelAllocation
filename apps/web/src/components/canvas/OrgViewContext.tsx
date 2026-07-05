@@ -66,6 +66,8 @@ export interface OrgViewContextValue {
   openDropIntent:           (state: DropIntentState) => void
   /** バンド間ドラッグ: 昇格/降格 quickInputs フォームを直接開く */
   openBandDrop:             (state: DropOpState) => void
+  /** グループ間ドラッグ（form 種別）: フル inputs フォームを DropOperationModal で開く */
+  openGroupFormDrop:        (state: DropOpState) => void
   handleDragOver:           (e: React.DragEvent, orgId: string) => void
   handleDragLeave:          () => void
   handleDrop:               (e: React.DragEvent, orgId: string) => void

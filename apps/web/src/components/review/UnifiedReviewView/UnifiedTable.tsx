@@ -137,7 +137,7 @@ export function UnifiedTable({
   // sbs:   チェック(1) + 担当者(1) + 本人情報11列 + 変更種別(1) + After(n) + Before(n) + 除外(1)  = 15 + 2n
   const COL_SPAN = viewMode === 'diff' ? 16 + n : 15 + 2 * n
 
-  const STATIC_W   = 876
+  const STATIC_W   = 980
   const DIFF_DYN_W = 120
   const SBS_DYN_W  = 96
   const tableWidth = viewMode === 'diff'
@@ -182,7 +182,7 @@ export function UnifiedTable({
           <col style={{ width: 44 }} />
           <col style={{ width: 60 }} />
           <col style={{ width: 56 }} />
-          <col style={{ width: 96 }} />
+          <col style={{ width: 200 }} />
           {viewMode === 'diff' ? (
             <>
               {allDisplayFields.map((_, i) => <col key={`d${i}`} style={{ width: DIFF_DYN_W }} />)}

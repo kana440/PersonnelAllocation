@@ -6,6 +6,7 @@ import { SetPositionManagerOperation } from '@personnel/domain/commands/handlers
 import { ReorderRowOperation }         from '@personnel/domain/commands/handlers/reorderRow'
 import { bindOperation }               from '@personnel/domain/commands/defs'
 import { orgRestructureDef }           from '@personnel/domain/commands/defs/orgTransferDefs'
+import { moveToVacantPositionDef }     from '@personnel/domain/commands/defs/positionMoveDefs'
 import { TR }                          from '@personnel/domain/transferReasonLabels'
 import type { Organization }           from '@personnel/domain/schemas'
 import { appService }          from '../../../application/HRApplicationService'
@@ -43,7 +44,6 @@ export function OrgOperationView() {
     allocationList: scopedAllocList,
     selectPerson, selectCard, saveRow,
     operationPanelRowId, enterOperationPanel,
-    assignPersonToVacantPosition,
     assigneeWarnings,
   } = store
 
@@ -83,7 +83,6 @@ export function OrgOperationView() {
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
-  const [bandDialog,          setBandDialog]          = useState<{ from: string; to: string; onOverride: () => void; onKeep: () => void } | null>(null)
   const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
   const [moveModalOpen,       setMoveModalOpen]       = useState(false)
   const [bulkActionModal,     setBulkActionModal]     = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
@@ -127,12 +126,22 @@ export function OrgOperationView() {
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     clearAllDropTargets,
   } = useOrgDrag({
-    organizations, persons, saveRow, assignPersonToVacantPosition,
+    organizations, saveRow,
     openPersonMoveDialog: (fromRowId, personId, toOrgId) =>
       setDropIntentState({ fromRowId, personId, toOrgId, dropType: 'org' }),
     onUnmappedBulkDrop: handleUnmappedBulkDrop,
-    checkBandChange:    (vacantRowId, sfId) => appService.checkAssignBandChange(vacantRowId, sfId),
-    onBandChangeRequest: setBandDialog,
+    onVacantDrop: isHistoryPreviewMode ? undefined : (personRowId, vacantRowId) => {
+      const personRow = allocationList.find(r => r.rowId === personRowId)
+      const vacantRow = allocationList.find(r => r.rowId === vacantRowId)
+      if (!personRow || !vacantRow) return
+      const vacantPosCode = vacantRow.positionCode as string | undefined
+      if (!vacantPosCode) return
+      setBandDropOpState({
+        def:             moveToVacantPositionDef,
+        row:             personRow,
+        overrideInitial: { _targetPositionCode: vacantPosCode },
+      })
+    },
     onAbsenceReturn: (fromRowId, toOrg) => {
       const targetCode = toOrg.externalCode ?? toOrg.id
       saveRow(fromRowId, { departmentCode: targetCode, transferReason: undefined })
@@ -234,7 +243,8 @@ export function OrgOperationView() {
       }
       setDropIntentState(s)
     },
-    openBandDrop:    isHistoryPreviewMode ? () => {} : (s: import('../hooks/useDropIntent').DropOpState) => setBandDropOpState(s),
+    openBandDrop:       isHistoryPreviewMode ? () => {} : (s: import('../hooks/useDropIntent').DropOpState) => setBandDropOpState(s),
+    openGroupFormDrop:  isHistoryPreviewMode ? () => {} : (s: import('../hooks/useDropIntent').DropOpState) => setDropOpState(s),
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition:  isHistoryPreviewMode ? () => {} : handleAddPosition,
     handleSecondmentIn: isHistoryPreviewMode ? () => {} : handleSecondmentIn,
@@ -256,7 +266,7 @@ export function OrgOperationView() {
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
     dropGapBelowRowId, setDropGapBelowRowId,
-    isHistoryPreviewMode, saveRow, setDropIntentState, setBandDropOpState,
+    isHistoryPreviewMode, saveRow, setDropIntentState, setBandDropOpState, setDropOpState,
     handleDragOver, handleDragLeave, handleDrop, handleDropOnVacantSlot,
     handleAddPosition, handleSecondmentIn, topPositionCodeOfOrg,
     setBulkMoveSourceId, setConfirmDialog,
@@ -389,32 +399,6 @@ export function OrgOperationView() {
         />
       </div>
 
-      {/* バンド変更確認ダイアログ */}
-      {bandDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-            <h3 className="text-base font-semibold text-gray-800 mb-3">バンドが変わります</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              このポジションのバンドは <strong>{bandDialog.to}</strong> です。<br />
-              現在のバンド <strong>{bandDialog.from}</strong> を上書きしますか？
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => { bandDialog.onKeep(); setBandDialog(null) }}
-                className="px-3 py-1.5 text-sm rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
-              >
-                現在のバンドを維持
-              </button>
-              <button
-                onClick={() => { bandDialog.onOverride(); setBandDialog(null) }}
-                className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-              >
-                {bandDialog.to} に上書き
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <FloatingAbsencePanel
         allocationList={allocationList}
         orgsByCode={afterOrgByCode}

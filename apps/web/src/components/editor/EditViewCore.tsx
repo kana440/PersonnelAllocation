@@ -77,6 +77,20 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const compactGroupById    = useCanvasDisplayStore(s => s.compactGroupById)
   const setCompactGroupById = useCanvasDisplayStore(s => s.setCompactGroupById)
 
+  // スタイル切替後、フォーカス中の行または組織にスクロール
+  const prevStyleRef = useRef<string>(canvasPanelStyle)
+  useEffect(() => {
+    if (prevStyleRef.current === canvasPanelStyle) return
+    prevStyleRef.current = canvasPanelStyle
+    const { selectedCardRowId, focusedOrgId } = useStore.getState()
+    const layoutStore = useCanvasLayoutStore.getState()
+    if (selectedCardRowId !== null) {
+      layoutStore.requestScrollToRow(selectedCardRowId)
+    } else if (focusedOrgId) {
+      layoutStore.requestScrollToOrg(focusedOrgId)
+    }
+  }, [canvasPanelStyle])
+
   // ── ビュー操作（表形式） ─────────────────────────────────────────
   const viewMode    = useReviewFilterStore(s => s.viewMode)
   const setViewMode = useReviewFilterStore(s => s.setViewMode)

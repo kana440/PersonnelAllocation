@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../store/useStore'
 import { toAllocationRows } from '../../infrastructure/allocationListMapper'
 import { buildExportBuffer, removeOverlay } from '../../infrastructure/excel/engine'
+import { workspaceStore } from '../../infrastructure/workspace'
 
 interface Props {
   onCleared: () => void   // セッションクリア後に呼ぶ（sessionReady = false など）
@@ -17,6 +18,7 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
   const rows = toAllocationRows(store.allocationList, allOrgs)
 
   const handleClearWithoutSave = () => {
+    workspaceStore.delete('autosave').catch(console.error)
     store.reset()
     onCleared()
   }
@@ -58,6 +60,7 @@ export function ClearSessionDialog({ onCleared, onCancel }: Props) {
         URL.revokeObjectURL(url)
       }
 
+      await workspaceStore.delete('autosave')
       store.reset()
       onCleared()
     } catch (e) {
