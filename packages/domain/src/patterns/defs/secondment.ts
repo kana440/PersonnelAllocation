@@ -22,7 +22,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     label: '本務出向', addLabel: '本務出向', editLabel: '本務出向',
     chipLabel: '本務出向',
     description: '異動事由が「本務出向」。',
-    badge: 'secondment', group: 'person',
+    badge: 'secondment', group: 'person', defaultVisible: true,
     detect: tr(TR.SECONDMENT_OUT),
   },
   secondmentIn: {
@@ -30,7 +30,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     chipLabel: '本務出向受',
     description: '異動事由が「本務出向受入」。',
     menuLabel: '本務出向受入',
-    badge: 'secondment', group: 'person',
+    badge: 'secondment', group: 'person', defaultVisible: true,
     detect: tr(TR.SECONDMENT_IN),
   },
   secondmentOutRelease: {
@@ -38,7 +38,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     chipLabel: '本務出向解',
     description: '異動事由が「本務出向解除」。',
     menuLabel: '本務出向解除',
-    badge: 'negative', group: 'person',
+    badge: 'negative', group: 'person', defaultVisible: true,
     detect: tr(TR.SECONDMENT_OUT_RELEASE),
   },
   secondmentInRelease: {
@@ -46,7 +46,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     chipLabel: '本務受入解',
     description: '共有解除事由で、isSecondmentAcceptance=true の雇用タイプかつ prevConcurrentType=本務 の行が解除。',
     menuLabel: '本務出向受入解除',
-    badge: 'negative', group: 'person',
+    badge: 'negative', group: 'person', defaultVisible: true,
     detect: (row, ctx) => {
       if ((row.transferReason as string | undefined) !== TR.CONCURRENT_OR_SECONDMENT_IN_RELEASE) return false
       return prevIsSecondmentAcceptance(row, ctx) &&
@@ -59,7 +59,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     label: '兼務出向（SF外）', addLabel: '兼務出向（SF外）', editLabel: '兼務出向（SF外）',
     chipLabel: '兼務出向SF外',
     description: '異動事由が「兼務出向」。SF外（非SF登録）の出向先へ兼務行として登録。',
-    badge: 'secondment', group: 'person',
+    badge: 'secondment', group: 'person', defaultVisible: false,
     detect: tr(TR.CONCURRENT_SECONDMENT_OUT),
   },
   concurrentSecondmentIn: {
@@ -67,14 +67,14 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     chipLabel: '兼務出向受',
     description: '異動事由が「兼務出向受入」。',
     menuLabel: '兼務受入',
-    badge: 'secondment', group: 'person',
+    badge: 'secondment', group: 'person', defaultVisible: true,
     detect: tr(TR.CONCURRENT_SECONDMENT_IN),
   },
   concurrentSecondmentOutRelease: {
     label: '兼務出向解除', addLabel: '兼務出向解除', editLabel: '兼務出向解除',
     chipLabel: '兼務出向解',
     description: '異動事由が「兼務出向解除」。',
-    badge: 'negative', group: 'person',
+    badge: 'negative', group: 'person', defaultVisible: false,
     detect: tr(TR.CONCURRENT_SECONDMENT_OUT_RELEASE),
   },
   concurrentSecondmentInRelease: {
@@ -82,7 +82,7 @@ export const SECONDMENT_META: Partial<Record<string, EditPatternMeta>> = {
     chipLabel: '兼務受入解',
     description: '専用解除事由または共有解除事由で、isSecondmentAcceptance=true の雇用タイプかつ prevConcurrentType=兼務 の行が解除。',
     menuLabel: '兼務受入解除',
-    badge: 'negative', group: 'person',
+    badge: 'negative', group: 'person', defaultVisible: false,
     detect: (row, ctx) => {
       const trVal = row.transferReason as string | undefined
       // 専用 TR

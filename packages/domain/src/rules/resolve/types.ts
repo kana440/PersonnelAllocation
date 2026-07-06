@@ -1,5 +1,4 @@
 import type { AllocationRow } from '../../allocationRow'
-import type { EditCommand } from '../../commands/types'
 import type { ValidationIssue } from '../validate/types'
 
 /**
@@ -7,12 +6,14 @@ import type { ValidationIssue } from '../validate/types'
  *
  * EditOperation / EditCommand の関係に対応する概念：
  *   ValidationResolutionDef  ←→  EditOperation（フォーム定義・条件宣言）
- *   createCommand が返す EditCommand  ←→  EditCommand（validate/apply 実装）
  *
  * UI・AI からは次のように使う：
  *   1. issueGroups を ValidationResolutionDef.match で分類する
- *   2. ユーザーが値を入力したら dryRunResolution() でプレビュー
- *   3. 確定したら createCommand(rowId, values).apply(ctx) で実行
+ *   2. ユーザーが値を入力したら patch() でフィールドパッチを取得
+ *   3. 確定したら呼び出し側で new DirectEditOperation(rowId, patch, label) を生成して実行
+ *
+ * ルール層（rules/）はコマンド層（commands/）に依存しないため、
+ * EditCommand の生成は呼び出し側（Application層）の責務とする。
  */
 export interface ValidationResolutionDef {
   /** 一意ID */
@@ -36,6 +37,9 @@ export interface ValidationResolutionDef {
   /** 行の現在状態から修正値を提案する（省略時は空欄）*/
   suggestValue?(row: AllocationRow): string | undefined
 
-  /** 指定フィールドの修正値で EditCommand を生成する */
-  createCommand(rowId: number, values: Partial<AllocationRow>): EditCommand
+  /**
+   * 修正値から適用するフィールドパッチを返す。
+   * 呼び出し側が new DirectEditOperation(rowId, patch, label) でコマンド化する。
+   */
+  patch(row: AllocationRow, values: Partial<AllocationRow>): Partial<AllocationRow>
 }

@@ -20,7 +20,7 @@ function checkD2_1(row: AllocationRow, orgs: Organization[]): ValidationIssue[] 
   const code = row.departmentCode
   if (!code || orgs.length === 0) return []
   if (orgs.some(o => o.externalCode === code || o.id === code)) return []
-  return [{ field: 'departmentCode', level: 'error', message: '組織コードは有効な選択肢から選択してください' }]
+  return [{ field: 'departmentCode', level: 'error', message: '組織コードは有効な選択肢から選択してください', id: 'consistency_dept_options' }]
 }
 
 // ── D2-7: ジョブタイプ（親子フィルタ）────────────────────────────────────────
@@ -31,10 +31,10 @@ function checkD2_7(row: AllocationRow, masters: AllMasters): ValidationIssue[] {
   if (parent) {
     const children = masters.jobTypes.filter(s => s.jobFamilyCode === parent.code)
     if (children.some(s => s.label === jobType)) return []
-    return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは選択中のジョブファミリーに含まれる値を選択してください' }]
+    return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは選択中のジョブファミリーに含まれる値を選択してください', id: 'consistency_job_type' }]
   }
   if (masters.jobTypes.some(s => s.label === jobType)) return []
-  return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは有効な選択肢から選択してください' }]
+  return [{ field: 'jobType', level: 'error', message: 'ジョブタイプは有効な選択肢から選択してください', id: 'consistency_job_type' }]
 }
 
 // ── FIELD_RULES 全評価（D2-2〜D2-6, D2-8〜D2-11, F系）─────────────────────────
@@ -47,7 +47,12 @@ export function runFromFieldRules(
 ): ValidationIssue[] {
   return [
     ...checkD2_1(row, orgs),
-    ...VALIDATING_RULES.flatMap(r => evaluateFieldRule(r, row, masters)),
+    ...VALIDATING_RULES.flatMap(r =>
+      evaluateFieldRule(r, row, masters).map(issue => ({
+        ...issue,
+        id: r.when ? 'field_constraint_conditional' : 'field_constraint',
+      }))
+    ),
     ...checkD2_7(row, masters),
   ]
 }

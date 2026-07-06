@@ -3,6 +3,7 @@ import type { Organization } from '@personnel/domain/schemas'
 import type { Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
+import type { ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 import type { DropIntentState, DropOpState } from './hooks/useDropIntent'
 
 export interface DragData {
@@ -29,6 +30,8 @@ export interface PositionEntry {
   person:              Person | null
   depth:               number
   activePatterns:      Set<EditPattern>
+  /** 単行バリデーション結果（行間チェックなし）。RowCard・SummaryView のチップ表示用 */
+  validationIssues:    ValidationIssue[]
   /**
    * managerPositionCode が存在するが org 内に対応行がない場合のみ設定される。
    * 'cross-org': 別 org の行が持つ positionCode と一致（別ファイルの上司）

@@ -44,6 +44,7 @@ function checkRow(row: AllocationRow, index: PosUniqIndex): ValidationIssue[] {
     field:   'positionCode',
     level:   'error',
     message: `ポジションコード "${pos}" が複数の行で重複しています（${rowIds.length}行）`,
+    id:      'interrow_pos_duplicate',
   }]
 }
 

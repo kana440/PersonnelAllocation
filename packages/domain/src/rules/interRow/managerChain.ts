@@ -45,6 +45,7 @@ function checkRow(row: AllocationRow, index: E1Index): ValidationIssue[] {
       field:   'managerPositionCode',
       level:   'warning',
       message: `上司ポジションコード "${mgrCode}" がこのファイルに存在しません（別組織の可能性あり）`,
+      id:      'interrow_manager_missing',
     }]
   }
 
@@ -55,6 +56,7 @@ function checkRow(row: AllocationRow, index: E1Index): ValidationIssue[] {
       field:   'managerPositionCode',
       level:   'error',
       message: '自分自身を上司ポジションに設定できません',
+      id:      'interrow_manager_self',
     }]
   }
 
@@ -69,6 +71,7 @@ function checkRow(row: AllocationRow, index: E1Index): ValidationIssue[] {
           field:   'managerPositionCode',
           level:   'error',
           message: '配下のポジションを上司に設定できません（循環参照）',
+          id:      'interrow_manager_circular',
         }]
       }
       cur = index.posToMgr.get(cur)

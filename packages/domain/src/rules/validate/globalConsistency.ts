@@ -29,6 +29,7 @@ function checkG1_bandChangeRequiresNewPosition(row: AllocationRow, changes?: Row
     field:   'positionCode',
     level:   'error',
     message: '昇級・降級が検出されましたが、ポジションコードが変更されていません（新ポジションへの登録が必要です）',
+    id:      'interrow_promotion_no_pos',
   }]
 }
 
@@ -68,6 +69,7 @@ function checkW3_managerNotInAncestorOrg(
     field:   'managerPositionCode' as keyof AllocationRow,
     level:   'warning',
     message: `上司（${mgrName}）が直系上位組織以外（${mgrDeptCode}）に所属しています。組織ツリーを確認してください`,
+    id:      'warning_manager_org',
   }]
 }
 

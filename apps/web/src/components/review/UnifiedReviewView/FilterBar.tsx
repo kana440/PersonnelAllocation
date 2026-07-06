@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { ReviewData } from '../hooks/useReviewData'
-import type { UnifiedFilter, IssueGroupDef, SearchFieldOption } from './types'
+import type { UnifiedFilter, IssueGroupDef } from './types'
 import { getIssueShortLabel, PATTERN_CHIP_DEFS, parseSearchTokens } from './helpers'
+import { FilterDetailPanel } from './FilterDetailPanel'
 
 type NavMode = 'all' | 'changes' | 'issues'
 
@@ -13,18 +15,18 @@ interface Props {
   onSearchInputChange: (v: string) => void
   summary:             ReviewData['summary']
   issueGroups:         IssueGroupDef[]
-  searchFields:        SearchFieldOption[]
   filteredCount:       number
   totalRows:           number
   changedCount:        number
+  masters:             AllMasters
   onOpenBulkModal:     (group: IssueGroupDef) => void
 }
 
 export function FilterBar({
   filter, onFilterChange, searchInput, onSearchInputChange,
   summary, issueGroups,
-  searchFields, filteredCount, totalRows, changedCount,
-  onOpenBulkModal,
+  filteredCount, totalRows, changedCount,
+  masters, onOpenBulkModal,
 }: Props) {
   const [uiMode,       setUiMode]       = useState<NavMode>('all')
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -61,8 +63,6 @@ export function FilterBar({
   const totalIssueRows = new Set(issueGroups.flatMap(g => g.rowIds)).size
   const tokenCount     = parseSearchTokens(searchInput).length
 
-  // 詳細条件用フィールド（特殊キーは除外）
-  const detailFields = searchFields.filter(f => !f.value.startsWith('__'))
   const hasFieldConditions = Object.values(filter.fieldConditions ?? {}).some(v => !!v?.trim())
 
   const clearFieldConditions = () => set({ fieldConditions: {} })
@@ -136,31 +136,13 @@ export function FilterBar({
 
       {/* ── Row C: 詳細条件パネル ── */}
       {advancedOpen && (
-        <div className="px-2 pb-2 border-t border-blue-100 bg-blue-50/30">
-          <div className="flex items-center gap-1 py-1 mb-0.5">
-            <span className="text-[9px] font-semibold text-blue-700 flex-1">詳細条件（AND 絞り込み）</span>
-            <button onClick={clearFieldConditions} disabled={!hasFieldConditions}
-              className="text-[9px] text-gray-400 hover:text-red-600 disabled:opacity-30 underline"
-            >全クリア</button>
-            <button onClick={() => setAdvancedOpen(false)} className="text-[9px] text-gray-400 hover:text-gray-700 ml-1">▲ 畳む</button>
-          </div>
-          <div className="grid grid-cols-4 gap-x-2 gap-y-0.5 max-h-60 overflow-y-auto">
-            {/* 氏名・組織（特殊フィールド）を先頭に */}
-            {[
-              { value: '__name__',    label: '氏名' },
-              { value: '__orgPath__', label: '組織（階層）' },
-              ...detailFields,
-            ].map(f => (
-              <div key={f.value} className="flex items-start gap-1">
-                <label className="text-[9px] text-gray-500 pt-1 w-14 flex-shrink-0 truncate" title={f.label}>{f.label}</label>
-                <FieldConditionInput
-                  value={filter.fieldConditions?.[f.value] ?? ''}
-                  onChange={v => set({ fieldConditions: { ...filter.fieldConditions, [f.value]: v } })}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        <FilterDetailPanel
+          fieldConditions={filter.fieldConditions ?? {}}
+          onSetField={(field, value) => set({ fieldConditions: { ...filter.fieldConditions, [field]: value } })}
+          onClearAll={clearFieldConditions}
+          onClose={() => setAdvancedOpen(false)}
+          masters={masters}
+        />
       )}
 
       {/* ── Row D: 変更種別チップ ── */}
@@ -227,23 +209,3 @@ export function FilterBar({
   )
 }
 
-// 詳細条件の各フィールド入力（auto-expand）
-function FieldConditionInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 60)}px`
-  }, [value])
-  return (
-    <textarea
-      ref={ref}
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      rows={1}
-      style={{ resize: 'none', overflow: 'hidden' }}
-      className="flex-1 text-[9px] border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-200 leading-relaxed bg-white min-w-0"
-    />
-  )
-}

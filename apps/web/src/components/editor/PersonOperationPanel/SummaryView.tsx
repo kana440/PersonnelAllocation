@@ -1,10 +1,16 @@
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../../../store/useStore'
 import { rowDiff, type AllocationRow } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { ALL_EDIT_OPERATIONS, ALL_MULTI_ROW_OPERATION_DEFS, resolveAvailability } from '@personnel/domain/commands/defs/index'
 import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
 import { useUnavailableOperationDisplay } from '../../../hooks/useFieldStrictness'
+import { detectPatterns } from '@personnel/domain/patterns/detection'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import { resolveIssueMeta } from '@personnel/domain/rules/validate/issueTypeMeta'
+import { PATTERN_COLOR_MAP, PATTERN_LABEL_MAP } from '../../common/patternChips'
+import { useDisplayPreferenceStore } from '../../../store/displayPreferenceStore'
 import type { PanelView } from './types'
 
 // ── セクションエントリ型 ──────────────────────────────────────────────────────
@@ -143,9 +149,26 @@ interface Props {
 export function SummaryView({ row, onSelect }: Props) {
   const { masters, afterOrganizations, allocationList } = useStore()
   const unavailableDisplay = useUnavailableOperationDisplay()
+  const { visiblePatterns, visibleIssueIds } = useDisplayPreferenceStore(
+    useShallow(s => ({ visiblePatterns: s.visiblePatterns, visibleIssueIds: s.visibleIssueIds }))
+  )
 
-
-  const diffs   = useMemo(() => rowDiff(row), [row])
+  const diffs = useMemo(() => rowDiff(row), [row])
+  const detection = useMemo(
+    () => detectPatterns(row, { allocationList, afterOrganizations, masters }),
+    [row, allocationList, afterOrganizations, masters],
+  )
+  const visiblePatternChips = useMemo(
+    () => [...detection.patterns].filter(p => visiblePatterns.has(p)),
+    [detection.patterns, visiblePatterns],
+  )
+  const visibleIssueChips = useMemo(() => {
+    const issues = validateRow({ row, afterOrganizations, masters, allocationList: [], changes: detection })
+    return issues.filter(i => {
+      const meta = resolveIssueMeta(i)
+      return meta ? visibleIssueIds.has(meta.id) : false
+    })
+  }, [row, afterOrganizations, masters, detection, visibleIssueIds])
   const orgName = afterOrganizations.find(
     o => o.externalCode === row.departmentCode || o.id === row.departmentCode
   )?.name ?? (row.departmentCode as string | undefined) ?? ''
@@ -164,22 +187,63 @@ export function SummaryView({ row, onSelect }: Props) {
         )}
       </div>
 
-      {/* 変更済みフィールドのサマリー */}
-      {diffs.length > 0 && (
+      {/* 変更済みフィールドのサマリー + 変更種別チップ + 問題チップ（全件・省略なし） */}
+      {(diffs.length > 0 || visiblePatternChips.length > 0 || visibleIssueChips.length > 0) && (
         <div className="px-4 py-2 border-b border-gray-100 bg-blue-50 flex-shrink-0">
-          <div className="text-[10px] font-semibold text-blue-600 mb-1">変更済み（{diffs.length}件）</div>
-          <div className="space-y-0.5 max-h-24 overflow-y-auto">
-            {diffs.map(({ afterKey, prevValue, afterValue }) => (
-              <div key={afterKey as string} className="flex items-center gap-1 text-[10px]">
-                <span className="text-gray-400 flex-shrink-0 truncate max-w-[80px]">
-                  {ALLOCATION_LIST_LABEL_MAP[afterKey as string]?.ja ?? afterKey as string}
-                </span>
-                <span className="text-gray-300">→</span>
-                <span className="text-blue-700 truncate">{afterValue || '（空）'}</span>
-                {prevValue && <span className="text-gray-300 truncate">（前: {prevValue}）</span>}
+          {diffs.length > 0 && (
+            <div className={(visiblePatternChips.length > 0 || visibleIssueChips.length > 0) ? 'mb-2' : ''}>
+              <div className="text-[10px] font-semibold text-blue-600 mb-1">変更済み（{diffs.length}件）</div>
+              <div className="space-y-0.5 max-h-24 overflow-y-auto">
+                {diffs.map(({ afterKey, prevValue, afterValue }) => (
+                  <div key={afterKey as string} className="flex items-center gap-1 text-[10px]">
+                    <span className="text-gray-400 flex-shrink-0 truncate max-w-[80px]">
+                      {ALLOCATION_LIST_LABEL_MAP[afterKey as string]?.ja ?? afterKey as string}
+                    </span>
+                    <span className="text-gray-300">→</span>
+                    <span className="text-blue-700 truncate">{afterValue || '（空）'}</span>
+                    {prevValue && <span className="text-gray-300 truncate">（前: {prevValue}）</span>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+          {visiblePatternChips.length > 0 && (
+            <div className={visibleIssueChips.length > 0 ? 'mb-2' : ''}>
+              <div className="text-[10px] font-semibold text-blue-600 mb-1">変更種別</div>
+              <div className="flex flex-wrap gap-1">
+                {visiblePatternChips.map(p => (
+                  <span
+                    key={p}
+                    className={`text-[10px] px-1.5 py-0.5 rounded border leading-none font-medium flex-shrink-0 ${PATTERN_COLOR_MAP[p] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}
+                  >
+                    {PATTERN_LABEL_MAP[p] ?? p}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {visibleIssueChips.length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold text-red-500 mb-1">問題</div>
+              <div className="flex flex-wrap gap-1">
+                {visibleIssueChips.map((issue, idx) => {
+                  const meta = resolveIssueMeta(issue)
+                  const colorCls = issue.level === 'error'
+                    ? 'bg-red-100 text-red-700 border-red-200'
+                    : 'bg-amber-100 text-amber-700 border-amber-200'
+                  return (
+                    <span
+                      key={idx}
+                      className={`text-[10px] px-1.5 py-0.5 rounded border leading-none font-medium flex-shrink-0 ${colorCls}`}
+                      title={meta?.description ?? issue.message}
+                    >
+                      {meta?.chipLabel ?? issue.message.slice(0, 8)}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

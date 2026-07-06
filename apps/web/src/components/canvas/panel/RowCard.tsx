@@ -1,8 +1,11 @@
 import { useMemo }               from 'react'
+import { useShallow }            from 'zustand/react/shallow'
 import { useOrgView }            from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
 import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
+import { resolveIssueMeta }      from '@personnel/domain/rules/validate/issueTypeMeta'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
+import { useDisplayPreferenceStore } from '../../../store/displayPreferenceStore'
 import { useStore }              from '../../../store/useStore'
 import { CanvasFieldDiff }       from '../toolbar/CanvasFieldDiff'
 import { PATTERN_COLOR_MAP, PATTERN_LABEL_MAP } from '../../common/patternChips'
@@ -51,7 +54,7 @@ export function RowCard({
   entry, orgId, panelId,
   comparisonStatus, comparisonOrgName, comparisonColorIdx = 0,
 }: RowCardProps) {
-  const { row, person, depth, activePatterns, externalManagerKind } = entry
+  const { row, person, depth, activePatterns, validationIssues, externalManagerKind } = entry
   const {
     organizations,
     isSelectMode, selectedPersonIds,
@@ -72,7 +75,9 @@ export function RowCard({
   // これにより他のカードのクリックでこのカードが再レンダーされない
   const isCardSelected      = useStore(s => !isVacantRow(row) && !isSelectMode && s.selectedCardRowId === row.rowId)
   const displayFields       = useCanvasDisplayStore(s => s.displayFields)
-  const hiddenBadgeTypes    = useCanvasDisplayStore(s => s.hiddenBadgeTypes)
+  const { visiblePatterns, visibleIssueIds } = useDisplayPreferenceStore(
+    useShallow(s => ({ visiblePatterns: s.visiblePatterns, visibleIssueIds: s.visibleIssueIds }))
+  )
   const masters             = useStore(s => s.masters)
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
 
@@ -385,10 +390,14 @@ export function RowCard({
           />
         )}
 
-        {/* 変更差分セクション: 変更フィールドの差分 + 変更バッジ */}
+        {/* 変更差分セクション: 変更フィールドの差分 + 変更チップ + 問題チップ */}
         {!isVacant && (() => {
-          const visibleBadges = [...activePatterns].filter(p => !hiddenBadgeTypes.includes(EDIT_PATTERN_META[p].badge))
-          if (changedFields.length === 0 && visibleBadges.length === 0) return null
+          const visiblePatternChips = [...activePatterns].filter(p => visiblePatterns.has(p))
+          const visibleIssueChips   = validationIssues.filter(i => {
+            const meta = resolveIssueMeta(i)
+            return meta ? visibleIssueIds.has(meta.id) : false
+          })
+          if (changedFields.length === 0 && visiblePatternChips.length === 0 && visibleIssueChips.length === 0) return null
           return (
             <div className="mt-0.5 min-w-0">
               {/* 変更フィールド差分: 項目名: 青字 ← 灰色取消 */}
@@ -404,17 +413,38 @@ export function RowCard({
                   )}
                 </div>
               ))}
-              {/* 変更バッジ: 最大3個, 4個以上は +N件 */}
-              {visibleBadges.length > 0 && (
+              {/* 変更種別チップ: 最大3個, 超過は +N件 */}
+              {visiblePatternChips.length > 0 && (
                 <div className="flex flex-wrap gap-0.5 mt-0.5">
-                  {visibleBadges.slice(0, 3).map(p => (
+                  {visiblePatternChips.slice(0, 3).map(p => (
                     <span key={p} className={`flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none ${PATTERN_COLOR_MAP[p] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
                       {PATTERN_LABEL_MAP[p] ?? EDIT_PATTERN_META[p].chipLabel}
                     </span>
                   ))}
-                  {visibleBadges.length > 3 && (
+                  {visiblePatternChips.length > 3 && (
                     <span className="flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none bg-gray-100 text-gray-500 border-gray-200">
-                      +{visibleBadges.length - 3}件
+                      +{visiblePatternChips.length - 3}件
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* 問題チップ: 最大2個, 超過は +N件 */}
+              {visibleIssueChips.length > 0 && (
+                <div className="flex flex-wrap gap-0.5 mt-0.5">
+                  {visibleIssueChips.slice(0, 2).map((issue, idx) => {
+                    const meta = resolveIssueMeta(issue)
+                    const colorCls = issue.level === 'error'
+                      ? 'bg-red-100 text-red-700 border-red-200'
+                      : 'bg-amber-100 text-amber-700 border-amber-200'
+                    return (
+                      <span key={idx} className={`flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none ${colorCls}`}>
+                        {meta?.chipLabel ?? issue.message.slice(0, 8)}
+                      </span>
+                    )
+                  })}
+                  {visibleIssueChips.length > 2 && (
+                    <span className="flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none bg-red-50 text-red-500 border-red-100">
+                      +{visibleIssueChips.length - 2}件
                     </span>
                   )}
                 </div>

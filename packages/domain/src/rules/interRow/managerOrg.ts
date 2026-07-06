@@ -56,6 +56,7 @@ function checkRow(
     field:   'managerPositionCode' as keyof AllocationRow,
     level:   'warning',
     message: `上司（${mgrName}）が直系上位組織以外（${mgrDeptCode}）に所属しています。組織ツリーを確認してください`,
+    id:      'warning_manager_org',
   }]
 }
 

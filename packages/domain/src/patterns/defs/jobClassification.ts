@@ -81,18 +81,18 @@ function s(
 }
 
 export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> = {
-  promotion:              s('promotion',              '昇格',               '昇格',    { badge: 'positive',  group: 'jobClassification', description: '本人バンドまたはポジションバンドが前期より上昇。masters.jobLevels の promotionDemotionWarningLevel で方向を判定。' }),
-  demotion:               s('demotion',               '降格',               '降格',    { badge: 'negative',  group: 'jobClassification', description: '本人バンドまたはポジションバンドが前期より低下。promotionDemotionWarningLevel で方向を判定。' }),
-  bandChange:             s('bandChange',             'バンド変更(昇降格不明)',          'Band変(昇降不明)', { badge: 'jobChange', group: 'jobClassification', description: 'バンド（本人またはポジション）が変化したが、マスタにレベル情報がなく昇降格の方向が判定不能。' }),
-  titleChange:            s('titleChange',   '役職名のみ変更', '役職名のみ変', { badge: 'jobChange', group: 'jobClassification', menuLabel: '役職名のみ変更', description: 'フリータイトル（localJobTitle）のみ変化。またはnoCheckRequired行で「役職名変更」事由。' }),
-  mpTrackSwitch:          s('mpTrackSwitch', 'M職P職切替',    'M/P職替',   { badge: 'jobChange', group: 'jobClassification', menuLabel: 'M職P職切替',   description: 'バンド変化あり、promotionDemotionBand が同一（M職↔P職など昇降格なしの横移動）。' }),
+  promotion:              s('promotion',    '昇格',            '昇格',         { badge: 'positive',  group: 'jobClassification', defaultVisible: true,  description: '本人バンドまたはポジションバンドが前期より上昇。masters.jobLevels の promotionDemotionWarningLevel で方向を判定。' }),
+  demotion:               s('demotion',    '降格',             '降格',         { badge: 'negative',  group: 'jobClassification', defaultVisible: true,  description: '本人バンドまたはポジションバンドが前期より低下。promotionDemotionWarningLevel で方向を判定。' }),
+  bandChange:             s('bandChange',  'バンド変更(昇降格不明)', 'Band変(昇降不明)', { badge: 'jobChange', group: 'jobClassification', defaultVisible: false, description: 'バンド（本人またはポジション）が変化したが、マスタにレベル情報がなく昇降格の方向が判定不能。' }),
+  titleChange:            s('titleChange', '役職名のみ変更',  '役職名のみ変', { badge: 'jobChange', group: 'jobClassification', defaultVisible: false, menuLabel: '役職名のみ変更', description: 'フリータイトル（localJobTitle）のみ変化。またはnoCheckRequired行で「役職名変更」事由。' }),
+  mpTrackSwitch:          s('mpTrackSwitch', 'M職P職切替',    'M/P職替',      { badge: 'jobChange', group: 'jobClassification', defaultVisible: false, menuLabel: 'M職P職切替',   description: 'バンド変化あり、promotionDemotionBand が同一（M職↔P職など昇降格なしの横移動）。' }),
 
   jobFamilyChange: {
     label: 'ジョブファミリー変更', addLabel: 'ジョブファミリー変更', editLabel: 'ジョブファミリー変更',
     chipLabel: 'JF変',
     description: 'ジョブファミリー（jobFamily）が変化。JF変化時は JT変 より優先して表示。noCheckRequired 行は対象外。',
     menuLabel: 'ジョブファミリー変更',
-    badge: 'jobChange', group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification', defaultVisible: false,
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return false
       const prevFamily  = row.prevJobFamily as string | undefined
@@ -106,7 +106,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
     chipLabel: 'JT変',
     description: 'ジョブタイプ（jobType）が変化し、ジョブファミリーは変化なし。ファミリーも変化した場合は JF変更 を優先。noCheckRequired 行は対象外。',
     menuLabel: '職種変更',
-    badge: 'jobChange', group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification', defaultVisible: false,
     detect: (row, ctx) => {
       if (isNoCheckReason(row, ctx)) return false
       const prevFamily  = row.prevJobFamily as string | undefined
@@ -122,7 +122,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
     label: '給与等級変更', addLabel: '給与等級変更', editLabel: '給変',
     chipLabel: '給与変更',
     description: '給与等級（payGrade）フィールドが変化。',
-    badge: 'jobChange', group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification', defaultVisible: false,
     detect: (row, _ctx) => {
       const prev  = row.prevPayGrade as string | undefined
       const after = row.payGrade     as string | undefined
@@ -134,7 +134,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
     label: '本務兼務切替（出向受入）', addLabel: '本務兼務切替（出向受入）', editLabel: '本務兼務切替（出向受入）',
     chipLabel: '本兼切替(出向)',
     description: '異動事由が「出向受入本務兼務切替」で、isSecondmentAcceptance=true の雇用タイプ間の本務↔兼務の切替。',
-    badge: 'jobChange', group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification', defaultVisible: false,
     detect: (row, ctx) => {
       if ((row.transferReason as string | undefined) !== TR.SECONDMENT_ACCEPTANCE_MODE_SWITCH) return false
       if (isNoCheckReason(row, ctx)) return true
@@ -150,7 +150,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
     label: '雇用延長', addLabel: '雇用延長', editLabel: '雇用延長',
     chipLabel: '雇延',
     description: '異動事由が「雇用延長」または「雇用延長手続」。',
-    badge: 'jobChange', group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification', defaultVisible: true,
     detect: (row, _ctx) => {
       const tr = row.transferReason as string | undefined
       return tr === TR.EMPLOYMENT_EXTENSION || tr === TR.EMPLOYMENT_EXTENSION_PROCEDURE
@@ -161,7 +161,7 @@ export const JOB_CLASSIFICATION_META: Partial<Record<string, EditPatternMeta>> =
     label: '雇用タイプ変更', addLabel: '雇用タイプ変更', editLabel: '雇用タイプ変更',
     chipLabel: '雇T変',
     description: '異動事由が「雇用タイプ変更手続」かつ雇用タイプ（employmentType）が変化。noCheckRequired 行は事由のみで判定。',
-    badge: 'jobChange', group: 'jobClassification',
+    badge: 'jobChange', group: 'jobClassification', defaultVisible: false,
     detect: (row, ctx) => {
       if ((row.transferReason as string | undefined) !== TR.EMPLOYMENT_TYPE_CHANGE_PROCEDURE) return false
       if (isNoCheckReason(row, ctx)) return true

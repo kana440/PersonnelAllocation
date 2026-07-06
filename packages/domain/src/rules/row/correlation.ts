@@ -41,7 +41,7 @@ const c1: RowRule = {
       const rowVal    = (row[rowKey]      as string | undefined) ?? ''
       const masterVal = (entry[masterKey] as string)             ?? ''
       if (rowVal !== masterVal)
-        issues.push({ field: rowKey, level: 'error',
+        issues.push({ field: rowKey, level: 'error', id: 'consistency_org_sub',
           message: `${label}が組織マスタの値と異なります（正しい値: "${masterVal || '（空）'}"）` })
     }
     return issues
@@ -60,10 +60,10 @@ const c2: RowRule = {
 
     const issues: ValidationIssue[] = []
     if (entry.workLocation && (row.location as string | undefined) !== entry.workLocation)
-      issues.push({ field: 'location',   level: 'error',
+      issues.push({ field: 'location',   level: 'error', id: 'consistency_location_cc',
         message: `勤務場所が組織マスタの値と異なります（正しい値: "${entry.workLocation}"）` })
     if (entry.costCenter && (row.costCenter as string | undefined) !== entry.costCenter)
-      issues.push({ field: 'costCenter', level: 'error',
+      issues.push({ field: 'costCenter', level: 'error', id: 'consistency_location_cc',
         message: `コストセンターが組織マスタの値と異なります（正しい値: "${entry.costCenter}"）` })
     return issues
   },
@@ -78,10 +78,10 @@ const c3: RowRule = {
   validate(row: AllocationRow, _ctx: RowRuleCtx): ValidationIssue[] {
     const issues: ValidationIssue[] = []
     if (row.positionUnionFlag !== UNION_MEMBER_CODE.NON_MEMBER)
-      issues.push({ field: 'positionUnionFlag', level: 'error',
+      issues.push({ field: 'positionUnionFlag', level: 'error', id: 'consistency_union',
         message: '非組合協定対象者の場合、ポジション＿労働組合員は「非組合員」を選択してください' })
     if (row.unionFlag !== UNION_MEMBER_CODE.NON_MEMBER)
-      issues.push({ field: 'unionFlag', level: 'error',
+      issues.push({ field: 'unionFlag', level: 'error', id: 'consistency_union',
         message: '非組合協定対象者の場合、労働組合員は「非組合員」を選択してください' })
     return issues
   },
@@ -98,7 +98,7 @@ const c4: RowRule = {
   validate(row: AllocationRow, ctx: RowRuleCtx): ValidationIssue[] {
     const org = ctx.orgMasterByCode.get(row.departmentCode as string)
     if (org && org.orgCategory !== SECONDMENT_ORG_LEVEL)
-      return [{ field: 'departmentCode', level: 'error',
+      return [{ field: 'departmentCode', level: 'error', id: 'consistency_secondment_org',
         message: '出向先会社が入力されている場合、組織コードは出向者用組織を選択してください' }]
     return []
   },

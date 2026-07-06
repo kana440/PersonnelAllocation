@@ -1,7 +1,6 @@
 import type { AllocationRow } from '../../allocationRow'
 import type { ValidationResolutionDef } from './types'
 import type { ValidationIssue } from '../validate/types'
-import { DirectEditOperation } from '../../commands/handlers/directEdit'
 
 /** field が一致する error/warning を修正するシンプルな ResolutionDef を生成する */
 function fieldDef(
@@ -20,8 +19,8 @@ function fieldDef(
     match(issue: ValidationIssue) {
       return issue.field === field && issue.level === level
     },
-    createCommand(rowId, values) {
-      return new DirectEditOperation(rowId, values, `${label ?? shortLabel}修正`)
+    patch(_row, values) {
+      return values
     },
   }
 }
@@ -55,9 +54,7 @@ export const RESOLUTION_DEFS: ValidationResolutionDef[] = [
         && issue.message.includes('出向先会社')
     },
     suggestValue() { return '出向者' },
-    createCommand(rowId, values) {
-      return new DirectEditOperation(rowId, values, '出向者役職修正')
-    },
+    patch(_row, values) { return values },
   },
 
   // 雇用タイプ
@@ -83,9 +80,7 @@ export const RESOLUTION_DEFS: ValidationResolutionDef[] = [
         && issue.message.includes('出向先会社')
     },
     suggestValue() { return '出向' },
-    createCommand(rowId, values) {
-      return new DirectEditOperation(rowId, values, '出向勤務場所修正')
-    },
+    patch(_row, values) { return values },
   },
 
   // 組織コード
@@ -121,9 +116,7 @@ export const RESOLUTION_DEFS: ValidationResolutionDef[] = [
     match(issue) {
       return issue.field === 'managerPositionCode' && issue.level === 'warning'
     },
-    createCommand(rowId, values) {
-      return new DirectEditOperation(rowId, values, '上司ポジション修正')
-    },
+    patch(_row, values) { return values },
   },
 
   // ポジションコード昇降格未更新 警告
@@ -136,8 +129,6 @@ export const RESOLUTION_DEFS: ValidationResolutionDef[] = [
     match(issue) {
       return issue.field === 'positionCode' && issue.level === 'warning'
     },
-    createCommand(rowId, values) {
-      return new DirectEditOperation(rowId, values, 'ポジションコード修正')
-    },
+    patch(_row, values) { return values },
   },
 ]

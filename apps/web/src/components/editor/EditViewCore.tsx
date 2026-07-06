@@ -19,6 +19,8 @@ import { exportToXlsx }            from '../../infrastructure/excel/engine'
 import { COMPACT_GROUP_DEFS }       from '../canvas/panel/compactGroupDefs'
 import { PatternReferenceModal }    from '../common/PatternReferenceModal'
 import { OperationReferenceModal }  from '../common/OperationReferenceModal'
+import { IssueReferenceModal }      from '../common/IssueReferenceModal'
+import { DisplayPreferenceModal }   from '../common/DisplayPreferenceModal'
 
 type MainViewMode = 'canvas' | 'review'
 
@@ -105,6 +107,8 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const [settingsMenuOpen,       setSettingsMenuOpen]       = useState(false)
   const [patternRefOpen,         setPatternRefOpen]         = useState(false)
   const [operationRefOpen,       setOperationRefOpen]       = useState(false)
+  const [issueRefOpen,           setIssueRefOpen]           = useState(false)
+  const [displayPrefOpen,        setDisplayPrefOpen]        = useState(false)
 
   const settingsRef = useRef<HTMLDivElement>(null)
 
@@ -334,11 +338,25 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
 
         <div className="ml-auto flex items-center gap-2 pr-1">
           <button
+            onClick={() => setDisplayPrefOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+            title="チップ表示設定"
+          >
+            ⚙ 表示設定
+          </button>
+          <button
             onClick={() => setPatternRefOpen(true)}
             className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 transition-colors"
             title="変更パターン一覧を表示"
           >
             📋 変更種別
+          </button>
+          <button
+            onClick={() => setIssueRefOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+            title="問題種別一覧を表示"
+          >
+            ⚠ 問題種別
           </button>
           <button
             onClick={() => setOperationRefOpen(true)}
@@ -361,7 +379,9 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
       {masterBrowserOpen      && <MasterBrowserPanel       onClose={() => setMasterBrowserOpen(false)} />}
       {strictnessSettingsOpen && <StrictnessSettingsPanel  onClose={() => setStrictnessSettingsOpen(false)} />}
       {patternRefOpen         && <PatternReferenceModal    onClose={() => setPatternRefOpen(false)} />}
+      {issueRefOpen           && <IssueReferenceModal      onClose={() => setIssueRefOpen(false)} />}
       {operationRefOpen       && <OperationReferenceModal  onClose={() => setOperationRefOpen(false)} />}
+      {displayPrefOpen        && <DisplayPreferenceModal   onClose={() => setDisplayPrefOpen(false)} />}
 
       {/* メインエリア */}
       <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5">

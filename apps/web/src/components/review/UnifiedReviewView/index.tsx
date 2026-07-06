@@ -4,7 +4,7 @@ import { useStore } from '../../../store/useStore'
 import { useReviewFilterStore } from '../../../store/reviewFilterStore'
 import { useReviewData } from '../hooks/useReviewData'
 import { BEFORE_AFTER_FIELD_PAIRS } from '@personnel/domain/allocationRow'
-import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
+import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { appService } from '../../../application/HRApplicationService'
 import { buildOrgPathMap } from '../components/BulkFieldEditModal/helpers'
@@ -19,17 +19,9 @@ import { buildPositionDepthList } from '../../canvas/panel/helpers'
 const ALL_DISPLAY_FIELDS: DisplayField[] = BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => ({
   afterKey: String(afterKey),
   prevKey:  String(prevKey),
-  label:    ALLOCATION_LIST_LABEL_MAP[String(afterKey)]?.ja ?? String(afterKey),
+  label:    FIELD_DISPLAY_LABELS[String(afterKey)] ?? String(afterKey),
 }))
 
-const SEARCH_FIELDS = [
-  { value: '__all__',        label: 'すべての表示項目' },
-  { value: '__name__',       label: '氏名' },
-  { value: '__orgPath__',    label: '組織（階層）' },
-  { value: 'userId',         label: 'ユーザーID' },
-  { value: 'transferReason', label: '異動事由' },
-  ...ALL_DISPLAY_FIELDS.map(f => ({ value: f.afterKey, label: f.label })),
-]
 
 export function UnifiedReviewView() {
   const data = useReviewData()
@@ -197,10 +189,10 @@ export function UnifiedReviewView() {
         onSearchInputChange={setSearchInput}
         summary={data.summary}
         issueGroups={issueGroups}
-        searchFields={SEARCH_FIELDS}
         filteredCount={filteredRows.length}
         totalRows={data.rows.length}
         changedCount={changedCount}
+        masters={masters}
         onOpenBulkModal={(group) => setBulkModal(group)}
       />
       <SelectionActionBar />

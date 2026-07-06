@@ -31,6 +31,7 @@ const w2: RowRule = {
       field:   'band',
       level:   'warning',
       message: '２段階の昇降格が検出されました。問題ないか確認してください',
+      id:      'warning_two_step',
     }]
   },
 }

@@ -13,6 +13,8 @@ export interface EditPatternMeta {
   menuLabel?:   string
   /** パターン参照テーブル用の判定ロジック説明（1〜2文） */
   description?: string
+  /** 標準プリセットでの初期表示。false = 上級者向け／細粒度のパターン */
+  defaultVisible: boolean
   /** 変更パターンを検知する関数。noCheckRequired の場合は異動事由宣言ベースで判定する */
   detect: (row: AllocationRow, ctx: DetectContext) => boolean
 }

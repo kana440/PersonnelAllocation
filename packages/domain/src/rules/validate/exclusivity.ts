@@ -11,10 +11,10 @@ function checkManagerPositionCode(row: AllocationRow, allRows: AllocationRow[]):
   const mgrRow = allRows.find(r => r.positionCode === mgrCode)
   if (!mgrRow)
     // ファイル分割運用では上司が別 Excel に存在するため warning に留める（保存はブロックしない）
-    return [{ field: 'managerPositionCode', level: 'warning', message: `上司ポジションコード "${mgrCode}" がこのファイルに存在しません（別組織の可能性あり）` }]
+    return [{ field: 'managerPositionCode', level: 'warning', message: `上司ポジションコード "${mgrCode}" がこのファイルに存在しません（別組織の可能性あり）`, id: 'interrow_manager_missing' }]
 
   if (row.positionCode && mgrCode === row.positionCode)
-    return [{ field: 'managerPositionCode', level: 'error', message: '自分自身を上司ポジションに設定できません' }]
+    return [{ field: 'managerPositionCode', level: 'error', message: '自分自身を上司ポジションに設定できません', id: 'interrow_manager_self' }]
 
   if (row.positionCode) {
     const posToMgr = new Map<string, string>()
@@ -26,7 +26,7 @@ function checkManagerPositionCode(row: AllocationRow, allRows: AllocationRow[]):
     while (cur && !visited.has(cur)) {
       visited.add(cur)
       if (cur === row.positionCode)
-        return [{ field: 'managerPositionCode', level: 'error', message: '配下のポジションを上司に設定できません（循環参照）' }]
+        return [{ field: 'managerPositionCode', level: 'error', message: '配下のポジションを上司に設定できません（循環参照）', id: 'interrow_manager_circular' }]
       cur = posToMgr.get(cur)
     }
   }

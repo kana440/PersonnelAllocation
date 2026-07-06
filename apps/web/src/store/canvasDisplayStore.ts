@@ -5,7 +5,6 @@ import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList
 
 const STORAGE_KEY                    = 'canvas_display_fields'
 const UNAVAIL_OP_DISPLAY_STORAGE_KEY = 'unavailable_operation_display'
-const HIDDEN_BADGE_TYPES_STORAGE_KEY = 'canvas_hidden_badge_types'
 const COMPACT_GROUP_STORAGE_KEY      = 'compact_group_by'
 
 export interface CanvasField {
@@ -62,16 +61,6 @@ function loadUnavailableOperationDisplay(): UnavailableOperationDisplay {
   return DEFAULT_UNAVAILABLE_OPERATION_DISPLAY
 }
 
-function loadHiddenBadgeTypes(): string[] {
-  try {
-    const raw = localStorage.getItem(HIDDEN_BADGE_TYPES_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as unknown
-    if (Array.isArray(parsed) && parsed.every(x => typeof x === 'string')) return parsed as string[]
-  } catch { /* ignore */ }
-  return []
-}
-
 function loadCompactGroupById(): string {
   try {
     return localStorage.getItem(COMPACT_GROUP_STORAGE_KEY) ?? 'positionBand'
@@ -83,8 +72,6 @@ interface CanvasDisplayState {
   setDisplayFields:               (fields: string[]) => void
   unavailableOperationDisplay:    UnavailableOperationDisplay
   setUnavailableOperationDisplay: (value: UnavailableOperationDisplay) => void
-  hiddenBadgeTypes:               string[]
-  setHiddenBadgeTypes:            (types: string[]) => void
   compactGroupById:               string
   setCompactGroupById:            (id: string) => void
 }
@@ -99,11 +86,6 @@ export const useCanvasDisplayStore = create<CanvasDisplayState>()(set => ({
   setUnavailableOperationDisplay: (value) => {
     localStorage.setItem(UNAVAIL_OP_DISPLAY_STORAGE_KEY, value)
     set({ unavailableOperationDisplay: value })
-  },
-  hiddenBadgeTypes: loadHiddenBadgeTypes(),
-  setHiddenBadgeTypes: (types) => {
-    localStorage.setItem(HIDDEN_BADGE_TYPES_STORAGE_KEY, JSON.stringify(types))
-    set({ hiddenBadgeTypes: types })
   },
   compactGroupById: loadCompactGroupById(),
   setCompactGroupById: (id) => {

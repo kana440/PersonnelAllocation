@@ -5,6 +5,7 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
+import { validateRow } from '@personnel/domain/rules/validate/validateRow'
 import { buildPositionDepthList } from '../panel/helpers'
 import { isAbsenceRow } from '../FloatingAbsencePanel/helpers'
 
@@ -119,11 +120,19 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
         if (mgrCode && !inOrgCodes.has(mgrCode)) {
           externalManagerKind = allPositionCodes.has(mgrCode) ? 'cross-org' : 'missing'
         }
+        const detection = detectPatterns(row, detectCtx)
         return {
           row,
           depth,
-          person:              row.userId ? (personBySfId.get(row.userId) ?? null) : null,
-          activePatterns:      detectPatterns(row, detectCtx).patterns,
+          person:           row.userId ? (personBySfId.get(row.userId) ?? null) : null,
+          activePatterns:   detection.patterns,
+          validationIssues: validateRow({
+            row,
+            afterOrganizations: detectCtx.afterOrganizations,
+            masters:            detectCtx.masters,
+            allocationList:     [],
+            changes:            detection,
+          }),
           externalManagerKind,
         }
       }))

@@ -221,9 +221,11 @@ export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Pr
       const values = { [field]: newValue }
       appService.executeBatch(`${label} 一括修正`,
         filteredRows.map(r =>
-          resolutionDef
-            ? resolutionDef.createCommand(r.rowId, values)
-            : new DirectEditOperation(r.rowId, values, `${label} 一括修正`)
+          new DirectEditOperation(
+            r.rowId,
+            resolutionDef ? resolutionDef.patch(r, values) : values,
+            `${label} 一括修正`,
+          )
         ))
     } else if (mode === 'pair') {
       appService.executeBatch(`${label} 一括修正`,
