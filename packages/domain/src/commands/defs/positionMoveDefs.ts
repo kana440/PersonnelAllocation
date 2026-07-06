@@ -19,6 +19,8 @@ export const subordinateHandoffDef: EditOperation = {
   badge:      'transfer',
 
   description: '配下のメンバーの上司ポジションを引継先に変更します。統合元が空きポジションの場合はその行を削除します。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '部下が存在する在席者または空席ポジション行。配下のレポートラインを別ポジションに引き継ぐ。',
 
   availableFor: (row) =>
     (row.positionCode as string | undefined)
@@ -99,6 +101,8 @@ export const moveToVacantPositionDef: EditOperation = {
   badge:      'transfer',
 
   description: '人を空きポジションに移動します。「元のポジションを空席として残す」を選択すると、変更前のポジションに空席行が追加されます。',
+  entryPoints:     ['personMenu', 'dragIntent'] as const,
+  availabilityNote: '在席者（userId あり）の本務行。移動先に空席ポジションが存在する場合に有効。ロック操作中は不可。',
 
   availableFor: (row) => {
     if (!(row.positionCode as string | undefined))

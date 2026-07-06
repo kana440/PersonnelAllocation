@@ -3,13 +3,11 @@ export type { EditPatternMeta } from './types'
 export type EditPattern =
   // 職務情報系
   | 'promotion'
-  | 'promotionPositionOnly'  // 本人バンド比較不可時にポジションバンドで推定
   | 'demotion'
-  | 'demotionPositionOnly'   // 本人バンド比較不可時にポジションバンドで推定
-  | 'bandChange'              // 本人バンドが変わったが昇降格判定不可
-  | 'bandChangePositionOnly'  // ポジションバンドのみ変化、方向不明
+  | 'bandChange'              // バンドが変わったが昇降格判定不可
   | 'titleChange'
   | 'mpTrackSwitch'
+  | 'jobFamilyChange'                 // ジョブファミリー変更（JF変化時に優先）
   | 'jobTypeChange'
   | 'payGradeChange'                  // 給与等級変更
   | 'secondmentAcceptanceModeSwitch'  // 出向受入の本務↔兼務切替
@@ -42,9 +40,9 @@ export type EditPattern =
   | 'noChange'
 
 export const ALL_EDIT_PATTERNS: EditPattern[] = [
-  'promotion', 'promotionPositionOnly', 'demotion', 'demotionPositionOnly',
-  'bandChange', 'bandChangePositionOnly',
-  'titleChange', 'mpTrackSwitch', 'jobTypeChange', 'payGradeChange', 'secondmentAcceptanceModeSwitch', 'employmentExtension', 'employmentTypeChange',
+  'promotion', 'demotion',
+  'bandChange',
+  'titleChange', 'mpTrackSwitch', 'jobFamilyChange', 'jobTypeChange', 'payGradeChange', 'secondmentAcceptanceModeSwitch', 'employmentExtension', 'employmentTypeChange',
   'orgTransfer', 'orgRestructure', 'positionChange', 'managerChange', 'newPosition', 'concurrentAdd', 'concurrentRelease',
   'secondmentOut', 'secondmentIn', 'secondmentOutRelease', 'secondmentInRelease',
   'concurrentSecondmentOutNonSF', 'concurrentSecondmentIn',

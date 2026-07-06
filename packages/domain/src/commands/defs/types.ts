@@ -32,6 +32,15 @@ export function unavailable(reason: string): AvailabilityResult {
 export type OperationGroup = 'position' | 'jobClassification' | 'person' | 'secondmentMain' | 'secondmentConcurrent'
 
 /**
+ * 操作の UI 入口。OperationReferenceModal・AI ツール説明文で使用する。
+ *   personMenu   : 人カードのコンテキストメニュー（操作パネル）
+ *   dragIntent   : キャンバスでカードをドラッグ → DragIntentPicker
+ *   orgAddButton : 組織パネルの「+」追加ボタン（直接開けないため AI は ui_open_operation 不可）
+ *   summaryPanel : 変更サマリーパネルのクイック操作ボタン
+ */
+export type OperationEntryPoint = 'personMenu' | 'dragIntent' | 'orgAddButton' | 'summaryPanel'
+
+/**
  * 操作の排他ロール宣言。行ごとの相互排他・取消ペアを宣言的に表現する。
  *
  *   lock        : 厳密ロック。他の lock/softLock/normal 操作を全てブロックする。
@@ -206,6 +215,17 @@ export interface EditOperation {
 
   /** フォーム上部に表示する操作説明文。業務上の注意事項や手順を記載する */
   readonly description?: string
+
+  /** この操作を起動できる UI 入口。OperationReferenceModal・AI ツール説明文に使用する */
+  readonly entryPoints?: readonly OperationEntryPoint[]
+
+  /**
+   * availableFor の人間向け・AI向け要約。
+   * 「いつこの操作が使えるか」を1〜2文で記述する。
+   * AI は findPersons の availableOps で実際の可否を確認するが、
+   * この note をツール description に埋め込むことで事前に判断精度を向上させる。
+   */
+  readonly availabilityNote?: string
 
   /**
    * true のとき createCommand().apply() ドライランによる副作用警告を表示しない。

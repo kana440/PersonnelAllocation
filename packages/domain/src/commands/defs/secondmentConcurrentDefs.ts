@@ -21,6 +21,9 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
   label: '兼務出向（SF非統合先）',
   group: 'secondmentConcurrent',
   badge: 'secondment',
+  description: 'SF未統合の関連会社へ兼務で出向します。本務行はそのまま維持され、兼務出向情報（出向先会社名・出向先組織）が本務行に付加されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: '正社員の本務行のみ。SF非統合先への兼務出向。本務行はそのまま維持される。ロック操作中は不可。',
 
   availableFor(row, ms) {
     if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
@@ -90,6 +93,9 @@ export const concurrentSecondmentInNewDef: EditOperation = {
   label: '兼務出向受入 新規',
   group: 'secondmentConcurrent',
   badge: 'secondment',
+  description: '他社からの兼務出向者を新規行として受入登録します。出向元会社・受入先組織・雇用タイプを入力してください。',
+  entryPoints:      ['orgAddButton'],
+  availabilityNote: '組織パネルの追加ボタンから新規追加した行のみ（transferReason = 出向受入兼務）。AI から ui_open_operation では起動不可。',
 
   operationRole: {
     kind:                'lock',
@@ -175,6 +181,9 @@ export const concurrentSecondmentInNewDef: EditOperation = {
 
 export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
   id: 'ConcurrentSecondmentOutReleaseSF', label: '兼務出向解除（SF導入先）',
+  description: 'SF導入済みの関連会社への兼務出向を解除します。兼務行が削除されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'SF統合先への兼務出向行のみ（concurrentType = 兼務 かつ secondmentToCompany が SF統合先）。',
   group: 'secondmentConcurrent', badge: 'negative',
 
   availableFor(row, ms) {
@@ -210,6 +219,9 @@ export const concurrentSecondmentOutReleaseSFDef: EditOperation = {
 
 export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentOutReleaseNonSF', label: '兼務出向解除（SF未導入先）',
+  description: 'SF未導入の関連会社への兼務出向を解除します。兼務行が削除されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'SF非統合先への兼務出向行のみ。',
   group: 'secondmentConcurrent', badge: 'negative',
 
   availableFor(row, ms) {
@@ -245,6 +257,9 @@ export const concurrentSecondmentOutReleaseNonSFDef: EditOperation = {
 
 export const concurrentSecondmentInReleaseSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInReleaseSF', label: '兼務出向受入解除（SF導入先）',
+  description: 'SF導入済みの関連会社からの兼務出向受入を解除します。兼務受入行が削除されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'SF統合先からの兼務出向受入行のみ（concurrentType = 兼務 かつ secondmentFromCompany が SF統合先）。',
   group: 'secondmentConcurrent', badge: 'negative',
 
   availableFor(row, ms) {
@@ -280,6 +295,9 @@ export const concurrentSecondmentInReleaseSFDef: EditOperation = {
 
 export const concurrentSecondmentInReleaseNonSFDef: EditOperation = {
   id: 'ConcurrentSecondmentInReleaseNonSF', label: '兼務出向受入解除（SF未導入先）',
+  description: 'SF未導入の関連会社からの兼務出向受入を解除します。兼務受入行が削除されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'SF非統合先からの兼務出向受入行のみ。',
   group: 'secondmentConcurrent', badge: 'negative',
 
   availableFor(row, ms) {
@@ -317,6 +335,8 @@ export const concurrentSecondmentInCancelDef: EditOperation = {
   id: 'ConcurrentSecondmentInCancel', label: '兼務出向受入取消',
   group: 'secondmentConcurrent', badge: 'negative',
   description: 'このセッションで追加した兼務出向受入を取消します。下記の情報が削除されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'このセッションで ConcurrentSecondmentInNew で追加した兼務出向受入行のみ（lockCancel 操作）。',
   suppressSideEffectWarning: true,
 
   operationRole: { kind: 'lockCancel', of: 'ConcurrentSecondmentInNew' },

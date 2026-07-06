@@ -21,6 +21,8 @@ export const leaveOfAbsenceDef: EditOperation = {
   badge:       'neutral',
 
   description: '4/1付で休職する場合は個別対応します。3/31以前の休職については通常の申請を行った上で、必要な異動をしてください。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '在席者（userId あり）の本務行かつ休職フラグ未設定。他のロック操作中は不可。',
 
   operationRole: {
     kind:        'softLock',
@@ -86,6 +88,8 @@ export const leaveOfAbsenceCancelDef: EditOperation = {
   badge:       'neutral',
 
   description: '4/1付休職を取り消します。4/1以前に休職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'このセッションで休職を設定した行のみ（prevLeaveOfAbsenceSign が空）。',
 
   availableFor(row) {
     if (!row.leaveOfAbsenceSign)     return unavailable('休職中ではないため取消できません')
@@ -141,6 +145,8 @@ export const returnFromLeaveDef: EditOperation = {
   badge:       'positive',
 
   description: '4/1付で復職します。4/1以前に復職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '在席者（userId あり）の本務行かつ休職フラグ設定済み。ロック操作中は不可。',
 
   operationRole: {
     kind:        'softLock',
@@ -203,6 +209,8 @@ export const returnFromLeaveCancelDef: EditOperation = {
   badge:       'neutral',
 
   description: '4/1付復職を取り消します。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'このセッションで復職を設定した行のみ（prevLeaveOfAbsenceSign に値あり）。',
 
   availableFor(row) {
     if (row.leaveOfAbsenceSign)       return unavailable('まだ休職中のため復職取消できません')
@@ -261,6 +269,8 @@ export const resignationDef: EditOperation = {
   badge:       'negative',
 
   description: '4/1付で退職（または解任済み）として登録します。設定後は他の操作がロックされます。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '在席者（userId あり）の本務行。設定後は他の全操作をロック。',
 
   operationRole: {
     kind:                'lock',
@@ -313,6 +323,8 @@ export const resignationCancelDef: EditOperation = {
   badge:       'neutral',
 
   description: '4/1付退職を取り消します。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'このセッションで退職を設定した行のみ（lockCancel 操作）。',
 
   operationRole: { kind: 'lockCancel', of: 'Resignation' },
 
@@ -359,6 +371,8 @@ export const employmentTransferDef: EditOperation = {
   badge:       'negative',
 
   description: '4/1付でグループ外または他社へ移籍する場合に設定します。移籍後の氏名・組織・バンドなど必要な情報を入力してください。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '在席者（userId あり）の本務行。4/1付移籍。設定後は他の全操作をロック。',
 
   operationRole: {
     kind:                'lock',
@@ -445,6 +459,8 @@ export const employmentTransferCancelDef: EditOperation = {
   badge:       'neutral',
 
   description: '4/1付移籍を取り消します。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'このセッションで移籍を設定した行のみ（lockCancel 操作）。',
 
   operationRole: { kind: 'lockCancel', of: 'EmploymentTransfer' },
 
@@ -495,6 +511,8 @@ export const noChangeDef: EditOperation = {
   badge:       'neutral',
 
   description: '変更がない場合に選択してください。after 項目は発令前の値が維持されます。セッション内で変更済みの項目がある場合は確認ダイアログが表示されます。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '在籍者（userId あり）の本務行。「変更なし」を設定すると after が before 値に固定される（softLock）。',
 
   operationRole: {
     kind:                'lock',
@@ -548,6 +566,8 @@ export const noChangeCancelDef: EditOperation = {
   badge:       'neutral',
 
   description: '「変更なし」を取り消します。after 項目は Excel インポート時の before 値に復元されます。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'このセッションで「変更なし」を設定した行のみ（softLock のキャンセル）。',
 
   operationRole: { kind: 'lockCancel', of: 'NoChange' },
 
@@ -595,6 +615,8 @@ export const resetToBeforeDef: EditOperation = {
   badge:       'negative',
 
   description: '⚠ 警告：全ての after 項目を before（インポート前）の値に戻します。未割当の旧組織から誤って割り当てた行を元に戻すときに使います。実行するとセッション内の変更がすべて失われ、組織「未割当」状態に戻ります。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: '任意の行。after フィールドを before 値に全リセット。セッション内変更がすべて失われる。',
 
   availableFor: (row) =>
     row.userId ? AVAILABLE : unavailable('人物がアサインされていない行には使えません'),

@@ -5,7 +5,7 @@ import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { useStore }              from '../../../store/useStore'
 import { CanvasFieldDiff }       from '../toolbar/CanvasFieldDiff'
-import { OPERATION_BADGE_COLORS } from '../../../config/badgeColors'
+import { PATTERN_COLOR_MAP, PATTERN_LABEL_MAP } from '../../common/patternChips'
 import { isInternalPosCode, getPositionTitle, getEmpBorderClass } from './helpers'
 import { isVacantRow } from '@personnel/domain/allocationRow'
 import { TR_SHORT } from '@personnel/domain/transferReasonLabels'
@@ -404,20 +404,17 @@ export function RowCard({
                   )}
                 </div>
               ))}
-              {/* 変更バッジ: 最大3個, 4個以上は +N変更 */}
+              {/* 変更バッジ: 最大3個, 4個以上は +N件 */}
               {visibleBadges.length > 0 && (
                 <div className="flex flex-wrap gap-0.5 mt-0.5">
-                  {visibleBadges.slice(0, 3).map(p => {
-                    const meta = EDIT_PATTERN_META[p]
-                    return (
-                      <span key={p} className={`flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none ${OPERATION_BADGE_COLORS[meta.badge]}`}>
-                        {meta.label}
-                      </span>
-                    )
-                  })}
+                  {visibleBadges.slice(0, 3).map(p => (
+                    <span key={p} className={`flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none ${PATTERN_COLOR_MAP[p] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                      {PATTERN_LABEL_MAP[p] ?? EDIT_PATTERN_META[p].chipLabel}
+                    </span>
+                  ))}
                   {visibleBadges.length > 3 && (
-                    <span className="flex-shrink-0 text-[9px] font-medium px-0.5 py-0.5 rounded leading-none bg-gray-100 text-gray-500">
-                      +{visibleBadges.length - 3}変更
+                    <span className="flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none bg-gray-100 text-gray-500 border-gray-200">
+                      +{visibleBadges.length - 3}件
                     </span>
                   )}
                 </div>

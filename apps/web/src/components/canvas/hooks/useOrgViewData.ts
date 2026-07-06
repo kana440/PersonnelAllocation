@@ -4,15 +4,17 @@ import type { Organization, Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
-import { detectPatterns } from '@personnel/domain/patterns/detection'
+import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { buildPositionDepthList } from '../panel/helpers'
 import { isAbsenceRow } from '../FloatingAbsencePanel/helpers'
 
 interface UseOrgViewDataDeps {
-  allAfterOrgs:   Organization[]
-  persons:        Person[]
-  allocationList: AllocationRow[]
-  masters:        AllMasters
+  allAfterOrgs:        Organization[]
+  beforeOrganizations: Organization[]
+  persons:             Person[]
+  allocationList:      AllocationRow[]
+  masters:             AllMasters
+  orgMapping:          Map<string, string[]>
 }
 
 /**
@@ -35,9 +37,32 @@ function makeRowComparator(masters: AllMasters): (a: AllocationRow, b: Allocatio
   }
 }
 
-export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters }: UseOrgViewDataDeps) {
+export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, allocationList, masters, orgMapping }: UseOrgViewDataDeps) {
   const afterOrgByCode = useMemo(() => buildOrgMap(allAfterOrgs), [allAfterOrgs])
   const personBySfId   = useMemo(() => new Map(persons.map(p => [p.sfPersonId ?? '', p])), [persons])
+
+  // "${beforeCode}|${afterCode}" のペア集合。orgRestructure / 昇降格検出に使用
+  const sameOrgPairs = useMemo((): Set<string> => {
+    const beforeCodeById = new Map(beforeOrganizations.filter(o => o.externalCode).map(o => [o.id, o.externalCode!]))
+    const afterCodeById  = new Map(allAfterOrgs.filter(o => o.externalCode).map(o => [o.id, o.externalCode!]))
+    const pairs = new Set<string>()
+    for (const [beforeId, afterIds] of orgMapping) {
+      const beforeCode = beforeCodeById.get(beforeId)
+      if (!beforeCode) continue
+      for (const afterId of afterIds) {
+        const afterCode = afterCodeById.get(afterId)
+        if (afterCode) pairs.add(`${beforeCode}|${afterCode}`)
+      }
+    }
+    return pairs
+  }, [beforeOrganizations, allAfterOrgs, orgMapping])
+
+  const detectCtx = useMemo((): DetectContext => ({
+    allocationList,
+    afterOrganizations: allAfterOrgs,
+    masters,
+    sameOrgPairs,
+  }), [allocationList, allAfterOrgs, masters, sameOrgPairs])
 
   const afterMembersByOrgId = useMemo(() => {
     const map = new Map<string, MemberEntry[]>()
@@ -98,13 +123,13 @@ export function useOrgViewData({ allAfterOrgs, persons, allocationList, masters 
           row,
           depth,
           person:              row.userId ? (personBySfId.get(row.userId) ?? null) : null,
-          activePatterns:      detectPatterns(row).patterns,
+          activePatterns:      detectPatterns(row, detectCtx).patterns,
           externalManagerKind,
         }
       }))
     }
     return result
-  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes])
+  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes, detectCtx])
 
   return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId }
 }

@@ -1,5 +1,5 @@
 import { useRowSelectionStore } from '../../../store/rowSelectionStore'
-import { PATTERN_CHIP_DEFS }    from '../../review/UnifiedReviewView/helpers'
+import { PATTERN_CHIP_DEFS }    from '../../common/patternChips'
 import type { CompactPersonRow } from './useCompactData'
 
 interface Props {
@@ -61,16 +61,16 @@ export function PersonRow({ row, fromOrgId, onFocus, onDoubleClick }: Props) {
         {row.name}
       </span>
 
-      {/* 変更種別バッジ（最大2件）*/}
+      {/* 変更種別バッジ（最大3件）*/}
       <div className="flex gap-0.5 flex-shrink-0">
-        {activeChips.slice(0, 2).map(d => (
+        {activeChips.slice(0, 3).map(d => (
           <span key={d.key} className={`px-1 py-0.5 rounded text-[9px] border leading-none ${d.color}`}>
             {d.label}
           </span>
         ))}
-        {activeChips.length > 2 && (
+        {activeChips.length > 3 && (
           <span className="px-1 py-0.5 rounded text-[9px] bg-gray-100 text-gray-500 border border-gray-200 leading-none">
-            +{activeChips.length - 2}
+            +{activeChips.length - 3}件
           </span>
         )}
         {row.hasIssues && (

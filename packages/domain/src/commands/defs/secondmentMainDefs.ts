@@ -21,6 +21,9 @@ export const secondmentOutSFDef: EditOperation = {
   label:               '本務出向（SF統合先）',
   group:               'secondmentMain',
   badge:               'secondment',
+  description:         'SuccessFactors（SF）統合済みの関連会社への本務出向を設定します。出向先組織コードを選択すると勤務場所等が自動設定されます。出向元ポジションは「出向箱」として管理されます。',
+  entryPoints:         ['personMenu'],
+  availabilityNote:    '正社員の本務行または出向箱（このセッションで出向設定した行は再編集可）。すでにインポート前から出向中の場合は不可。',
   supportsLeaveVacant: true,
 
   operationRole: {
@@ -109,6 +112,9 @@ export const secondmentOutNonSFDef: EditOperation = {
   label:               '本務出向（SF非統合先）',
   group:               'secondmentMain',
   badge:               'secondment',
+  description:         'SF未統合の関連会社・グループ外への本務出向を設定します。出向先組織コードは任意です。',
+  entryPoints:         ['personMenu'],
+  availabilityNote:    '正社員の本務行または出向箱（このセッションで出向設定した行は再編集可）。SF非統合先向け。',
   supportsLeaveVacant: true,
 
   operationRole: {
@@ -197,6 +203,9 @@ export const secondmentInNewDef: EditOperation = {
   label: '本務出向受入 新規',
   group: 'secondmentMain',
   badge: 'secondment',
+  description: '他社からの本務出向者を新規行として受入登録します。出向元会社・社員番号・受入先組織コード・雇用タイプを入力してください。',
+  entryPoints:         ['orgAddButton'],
+  availabilityNote:    '組織パネルの追加ボタンから新規追加した行のみ（transferReason = 出向受入）。AI から ui_open_operation では起動不可。',
 
   operationRole: {
     kind:                'lock',
@@ -343,6 +352,9 @@ function createOutReleaseCommand(rowId: number, values: Partial<AllocationRow>, 
 
 export const secondmentOutReleaseSFDef: EditOperation = {
   id: 'SecondmentOutReleaseSF', label: '本務出向解除（SF導入先）',
+  description: 'SF導入済みの関連会社への本務出向を解除（帰任）します。帰任先の組織・バンド等を入力してください。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'インポート前から SF統合先へ本務出向中の行のみ（prevConcurrentType = 出向箱 または prevSecondmentToCompany あり）。',
   group: 'secondmentMain', badge: 'negative',
 
   availableFor(row, ms) {
@@ -364,6 +376,9 @@ export const secondmentOutReleaseSFDef: EditOperation = {
 
 export const secondmentOutReleaseNonSFDef: EditOperation = {
   id: 'SecondmentOutReleaseNonSF', label: '本務出向解除（SF未導入先）',
+  description: 'SF未導入の関連会社・グループ外への本務出向を解除（帰任）します。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'インポート前から SF非統合先へ本務出向中の行のみ。',
   group: 'secondmentMain', badge: 'negative',
 
   availableFor(row, ms) {
@@ -396,6 +411,9 @@ export const inReleaseInitial = () => ({
 
 export const secondmentInReleaseSFDef: EditOperation = {
   id: 'SecondmentInReleaseSF', label: '本務出向受入解除（SF導入先）',
+  description: 'SF導入済みの関連会社からの本務出向受入を解除します。受入行の出向元情報がクリアされます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'インポート前から SF統合先からの本務出向受入行のみ（prevSecondmentFromCompany かつ SF統合先）。',
   group: 'secondmentMain', badge: 'negative',
 
   availableFor(row, ms) {
@@ -442,6 +460,9 @@ export const secondmentInReleaseSFDef: EditOperation = {
 
 export const secondmentInReleaseNonSFDef: EditOperation = {
   id: 'SecondmentInReleaseNonSF', label: '本務出向受入解除（SF未導入先）',
+  description: 'SF未導入の関連会社からの本務出向受入を解除します。受入行の出向元情報がクリアされます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'インポート前から SF非統合先からの本務出向受入行のみ。',
   group: 'secondmentMain', badge: 'negative',
 
   availableFor(row, ms) {
@@ -490,6 +511,8 @@ export const secondmentInCancelDef: EditOperation = {
   id: 'SecondmentInCancel', label: '本務出向受入取消',
   group: 'secondmentMain', badge: 'negative',
   description: 'このセッションで追加した出向受入を取消します。下記の情報が削除されます。',
+  entryPoints:      ['personMenu'],
+  availabilityNote: 'このセッションで SecondmentInNew で追加した出向受入行のみ（lockCancel 操作）。',
   suppressSideEffectWarning: true,
 
   operationRole: { kind: 'lockCancel', of: 'SecondmentInNew' },

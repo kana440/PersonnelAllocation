@@ -32,6 +32,8 @@ export function OrgOperationView() {
   const store = useScopedStore()
   const {
     afterOrganizations: allAfterOrgsUnscoped,
+    beforeOrganizations,
+    orgMapping,
     isHistoryPreviewMode, historyPreviewPosition,
     previewAllocationList, previewPersons, previewAfterOrganizations,
     applyHistoryPreview, cancelHistoryPreview,
@@ -64,7 +66,7 @@ export function OrgOperationView() {
     }
     return m
   }, [organizations])
-  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, persons, allocationList, masters })
+  const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, allocationList, masters, orgMapping })
 
   // orgId → サブツリー全体のアイテム数。O(N) で1回構築し全 TreeWindow が共有する
   const subtreeCountByOrgId = useMemo(() => {

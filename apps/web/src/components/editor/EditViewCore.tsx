@@ -17,6 +17,8 @@ import { useResizablePanel }        from '../../hooks/useResizablePanel'
 import { toAllocationRows }         from '../../infrastructure/allocationListMapper'
 import { exportToXlsx }            from '../../infrastructure/excel/engine'
 import { COMPACT_GROUP_DEFS }       from '../canvas/panel/compactGroupDefs'
+import { PatternReferenceModal }    from '../common/PatternReferenceModal'
+import { OperationReferenceModal }  from '../common/OperationReferenceModal'
 
 type MainViewMode = 'canvas' | 'review'
 
@@ -101,6 +103,8 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const [masterBrowserOpen,      setMasterBrowserOpen]      = useState(false)
   const [strictnessSettingsOpen, setStrictnessSettingsOpen] = useState(false)
   const [settingsMenuOpen,       setSettingsMenuOpen]       = useState(false)
+  const [patternRefOpen,         setPatternRefOpen]         = useState(false)
+  const [operationRefOpen,       setOperationRefOpen]       = useState(false)
 
   const settingsRef = useRef<HTMLDivElement>(null)
 
@@ -328,7 +332,21 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
           )}
         </div>
 
-        <div className="ml-auto pr-1">
+        <div className="ml-auto flex items-center gap-2 pr-1">
+          <button
+            onClick={() => setPatternRefOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+            title="変更パターン一覧を表示"
+          >
+            📋 変更種別
+          </button>
+          <button
+            onClick={() => setOperationRefOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+            title="操作一覧を表示"
+          >
+            🛠 操作について
+          </button>
           <button
             onClick={handleExport}
             disabled={allocationList.length === 0}
@@ -342,6 +360,8 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
       {maintenanceOpen        && <MaintenanceDialog        onClose={() => setMaintenanceOpen(false)} />}
       {masterBrowserOpen      && <MasterBrowserPanel       onClose={() => setMasterBrowserOpen(false)} />}
       {strictnessSettingsOpen && <StrictnessSettingsPanel  onClose={() => setStrictnessSettingsOpen(false)} />}
+      {patternRefOpen         && <PatternReferenceModal    onClose={() => setPatternRefOpen(false)} />}
+      {operationRefOpen       && <OperationReferenceModal  onClose={() => setOperationRefOpen(false)} />}
 
       {/* メインエリア */}
       <div className="flex flex-1 overflow-hidden min-h-0 gap-1.5 p-1.5">

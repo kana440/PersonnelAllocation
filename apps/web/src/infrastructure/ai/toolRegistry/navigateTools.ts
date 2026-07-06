@@ -17,7 +17,66 @@ import { useCanvasLayoutStore }     from '../../../store/canvasLayoutStore'
 import { useCanvasDisplayStore }    from '../../../store/canvasDisplayStore'
 import { COMPACT_GROUP_DEFS }       from '../../../components/canvas/panel/compactGroupDefs'
 import { ALL_EDIT_OPERATIONS }      from '@personnel/domain/commands/defs'
+import type { EditOperation }       from '@personnel/domain/commands/defs'
 import type { AllocationRow }       from '@personnel/domain/allocationRow'
+
+// ── ui_open_operation の説明文を defs から自動生成 ────────────────────────────
+// entryPoints に personMenu / dragIntent が含まれる操作 = AI から直接起動可能。
+// orgAddButton のみの操作は組織パネルボタン専用で AI から直接起動不可。
+
+const GROUP_LABEL: Record<string, string> = {
+  jobClassification:    '職務情報系',
+  position:             'ポジション系',
+  person:               '在籍・退職系',
+  secondmentMain:       '本務出向系',
+  secondmentConcurrent: '兼務出向系',
+}
+
+const GROUP_ORDER = ['jobClassification', 'position', 'person', 'secondmentMain', 'secondmentConcurrent']
+
+function isAiOpenable(op: EditOperation): boolean {
+  if (!op.entryPoints || op.entryPoints.length === 0) return true
+  return op.entryPoints.some(p => p === 'personMenu' || p === 'dragIntent')
+}
+
+function buildOpenOperationDesc(): string {
+  const byGroup = new Map<string, EditOperation[]>()
+  for (const op of ALL_EDIT_OPERATIONS) {
+    if (!byGroup.has(op.group)) byGroup.set(op.group, [])
+    byGroup.get(op.group)!.push(op)
+  }
+
+  const header =
+    '指定した人物の操作フォームを開き、AIが把握している値を事前入力する。' +
+    'UIの表示のみ変更・データは変更しない。ユーザーが残りを入力して送信する。' +
+    '「昇格フォームを開いて」「異動画面を出して」のようなリクエストに使う。' +
+    'findPersons で rowId と availableOps を確認した後に使うこと（availableOps にない ID はエラーになる）。\n'
+
+  const orgOnlyIds: string[] = []
+  let body = ''
+
+  for (const g of GROUP_ORDER) {
+    const ops = byGroup.get(g) ?? []
+    const aiOps   = ops.filter(isAiOpenable)
+    const blocked = ops.filter(op => !isAiOpenable(op))
+    orgOnlyIds.push(...blocked.map(op => op.id))
+    if (aiOps.length === 0) continue
+    body += `\n${GROUP_LABEL[g] ?? g}:\n`
+    for (const op of aiOps) {
+      body += `  ${op.id}（${op.label}）`
+      if (op.availabilityNote) body += `: ${op.availabilityNote}`
+      body += '\n'
+    }
+  }
+
+  const footer = orgOnlyIds.length > 0
+    ? `\n※ 組織パネルボタン専用（直接開けない）: ${orgOnlyIds.join(' / ')}`
+    : ''
+
+  return header + body + footer
+}
+
+const OPEN_OPERATION_DESC = buildOpenOperationDesc()
 
 export const NAVIGATE_TOOLS: Array<ReadEntry | NavigateEntry> = [
 
@@ -30,22 +89,7 @@ export const NAVIGATE_TOOLS: Array<ReadEntry | NavigateEntry> = [
       type: 'function',
       function: {
         name: 'ui_open_operation',
-        description:
-          '指定した人物の操作フォームを開き、AIが把握している値を事前入力する。' +
-          'UIの表示のみ変更・データは変更しない。ユーザーが残りを入力して送信する。' +
-          '「昇格フォームを開いて」「異動画面を出して」のようなリクエストに使う。' +
-          'findPersons で rowId と availableOps を確認した後に使うこと（availableOps にない ID はエラーになる）。' +
-          '\n' +
-          '昇降格・役職変更: Promotion（昇格）/ Demotion（降格）/ TitleChange（役職変更）/ MpTrackSwitch（M職P職切替）\n' +
-          '雇用形態: JobTypeChange（ジョブタイプ変更）/ EmploymentExtension（雇用延長）/ EmploymentTypeChange（雇用タイプ変更）\n' +
-          '組織異動: OrgTransfer（社内異動）/ OrgRestructure（組織改変）/ ManagerChange（上司変更）\n' +
-          '兼務: ConcurrentAdd（兼務追加コピー）/ ConcurrentRelease（兼務解除）/ ConcurrentAddCancel（兼務追加取消）\n' +
-          '在籍・退職: LeaveOfAbsence（休職）/ LeaveOfAbsenceCancel（休職取消）/ ReturnFromLeave（復職）/ ReturnFromLeaveCancel（復職取消）/ EmploymentTransfer（移籍）/ EmploymentTransferCancel（移籍取消）/ NoChange（変更なし）/ NoChangeCancel（変更なし取消）\n' +
-          '出向設定: SecondmentOutSF（本務出向・SF統合先）/ SecondmentOutNonSF（本務出向・SF外）/ ConcurrentSecondmentOutNonSF（兼務出向・SF外）\n' +
-          '出向解除: SecondmentOutReleaseSF / SecondmentOutReleaseNonSF / SecondmentInReleaseSF / SecondmentInReleaseNonSF\n' +
-          '出向解除（兼務）: ConcurrentSecondmentOutReleaseSF / ConcurrentSecondmentOutReleaseNonSF / ConcurrentSecondmentInReleaseSF / ConcurrentSecondmentInReleaseNonSF\n' +
-          '出向受入取消: SecondmentInCancel / ConcurrentSecondmentInCancel\n' +
-          '※ 組織パネルボタン専用（直接開けない）: ConcurrentAddNew / SecondmentInNew / ConcurrentSecondmentInNew / AddEmptyPosition',
+        description: OPEN_OPERATION_DESC,
         parameters: {
           type: 'object',
           required: ['rowId', 'operationId'],

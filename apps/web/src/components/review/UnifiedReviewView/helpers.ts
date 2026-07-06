@@ -1,35 +1,9 @@
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { BEFORE_AFTER_FIELD_PAIRS } from '@personnel/domain/allocationRow'
-import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import { RESOLUTION_DEFS } from '@personnel/domain/rules/resolve'
 import type { ReviewRow } from '../hooks/useReviewData'
 import type { UnifiedFilter, IssueGroupDef } from './types'
-
-// ── パターンラベル ────────────────────────────────────────────────────────────
-
-export const PATTERN_CHIP_DEFS: { key: EditPattern; label: string; color: string }[] = [
-  { key: 'orgTransfer',          label: '別組織へ異動',       color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'orgRestructure',       label: '組改',              color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-  { key: 'promotion',            label: '昇格',              color: 'bg-green-100 text-green-700 border-green-200' },
-  { key: 'demotion',             label: '降格',              color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { key: 'titleChange',          label: '役職変更',          color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  { key: 'jobTypeChange',        label: 'JT変更',            color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { key: 'secondmentOut',        label: '本務出向',          color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  { key: 'secondmentIn',         label: '出向受入',          color: 'bg-amber-50 text-amber-600 border-amber-100' },
-  { key: 'secondmentOutRelease', label: '出向解除',          color: 'bg-red-100 text-red-600 border-red-200' },
-  { key: 'secondmentInRelease',  label: '受入解除',          color: 'bg-red-100 text-red-600 border-red-200' },
-  { key: 'leaveOfAbsence',       label: '休職',              color: 'bg-gray-100 text-gray-600 border-gray-200' },
-  { key: 'returnFromLeave',      label: '復職',              color: 'bg-gray-100 text-gray-600 border-gray-200' },
-  { key: 'concurrentAdd',        label: '兼務追加',          color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
-  { key: 'positionChange',       label: 'Pos変更',           color: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
-  { key: 'employmentTransfer',   label: '移籍',              color: 'bg-red-50 text-red-600 border-red-100' },
-  { key: 'noChange',             label: '変更なし',          color: 'bg-neutral-100 text-neutral-500 border-neutral-200' },
-  { key: 'termination',          label: '退職',              color: 'bg-red-100 text-red-700 border-red-200' },
-]
-
-export const PATTERN_LABEL_MAP: Partial<Record<EditPattern, string>> = Object.fromEntries(
-  PATTERN_CHIP_DEFS.map(d => [d.key, d.label])
-) as Partial<Record<EditPattern, string>>
+export { PATTERN_CHIP_DEFS, PATTERN_LABEL_MAP } from '../../common/patternChips'
 
 // ── フィルタ ─────────────────────────────────────────────────────────────────
 

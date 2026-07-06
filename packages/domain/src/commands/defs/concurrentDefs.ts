@@ -20,6 +20,9 @@ export const concurrentAddDef: EditOperation = {
   label:      '社内兼務追加',
   group:      'position',
   badge: 'concurrent',
+  description: '本務行の社員を社内の別組織で兼務させます。本務行の氏名・雇用タイプをコピーして兼務行を作成し、兼務先組織・バンド等を入力します。',
+  entryPoints:     ['personMenu'],
+  availabilityNote: '在席者（userId あり）の本務行。兼務行・出向箱には設定不可。ロック操作中は不可。',
 
   availableFor(row) {
     if (!row.userId)            return unavailable('担当者が配属されていない行には設定できません')
@@ -104,6 +107,9 @@ export const concurrentAddNewDef: EditOperation = {
   label:      '社内兼務追加（新規）',
   group:      'position',
   badge: 'concurrent',
+  description: '組織パネルから空の兼務行を新規追加します。氏名・兼務先組織などを入力してください。本務行が存在しない場合（外部受入等）はこちらを使います。',
+  entryPoints:     ['orgAddButton'],
+  availabilityNote: '組織パネルの追加ボタンから新規追加した行のみ（transferReason = 兼務）。AI から ui_open_operation では起動不可。',
 
   operationRole: {
     kind:                'lock',
@@ -186,6 +192,8 @@ export const concurrentAddCancelDef: EditOperation = {
   badge: 'negative',
 
   description: 'このセッションで追加した社内兼務を取消します。下記の情報が削除されます。',
+  entryPoints:     ['personMenu'],
+  availabilityNote: 'このセッションで ConcurrentAdd/ConcurrentAddNew で追加した兼務行のみ（prevConcurrentType が空）。',
   suppressSideEffectWarning: true,
 
   operationRole: { kind: 'lockCancel', of: 'ConcurrentAddNew' },
@@ -254,6 +262,9 @@ export const concurrentReleaseDef: EditOperation = {
   label:      '社内兼務解除',
   group:      'position',
   badge: 'concurrent',
+  description: 'インポート前から存在していた社内兼務行を業務的に解除します。兼務行は削除対象としてマークされます。セッション内で追加した兼務行は「社内兼務追加取消」を使ってください。',
+  entryPoints:     ['personMenu'],
+  availabilityNote: 'インポート前から存在していた兼務行（prevConcurrentType = 兼務）。出向兼務行は出向解除操作を使うこと。',
 
   // prevConcurrentType = '兼務' → インポート時から兼務として存在していた行のみ対象
   // セッション内追加分は ConcurrentAddCancel で対処する

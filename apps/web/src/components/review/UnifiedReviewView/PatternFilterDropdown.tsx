@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { ReviewData } from '../hooks/useReviewData'
 import { PATTERN_CHIP_DEFS } from './helpers'
+import { PatternReferenceModal } from '../../common/PatternReferenceModal'
 
 interface Props {
   activePatterns: Set<EditPattern>
@@ -11,7 +12,8 @@ interface Props {
 }
 
 export function PatternFilterDropdown({ activePatterns, onToggle, onClear, summary }: Props) {
-  const [open, setOpen] = useState(false)
+  const [open,    setOpen]    = useState(false)
+  const [refOpen, setRefOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -72,8 +74,16 @@ export function PatternFilterDropdown({ activePatterns, onToggle, onClear, summa
               </label>
             )
           })}
+          {/* 一覧リンク */}
+          <button
+            onClick={() => { setOpen(false); setRefOpen(true) }}
+            className="w-full text-left px-3 py-2 text-[10px] text-blue-500 hover:text-blue-700 hover:bg-blue-50 border-t border-gray-100 transition-colors"
+          >
+            📋 判定ロジック一覧を見る →
+          </button>
         </div>
       )}
+      {refOpen && <PatternReferenceModal onClose={() => setRefOpen(false)} />}
     </div>
   )
 }

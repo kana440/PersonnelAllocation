@@ -12,7 +12,7 @@
  *   2. ここの再エクスポートに追加
  */
 
-export type { EditOperation, OperationDef, OperationGroup, OperationRole, OperationInput, InputRow, SectionDivider, FieldChangeEffect, AvailabilityResult } from './types'
+export type { EditOperation, OperationDef, OperationGroup, OperationRole, OperationInput, InputRow, SectionDivider, FieldChangeEffect, AvailabilityResult, OperationEntryPoint } from './types'
 export { isSectionDivider, isInputRow, AVAILABLE, unavailable } from './types'
 export type { OperationBadge } from './badge'
 export { isRegularEmployee, isSecondmentAcceptance, isMainAssignment, wasSecondedOut, wasSecondedIn } from '../helpers'

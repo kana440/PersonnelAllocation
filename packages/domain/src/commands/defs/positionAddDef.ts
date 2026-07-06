@@ -20,6 +20,9 @@ export const managerChangeDef: EditOperation = {
   label:      '上司変更',
   group:      'position',
   badge:      'transfer',
+  description: 'ポジションの上司（レポートライン）を変更します。上司ポジションを選ぶと上司名が自動入力されます。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'positionCode が設定されている行（在席・空席ともに可）。ロック操作中は不可。',
 
   availableFor: (row) =>
     row.positionCode ? AVAILABLE : unavailable('ポジションコードが設定されていない行には設定できません'),
@@ -83,6 +86,9 @@ export const addEmptyPositionDef: EditOperation = {
   label:      'ポジション追加',
   group:      'position',
   badge:      'neutral',
+  description: '組織パネルから空席ポジションを新規追加します。ポジション番号は自動採番されますが変更可能です。',
+  entryPoints:     ['orgAddButton'] as const,
+  availabilityNote: '組織パネルの「+」ボタンから新規追加した行のみ（transferReason = 新規追加）。AI から ui_open_operation では起動不可。',
 
   suppressSideEffectWarning: true,
 
@@ -149,6 +155,8 @@ export const addEmptyPositionCancelDef: EditOperation = {
   group: 'position',
   badge: 'negative',
   description: 'このセッションで追加した空席ポジションを削除します。',
+  entryPoints:     ['personMenu'] as const,
+  availabilityNote: 'このセッションで ポジション追加した行のみ（lockCancel 操作）。',
   suppressSideEffectWarning: true,
 
   operationRole: { kind: 'lockCancel', of: 'AddEmptyPosition' },
