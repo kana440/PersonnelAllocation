@@ -4,6 +4,14 @@ import type { PanelDef } from '../../../store/canvasLayoutStore'
 import { computeVisibleRect, panelRect, rectsIntersect } from '../treeWindowLayout'
 
 /**
+ * 開いているパネル数がこの件数以下なら、可視判定を一切せず常に全件を描画対象にする。
+ * このスケールなら全件描画してもコストは無視できるうえ、
+ * ドラッグ/スクロール中に可視判定の再計算が追いつかず一時的に空欄になる、という
+ * 体験上の欠点を避けられる（仮想化が本当に必要なのは、これを大きく超える規模のときだけ）。
+ */
+const VIRTUALIZATION_THRESHOLD = 100
+
+/**
  * 画面外パネルを描画対象から除外する（パネル単位の仮想化）。
  *
  * スクロール位置そのものは state に持たない（スクロールピクセル単位で全パネルの
@@ -28,14 +36,21 @@ export function usePanelVirtualization(
     const el = scrollerRef.current
     if (!el) return
     const t0 = performance.now()
-    const draggingPanelId = useCanvasLayoutStore.getState().draggingPanelId
-    const visibleRect = computeVisibleRect(el.scrollLeft, el.scrollTop, el.clientWidth, el.clientHeight, canvasZoom)
-    const next = new Set<string>()
-    for (const p of displayPanels) {
-      if (p.id === draggingPanelId || rectsIntersect(panelRect(p, winW, panelHeights), visibleRect)) {
-        next.add(p.id)
+
+    let next: Set<string>
+    if (displayPanels.length <= VIRTUALIZATION_THRESHOLD) {
+      next = new Set(displayPanels.map(p => p.id))
+    } else {
+      const draggingPanelId = useCanvasLayoutStore.getState().draggingPanelId
+      const visibleRect = computeVisibleRect(el.scrollLeft, el.scrollTop, el.clientWidth, el.clientHeight, canvasZoom)
+      next = new Set<string>()
+      for (const p of displayPanels) {
+        if (p.id === draggingPanelId || rectsIntersect(panelRect(p, winW, panelHeights), visibleRect)) {
+          next.add(p.id)
+        }
       }
     }
+
     // eslint-disable-next-line no-console
     console.log(`[perf] usePanelVirtualization recompute: ${(performance.now() - t0).toFixed(1)}ms (${next.size} visible / ${displayPanels.length} open panels)`)
     setVisiblePanelIds(prev => {

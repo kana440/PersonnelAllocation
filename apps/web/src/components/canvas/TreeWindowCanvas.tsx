@@ -1,18 +1,20 @@
 import { useMemo, useCallback, useEffect, useState, useRef, memo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
+import { useCanvasLayoutStore, VIEW_MODE_WIDTHS } from '../../store/canvasLayoutStore'
 import { useStore }             from '../../store/useStore'
+import { useCanvasDisplayStore } from '../../store/canvasDisplayStore'
 import { useOrgView }           from './OrgViewContext'
 import { TreeWindow }           from './after'
 import { useCanvasScroll }      from './hooks/useCanvasScroll'
 import { useCanvasInteraction } from './hooks/useCanvasInteraction'
 import { usePanelVirtualization } from './hooks/usePanelVirtualization'
 import {
-  EST_WIN_H, CANVAS_MARGIN,
+  CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
   buildPanelByOrgIdMap, buildOrgByIdMap,
 } from './treeWindowLayout'
-import { VIEW_MODE_WIDTHS } from '../../store/canvasLayoutStore'
+import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from './panel/compactGroupDefs'
+import { estimateTreeBodyHeight, estimateBandBodyHeight, EST_HEADER_H } from './panel/heightEstimate'
 
 // memo: OrgOperationView が selectedCardRowId 等の変化で再レンダーしても、
 // context が変わらない限りここは再レンダーしない（props なし）
@@ -27,6 +29,7 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     triggerComparisonArrange,
     canvasZoom, setCanvasZoom, stepCanvasZoom,
     canvasPanelStyle,
+    draggingPanelId,
   } = useCanvasLayoutStore(useShallow(s => ({
     panels:                  s.panels,
     setPositions:            s.setPositions,
@@ -40,10 +43,17 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     setCanvasZoom:           s.setCanvasZoom,
     stepCanvasZoom:          s.stepCanvasZoom,
     canvasPanelStyle:           s.canvasPanelStyle,
+    draggingPanelId:         s.draggingPanelId,
   })))
   const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
   const selectedOrgId = useStore(s => s.selectedOrgId)
+  const compactGroupById = useCanvasDisplayStore(s => s.compactGroupById)
   const { organizations, positionTreeByOrgId } = useOrgView()
+
+  const groupDef = useMemo(() =>
+    COMPACT_GROUP_DEFS.find(d => d.id === compactGroupById)
+      ?? COMPACT_GROUP_DEFS.find(d => d.id === DEFAULT_COMPACT_GROUP_ID)!,
+    [compactGroupById])
 
   // rowId → orgId。マウント時に選択行の祖先パネルを開くために使う（useCanvasScroll 参照）
   const rowIdToOrgId = useMemo(() => {
@@ -67,19 +77,58 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     return panels.filter(p => isStandaloneWindow(p, panelByOrgId, orgById))
   }, [panels, orgById])
 
+  // ── 未実測パネルの高さ見積もり（表示モード・グループ単位で変わる）────
+  // 仮想化で一度も画面に出ていないパネルは実測（panelHeights）が永遠に届かないため、
+  // 固定値の代わりに行数（ツリー）・グループ人数（コンパクト）から見積もる。
+  // canvasPanelStyle・groupDef が変われば見積もりも変わるので依存に含める。
+  const estimatedHeights = useMemo(() => {
+    const bodyWidth = winW - 16
+    const map: Record<string, number> = {}
+    for (const p of standalonePanels) {
+      const entries = positionTreeByOrgId.get(p.orgId) ?? []
+      const bodyH = canvasPanelStyle === 'band'
+        ? estimateBandBodyHeight(entries.map(e => groupDef.getKey(e.row)), bodyWidth)
+        : estimateTreeBodyHeight(entries.length)
+      map[p.id] = EST_HEADER_H + bodyH
+    }
+    return map
+  }, [standalonePanels, positionTreeByOrgId, canvasPanelStyle, groupDef, winW])
+
+  // 実測（panelHeights）があればそちらを優先し、無ければ見積もりを使う
+  const effectiveHeights = useMemo(
+    () => ({ ...estimatedHeights, ...panelHeights }),
+    [estimatedHeights, panelHeights],
+  )
+
+  // ドラッグ中に mousemove のたびに全パネル分の computeLayout を再実行すると
+  // 大規模データで致命的に重くなるため、ドラッグ中は前回の計算結果を使い回し、
+  // ドラッグ対象パネルだけ実際の座標（ライブの x/y）に差し替える。
+  // ドラッグ終了後（draggingPanelId が null に戻ったとき）に改めて全体を再計算する。
+  const layoutCacheRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
+
+    if (draggingPanelId) {
+      return standalonePanels.map(p => {
+        if (p.id === draggingPanelId) return p
+        const cached = layoutCacheRef.current.get(p.id)
+        return cached ? { ...p, ...cached } : p
+      })
+    }
+
     const perfLabel = `[perf] computeLayout (${standalonePanels.length} standalone panels / ${panels.length} total panels)`
     // eslint-disable-next-line no-console
     console.time(perfLabel)
-    const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW)
+    const posMap = computeLayout(standalonePanels, orgById, effectiveHeights, winW)
     // eslint-disable-next-line no-console
     console.timeEnd(perfLabel)
+    layoutCacheRef.current = posMap
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [autoArrange, standalonePanels, orgById, panelHeights, winW, panels.length])
+  }, [autoArrange, standalonePanels, orgById, effectiveHeights, winW, panels.length, draggingPanelId])
 
   const connections = useMemo(
     () => buildConnections(displayPanels, orgById),
@@ -93,28 +142,28 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
 
   const canvasHeight = useMemo(() =>
     displayPanels.length === 0 ? 800
-    : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
-  , [displayPanels, panelHeights])
+    : Math.max(800, ...displayPanels.map(p => p.y + (effectiveHeights[p.id] ?? EST_HEADER_H) + CANVAS_MARGIN * 2))
+  , [displayPanels, effectiveHeights])
 
   const connectionPaths = useMemo(() =>
     connections.map(({ parentPanel, childPanel }) => ({
       key: `${parentPanel.id}-${childPanel.id}`,
-      d: connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW),
+      d: connectionPath(parentPanel, childPanel, effectiveHeights, lineStyle, winW),
       dashArray: lineStyle === 'polyline' ? undefined : '5 3',
     }))
-  , [connections, panelHeights, lineStyle, winW])
+  , [connections, effectiveHeights, lineStyle, winW])
 
   // ── 整列ボタン ──────────────────────────────────────────────────
   const handleArrange = useCallback(() => {
-    setPositions(computeLayout(standalonePanels, orgById, panelHeights, winW))
+    setPositions(computeLayout(standalonePanels, orgById, effectiveHeights, winW))
     triggerComparisonArrange()
-  }, [standalonePanels, orgById, panelHeights, winW, setPositions, triggerComparisonArrange])
+  }, [standalonePanels, orgById, effectiveHeights, winW, setPositions, triggerComparisonArrange])
 
   const handleAutoArrangeChange = useCallback((checked: boolean) => {
-    if (!checked) setPositions(computeLayout(standalonePanels, orgById, panelHeights, winW))
+    if (!checked) setPositions(computeLayout(standalonePanels, orgById, effectiveHeights, winW))
     setAutoArrange(checked)
     if (checked) triggerComparisonArrange()
-  }, [standalonePanels, orgById, panelHeights, winW, setPositions, setAutoArrange, triggerComparisonArrange])
+  }, [standalonePanels, orgById, effectiveHeights, winW, setPositions, setAutoArrange, triggerComparisonArrange])
 
   // ── スクロール（人物・組織）────────────────────────────────────
   // useCanvasScroll → usePanelVirtualization の順で呼ぶこと
@@ -123,7 +172,7 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   const { spaceHeld, panning, band, handleCanvasMouseDown } = useCanvasInteraction(scrollerRef)
 
   // ── パネル単位の仮想化（画面外パネルは描画しない）────────────────
-  const visiblePanelIds = usePanelVirtualization(scrollerRef, displayPanels, winW, panelHeights, canvasZoom)
+  const visiblePanelIds = usePanelVirtualization(scrollerRef, displayPanels, winW, effectiveHeights, canvasZoom)
 
   // ── Ctrl+Wheel ズーム ─────────────────────────────────────────
   const hasCanvasContent = displayPanels.length > 0
@@ -140,10 +189,11 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   }, [hasCanvasContent, stepCanvasZoom])
 
   // [perf] このレンダーが実際に DOM へ commit されるまでの所要時間
+  // 注: displayPanels.length は「開いている」総数。実際に描画されたのは visiblePanelIds.size
   useEffect(() => {
     const elapsed = performance.now() - renderStartRef.current
     // eslint-disable-next-line no-console
-    console.log(`[perf] TreeWindowCanvas render→commit: ${elapsed.toFixed(1)}ms (${displayPanels.length} panels displayed / ${panels.length} total panels)`)
+    console.log(`[perf] TreeWindowCanvas render→commit: ${elapsed.toFixed(1)}ms (${visiblePanelIds.size} panels rendered / ${displayPanels.length} open / ${panels.length} total)`)
   })
 
   // ── ズームプリセットドロップダウン ────────────────────────────

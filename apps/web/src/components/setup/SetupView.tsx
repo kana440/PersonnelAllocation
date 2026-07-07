@@ -18,7 +18,7 @@ const LOCAL_SAMPLE_FILES = ['sample.xlsm']
 // true  = 従来通り全人員在籍組織を自動展開
 // false = 現行のルート組織のみ自動展開（デフォルト）
 // 検証が終わったら false 側の分岐だけ残してこのフラグごと削除すること。
-const ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS = true
+const ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS = false
 
 type Phase =
   | { kind: 'checking' }

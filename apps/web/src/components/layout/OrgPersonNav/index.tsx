@@ -204,7 +204,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
                     const isError = g.level === 'error'
                     return (
                       <button
-                        key={g.message}
+                        key={g.key}
                         title={`${g.message}（${g.rowIds.length}件）`}
                         onClick={() => patchFilter({ activeIssueKey: active ? '' : g.key })}
                         className={`px-1.5 py-0.5 rounded border text-[9px] font-medium transition-all whitespace-nowrap ${

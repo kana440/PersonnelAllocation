@@ -1,7 +1,8 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
+import { useCanvasLayoutStore, VIEW_MODE_WIDTHS } from '../../../store/canvasLayoutStore'
 import { useStore }             from '../../../store/useStore'
+import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { useScopedStore }       from '../../../store/useScopedStore'
 import { buildOrgMap }          from '@personnel/domain/rules/options/rows'
 import type { Person }          from '@personnel/domain/schemas'
@@ -9,12 +10,13 @@ import { BeforeTreeWindow }     from './BeforeTreeWindow'
 import { BeforeOrgViewContext } from './BeforeOrgViewContext'
 import type { BeforeOrgViewContextValue } from './BeforeOrgViewContext'
 import {
-  EST_WIN_H, CANVAS_MARGIN,
+  CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
   buildPanelByOrgIdMap, buildOrgByIdMap, computeScrollToPanel,
 } from '../treeWindowLayout'
+import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from '../panel/compactGroupDefs'
+import { estimateTreeBodyHeight, estimateBandBodyHeight, EST_HEADER_H } from '../panel/heightEstimate'
 import { usePanelVirtualization } from '../hooks/usePanelVirtualization'
-import { VIEW_MODE_WIDTHS } from '../../../store/canvasLayoutStore'
 
 export function BeforeTreeWindowCanvas() {
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
@@ -31,6 +33,7 @@ export function BeforeTreeWindowCanvas() {
     lineStyle,
     canvasZoom, stepCanvasZoom,
     canvasPanelStyle,
+    draggingPanelId,
   } = useCanvasLayoutStore(useShallow(s => ({
     comparisonPanels:     s.comparisonPanels,
     comparisonOrgMapping: s.comparisonOrgMapping,
@@ -41,8 +44,14 @@ export function BeforeTreeWindowCanvas() {
     canvasZoom:           s.canvasZoom,
     stepCanvasZoom:       s.stepCanvasZoom,
     canvasPanelStyle:        s.canvasPanelStyle,
+    draggingPanelId:      s.draggingPanelId,
   })))
   const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
+  const compactGroupById = useCanvasDisplayStore(s => s.compactGroupById)
+  const groupDef = useMemo(() =>
+    COMPACT_GROUP_DEFS.find(d => d.id === compactGroupById)
+      ?? COMPACT_GROUP_DEFS.find(d => d.id === DEFAULT_COMPACT_GROUP_ID)!,
+    [compactGroupById])
 
   // beforeOrg の O(1) ルックアップ
   const beforeOrgById = useMemo(() => buildOrgByIdMap(beforeOrganizations), [beforeOrganizations])
@@ -134,14 +143,47 @@ export function BeforeTreeWindowCanvas() {
     return comparisonPanels.filter(p => isStandaloneWindow(p, panelByOrgId, beforeOrgById))
   }, [comparisonPanels, beforeOrgById])
 
+  // 未実測パネルの高さ見積もり（after 側 TreeWindowCanvas と同じ考え方）
+  const estimatedHeights = useMemo(() => {
+    const bodyWidth = winW - 16
+    const getGroupKey = groupDef.getPrevKey ?? groupDef.getKey
+    const map: Record<string, number> = {}
+    for (const p of standalonePanels) {
+      const rows = beforeRowsByOrgId.get(p.orgId) ?? []
+      const bodyH = canvasPanelStyle === 'band'
+        ? estimateBandBodyHeight(rows.map(getGroupKey), bodyWidth)
+        : estimateTreeBodyHeight(rows.length)
+      map[p.id] = EST_HEADER_H + bodyH
+    }
+    return map
+  }, [standalonePanels, beforeRowsByOrgId, canvasPanelStyle, groupDef, winW])
+
+  const effectiveHeights = useMemo(
+    () => ({ ...estimatedHeights, ...panelHeights }),
+    [estimatedHeights, panelHeights],
+  )
+
+  // ドラッグ中は全体再計算をスキップしてキャッシュを使い回す（after 側と同じ理由）
+  const layoutCacheRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
   const displayPanels = useMemo(() => {
     if (standalonePanels.length === 0) return standalonePanels
-    const posMap = computeLayout(standalonePanels, beforeOrgById, panelHeights, winW)
+
+    if (draggingPanelId) {
+      return standalonePanels.map(p => {
+        if (p.id === draggingPanelId) return p
+        const cached = layoutCacheRef.current.get(p.id)
+        return cached ? { ...p, ...cached } : p
+      })
+    }
+
+    const posMap = computeLayout(standalonePanels, beforeOrgById, effectiveHeights, winW)
+    layoutCacheRef.current = posMap
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [standalonePanels, beforeOrgById, panelHeights, winW])
+  }, [standalonePanels, beforeOrgById, effectiveHeights, winW, draggingPanelId])
 
   const connections = useMemo(
     () => buildConnections(displayPanels, beforeOrgById),
@@ -156,16 +198,16 @@ export function BeforeTreeWindowCanvas() {
 
   const canvasHeight = useMemo(() =>
     displayPanels.length === 0 ? 800
-    : Math.max(800, ...displayPanels.map(p => p.y + (panelHeights[p.id] ?? EST_WIN_H) + CANVAS_MARGIN * 2))
-  , [displayPanels, panelHeights])
+    : Math.max(800, ...displayPanels.map(p => p.y + (effectiveHeights[p.id] ?? EST_HEADER_H) + CANVAS_MARGIN * 2))
+  , [displayPanels, effectiveHeights])
 
   const connectionPaths = useMemo(() =>
     connections.map(({ parentPanel, childPanel }) => ({
       key: `${parentPanel.id}-${childPanel.id}`,
-      d: connectionPath(parentPanel, childPanel, panelHeights, lineStyle, winW),
+      d: connectionPath(parentPanel, childPanel, effectiveHeights, lineStyle, winW),
       dashArray: lineStyle === 'polyline' ? undefined : '5 3',
     }))
-  , [connections, panelHeights, lineStyle, winW])
+  , [connections, effectiveHeights, lineStyle, winW])
 
   // ── 選択中の行が変わったら before-canvas をスクロール ─────────────
   const selectedCardRowId    = useStore(s => s.selectedCardRowId)
@@ -176,7 +218,7 @@ export function BeforeTreeWindowCanvas() {
   useEffect(() => { displayPanelsRef.current = displayPanels }, [displayPanels])
 
   // ── パネル単位の仮想化（画面外パネルは描画しない）────────────────
-  const visiblePanelIds = usePanelVirtualization(scrollerRef, displayPanels, winW, panelHeights, canvasZoom)
+  const visiblePanelIds = usePanelVirtualization(scrollerRef, displayPanels, winW, effectiveHeights, canvasZoom)
 
   // 対象行の prevDepartmentCode からパネルチェーン（祖先→ターゲット）を展開し、
   // 座標ジャンプ（仮想化の可視範囲に入れる）→ DOM 検索でスクロールする。
@@ -212,7 +254,7 @@ export function BeforeTreeWindowCanvas() {
       if (!el) return
       const panel = targetOrgId ? displayPanelsRef.current.find(p => p.orgId === targetOrgId) : undefined
       if (panel) {
-        const panelH = panelHeights[panel.id] ?? EST_WIN_H
+        const panelH = effectiveHeights[panel.id] ?? EST_HEADER_H
         const { left, top } = computeScrollToPanel(panel, winW, panelH, canvasZoom, el.clientWidth, el.clientHeight)
         el.scrollLeft = left
         el.scrollTop  = top
@@ -222,7 +264,7 @@ export function BeforeTreeWindowCanvas() {
           ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
       })
     })
-  }, [allocationList, beforeOrganizations, setComparisonOrgOpen, panelHeights, winW, canvasZoom])
+  }, [allocationList, beforeOrganizations, setComparisonOrgOpen, effectiveHeights, winW, canvasZoom])
 
   // after-canvas からの選択時
   useEffect(() => {
