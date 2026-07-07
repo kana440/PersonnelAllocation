@@ -10,6 +10,8 @@ import { detectPatterns } from '@personnel/domain/patterns/detection'
 import { validateRow } from '@personnel/domain/rules/validate/validateRow'
 import { resolveIssueMeta } from '@personnel/domain/rules/validate/issueTypeMeta'
 import { PATTERN_COLOR_MAP, PATTERN_LABEL_MAP } from '../../common/patternChips'
+
+const FIELD_LEVEL_IDS = new Set(['field_constraint', 'field_constraint_conditional'])
 import { useDisplayPreferenceStore } from '../../../store/displayPreferenceStore'
 import type { PanelView } from './types'
 
@@ -227,7 +229,11 @@ export function SummaryView({ row, onSelect }: Props) {
               <div className="text-[10px] font-semibold text-red-500 mb-1">問題</div>
               <div className="flex flex-wrap gap-1">
                 {visibleIssueChips.map((issue, idx) => {
-                  const meta = resolveIssueMeta(issue)
+                  const meta      = resolveIssueMeta(issue)
+                  const fieldStr  = String(issue.field)
+                  const chipLabel = meta && FIELD_LEVEL_IDS.has(meta.id)
+                    ? (ALLOCATION_LIST_LABEL_MAP[fieldStr]?.ja ?? fieldStr)
+                    : (meta?.chipLabel ?? issue.message.slice(0, 8))
                   const colorCls = issue.level === 'error'
                     ? 'bg-red-100 text-red-700 border-red-200'
                     : 'bg-amber-100 text-amber-700 border-amber-200'
@@ -235,9 +241,9 @@ export function SummaryView({ row, onSelect }: Props) {
                     <span
                       key={idx}
                       className={`text-[10px] px-1.5 py-0.5 rounded border leading-none font-medium flex-shrink-0 ${colorCls}`}
-                      title={meta?.description ?? issue.message}
+                      title={issue.message}
                     >
-                      {meta?.chipLabel ?? issue.message.slice(0, 8)}
+                      {issue.level === 'error' ? '⚠ ' : '! '}{chipLabel}
                     </span>
                   )
                 })}

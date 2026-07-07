@@ -67,7 +67,7 @@ export function runFromFieldRules(
     ...VALIDATING_RULES.flatMap(r =>
       evaluateFieldRule(r, row, masters).map(issue => ({
         ...issue,
-        id: r.when ? 'field_constraint_conditional' : 'field_constraint',
+        id: r.issueId ?? (r.when ? 'field_constraint_conditional' : 'field_constraint'),
       }))
     ),
     ...checkD2_7(row, masters),

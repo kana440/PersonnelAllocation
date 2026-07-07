@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useScopedStore } from '../../../store/useScopedStore'
 import { validateRow, type ValidationIssue } from '@personnel/domain/rules/validate/validateRow'
 import { detectPatterns, type RowChanges, type DetectContext } from '@personnel/domain/patterns/detection'
+import { RowRuleCtx } from '@personnel/domain/rules/rowRule'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 
@@ -64,20 +65,30 @@ export function useReviewData(): ReviewData {
     [persons],
   )
 
-  const rows = useMemo((): ReviewRow[] =>
-    allocationList.map(row => {
+  // RowRuleCtx: lazy getter（orgById・orgByCode 等）のコストを全行で共有するため、
+  // rows のループ全体で 1 インスタンスだけ生成する（batchValidate.ts と同じパターン。
+  // 共有しないと validateRow 内で行ごとに O(組織数) の再構築が発生する）。
+  const rowRuleCtx = useMemo(() => new RowRuleCtx(masters, afterOrganizations), [masters, afterOrganizations])
+
+  const rows = useMemo((): ReviewRow[] => {
+    const perfLabel = `[perf] useReviewData rows build (${allocationList.length} rows)`
+    // eslint-disable-next-line no-console
+    console.time(perfLabel)
+    const result = allocationList.map(row => {
       const changes    = detectPatterns(row, detectCtx)
       const person     = row.userId ? personBySfId.get(row.userId as string) : undefined
       return {
         row,
         changes,
         activePatterns: changes.patterns,
-        issues:         validateRow({ row, afterOrganizations, masters, allocationList: [], changes }),
+        issues:         validateRow({ row, afterOrganizations, masters, allocationList: [], changes, rowRuleCtx }),
         personName:     person?.name ?? '',
       }
-    }),
-    [allocationList, afterOrganizations, masters, detectCtx, personBySfId]
-  )
+    })
+    // eslint-disable-next-line no-console
+    console.timeEnd(perfLabel)
+    return result
+  }, [allocationList, afterOrganizations, masters, detectCtx, personBySfId, rowRuleCtx])
 
   const summary = useMemo(() => {
     const byPattern = new Map<EditPattern, number>()

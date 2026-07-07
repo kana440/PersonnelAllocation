@@ -6,6 +6,7 @@ import { useOrgView }           from './OrgViewContext'
 import { TreeWindow }           from './after'
 import { useCanvasScroll }      from './hooks/useCanvasScroll'
 import { useCanvasInteraction } from './hooks/useCanvasInteraction'
+import { usePanelVirtualization } from './hooks/usePanelVirtualization'
 import {
   EST_WIN_H, CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
@@ -42,7 +43,16 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   })))
   const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
   const selectedOrgId = useStore(s => s.selectedOrgId)
-  const { organizations } = useOrgView()
+  const { organizations, positionTreeByOrgId } = useOrgView()
+
+  // rowId → orgId。マウント時に選択行の祖先パネルを開くために使う（useCanvasScroll 参照）
+  const rowIdToOrgId = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const [orgId, entries] of positionTreeByOrgId) {
+      for (const e of entries) map.set(e.row.rowId, orgId)
+    }
+    return map
+  }, [positionTreeByOrgId])
 
   // [perf] render開始 → commit(DOM反映)までの実測。React reconciliation + DOM mount コストを含む
   const renderStartRef = useRef(performance.now())
@@ -107,8 +117,13 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   }, [standalonePanels, orgById, panelHeights, winW, setPositions, setAutoArrange, triggerComparisonArrange])
 
   // ── スクロール（人物・組織）────────────────────────────────────
-  const { scrollerRef }                              = useCanvasScroll(displayPanels, organizations)
+  // useCanvasScroll → usePanelVirtualization の順で呼ぶこと
+  // （スクロール位置の復元/ジャンプが先に確定してから可視パネルを計算するため）
+  const { scrollerRef }                              = useCanvasScroll(displayPanels, organizations, orgById, rowIdToOrgId)
   const { spaceHeld, panning, band, handleCanvasMouseDown } = useCanvasInteraction(scrollerRef)
+
+  // ── パネル単位の仮想化（画面外パネルは描画しない）────────────────
+  const visiblePanelIds = usePanelVirtualization(scrollerRef, displayPanels, winW, panelHeights, canvasZoom)
 
   // ── Ctrl+Wheel ズーム ─────────────────────────────────────────
   const hasCanvasContent = displayPanels.length > 0
@@ -293,7 +308,7 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
                 ))}
               </svg>
 
-              {displayPanels.map(panel => (
+              {displayPanels.filter(p => visiblePanelIds.has(p.id)).map(panel => (
                 <div
                   key={panel.id}
                   className="absolute"

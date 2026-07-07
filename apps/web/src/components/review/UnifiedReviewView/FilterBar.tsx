@@ -3,7 +3,7 @@ import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { ReviewData } from '../hooks/useReviewData'
 import type { UnifiedFilter, IssueGroupDef } from './types'
-import { getIssueShortLabel, PATTERN_CHIP_DEFS, parseSearchTokens } from './helpers'
+import { PATTERN_CHIP_DEFS, parseSearchTokens } from './helpers'
 import { FilterDetailPanel } from './FilterDetailPanel'
 
 type NavMode = 'all' | 'changes' | 'issues'
@@ -189,7 +189,7 @@ export function FilterBar({
                         : isError ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
                     }`}
                   >
-                    {isError ? '⚠' : '!'} {g.resolutionDefs[0]?.shortLabel ?? getIssueShortLabel(g.message)}
+                    {isError ? '⚠ ' : '! '}{g.chipLabel}
                     <span className="ml-0.5 opacity-70">{g.rowIds.length}</span>
                   </button>
                 )

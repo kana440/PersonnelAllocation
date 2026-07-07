@@ -93,6 +93,22 @@ interface CanvasLayoutState {
   setOrgOpen:  (orgId: string, open: boolean) => void
   toggleOpen:  (panelId: string) => void
 
+  /**
+   * orgId から根組織まで遡り、閉じている祖先パネルを全て開く（対象自身も含む）。
+   * 初期表示はルート組織のみ open のため、ナビ・検索・レビュー画面からの選択でも
+   * 対象が見えるようにするための共通ヘルパー。兄弟・親の兄弟には触れない。
+   */
+  openOrgAncestors: (orgId: string, orgById: Map<string, Organization>) => void
+
+  /**
+   * 現在ドラッグ中のパネル ID。仮想化（画面外パネルの非描画）で、
+   * ドラッグ中のパネルだけは可視範囲外でも常に描画対象に含めるためのガード。
+   * PanelDef に持たせず独立フィールドにするのは、これが UI 一時状態であり
+   * clearPanels() 等の panels 配列操作に巻き込まれるべきではないため。
+   */
+  draggingPanelId:    string | null
+  setDraggingPanelId: (panelId: string | null) => void
+
   setPosition:  (panelId: string, x: number, y: number) => void
   setPositions: (positions: Map<string, { x: number; y: number }>) => void
 
@@ -318,6 +334,22 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
 
   setOrgOpen: (orgId, open) =>
     set(s => ({ panels: s.panels.map(p => p.orgId === orgId ? { ...p, open } : p) })),
+
+  openOrgAncestors: (orgId, orgById) => {
+    const toOpen = new Set<string>()
+    let cur = orgById.get(orgId)
+    while (cur) {
+      toOpen.add(cur.id)
+      cur = cur.parentId ? orgById.get(cur.parentId) : undefined
+    }
+    if (toOpen.size === 0) return
+    set(s => ({
+      panels: s.panels.map(p => (toOpen.has(p.orgId) && !p.open) ? { ...p, open: true } : p),
+    }))
+  },
+
+  draggingPanelId:    null,
+  setDraggingPanelId: (panelId) => set({ draggingPanelId: panelId }),
 
   toggleOpen: (panelId) =>
     set(s => ({ panels: s.panels.map(p => p.id === panelId ? { ...p, open: !p.open } : p) })),

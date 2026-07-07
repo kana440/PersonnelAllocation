@@ -8,10 +8,11 @@ export function useCanvasPanelNav(
   viewOrgs: Organization[],
   _selectPerson: (id: string) => void,  // 後方互換のため残存（未使用）
 ) {
-  const { panels, setOrgOpen, addPanel, setCollapsedOrgIds, requestScrollToRow } = useCanvasLayoutStore(
+  const { panels, setOrgOpen, openOrgAncestors, addPanel, setCollapsedOrgIds, requestScrollToRow } = useCanvasLayoutStore(
     useShallow(s => ({
       panels:             s.panels,
       setOrgOpen:         s.setOrgOpen,
+      openOrgAncestors:   s.openOrgAncestors,
       addPanel:           s.addPanel,
       setCollapsedOrgIds: s.setCollapsedOrgIds,
       requestScrollToRow: s.requestScrollToRow,
@@ -36,7 +37,10 @@ export function useCanvasPanelNav(
 
     const exactPanel = panels.find(pp => pp.orgId === orgId)
     if (exactPanel && isActivePanel(exactPanel)) {
-      if (!exactPanel.open) setOrgOpen(orgId, true)
+      // 初期表示はルート組織のみ open のため、対象自身だけでなく閉じている祖先も
+      // 全て開く（1つでも祖先が閉じていると isStandaloneWindow が false になり非表示のまま）。
+      // 兄弟や親の兄弟には触れない。
+      openOrgAncestors(orgId, orgMap)
       return
     }
     // ゴースト（inline 切り替え後の残留パネル）または exactPanel なし → 祖先ウォークで開く

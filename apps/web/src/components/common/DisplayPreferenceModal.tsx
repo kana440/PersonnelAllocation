@@ -54,6 +54,7 @@ const ISSUE_GROUPS: { label: string; group: IssueGroup }[] = [
   { label: '必須項目',       group: 'required'    },
   { label: '書式',           group: 'format'      },
   { label: 'マスタ整合性',   group: 'consistency' },
+  { label: '条件付き制約',   group: 'conditional' },
   { label: '行間',           group: 'interRow'    },
   { label: 'ワーニング',     group: 'warning'     },
 ]
@@ -176,7 +177,7 @@ export function DisplayPreferenceModal({ onClose }: Props) {
                 return (
                   <div key={group}>
                     <div className="text-[10px] font-semibold text-gray-400 mb-1.5">{label}</div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="space-y-1">
                       {metas.map(meta => {
                         const checked = visibleIssueIds.has(meta.id)
                         const colorOn = meta.level === 'error'
@@ -186,14 +187,22 @@ export function DisplayPreferenceModal({ onClose }: Props) {
                           <button
                             key={meta.id}
                             onClick={() => toggleIssueId(meta.id)}
-                            title={meta.description}
-                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] leading-none font-medium transition-all ${
+                            className={`w-full flex items-start gap-2 px-2 py-1 rounded border text-left transition-all ${
+                              checked
+                                ? colorOn
+                                : 'bg-gray-50 text-gray-300 border-gray-200'
+                            }`}
+                          >
+                            <span className={`shrink-0 px-1 py-0.5 rounded text-[10px] font-semibold leading-none border mt-0.5 ${
                               checked
                                 ? colorOn
                                 : 'bg-gray-100 text-gray-300 border-gray-200 line-through'
-                            }`}
-                          >
-                            {meta.chipLabel}
+                            }`}>
+                              {meta.chipLabel}
+                            </span>
+                            <span className={`text-[11px] leading-snug ${checked ? '' : 'text-gray-300'}`}>
+                              {meta.description}
+                            </span>
                           </button>
                         )
                       })}

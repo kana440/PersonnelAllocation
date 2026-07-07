@@ -11,8 +11,9 @@ import type { BeforeOrgViewContextValue } from './BeforeOrgViewContext'
 import {
   EST_WIN_H, CANVAS_MARGIN,
   isStandaloneWindow, computeLayout, connectionPath, buildConnections,
-  buildPanelByOrgIdMap, buildOrgByIdMap,
+  buildPanelByOrgIdMap, buildOrgByIdMap, computeScrollToPanel,
 } from '../treeWindowLayout'
+import { usePanelVirtualization } from '../hooks/usePanelVirtualization'
 import { VIEW_MODE_WIDTHS } from '../../../store/canvasLayoutStore'
 
 export function BeforeTreeWindowCanvas() {
@@ -64,7 +65,8 @@ export function BeforeTreeWindowCanvas() {
     return m
   }, [beforeOrganizations])
 
-  // 比較モード開始時にパネルを初期化（After の initPanelsForOrgs と同じ判定: isRoot || subtreeCount > 0）
+  // 比較モード開始時にパネルを初期化。ルート組織のみ自動展開する
+  // （全ての祖先を自動展開すると大規模データで描画がフリーズするため。子孫はチップから手動展開する）
   // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
   useEffect(() => {
     if (comparisonPanels.length > 0) return  // guard: 既に初期化済み
@@ -75,7 +77,7 @@ export function BeforeTreeWindowCanvas() {
     const openIds = new Set<string>()
     for (const org of viewOrgs) {
       const isRoot = !org.parentId || !orgIdSet.has(org.parentId)
-      if (isRoot || (beforeSubtreeCountByOrgId.get(org.id) ?? 0) > 0) openIds.add(org.id)
+      if (isRoot) openIds.add(org.id)
     }
     initComparisonPanels(ids, openIds)
   }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -170,17 +172,23 @@ export function BeforeTreeWindowCanvas() {
   const selectedCardSource   = useStore(s => s.selectedCardSource)
   const scrollToBeforeRowRequest = useCanvasLayoutStore(s => s.scrollToBeforeRowRequest)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const displayPanelsRef = useRef(displayPanels)
+  useEffect(() => { displayPanelsRef.current = displayPanels }, [displayPanels])
 
-  // after-canvas からの選択時: before-canvas のパネルチェーンを展開してスクロール
-  useEffect(() => {
-    if (!selectedCardRowId || selectedCardSource !== 'after') return
+  // ── パネル単位の仮想化（画面外パネルは描画しない）────────────────
+  const visiblePanelIds = usePanelVirtualization(scrollerRef, displayPanels, winW, panelHeights, canvasZoom)
 
-    // 対象 row の prevDepartmentCode からパネルチェーンを展開（祖先→ターゲット）
-    const row = allocationList.find(r => r.rowId === selectedCardRowId)
+  // 対象行の prevDepartmentCode からパネルチェーン（祖先→ターゲット）を展開し、
+  // 座標ジャンプ（仮想化の可視範囲に入れる）→ DOM 検索でスクロールする。
+  // after-canvas からの選択・サイドバーからの選択の両方から呼ばれる共通処理。
+  const revealBeforeRow = useCallback((rowId: number) => {
+    const row = allocationList.find(r => r.rowId === rowId)
+    let targetOrgId: string | undefined
     if (row?.prevDepartmentCode) {
       const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
       const targetOrg = viewOrgs.find(o => o.externalCode === row.prevDepartmentCode)
       if (targetOrg) {
+        targetOrgId = targetOrg.id
         const orgMap = new Map(viewOrgs.map(o => [o.id, o]))
         const curPanels = useCanvasLayoutStore.getState().comparisonPanels
         const panelMap = new Map(curPanels.map(p => [p.orgId, p]))
@@ -197,22 +205,37 @@ export function BeforeTreeWindowCanvas() {
       }
     }
 
-    // パネル展開後（次フレーム）にスクロール
-    const rowId = selectedCardRowId
-    setTimeout(() => {
-      scrollerRef.current
-        ?.querySelector<HTMLElement>(`[data-before-rowid="${rowId}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
-    }, 0)
-  }, [selectedCardRowId, selectedCardSource]) // eslint-disable-line react-hooks/exhaustive-deps
+    // 1フレーム目: パネル展開の反映を待ってから座標ジャンプ（仮想化の可視範囲に入れる）
+    // 2フレーム目: ジャンプによる可視パネル再計算が反映されてから DOM 検索で微調整
+    requestAnimationFrame(() => {
+      const el = scrollerRef.current
+      if (!el) return
+      const panel = targetOrgId ? displayPanelsRef.current.find(p => p.orgId === targetOrgId) : undefined
+      if (panel) {
+        const panelH = panelHeights[panel.id] ?? EST_WIN_H
+        const { left, top } = computeScrollToPanel(panel, winW, panelH, canvasZoom, el.clientWidth, el.clientHeight)
+        el.scrollLeft = left
+        el.scrollTop  = top
+      }
+      requestAnimationFrame(() => {
+        el.querySelector<HTMLElement>(`[data-before-rowid="${rowId}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+      })
+    })
+  }, [allocationList, beforeOrganizations, setComparisonOrgOpen, panelHeights, winW, canvasZoom])
 
-  // サイドバーからの選択時: パネル展開後にスクロール（seq で重複排除）
+  // after-canvas からの選択時
   useEffect(() => {
-    if (!scrollToBeforeRowRequest || !scrollerRef.current) return
-    const el = scrollerRef.current.querySelector<HTMLElement>(`[data-before-rowid="${scrollToBeforeRowRequest.rowId}"]`)
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
-  }, [scrollToBeforeRowRequest])
+    if (!selectedCardRowId || selectedCardSource !== 'after') return
+    revealBeforeRow(selectedCardRowId)
+  }, [selectedCardRowId, selectedCardSource, revealBeforeRow])
+
+  // サイドバーからの選択時（seq で重複排除）。以前は祖先を開かず DOM 検索のみで、
+  // 対象パネルが閉じていると無言で失敗していた（既存バグ）ため、上と同じ処理に揃える。
+  useEffect(() => {
+    if (!scrollToBeforeRowRequest) return
+    revealBeforeRow(scrollToBeforeRowRequest.rowId)
+  }, [scrollToBeforeRowRequest, revealBeforeRow])
 
   // ── Ctrl+Wheel ズーム（TreeWindowCanvas と共有） ─────────────────
   // standalonePanels.length > 0 を dep に含めることで、比較モード開始後に
@@ -421,8 +444,8 @@ export function BeforeTreeWindowCanvas() {
                 ))}
               </svg>
 
-              {/* ウィンドウ群 */}
-              {displayPanels.map(panel => {
+              {/* ウィンドウ群（仮想化: 可視範囲外のパネルは描画しない） */}
+              {displayPanels.filter(p => visiblePanelIds.has(p.id)).map(panel => {
                 return (
                   <div
                     key={panel.id}

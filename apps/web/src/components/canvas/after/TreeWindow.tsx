@@ -13,6 +13,7 @@ import { TreeWindowHeader }        from './TreeWindowHeader'
 import { AddRowDropdown }          from '../AddRowDropdown'
 import { BandMatrixPanel }         from '../panel/BandMatrixPanel'
 import { RowCard }                 from '../panel/RowCard'
+import { VirtualRowList }          from '../panel/VirtualRowList'
 
 interface TreeWindowProps {
   panel:       PanelDef
@@ -117,6 +118,12 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     subtreeCountByOrgId,
     renderItems: (orgId, panelId) => {
       const entries = positionTreeByOrgId.get(orgId) ?? []
+      // 行単位の仮想化（Tier 1）: パネル自身の現在のルート組織の直属行のみ対象。
+      // inline 展開された子組織のセクション（orgId !== currentRootId）はスクロール開始位置が
+      // 0 でない（他の内容の下に積まれる）ため対象外とし、従来通り全件描画する。
+      if (orgId === currentRootId) {
+        return <VirtualRowList items={entries} orgId={orgId} panelId={panelId} />
+      }
       return entries.map(e => <RowCard key={e.row.rowId} entry={e} orgId={orgId} panelId={panelId} />)
     },
     renderFlatItems: (orgId, panelId) => <BandMatrixPanel orgId={orgId} panelId={panelId} />,
@@ -137,7 +144,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     selectedOrgId: selectedOrgId ?? undefined,
     onSelectOrg: selectOrg,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [organizations, orgById, childrenByOrgId, getItemCount, subtreeCountByOrgId, positionTreeByOrgId, getHeaderBg, handleDragOver, handleDragLeave, handleDrop, dragOverOrgId, selectedOrgId, selectOrg])
+  }), [organizations, orgById, childrenByOrgId, getItemCount, subtreeCountByOrgId, positionTreeByOrgId, getHeaderBg, handleDragOver, handleDragLeave, handleDrop, dragOverOrgId, selectedOrgId, selectOrg, currentRootId])
 
   const hasChildren = (childrenByOrgId.get(currentRootId)?.length ?? 0) > 0
 

@@ -1,10 +1,14 @@
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { BEFORE_AFTER_FIELD_PAIRS } from '@personnel/domain/allocationRow'
+import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { RESOLUTION_DEFS } from '@personnel/domain/rules/resolve'
 import { resolveIssueMeta } from '@personnel/domain/rules/validate/issueTypeMeta'
 import type { ReviewRow } from '../hooks/useReviewData'
 import type { UnifiedFilter, IssueGroupDef } from './types'
 export { PATTERN_CHIP_DEFS, PATTERN_LABEL_MAP } from '../../common/patternChips'
+
+/** これらの id は同一 id が複数フィールドにまたがるため、chipLabel にフィールド名を使う */
+const FIELD_LEVEL_IDS = new Set(['field_constraint', 'field_constraint_conditional'])
 
 // ── フィルタ ─────────────────────────────────────────────────────────────────
 
@@ -123,12 +127,21 @@ export function buildIssueGroups(rows: ReviewRow[]): IssueGroupDef[] {
     for (const issue of issues) {
       const key = issueGroupKey(issue)
       if (!map.has(key)) {
+        const meta      = resolveIssueMeta(issue)
+        const fieldStr  = String(issue.field)
+        const fieldLabel = ALLOCATION_LIST_LABEL_MAP[fieldStr]?.ja ?? fieldStr
+        // field_constraint 系は同一 id が複数フィールドにまたがるのでフィールド名を chipLabel にする
+        const chipLabel = meta && FIELD_LEVEL_IDS.has(meta.id)
+          ? fieldLabel
+          : (meta?.chipLabel ?? getIssueShortLabel(issue.message))
         map.set(key, {
           key,
           message:        issue.message,
-          field:          String(issue.field),
+          field:          fieldStr,
           level:          issue.level as 'error' | 'warning',
           rowIds:         [],
+          chipLabel,
+          description:    meta?.description,
           suggestedPatch: issue.suggestedPatch,
           resolutionDefs: RESOLUTION_DEFS.filter(d => d.match(issue)),
         })

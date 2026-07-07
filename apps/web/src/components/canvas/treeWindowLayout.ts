@@ -134,3 +134,59 @@ export function buildConnections(standalonePanels: PanelDef[], orgById: Map<stri
 }
 
 export const CANVAS_MARGIN = MARGIN
+
+// ── パネル仮想化（画面外パネルの非描画）用ヘルパー ─────────────────────────
+
+/** 可視範囲判定のオーバースキャン（canvas 座標・非スケール）。パネル1個分の余白を持たせる */
+export const PANEL_CULL_OVERSCAN_X = WINDOW_W
+export const PANEL_CULL_OVERSCAN_Y = EST_WIN_H
+
+export interface Rect { x1: number; y1: number; x2: number; y2: number }
+
+export function panelRect(panel: PanelDef, winW: number, panelHeights: Record<string, number>): Rect {
+  return {
+    x1: panel.x,
+    y1: panel.y,
+    x2: panel.x + winW,
+    y2: panel.y + (panelHeights[panel.id] ?? EST_WIN_H),
+  }
+}
+
+export function rectsIntersect(a: Rect, b: Rect): boolean {
+  return a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1
+}
+
+/**
+ * スクローラの scrollLeft/scrollTop/clientWidth/clientHeight と canvasZoom から、
+ * 現在画面に見えている canvas 座標（非スケール）の矩形を求める（オーバースキャン込み）。
+ * zoom は外側ラッパーへの transform: scale() のみで適用され、panel.x/y は非スケール座標のため、
+ * スクロール量（スケール後のpx）を canvasZoom で割ることで同じ非スケール座標系に変換する。
+ */
+export function computeVisibleRect(
+  scrollLeft: number, scrollTop: number, clientWidth: number, clientHeight: number,
+  canvasZoom: number,
+  overscanX = PANEL_CULL_OVERSCAN_X, overscanY = PANEL_CULL_OVERSCAN_Y,
+): Rect {
+  return {
+    x1: scrollLeft / canvasZoom - overscanX,
+    y1: scrollTop / canvasZoom - overscanY,
+    x2: (scrollLeft + clientWidth) / canvasZoom + overscanX,
+    y2: (scrollTop + clientHeight) / canvasZoom + overscanY,
+  }
+}
+
+/**
+ * 指定パネルが画面中央に来るような scrollLeft/scrollTop を計算する（座標優先のスクロール先決定）。
+ * パネルが DOM に無くても（仮想化で非描画でも）計算だけで求まるのがポイント。
+ * 呼び出し側で 0〜(canvasWidth*zoom-clientWidth) 等の範囲にクランプすることを想定し、
+ * ここでは 0 未満だけガードする。
+ */
+export function computeScrollToPanel(
+  panel: { x: number; y: number },
+  winW: number, panelH: number,
+  canvasZoom: number, clientWidth: number, clientHeight: number,
+): { left: number; top: number } {
+  const left = panel.x * canvasZoom - (clientWidth  - winW  * canvasZoom) / 2
+  const top  = panel.y * canvasZoom - (clientHeight - panelH * canvasZoom) / 2
+  return { left: Math.max(0, left), top: Math.max(0, top) }
+}

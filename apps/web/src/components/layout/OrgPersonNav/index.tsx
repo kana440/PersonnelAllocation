@@ -5,7 +5,7 @@ import { useReviewFilterStore }   from '../../../store/reviewFilterStore'
 import { useRowSelectionStore }   from '../../../store/rowSelectionStore'
 import { useCanvasPanelNav }      from './useCanvasPanelNav'
 import { PATTERN_CHIP_DEFS }       from '../../common/patternChips'
-import { getIssueShortLabel }      from '../../review/UnifiedReviewView/helpers'
+
 import { BulkFieldEditModal }     from '../../review/components/BulkFieldEditModal'
 import { OrgSection }             from './OrgSection'
 import { useCompactData }         from './useCompactData'
@@ -215,7 +215,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
                                       : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
                         }`}
                       >
-                        {isError ? '⚠' : '!'} {g.resolutionDefs[0]?.shortLabel ?? getIssueShortLabel(g.message)} {g.rowIds.length}
+                        {isError ? '⚠ ' : '! '}{g.chipLabel} {g.rowIds.length}
                       </button>
                     )
                   })}

@@ -3,6 +3,7 @@ import type React from 'react'
 import type { PanelDef, CanvasPanelStyle } from '../../../store/canvasLayoutStore'
 import { VIEW_MODE_WIDTHS, useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { scheduleHeightUpdate } from './panelHeightBatcher'
+import { PanelScrollContext } from './PanelScrollContext'
 
 interface Props {
   panel:          PanelDef
@@ -36,6 +37,7 @@ export function OrgTreePanel({
   dragHandlersOuter,
 }: Props) {
   const panelRef  = useRef<HTMLDivElement>(null)
+  const bodyRef   = useRef<HTMLDivElement>(null)
   const dragging  = useRef(false)
   const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 })
   const zoomRef   = useRef(1)
@@ -58,6 +60,7 @@ export function OrgTreePanel({
     e.preventDefault()
     dragging.current  = true
     dragStart.current = { mx: e.clientX, my: e.clientY, px: panel.x, py: panel.y }
+    useCanvasLayoutStore.getState().setDraggingPanelId(panel.id)
   }
 
   useEffect(() => {
@@ -67,7 +70,10 @@ export function OrgTreePanel({
       const z = zoomRef.current
       setPosition(panel.id, Math.max(0, px + (e.clientX - mx) / z), Math.max(0, py + (e.clientY - my) / z))
     }
-    const onUp = () => { dragging.current = false }
+    const onUp = () => {
+      dragging.current = false
+      useCanvasLayoutStore.getState().setDraggingPanelId(null)
+    }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup',   onUp)
     return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
@@ -98,8 +104,10 @@ export function OrgTreePanel({
       {panel.open && renderControls?.()}
 
       {panel.open && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {renderBody()}
+        <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto">
+          <PanelScrollContext.Provider value={{ scrollerRef: bodyRef }}>
+            {renderBody()}
+          </PanelScrollContext.Provider>
         </div>
       )}
     </div>

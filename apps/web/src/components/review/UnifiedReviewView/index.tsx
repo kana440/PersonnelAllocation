@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '../../../store/useStore'
 import { useReviewFilterStore } from '../../../store/reviewFilterStore'
@@ -24,6 +24,10 @@ const ALL_DISPLAY_FIELDS: DisplayField[] = BEFORE_AFTER_FIELD_PAIRS.map(([afterK
 
 
 export function UnifiedReviewView() {
+  // [perf] render開始 → commit(DOM反映)までの実測
+  const renderStartRef = useRef(performance.now())
+  renderStartRef.current = performance.now()
+
   const data = useReviewData()
   const { afterOrganizations, masters, selectedRowId } = useStore(useShallow(s => ({
     afterOrganizations: s.afterOrganizations,
@@ -72,6 +76,9 @@ export function UnifiedReviewView() {
 
   // ── 組織別にグループ化し、キャンバスと同じツリー順でソートした OrgTableItem[] を構築 ──
   const items = useMemo((): OrgTableItem[] => {
+    const perfLabel = `[perf] UnifiedReviewView items build (${data.rows.length} rows, ${filteredRows.length} filtered)`
+    // eslint-disable-next-line no-console
+    console.time(perfLabel)
     const afterOrgByCode = new Map(
       afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])
     )
@@ -137,6 +144,8 @@ export function UnifiedReviewView() {
       for (const rr of noOrgRows) result.push({ kind: 'row', reviewRow: rr })
     }
 
+    // eslint-disable-next-line no-console
+    console.timeEnd(perfLabel)
     return result
   }, [data.rows, filteredRows, afterOrganizations, orgPathMap])
 
@@ -179,6 +188,13 @@ export function UnifiedReviewView() {
   const handleOrgClick = useCallback((orgId: string) => {
     selectOrg(orgId)
   }, [selectOrg])
+
+  // [perf] このレンダーが実際に DOM へ commit されるまでの所要時間
+  useEffect(() => {
+    const elapsed = performance.now() - renderStartRef.current
+    // eslint-disable-next-line no-console
+    console.log(`[perf] UnifiedReviewView render→commit: ${elapsed.toFixed(1)}ms (${items.length} table rows/headers)`)
+  })
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

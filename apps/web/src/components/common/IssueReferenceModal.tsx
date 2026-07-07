@@ -5,17 +5,19 @@ import { ISSUE_TYPE_METAS, type IssueGroup } from '@personnel/domain/rules/valid
 // ── 表示グループ定義 ──────────────────────────────────────────────────────────
 
 const DISPLAY_GROUPS: { label: string; group: IssueGroup }[] = [
-  { label: '必須項目',       group: 'required'    },
-  { label: '書式',           group: 'format'      },
-  { label: 'マスタ整合性',   group: 'consistency' },
-  { label: '行間バリデーション', group: 'interRow' },
-  { label: 'ワーニング',     group: 'warning'     },
+  { label: '必須項目',         group: 'required'    },
+  { label: '書式',             group: 'format'      },
+  { label: 'マスタ整合性',     group: 'consistency' },
+  { label: '条件付き制約',     group: 'conditional' },
+  { label: '行間バリデーション', group: 'interRow'  },
+  { label: 'ワーニング',       group: 'warning'     },
 ]
 
 const GROUP_HEADER_COLORS: Record<IssueGroup, string> = {
   required:    'bg-red-50 text-red-800',
   format:      'bg-orange-50 text-orange-800',
   consistency: 'bg-yellow-50 text-yellow-800',
+  conditional: 'bg-violet-50 text-violet-800',
   interRow:    'bg-blue-50 text-blue-800',
   warning:     'bg-amber-50 text-amber-800',
 }

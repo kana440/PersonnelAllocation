@@ -1,16 +1,9 @@
 import { type AllocationRow, isVacantRow } from '@personnel/domain/allocationRow'
 import type { Organization } from '@personnel/domain/schemas'
 
-/**
- * ルート組織（親を持たない組織）の ID 一覧を返す。管理者モードの初期パネル構築に使う。
- */
-export function getRootOrgIds(afterOrganizations: Organization[]): string[] {
-  const orgIds = new Set(afterOrganizations.map(o => o.id))
-  return afterOrganizations
-    .filter(o => !o.parentId || !orgIds.has(o.parentId))
-    .map(o => o.id)
-}
-
+// TODO(検証用・一時的): 仮想化後に「配下に人がいる組織を初回から自動展開」が
+// パフォーマンス的に問題ないか比較検証するためだけに復活させた関数。
+// 検証が終わったら SetupView.tsx の呼び出し側ごと削除すること。
 /**
  * 管理者モード用: メンバー（userId あり）が属する全組織 ID の一覧を返す（重複なし）。
  */

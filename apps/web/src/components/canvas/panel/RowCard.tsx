@@ -9,6 +9,7 @@ import { useDisplayPreferenceStore } from '../../../store/displayPreferenceStore
 import { useStore }              from '../../../store/useStore'
 import { CanvasFieldDiff }       from '../toolbar/CanvasFieldDiff'
 import { PATTERN_COLOR_MAP, PATTERN_LABEL_MAP } from '../../common/patternChips'
+import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { isInternalPosCode, getPositionTitle, getEmpBorderClass } from './helpers'
 import { isVacantRow } from '@personnel/domain/allocationRow'
 import { TR_SHORT } from '@personnel/domain/transferReasonLabels'
@@ -28,6 +29,8 @@ const AUTO_DIFF_FIELDS: AutoDiffField[] = [
   { afterKey: 'secondmentToCompany',   prevKey: 'prevSecondmentToCompany',   label: '出向先' },
   { afterKey: 'leaveOfAbsenceSign',    prevKey: 'prevLeaveOfAbsenceSign',    label: '休職' },
 ]
+
+const FIELD_LEVEL_IDS = new Set(['field_constraint', 'field_constraint_conditional'])
 
 const DEST_BADGE_COLORS = [
   'bg-blue-100 text-blue-700',
@@ -432,12 +435,16 @@ export function RowCard({
                 <div className="flex flex-wrap gap-0.5 mt-0.5">
                   {visibleIssueChips.slice(0, 2).map((issue, idx) => {
                     const meta = resolveIssueMeta(issue)
+                    const fieldStr  = String(issue.field)
+                    const chipLabel = meta && FIELD_LEVEL_IDS.has(meta.id)
+                      ? (ALLOCATION_LIST_LABEL_MAP[fieldStr]?.ja ?? fieldStr)
+                      : (meta?.chipLabel ?? issue.message.slice(0, 8))
                     const colorCls = issue.level === 'error'
                       ? 'bg-red-100 text-red-700 border-red-200'
                       : 'bg-amber-100 text-amber-700 border-amber-200'
                     return (
-                      <span key={idx} className={`flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none ${colorCls}`}>
-                        {meta?.chipLabel ?? issue.message.slice(0, 8)}
+                      <span key={idx} title={issue.message} className={`flex-shrink-0 text-[9px] px-0.5 py-0.5 rounded border leading-none ${colorCls}`}>
+                        {issue.level === 'error' ? '⚠ ' : '! '}{chipLabel}
                       </span>
                     )
                   })}

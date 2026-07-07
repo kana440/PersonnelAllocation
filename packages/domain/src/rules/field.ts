@@ -35,6 +35,7 @@ import { DISCRETIONARY_YES, DISCRETIONARY_NO }   from '../masters/discretionaryW
  */
 export interface FieldRule {
   field:      keyof AllocationRow
+  issueId?:   string            // ValidationIssue.id に使う個別ID。未指定は fromFieldRules.ts でフォールバック
   when?:      (row: AllocationRow, masters: AllMasters) => boolean
   source:     (masters: AllMasters, row: AllocationRow) => string[]
   value:      'auto' | 'suggest' | 'none'
@@ -120,8 +121,9 @@ function c(
   source:  FieldRule['source'],
   message: (val: string) => string,
   when?:   FieldRule['when'],
+  issueId?: string,
 ): FieldRule {
-  return { field, source, when, value: 'none', options: 'split', validation: 'warning', message }
+  return { field, source, when, issueId, value: 'none', options: 'split', validation: 'warning', message }
 }
 
 // 推奨ルール（バリデーションなし・選択肢のみ）の簡略コンストラクタ
@@ -163,7 +165,8 @@ export const FIELD_RULES: FieldRule[] = [
   c('employmentType',
     ms => ms.employmentTypes.filter(e => e.isSecondmentAcceptance).map(e => e.label),
     _  => '出向受入の雇用タイプは出向受入対応の雇用タイプから選択してください',
-    row => !!row.secondmentFromCompany && row.concurrentType !== '兼務'),
+    row => !!row.secondmentFromCompany && row.concurrentType !== '兼務',
+    'f1_employmentType'),
 
   c('jobFamily',
     ms => ms.jobFamilies.map(e => e.label),
@@ -207,34 +210,40 @@ export const FIELD_RULES: FieldRule[] = [
   c('officialPositionCode',
     _   => ['出向者'],
     _   => '出向先会社が入力されている場合、役職は「出向者」を選択してください',
-    row => !!row.secondmentToCompany),
+    row => !!row.secondmentToCompany,
+    'c4_officialPosition'),
 
   c('location',
     _   => ['出向'],
     _   => '出向先会社が入力されている場合、勤務場所は「出向」を選択してください',
-    row => !!row.secondmentToCompany),
+    row => !!row.secondmentToCompany,
+    'c4_location'),
 
   // F1: 雇用タイプが出向受入のとき、対応バンド・給与等級に限定
   c('band',
     ms => ms.jobLevels.filter(e => e.isSecondmentAcceptance).map(e => e.label),
     _  => 'バンドは雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance),
+    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance,
+    'f1_band'),
 
   c('payGrade',
     ms => ms.payGrades.filter(e => e.isSecondmentAcceptance).map(e => e.label),
     _  => '給与等級は雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance),
+    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance,
+    'f1_payGrade'),
 
   // F2: 雇用タイプが社員かつ userId === groupEmployeeId のとき、対応バンド・給与等級・ポジション_バンドに限定
   c('band',
     ms => ms.jobLevels.filter(e => e.isRegularEmployee).map(e => e.label),
     _  => 'バンドは雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId),
+    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId,
+    'f2_band'),
 
   c('positionBand',
     ms => ms.jobLevels.filter(e => e.isRegularEmployee).map(e => e.label),
     _  => 'ポジション_バンドは雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId),
+    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId,
+    'f2_positionBand'),
 
   c('payGrade',
     (ms, row) => {
@@ -255,34 +264,40 @@ export const FIELD_RULES: FieldRule[] = [
       }).map(e => e.label)
     },
     _  => '給与等級は雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId),
+    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId,
+    'f2_payGrade'),
 
   // F3: 雇用タイプが雇用延長のとき、対応バンド・給与等級・ポジション_バンドに限定
   c('band',
     ms => ms.jobLevels.filter(e => e.isExtendedEmployeeJobClassification).map(e => e.label),
     _  => 'バンドは雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee),
+    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee,
+    'f3_band'),
 
   c('positionBand',
     ms => ms.jobLevels.filter(e => e.isExtendedEmployeePosition).map(e => e.label),
     _  => 'ポジション_バンドは雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee),
+    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee,
+    'f3_positionBand'),
 
   c('payGrade',
     ms => ms.payGrades.filter(e => e.isExtendedEmployee).map(e => e.label),
     _  => '給与等級は雇用タイプに対応する選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee),
+    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee,
+    'f3_payGrade'),
 
   // F4: 申請区分の兼務チェックサインが立っているとき、給与等級を兼務対応に限定・休職フラグは設定不可
   c('payGrade',
     ms => ms.payGrades.filter(e => e.isConcurrent).map(e => e.label),
     _  => '給与等級は兼務に対応する選択肢から選択してください',
-    (row, ms) => !!findTransferReason(ms, row)?.concurrentCheckSign),
+    (row, ms) => !!findTransferReason(ms, row)?.concurrentCheckSign,
+    'f4_payGrade'),
 
   c('leaveOfAbsenceSign',
     _  => ['0'],
     _  => '兼務の場合、休職フラグは設定できません',
-    (row, ms) => !!findTransferReason(ms, row)?.concurrentCheckSign),
+    (row, ms) => !!findTransferReason(ms, row)?.concurrentCheckSign,
+    'f4_leaveOfAbsence'),
 
   // positionUnionFlag: F1/F2 — positionBand の isRegularEmployeeOrSecondmentAcceptance=false なら非組合員のみ
   c('positionUnionFlag',
@@ -296,7 +311,8 @@ export const FIELD_RULES: FieldRule[] = [
       const et = findEmpType(ms, row)
       return !!et?.isSecondmentAcceptance
           || (!!et?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId)
-    }),
+    },
+    'f_posUnionFlag_f1f2'),
 
   // positionUnionFlag: F3 — positionBand の isExtendedEmployeeUnionMember=false なら非組合員のみ
   c('positionUnionFlag',
@@ -306,13 +322,15 @@ export const FIELD_RULES: FieldRule[] = [
         ? [UNION_MEMBER_CODE.NON_MEMBER] : [...UNION_MEMBER_CODES]
     },
     _ => 'ポジション_労働組合員は有効な選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee),
+    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee,
+    'f_posUnionFlag_f3'),
 
   // unionFlag: F1（出向受入）— 常に非組合員
   c('unionFlag',
     _  => [UNION_MEMBER_CODE.NON_MEMBER],
     _  => '労働組合員は有効な選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance),
+    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance,
+    'f_unionFlag_f1'),
 
   // unionFlag: F2（社員）— band の isRegularEmployeeOrSecondmentAcceptance=false なら非組合員のみ
   c('unionFlag',
@@ -322,7 +340,8 @@ export const FIELD_RULES: FieldRule[] = [
         ? [UNION_MEMBER_CODE.NON_MEMBER] : [...UNION_MEMBER_CODES]
     },
     _ => '労働組合員は有効な選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId),
+    (row, ms) => !!findEmpType(ms, row)?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId,
+    'f_unionFlag_f2'),
 
   // unionFlag: F3（雇用延長）— band の isExtendedEmployeeUnionMember=false なら非組合員のみ
   c('unionFlag',
@@ -332,7 +351,8 @@ export const FIELD_RULES: FieldRule[] = [
         ? [UNION_MEMBER_CODE.NON_MEMBER] : [...UNION_MEMBER_CODES]
     },
     _ => '労働組合員は有効な選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee),
+    (row, ms) => !!findEmpType(ms, row)?.isExtendedEmployee,
+    'f_unionFlag_f3'),
 
   // 裁量対象: ポジション_裁量労働対象が「はい」のとき、positionBand / jobFamily / jobType を裁量対象に絞る
   c('positionBand',
@@ -345,7 +365,8 @@ export const FIELD_RULES: FieldRule[] = [
       }).map(e => e.label)
     },
     _ => 'ポジション_バンドは裁量対象に対応する選択肢から選択してください',
-    row => row.positionDiscretionaryWorkFlag === DISCRETIONARY_YES),
+    row => row.positionDiscretionaryWorkFlag === DISCRETIONARY_YES,
+    'd_positionBand'),
 
   c('jobFamily',
     ms => {
@@ -353,7 +374,8 @@ export const FIELD_RULES: FieldRule[] = [
       return ms.jobFamilies.filter(e => targetCodes.has(e.code)).map(e => e.label)
     },
     _ => 'ジョブファミリーは裁量対象に対応する選択肢から選択してください',
-    row => row.positionDiscretionaryWorkFlag === DISCRETIONARY_YES),
+    row => row.positionDiscretionaryWorkFlag === DISCRETIONARY_YES,
+    'd_jobFamily'),
 
   c('jobType',
     (ms, row) => {
@@ -368,7 +390,8 @@ export const FIELD_RULES: FieldRule[] = [
       return candidates.map(e => e.label)
     },
     _ => 'ジョブタイプは裁量対象に対応する選択肢から選択してください',
-    row => row.positionDiscretionaryWorkFlag === DISCRETIONARY_YES),
+    row => row.positionDiscretionaryWorkFlag === DISCRETIONARY_YES,
+    'd_jobType'),
 
   // ポジション_裁量労働対象 — F1（出向受入）
   c('positionDiscretionaryWorkFlag',
@@ -382,7 +405,8 @@ export const FIELD_RULES: FieldRule[] = [
       return [DISCRETIONARY_YES, DISCRETIONARY_NO]
     },
     _ => 'ポジション_裁量労働対象は有効な選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance),
+    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance,
+    'd_posDisc_f1'),
 
   // ポジション_裁量労働対象 — F2/F3（社員/雇用延長）
   c('positionDiscretionaryWorkFlag',
@@ -403,7 +427,8 @@ export const FIELD_RULES: FieldRule[] = [
       const et = findEmpType(ms, row)
       return (!!et?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId)
           || !!et?.isExtendedEmployee
-    }),
+    },
+    'd_posDisc_f23'),
 
   // 裁量労働対象（人）— F1（出向受入）
   c('discretionaryWorkFlag',
@@ -417,7 +442,8 @@ export const FIELD_RULES: FieldRule[] = [
       return [DISCRETIONARY_YES, DISCRETIONARY_NO]
     },
     _ => '裁量労働対象は有効な選択肢から選択してください',
-    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance),
+    (row, ms) => !!findEmpType(ms, row)?.isSecondmentAcceptance,
+    'd_disc_f1'),
 
   // 裁量労働対象（人）— F2/F3（社員/雇用延長）
   c('discretionaryWorkFlag',
@@ -438,7 +464,8 @@ export const FIELD_RULES: FieldRule[] = [
       const et = findEmpType(ms, row)
       return (!!et?.isRegularEmployee && !!row.userId && row.userId === row.groupEmployeeId)
           || !!et?.isExtendedEmployee
-    }),
+    },
+    'd_disc_f23'),
 ]
 
 // ── 評価ヘルパー ─────────────────────────────────────────────────────────────

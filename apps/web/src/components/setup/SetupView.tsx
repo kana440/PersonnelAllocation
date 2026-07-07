@@ -13,6 +13,13 @@ import type { WorkspaceMeta } from '../../infrastructure/workspace'
 
 const LOCAL_SAMPLE_FILES = ['sample.xlsm']
 
+// TODO(検証用・一時的): 仮想化後に「管理者モードで配下に人がいる組織を初回から
+// 自動展開」してもパフォーマンス上問題ないか比較検証するためのフラグ。
+// true  = 従来通り全人員在籍組織を自動展開
+// false = 現行のルート組織のみ自動展開（デフォルト）
+// 検証が終わったら false 側の分岐だけ残してこのフラグごと削除すること。
+const ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS = true
+
 type Phase =
   | { kind: 'checking' }
   | { kind: 'resume'; entries: WorkspaceMeta[] }
@@ -100,17 +107,22 @@ export function SetupView({ onReady }: Props) {
   ) => {
     const { initPanelsForOrgs } = useCanvasLayoutStore.getState()
     const orgIds = result.afterOrganizations.map(o => o.id)
-
-    // メンバー組織の LCA を計算してパネルと同じ set() で確定（タイミング問題を回避）
-    const memberOrgIds = role === 'assignee'
-      ? getAssigneeOrgIds(result.allocationList, result.afterOrganizations, assigneeName)
-      : getAllMemberOrgIds(result.allocationList, result.afterOrganizations)
     const orgById = new Map(result.afterOrganizations.map(o => [o.id, o]))
 
+    // 管理者・担当者どちらも初期表示ではルート組織のみ開く
+    // （メンバー組織の祖先を全自動展開すると大規模データで描画がフリーズするため）。
+    // 子孫はチップから手動展開するか、下の focusOrg によるサイドバーフォーカス・検索から辿る。
+    // ※ ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS=true の間は検証用に管理者モードのみ従来挙動に戻す
+    const memberOrgIds = (role === 'admin' && ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS)
+      ? getAllMemberOrgIds(result.allocationList, result.afterOrganizations)
+      : []
     initPanelsForOrgs(orgIds, memberOrgIds, orgById)
 
-    // 担当者モード: サイドバーを最初の担当組織にフォーカス
-    if (role === 'assignee' && memberOrgIds.length > 0) focusOrg(memberOrgIds[0])
+    // 担当者モード: サイドバーを最初の担当組織にフォーカス（キャンバスパネルの自動展開はしない）
+    if (role === 'assignee') {
+      const assigneeOrgIds = getAssigneeOrgIds(result.allocationList, result.afterOrganizations, assigneeName)
+      if (assigneeOrgIds.length > 0) focusOrg(assigneeOrgIds[0])
+    }
   }, [focusOrg])
 
   // 管理者として開く
@@ -148,12 +160,16 @@ export function SetupView({ onReady }: Props) {
     await loadWorkspace(payload)
     const { role, assigneeName } = payload.userSession
     const orgIds      = payload.afterOrganizations.map(o => o.id)
-    const memberOrgIds = role === 'assignee'
-      ? getAssigneeOrgIds(payload.allocationList, payload.afterOrganizations, assigneeName)
-      : getAllMemberOrgIds(payload.allocationList, payload.afterOrganizations)
     const orgById = new Map(payload.afterOrganizations.map(o => [o.id, o]))
+    // 管理者・担当者どちらもルート組織のみ自動展開する（initCanvas と同じ理由）
+    const memberOrgIds = (role === 'admin' && ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS)
+      ? getAllMemberOrgIds(payload.allocationList, payload.afterOrganizations)
+      : []
     useCanvasLayoutStore.getState().initPanelsForOrgs(orgIds, memberOrgIds, orgById)
-    if (role === 'assignee' && memberOrgIds.length > 0) focusOrg(memberOrgIds[0])
+    if (role === 'assignee') {
+      const assigneeOrgIds = getAssigneeOrgIds(payload.allocationList, payload.afterOrganizations, assigneeName)
+      if (assigneeOrgIds.length > 0) focusOrg(assigneeOrgIds[0])
+    }
     onReady()
   }, [loadWorkspace, focusOrg, onReady])
 

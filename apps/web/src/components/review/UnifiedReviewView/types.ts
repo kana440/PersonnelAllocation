@@ -33,6 +33,10 @@ export interface IssueGroupDef {
   field:           string
   level:           'error' | 'warning'
   rowIds:          number[]
+  /** IssueTypeMeta.chipLabel — RowCard / SummaryView と共通の問題種別表示ラベル */
+  chipLabel:       string
+  /** IssueTypeMeta.description — ユーザー向けの説明文。チップのツールチップ等に使用 */
+  description?:    string
   /** issue.suggestedPatch から取得。確定的な修正値が存在する場合に設定する（ワンクリック修正用） */
   suggestedPatch?: Partial<AllocationRow>
   /** RESOLUTION_DEFS.filter() で取得した全修正案（空配列の場合は汎用ドロップダウンにフォールバック） */
