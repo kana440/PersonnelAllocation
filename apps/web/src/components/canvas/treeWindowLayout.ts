@@ -64,14 +64,20 @@ export function computeLayout(
   const getPanelH   = (p: PanelDef) => panelHeights[p.id] ?? EST_WIN_H
 
   // subtreeW をメモ化して O(N) に（元は各ノードで再帰的に再計算）
+  // visiting は組織データに親子の循環参照（不正データ）があった場合の無限再帰・スタックオーバー
+  // フローを防ぐガード。循環が見つかった場合はそこで打ち切り windowW を返す。
   const subtreeWCache = new Map<string, number>()
+  const visiting = new Set<string>()
   const subtreeW = (p: PanelDef): number => {
     const cached = subtreeWCache.get(p.id)
     if (cached !== undefined) return cached
+    if (visiting.has(p.id)) return windowW
+    visiting.add(p.id)
     const children = getChildren(p)
     const w = children.length === 0
       ? windowW
       : Math.max(windowW, children.reduce((s, c, i) => s + subtreeW(c) + (i ? H_GAP : 0), 0))
+    visiting.delete(p.id)
     subtreeWCache.set(p.id, w)
     return w
   }
