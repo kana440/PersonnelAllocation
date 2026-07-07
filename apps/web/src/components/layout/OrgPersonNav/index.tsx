@@ -43,7 +43,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
   })))
 
   const activePatterns     = useReviewFilterStore(s => s.filter.activePatterns)
-  const activeIssueMessage = useReviewFilterStore(s => s.filter.activeIssueMessage)
+  const activeIssueKey = useReviewFilterStore(s => s.filter.activeIssueKey)
   const patchFilter        = useReviewFilterStore(s => s.patchFilter)
 
   const { sections, totalCount, changedCount, patternCounts, filteredRowIds, issueGroups } = useCompactData()
@@ -63,11 +63,11 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
   const switchMode = useCallback((mode: NavMode) => {
     setNavMode(mode)
     if (mode === 'all') {
-      patchFilter({ changedOnly: false, issuesOnly: false, activePatterns: new Set(), activeIssueMessage: '' })
+      patchFilter({ changedOnly: false, issuesOnly: false, activePatterns: new Set(), activeIssueKey: '' })
     } else if (mode === 'changes') {
-      patchFilter({ changedOnly: true, issuesOnly: false, activeIssueMessage: '' })
+      patchFilter({ changedOnly: true, issuesOnly: false, activeIssueKey: '' })
     } else {
-      patchFilter({ issuesOnly: true, changedOnly: false, activePatterns: new Set(), activeIssueMessage: '' })
+      patchFilter({ issuesOnly: true, changedOnly: false, activePatterns: new Set(), activeIssueKey: '' })
     }
   }, [patchFilter])
 
@@ -88,8 +88,8 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
   }, [activePatterns, patchFilter])
 
   const selectedIssueGroup = useMemo(
-    () => issueGroups.find(g => g.message === activeIssueMessage) ?? null,
-    [issueGroups, activeIssueMessage],
+    () => issueGroups.find(g => g.key === activeIssueKey) ?? null,
+    [issueGroups, activeIssueKey],
   )
 
   const handlePersonFocus = useCallback((rowId: number) => {
@@ -200,13 +200,13 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
             : <div className="space-y-1">
                 <div className="flex flex-wrap gap-0.5 max-h-24 overflow-y-auto">
                   {issueGroups.map(g => {
-                    const active  = activeIssueMessage === g.message
+                    const active  = activeIssueKey === g.key
                     const isError = g.level === 'error'
                     return (
                       <button
                         key={g.message}
                         title={`${g.message}（${g.rowIds.length}件）`}
-                        onClick={() => patchFilter({ activeIssueMessage: active ? '' : g.message })}
+                        onClick={() => patchFilter({ activeIssueKey: active ? '' : g.key })}
                         className={`px-1.5 py-0.5 rounded border text-[9px] font-medium transition-all whitespace-nowrap ${
                           active
                             ? isError ? 'bg-red-600 text-white border-red-600'
@@ -215,7 +215,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
                                       : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
                         }`}
                       >
-                        {isError ? '⚠' : '!'} {g.resolutionDef?.shortLabel ?? getIssueShortLabel(g.message)} {g.rowIds.length}
+                        {isError ? '⚠' : '!'} {g.resolutionDefs[0]?.shortLabel ?? getIssueShortLabel(g.message)} {g.rowIds.length}
                       </button>
                     )
                   })}
@@ -224,7 +224,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
                 {selectedIssueGroup && (
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => patchFilter({ activeIssueMessage: '' })}
+                      onClick={() => patchFilter({ activeIssueKey: '' })}
                       className="text-[9px] text-gray-400 hover:text-gray-600"
                     >×</button>
                     <button
@@ -292,7 +292,8 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
         <BulkFieldEditModal
           field={bulkModal.field}
           rowIds={bulkModal.rowIds}
-          resolutionDef={bulkModal.resolutionDef}
+          suggestedPatch={bulkModal.suggestedPatch}
+          resolutionDefs={bulkModal.resolutionDefs}
           onClose={() => { setBulkModal(null); clearSelection() }}
         />
       )}

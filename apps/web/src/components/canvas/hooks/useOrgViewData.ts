@@ -105,6 +105,9 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
   }, [allocationList])
 
   const positionTreeByOrgId = useMemo((): Map<string, PositionEntry[]> => {
+    const perfLabel = `[perf] positionTreeByOrgId build (${allocationList.length} rows, ${afterOrgRowsById.size} orgs)`
+    // eslint-disable-next-line no-console
+    console.time(perfLabel)
     const result = new Map<string, PositionEntry[]>()
     for (const [orgId, rows] of afterOrgRowsById) {
       // 同一 org 内の positionCode セット（外部上司判定用）
@@ -137,6 +140,8 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
         }
       }))
     }
+    // eslint-disable-next-line no-console
+    console.timeEnd(perfLabel)
     return result
   }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes, detectCtx])
 

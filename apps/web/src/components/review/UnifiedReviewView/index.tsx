@@ -211,7 +211,8 @@ export function UnifiedReviewView() {
         <BulkFieldEditModal
           field={bulkModal.field}
           rowIds={bulkModal.rowIds}
-          resolutionDef={bulkModal.resolutionDef}
+          suggestedPatch={bulkModal.suggestedPatch}
+          resolutionDefs={bulkModal.resolutionDefs}
           onClose={() => setBulkModal(null)}
         />
       )}

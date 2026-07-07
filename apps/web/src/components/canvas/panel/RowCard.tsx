@@ -56,7 +56,6 @@ export function RowCard({
 }: RowCardProps) {
   const { row, person, depth, activePatterns, validationIssues, externalManagerKind } = entry
   const {
-    organizations,
     isSelectMode, selectedPersonIds,
     handlePersonClick,
     handleRowDoubleClick,
@@ -69,6 +68,7 @@ export function RowCard({
     setDragOverOrgId,
     openDropIntent,
     positionTreeByOrgId,
+    afterOrgByCode, beforeOrgByCode,
   } = useOrgView()
 
   // selectedCardRowId: コンテキスト経由をやめてストア直接購読 → このカードが選択状態か否かだけ比較
@@ -79,7 +79,6 @@ export function RowCard({
     useShallow(s => ({ visiblePatterns: s.visiblePatterns, visibleIssueIds: s.visibleIssueIds }))
   )
   const masters             = useStore(s => s.masters)
-  const beforeOrganizations = useStore(s => s.beforeOrganizations)
 
   // 自動検出変更フィールド（displayFields に含まれるものは除外して重複を防ぐ）
   const changedFields = useMemo(() => {
@@ -92,15 +91,15 @@ export function RowCard({
         const prevRaw  = String(r[f.prevKey]  ?? '')
         if (afterRaw === prevRaw || !prevRaw) return null
         const afterVal = f.isOrg
-          ? (organizations.find(o => o.externalCode === afterRaw)?.name ?? afterRaw)
+          ? (afterOrgByCode.get(afterRaw)?.name ?? afterRaw)
           : afterRaw
         const prevVal = f.isOrg
-          ? (beforeOrganizations.find(o => o.externalCode === prevRaw)?.name ?? prevRaw)
+          ? (beforeOrgByCode.get(prevRaw)?.name ?? prevRaw)
           : prevRaw
         return { key: f.afterKey, label: f.label, afterVal, prevVal }
       })
       .filter((f): f is NonNullable<typeof f> => f !== null)
-  }, [row, displayFields, organizations, beforeOrganizations])
+  }, [row, displayFields, afterOrgByCode, beforeOrgByCode])
 
   const clearDropTargets = () => {
     setDropPersonRowId(null)

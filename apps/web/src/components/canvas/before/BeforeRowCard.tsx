@@ -1,4 +1,3 @@
-import type { Person }        from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import { useStore }           from '../../../store/useStore'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
@@ -13,8 +12,8 @@ interface Props {
 
 export function BeforeRowCard({ row, orgId, depth = 0 }: Props) {
   const {
-    persons, afterOrganizations, beforeOrganizations,
     comparisonOrgMapping, selectedIds, toggleSelect,
+    beforeOrgById, afterOrgMap, personBySfId,
   } = useBeforeOrgView()
 
   const masters           = useStore(s => s.masters)
@@ -22,15 +21,15 @@ export function BeforeRowCard({ row, orgId, depth = 0 }: Props) {
   const selectCard        = useStore(s => s.selectCard)
   const requestScrollToRow = useCanvasLayoutStore(s => s.requestScrollToRow)
 
-  const person  = persons.find((p: Person) => p.sfPersonId === row.userId)
+  const person  = row.userId ? personBySfId.get(row.userId) : undefined
   const isVacant = !person
 
-  const beforeOrg      = beforeOrganizations.find(o => o.id === orgId)
+  const beforeOrg      = beforeOrgById.get(orgId)
   const mappedAfterId  = comparisonOrgMapping[orgId]
-  const mappedAfterOrg = mappedAfterId ? afterOrganizations.find(o => o.id === mappedAfterId) : null
+  const mappedAfterOrg = mappedAfterId ? afterOrgMap.get(mappedAfterId) : null
   const stayed         = row.departmentCode === beforeOrg?.externalCode
   const toMapped       = !stayed && !!mappedAfterOrg && row.departmentCode === mappedAfterOrg.externalCode
-  const destOrg        = !stayed ? afterOrganizations.find(o => o.externalCode === row.departmentCode) : null
+  const destOrg        = !stayed && row.departmentCode ? afterOrgMap.get(row.departmentCode) : null
 
   const isSingleSelected = selectedCardRowId === row.rowId
   const isMultiSelected  = !!person && selectedIds.has(person.id)

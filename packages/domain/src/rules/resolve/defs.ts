@@ -46,14 +46,13 @@ export const RESOLUTION_DEFS: ValidationResolutionDef[] = [
     id:         'officialPos-secondment',
     field:      'officialPositionCode',
     shortLabel: '役職(出向)',
-    level:      'error',
+    level:      'warning',
     label:      '出向者役職',
+    // suggestValue は issue.suggestedPatch で代替されるため不要
     match(issue) {
-      return issue.field === 'officialPositionCode'
-        && issue.level === 'error'
-        && issue.message.includes('出向先会社')
+      return issue.id === 'field_constraint_conditional'
+        && issue.field === 'officialPositionCode'
     },
-    suggestValue() { return '出向者' },
     patch(_row, values) { return values },
   },
 
@@ -72,14 +71,13 @@ export const RESOLUTION_DEFS: ValidationResolutionDef[] = [
     id:         'location-secondment',
     field:      'location',
     shortLabel: '場所(出向)',
-    level:      'error',
+    level:      'warning',
     label:      '出向勤務場所',
+    // suggestValue は issue.suggestedPatch で代替されるため不要
     match(issue) {
-      return issue.field === 'location'
-        && issue.level === 'error'
-        && issue.message.includes('出向先会社')
+      return issue.id === 'field_constraint_conditional'
+        && issue.field === 'location'
     },
-    suggestValue() { return '出向' },
     patch(_row, values) { return values },
   },
 

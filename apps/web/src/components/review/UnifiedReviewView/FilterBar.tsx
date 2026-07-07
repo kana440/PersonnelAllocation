@@ -37,9 +37,9 @@ export function FilterBar({
   const switchMode = (mode: NavMode) => {
     setUiMode(mode)
     if (mode === 'all') {
-      set({ changedOnly: false, issuesOnly: false, activePatterns: new Set(), activeIssueMessage: '' })
+      set({ changedOnly: false, issuesOnly: false, activePatterns: new Set(), activeIssueKey: '' })
     } else if (mode === 'changes') {
-      set({ changedOnly: true, issuesOnly: false, activeIssueMessage: '' })
+      set({ changedOnly: true, issuesOnly: false, activeIssueKey: '' })
     } else {
       set({ issuesOnly: true, changedOnly: false, activePatterns: new Set() })
     }
@@ -59,7 +59,7 @@ export function FilterBar({
     el.style.height = `${Math.min(el.scrollHeight, 100)}px`
   }, [searchInput])
 
-  const selectedGroup  = issueGroups.find(g => g.message === filter.activeIssueMessage) ?? null
+  const selectedGroup  = issueGroups.find(g => g.key === filter.activeIssueKey) ?? null
   const totalIssueRows = new Set(issueGroups.flatMap(g => g.rowIds)).size
   const tokenCount     = parseSearchTokens(searchInput).length
 
@@ -178,25 +178,25 @@ export function FilterBar({
             <div className="flex items-start gap-1 px-2 pb-1.5 border-t border-gray-100 pt-1 flex-wrap">
               <span className="text-[9px] font-semibold text-red-600 flex-shrink-0 whitespace-nowrap mt-0.5 mr-0.5">問題 {totalIssueRows}件:</span>
               {issueGroups.map(g => {
-                const active  = filter.activeIssueMessage === g.message
+                const active  = filter.activeIssueKey === g.key
                 const isError = g.level === 'error'
                 return (
                   <button key={g.message} title={`${g.message}（${g.rowIds.length}件）`}
-                    onClick={() => set({ activeIssueMessage: active ? '' : g.message })}
+                    onClick={() => set({ activeIssueKey: active ? '' : g.key })}
                     className={`px-1.5 py-0.5 rounded border text-[9px] font-medium transition-all whitespace-nowrap ${
                       active
                         ? isError ? 'bg-red-600 text-white border-red-600' : 'bg-amber-500 text-white border-amber-500'
                         : isError ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
                     }`}
                   >
-                    {isError ? '⚠' : '!'} {g.resolutionDef?.shortLabel ?? getIssueShortLabel(g.message)}
+                    {isError ? '⚠' : '!'} {g.resolutionDefs[0]?.shortLabel ?? getIssueShortLabel(g.message)}
                     <span className="ml-0.5 opacity-70">{g.rowIds.length}</span>
                   </button>
                 )
               })}
               {selectedGroup && (
                 <>
-                  <button onClick={() => set({ activeIssueMessage: '' })} className="text-[9px] text-gray-400 hover:text-gray-600 mt-0.5">×</button>
+                  <button onClick={() => set({ activeIssueKey: '' })} className="text-[9px] text-gray-400 hover:text-gray-600 mt-0.5">×</button>
                   <button onClick={() => onOpenBulkModal(selectedGroup)}
                     className="px-2.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap bg-blue-600 text-white hover:bg-blue-700 transition-colors ml-auto flex-shrink-0"
                   >一括修正 →</button>

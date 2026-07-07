@@ -57,8 +57,8 @@ export function filterRows(
   if (filter.issuesOnly)  list = list.filter(r => r.issues.length > 0)
   if (filter.activePatterns.size > 0)
     list = list.filter(r => [...filter.activePatterns].some(p => r.activePatterns.has(p)))
-  if (filter.activeIssueMessage)
-    list = list.filter(r => r.issues.some(i => i.message === filter.activeIssueMessage))
+  if (filter.activeIssueKey)
+    list = list.filter(r => r.issues.some(i => issueGroupKey(i) === filter.activeIssueKey))
   if (filter.searchText) {
     const tokens = parseSearchTokens(filter.searchText)
     if (tokens.length > 0)
@@ -112,22 +112,28 @@ export function getIssueShortLabel(message: string): string {
 
 // ── 問題グループ ──────────────────────────────────────────────────────────────
 
+/** グルーピングキー: id がある場合は `${id}::${field}`、ない場合は message にフォールバック */
+function issueGroupKey(issue: { id?: string; field: unknown; message: string }): string {
+  return issue.id ? `${issue.id}::${String(issue.field)}` : issue.message
+}
+
 export function buildIssueGroups(rows: ReviewRow[]): IssueGroupDef[] {
   const map = new Map<string, IssueGroupDef>()
   for (const { row, issues } of rows) {
     for (const issue of issues) {
-      if (!map.has(issue.message)) {
-        // 後ろから検索することで、汎用 def より先に特化 def がマッチする
-        const resolutionDef = [...RESOLUTION_DEFS].reverse().find(d => d.match(issue))
-        map.set(issue.message, {
-          message: issue.message,
-          field:   String(issue.field),
-          level:   issue.level as 'error' | 'warning',
-          rowIds:  [],
-          resolutionDef,
+      const key = issueGroupKey(issue)
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          message:        issue.message,
+          field:          String(issue.field),
+          level:          issue.level as 'error' | 'warning',
+          rowIds:         [],
+          suggestedPatch: issue.suggestedPatch,
+          resolutionDefs: RESOLUTION_DEFS.filter(d => d.match(issue)),
         })
       }
-      map.get(issue.message)!.rowIds.push(row.rowId)
+      map.get(key)!.rowIds.push(row.rowId)
     }
   }
   return [...map.values()].sort((a, b) => b.rowIds.length - a.rowIds.length)

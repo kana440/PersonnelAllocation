@@ -55,6 +55,10 @@ export interface OrgViewContextValue {
   /** orgId → サブツリー全体のアイテム数。O(N) で1回構築し全 TreeWindow が O(1) で参照 */
   subtreeCountByOrgId:      Map<string, number>
   afterMembersByOrgId:      Map<string, MemberEntry[]>
+  /** externalCode/id → Organization（after 側）。RowCard 等の名前解決を O(1) にするための共有 Map */
+  afterOrgByCode:           Map<string, Organization>
+  /** externalCode/id → Organization（before 側）。RowCard 等の名前解決を O(1) にするための共有 Map */
+  beforeOrgByCode:          Map<string, Organization>
   dragOverOrgId:            string | null
   setDragOverOrgId:         (id: string | null) => void
   highlightedOrgId:         string | null

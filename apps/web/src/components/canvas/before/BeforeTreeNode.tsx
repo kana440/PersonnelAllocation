@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { useBeforeOrgView } from './BeforeOrgViewContext'
 import { BeforeRowCard } from './BeforeRowCard'
-import { buildPositionDepthList, subtreeRowCount, hasAnyRows } from '../panel/helpers'
+import { buildPositionDepthList } from '../panel/helpers'
 import type { Organization } from '@personnel/domain/schemas'
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
-  const { beforeOrganizations, beforeRowsByOrgId } = useBeforeOrgView()
+  const { beforeRowsByOrgId, childrenByOrgId, beforeSubtreeCountByOrgId, beforeOrgById } = useBeforeOrgView()
   const { comparisonPanels, setComparisonOrgOpen } = useCanvasLayoutStore(useShallow(s => ({
     comparisonPanels:     s.comparisonPanels,
     setComparisonOrgOpen: s.setComparisonOrgOpen,
@@ -23,15 +23,15 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
   const panel        = comparisonPanels.find(p => p.id === panelId)
   const childrenMode = panel?.childrenMode ?? 'inline'
 
-  const org       = beforeOrganizations.find(o => o.id === orgId)
+  const org       = beforeOrgById.get(orgId)
   const rows      = beforeRowsByOrgId.get(orgId) ?? []
   const depthList = useMemo(
     () => buildPositionDepthList(rows, r => r.prevPositionCode, r => r.prevManagerPositionCode),
     [rows],
   )
-  const hasRowsFn = (id: string) => beforeRowsByOrgId.has(id)
-  const childOrgs = beforeOrganizations.filter(
-    o => o.parentId === orgId && hasAnyRows(o.id, beforeOrganizations, hasRowsFn),
+  // 子組織は事前構築済みの Map から O(1) で取得し、行を持つサブツリーのみに絞る（プレ計算済みカウントを再利用）
+  const childOrgs = (childrenByOrgId.get(orgId) ?? []).filter(
+    o => (beforeSubtreeCountByOrgId.get(o.id) ?? 0) > 0,
   )
 
   if (!org) return null
@@ -47,7 +47,7 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
           const isOpen     = childPanel?.open ?? false
 
           if (!isOpen) {
-            const count = subtreeRowCount(child.id, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
+            const count = beforeSubtreeCountByOrgId.get(child.id) ?? 0
             return (
               <BeforeChildChip
                 key={child.id}
@@ -60,7 +60,7 @@ export function BeforeTreeNode({ orgId, panelId, onNavigate, isRoot }: Props) {
           }
 
           if (childrenMode === 'windowed') {
-            const count = subtreeRowCount(child.id, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
+            const count = beforeSubtreeCountByOrgId.get(child.id) ?? 0
             return (
               <BeforeChildChip
                 key={child.id}
@@ -152,8 +152,8 @@ function BeforeInlineSection({
   onNavigate:   (orgId: string) => void
   onCollapse:   () => void
 }) {
-  const { beforeOrganizations, beforeRowsByOrgId } = useBeforeOrgView()
-  const count = subtreeRowCount(child.id, beforeOrganizations, id => beforeRowsByOrgId.get(id)?.length ?? 0)
+  const { beforeSubtreeCountByOrgId } = useBeforeOrgView()
+  const count = beforeSubtreeCountByOrgId.get(child.id) ?? 0
 
   return (
     <div className="rounded border border-gray-200">

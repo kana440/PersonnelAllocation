@@ -437,7 +437,11 @@ export function evaluateFieldRule(
   if (allowed.includes(val)) return []
 
   const level = rule.validation === 'warning' ? 'warning' as const : 'error' as const
-  return [{ field: rule.field, level, message: rule.message!(val) }]
+  // allowed が 1 件のときは修正値が確定するため suggestedPatch として付与する
+  const suggestedPatch: Partial<AllocationRow> | undefined = allowed.length === 1
+    ? { [rule.field]: allowed[0] } as Partial<AllocationRow>
+    : undefined
+  return [{ field: rule.field, level, message: rule.message!(val), ...(suggestedPatch && { suggestedPatch }) }]
 }
 
 /**

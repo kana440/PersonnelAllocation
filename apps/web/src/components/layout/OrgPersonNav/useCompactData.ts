@@ -54,7 +54,7 @@ export function useCompactData(): CompactData {
   const activePatterns     = useReviewFilterStore(s => s.filter.activePatterns)
   const issuesOnly         = useReviewFilterStore(s => s.filter.issuesOnly)
   const changedOnly        = useReviewFilterStore(s => s.filter.changedOnly)
-  const activeIssueMessage = useReviewFilterStore(s => s.filter.activeIssueMessage)
+  const activeIssueKey = useReviewFilterStore(s => s.filter.activeIssueKey)
   const showMembersOnly = useReviewFilterStore(s => s.showMembersOnly)
 
   const afterOrgByCode = useMemo(
@@ -95,7 +95,7 @@ export function useCompactData(): CompactData {
       if (activePatterns.size > 0 && ![...activePatterns].some(p => rowPatterns.has(p))) return []
       if (issuesOnly  && issues.length === 0)    return []
       if (changedOnly && rr.changes.diffCount === 0) return []
-      if (activeIssueMessage && !issues.some(i => i.message === activeIssueMessage)) return []
+      if (activeIssueKey && !issues.some(i => (i.id ? `${i.id}::${String(i.field)}` : i.message) === activeIssueKey)) return []
 
       const orgCode = showOldOrg
         ? (row.prevDepartmentCode as string | undefined)
@@ -135,7 +135,7 @@ export function useCompactData(): CompactData {
       }] as (CompactPersonRow & { _orgCode: string | undefined })[]
     })
   }, [reviewData.rows, searchTokens, showOldOrg, afterPathMap, beforePathMap,
-      activePatterns, issuesOnly, changedOnly, activeIssueMessage, personUUIDBysfId])
+      activePatterns, issuesOnly, changedOnly, activeIssueKey, personUUIDBysfId])
 
   const sections = useMemo(() => {
     const normalMap   = new Map<string, CompactOrgSection>()

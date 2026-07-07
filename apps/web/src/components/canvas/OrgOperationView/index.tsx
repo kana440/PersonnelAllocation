@@ -8,6 +8,7 @@ import { bindOperation }               from '@personnel/domain/commands/defs'
 import { orgRestructureDef }           from '@personnel/domain/commands/defs/orgTransferDefs'
 import { moveToVacantPositionDef }     from '@personnel/domain/commands/defs/positionMoveDefs'
 import { TR }                          from '@personnel/domain/transferReasonLabels'
+import { buildOrgMap }                 from '@personnel/domain/rules/options/rows'
 import type { Organization }           from '@personnel/domain/schemas'
 import { appService }          from '../../../application/HRApplicationService'
 import { useScopedStore }      from '../../../store/useScopedStore'
@@ -67,9 +68,14 @@ export function OrgOperationView() {
     return m
   }, [organizations])
   const { afterOrgByCode, afterMembersByOrgId, positionTreeByOrgId } = useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, allocationList, masters, orgMapping })
+  // beforeOrgByCode: RowCard の変更差分表示（組織名解決）を O(1) にするための共有 Map
+  const beforeOrgByCode = useMemo(() => buildOrgMap(beforeOrganizations), [beforeOrganizations])
 
   // orgId → サブツリー全体のアイテム数。O(N) で1回構築し全 TreeWindow が共有する
   const subtreeCountByOrgId = useMemo(() => {
+    const perfLabel = `[perf] subtreeCountByOrgId build (${organizations.length} orgs)`
+    // eslint-disable-next-line no-console
+    console.time(perfLabel)
     const map = new Map<string, number>()
     const compute = (orgId: string): number => {
       const cached = map.get(orgId)
@@ -80,6 +86,8 @@ export function OrgOperationView() {
       return n
     }
     for (const org of organizations) compute(org.id)
+    // eslint-disable-next-line no-console
+    console.timeEnd(perfLabel)
     return map
   }, [positionTreeByOrgId, childrenByOrgId, organizations])
 
@@ -233,6 +241,7 @@ export function OrgOperationView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ctxValue: OrgViewContextValue = useMemo(() => ({
     organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId, subtreeCountByOrgId,
+    afterOrgByCode, beforeOrgByCode,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,
@@ -264,6 +273,7 @@ export function OrgOperationView() {
   // deps: selectedCardRowId は意図的に除外（RowCard は store 直接購読に移行済み）
   }), [
     organizations, orgById, childrenByOrgId, positionTreeByOrgId, afterMembersByOrgId, subtreeCountByOrgId,
+    afterOrgByCode, beforeOrgByCode,
     dragOverOrgId, setDragOverOrgId, highlightedOrgId,
     dragOverVacantRowId, setDragOverVacantRowId,
     dropPersonRowId, setDropPersonRowId,

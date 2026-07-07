@@ -10,6 +10,12 @@ export interface BeforeOrgViewContextValue {
   childrenByOrgId:      Map<string, Organization[]>
   /** orgId → サブツリー全体の行数。O(N) で1回構築し全 BeforeTreeWindow が O(1) で参照 */
   beforeSubtreeCountByOrgId: Map<string, number>
+  /** id → Organization（before 側）。BeforeTreeNode 等の O(1) ルックアップ用 */
+  beforeOrgById:        Map<string, Organization>
+  /** externalCode/id → Organization（after 側）。BeforeRowCard の移動先解決を O(1) にする共有 Map */
+  afterOrgMap:          Map<string, Organization>
+  /** sfPersonId → Person。BeforeRowCard の在籍者解決を O(1) にする共有 Map */
+  personBySfId:         Map<string, Person>
   afterOrganizations:   Organization[]
   /** beforeOrgId → afterOrgId のマッピング */
   comparisonOrgMapping: Record<string, string>

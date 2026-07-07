@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import { useStore }             from '../../../store/useStore'
 import { useScopedStore }       from '../../../store/useScopedStore'
+import { buildOrgMap }          from '@personnel/domain/rules/options/rows'
 import type { Person }          from '@personnel/domain/schemas'
 import { BeforeTreeWindow }     from './BeforeTreeWindow'
 import { BeforeOrgViewContext } from './BeforeOrgViewContext'
@@ -44,6 +45,12 @@ export function BeforeTreeWindowCanvas() {
 
   // beforeOrg の O(1) ルックアップ
   const beforeOrgById = useMemo(() => buildOrgByIdMap(beforeOrganizations), [beforeOrganizations])
+
+  // afterOrg の O(1) ルックアップ（id・externalCode どちらでも引ける共有 Map）。BeforeRowCard の移動先解決に使う
+  const afterOrgMap = useMemo(() => buildOrgMap(afterOrganizations), [afterOrganizations])
+
+  // sfPersonId → Person。BeforeRowCard が行ごとに persons.find() しないための共有 Map
+  const personBySfId = useMemo(() => new Map(persons.map(p => [p.sfPersonId ?? '', p])), [persons])
 
   // beforeOrg の O(1) 子ルックアップ（全 BeforeTreeWindow が共有する）
   const beforeChildrenByOrgId = useMemo(() => {
@@ -334,6 +341,9 @@ export function BeforeTreeWindowCanvas() {
     beforeRowsByOrgId,
     childrenByOrgId: beforeChildrenByOrgId,
     beforeSubtreeCountByOrgId,
+    beforeOrgById,
+    afterOrgMap,
+    personBySfId,
     afterOrganizations,
     comparisonOrgMapping,
     persons,

@@ -14,10 +14,13 @@ import {
 import { RecordRow } from './RecordRow'
 
 interface Props {
-  field:          string
-  rowIds:         number[]
-  resolutionDef?: ValidationResolutionDef
-  onClose:        () => void
+  field:            string
+  rowIds:           number[]
+  /** issue.suggestedPatch から取得した確定的な修正値。存在すれば推奨ワンクリック修正として表示する */
+  suggestedPatch?:  Partial<AllocationRow>
+  /** RESOLUTION_DEFS.filter() で取得した全修正案（複数のとき修正方法ピッカーを表示） */
+  resolutionDefs?:  ValidationResolutionDef[]
+  onClose:          () => void
 }
 
 function resolveLabel(field: string): string {
@@ -104,11 +107,18 @@ function ColPickerDropdown({ visibleFields, onToggle }: ColPickerProps) {
 
 // ── メインコンポーネント ────────────────────────────────────────────────────
 
-export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Props) {
+export function BulkFieldEditModal({ field, rowIds, suggestedPatch, resolutionDefs = [], onClose }: Props) {
   const { allocationList, afterOrganizations, masters } = useStore()
   const mode   = getModalMode(field)
-  const label  = resolutionDef?.label ?? resolveLabel(field)
   const isPair = field === JOB_PAIR_FIELD
+
+  // 修正方法ピッカー（resolutionDefs が複数のとき）
+  const [selectedResIdx, setSelectedResIdx] = useState(0)
+  const activeResDef = resolutionDefs[selectedResIdx] ?? resolutionDefs[0]
+  const label = activeResDef?.label ?? resolveLabel(field)
+
+  // suggestedPatch の表示用値（単一フィールドを前提）
+  const suggestedValue = suggestedPatch ? String(Object.values(suggestedPatch)[0] ?? '') : undefined
 
   // Esc で閉じる
   useEffect(() => {
@@ -184,12 +194,7 @@ export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Pr
     return getGroupedFieldOptions(field, targetRows[0], masters).valid
   }, [field, isPair, targetRows, masters])
 
-  const suggestedValue = useMemo(() => {
-    if (!resolutionDef || targetRows.length === 0) return ''
-    return resolutionDef.suggestValue?.(targetRows[0]) ?? ''
-  }, [resolutionDef, targetRows])
-
-  const [newValue, setNewValue] = useState(() => suggestedValue)
+  const [newValue, setNewValue] = useState('')
 
   // ── Pair モード ────────────────────────────────────────────────────────────
   const jobFamilyOptions = useMemo(() => {
@@ -215,6 +220,13 @@ export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Pr
                  : mode === 'pair'   ? !!selectedFamily && !!selectedType && filteredRows.length > 0
                  : edits.size > 0
 
+  const handleApplySuggested = () => {
+    if (!suggestedPatch || filteredRows.length === 0) return
+    appService.executeBatch(`${label} 一括修正`,
+      filteredRows.map(r => new DirectEditOperation(r.rowId, suggestedPatch, `${label} 一括修正`)))
+    onClose()
+  }
+
   const handleApply = () => {
     if (!canApply) return
     if (mode === 'bulk') {
@@ -223,7 +235,7 @@ export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Pr
         filteredRows.map(r =>
           new DirectEditOperation(
             r.rowId,
-            resolutionDef ? resolutionDef.patch(r, values) : values,
+            activeResDef ? activeResDef.patch(r, values) : values,
             `${label} 一括修正`,
           )
         ))
@@ -255,6 +267,42 @@ export function BulkFieldEditModal({ field, rowIds, resolutionDef, onClose }: Pr
           <button onClick={onClose}
             className="ml-auto text-xl leading-none text-gray-400 hover:text-gray-600 transition-colors">×</button>
         </div>
+
+        {/* ── 推奨ワンクリック修正（suggestedPatch あり） ───────────────── */}
+        {suggestedValue !== undefined && (
+          <div className="flex items-center gap-2 px-5 py-2 border-b border-blue-100 bg-blue-50 flex-shrink-0">
+            <span className="text-xs font-semibold text-blue-700 whitespace-nowrap">推奨</span>
+            <span className="text-sm font-bold text-blue-900 truncate">{suggestedValue}</span>
+            <button
+              onClick={handleApplySuggested}
+              disabled={filteredRows.length === 0}
+              className="ml-auto whitespace-nowrap text-sm font-semibold px-3 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 transition-colors"
+            >
+              {filteredRows.length} 件に一括適用 →
+            </button>
+          </div>
+        )}
+
+        {/* ── 修正方法ピッカー（resolutionDefs が複数のとき） ─────────── */}
+        {resolutionDefs.length > 1 && (
+          <div className="flex items-center gap-2 px-5 py-2 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+            <span className="text-xs text-gray-500 whitespace-nowrap">修正方法</span>
+            {resolutionDefs.map((d, i) => (
+              <button
+                key={d.id}
+                onClick={() => setSelectedResIdx(i)}
+                className={[
+                  'text-xs px-2 py-0.5 rounded-full border transition-colors',
+                  selectedResIdx === i
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'border-gray-300 text-gray-600 hover:bg-gray-100',
+                ].join(' ')}
+              >
+                {d.shortLabel}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── 変更後の値（bulk / pair のみ） ────────────────────────────── */}
         {mode !== 'inline' && (

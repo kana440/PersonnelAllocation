@@ -34,9 +34,6 @@ export interface ValidationResolutionDef {
   /** バリデーションレベルに基づく表示分類 */
   readonly level: 'error' | 'warning'
 
-  /** 行の現在状態から修正値を提案する（省略時は空欄）*/
-  suggestValue?(row: AllocationRow): string | undefined
-
   /**
    * 修正値から適用するフィールドパッチを返す。
    * 呼び出し側が new DirectEditOperation(rowId, patch, label) でコマンド化する。

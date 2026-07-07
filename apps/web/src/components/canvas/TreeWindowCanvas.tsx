@@ -44,6 +44,10 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   const selectedOrgId = useStore(s => s.selectedOrgId)
   const { organizations } = useOrgView()
 
+  // [perf] render開始 → commit(DOM反映)までの実測。React reconciliation + DOM mount コストを含む
+  const renderStartRef = useRef(performance.now())
+  renderStartRef.current = performance.now()
+
   // ── O(1) Map（organizations が変わるときのみ再構築）──────────────
   const orgById = useMemo(() => buildOrgByIdMap(organizations), [organizations])
 
@@ -55,12 +59,17 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
 
   const displayPanels = useMemo(() => {
     if (!autoArrange) return standalonePanels
+    const perfLabel = `[perf] computeLayout (${standalonePanels.length} standalone panels / ${panels.length} total panels)`
+    // eslint-disable-next-line no-console
+    console.time(perfLabel)
     const posMap = computeLayout(standalonePanels, orgById, panelHeights, winW)
+    // eslint-disable-next-line no-console
+    console.timeEnd(perfLabel)
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
       return pos ? { ...p, ...pos } : p
     })
-  }, [autoArrange, standalonePanels, orgById, panelHeights, winW])
+  }, [autoArrange, standalonePanels, orgById, panelHeights, winW, panels.length])
 
   const connections = useMemo(
     () => buildConnections(displayPanels, orgById),
@@ -114,6 +123,13 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [hasCanvasContent, stepCanvasZoom])
+
+  // [perf] このレンダーが実際に DOM へ commit されるまでの所要時間
+  useEffect(() => {
+    const elapsed = performance.now() - renderStartRef.current
+    // eslint-disable-next-line no-console
+    console.log(`[perf] TreeWindowCanvas render→commit: ${elapsed.toFixed(1)}ms (${displayPanels.length} panels displayed / ${panels.length} total panels)`)
+  })
 
   // ── ズームプリセットドロップダウン ────────────────────────────
   const [zoomDropdownOpen, setZoomDropdownOpen] = useState(false)
