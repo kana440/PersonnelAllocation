@@ -16,10 +16,27 @@ import type { ValidationIssue } from './types'
  */
 
 // ── D2-1: 組織コード ──────────────────────────────────────────────────────────
+// orgs 配列参照ごとに externalCode/id の Set をキャッシュする（大量行のバリデーションで
+// 毎行 O(orgs) の線形検索を避けるため。orgs の参照が変わるまで再利用可能）。
+const orgCodeSetCache = new WeakMap<Organization[], Set<string>>()
+
+function getOrgCodeSet(orgs: Organization[]): Set<string> {
+  let set = orgCodeSetCache.get(orgs)
+  if (!set) {
+    set = new Set<string>()
+    for (const o of orgs) {
+      if (o.externalCode) set.add(o.externalCode)
+      set.add(o.id)
+    }
+    orgCodeSetCache.set(orgs, set)
+  }
+  return set
+}
+
 function checkD2_1(row: AllocationRow, orgs: Organization[]): ValidationIssue[] {
   const code = row.departmentCode
   if (!code || orgs.length === 0) return []
-  if (orgs.some(o => o.externalCode === code || o.id === code)) return []
+  if (getOrgCodeSet(orgs).has(code)) return []
   return [{ field: 'departmentCode', level: 'error', message: '組織コードは有効な選択肢から選択してください', id: 'consistency_dept_options' }]
 }
 

@@ -76,11 +76,38 @@ export function findTransferReason(ms: AllMasters, row: AllocationRow) {
 }
 
 // 行の組織コードから会社コードを引き、CompanyFilterEntry の noDiscretionaryVMAutoCreate を返す。
+// departmentCode → noAutoCreate の解決結果を ms 単位でキャッシュする（大量行のバリデーションで
+// orgMasterEntries/companyFilters を毎行 O(N) 走査しないため。ms の参照が変わるまで再利用可能）。
+const noAutoCreateCache = new WeakMap<AllMasters, Map<string, boolean>>()
+
+function buildNoAutoCreateMap(ms: AllMasters): Map<string, boolean> {
+  // 元ロジック（1件ずつ find）と同じ優先順位を保つ: 同一 code なら phase='after' の
+  // 最初の1件を優先し、なければ phase を問わない最初の1件にフォールバックする。
+  const afterEntryByCode = new Map<string, typeof ms.orgMasterEntries[number]>()
+  const anyEntryByCode   = new Map<string, typeof ms.orgMasterEntries[number]>()
+  for (const e of ms.orgMasterEntries) {
+    if (e.phase === 'after' && !afterEntryByCode.has(e.code)) afterEntryByCode.set(e.code, e)
+    if (!anyEntryByCode.has(e.code)) anyEntryByCode.set(e.code, e)
+  }
+  const noAutoCreateByCompanyCode = new Map(ms.companyFilters.map(f => [f.code, f.noDiscretionaryVMAutoCreate ?? false]))
+  const result = new Map<string, boolean>()
+  const codes = new Set<string>([...afterEntryByCode.keys(), ...anyEntryByCode.keys()])
+  for (const code of codes) {
+    const org = afterEntryByCode.get(code) ?? anyEntryByCode.get(code)
+    result.set(code, org?.companyCode ? (noAutoCreateByCompanyCode.get(org.companyCode) ?? false) : false)
+  }
+  return result
+}
+
 function getNoAutoCreate(row: AllocationRow, ms: AllMasters): boolean {
-  const org = ms.orgMasterEntries.find(e => e.code === row.departmentCode && e.phase === 'after')
-           ?? ms.orgMasterEntries.find(e => e.code === row.departmentCode)
-  if (!org?.companyCode) return false
-  return ms.companyFilters.find(f => f.code === org.companyCode)?.noDiscretionaryVMAutoCreate ?? false
+  const code = row.departmentCode
+  if (!code) return false
+  let map = noAutoCreateCache.get(ms)
+  if (!map) {
+    map = buildNoAutoCreateMap(ms)
+    noAutoCreateCache.set(ms, map)
+  }
+  return map.get(code) ?? false
 }
 
 // ── ルール定義 ───────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import type { AllMasters } from '@personnel/domain/masters/aggregate'
 import type { PositionEntry, MemberEntry } from '../OrgViewContext'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { validateRow } from '@personnel/domain/rules/validate/validateRow'
+import { RowRuleCtx } from '@personnel/domain/rules/rowRule'
 import { buildPositionDepthList } from '../panel/helpers'
 import { isAbsenceRow } from '../FloatingAbsencePanel/helpers'
 
@@ -97,6 +98,10 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
 
   const rowComparator = useMemo(() => makeRowComparator(masters), [masters])
 
+  // RowRuleCtx: lazy getter（orgById・orgByCode 等）のコストを全行で共有するため、
+  // positionTreeByOrgId のループ全体で 1 インスタンスだけ生成する（batchValidate.ts と同じパターン）。
+  const rowRuleCtx = useMemo(() => new RowRuleCtx(masters, allAfterOrgs), [masters, allAfterOrgs])
+
   // 全行の positionCode セット（クロスOrg 上司判定用）
   const allPositionCodes = useMemo(() => {
     const s = new Set<string>()
@@ -135,6 +140,7 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
             masters:            detectCtx.masters,
             allocationList:     [],
             changes:            detection,
+            rowRuleCtx,
           }),
           externalManagerKind,
         }
@@ -143,7 +149,7 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
     // eslint-disable-next-line no-console
     console.timeEnd(perfLabel)
     return result
-  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes, detectCtx])
+  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes, detectCtx, rowRuleCtx])
 
   return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId }
 }
