@@ -1,46 +1,40 @@
 import type { Node, Edge } from '@xyflow/react'
 import type { Organization } from '@personnel/domain/schemas'
-import type { PanelDef } from '../../store/canvasLayoutStore'
-import { computeLayout, WINDOW_W } from '../../components/canvas/treeWindowLayout'
+import type { PanelDef } from '../../../store/canvasLayoutStore'
+import { computeLayout, WINDOW_W } from '../treeWindowLayout'
 
-// 全ノード共通の初期高さであり、かつ実測後の上限キャップでもある（メガ組織で内部スクロール
-// させるため）。行数に応じた見積もりはしない — 実際の高さはマウント後に RealOrgNode が
-// 算出し、setNodes で自分の height と子孫の position.y をその場で調整する。
-export const NODE_WIDTH      = 262
-export const NODE_MAX_HEIGHT = 290
+export const NODE_WIDTH = WINDOW_W
+// 実測後も含めた上限キャップ（メガ組織はこれ以上大きくならず内部スクロールになる）。
+// 実際の RowCard は差分チップ等で単純な見積もり行より高くなるため、大きめに取っている。
+export const NODE_MAX_HEIGHT = 520
 
-// 既存キャンバスの computeLayout() をそのまま流用するための最小限のダミー PanelDef。
+// 既存の computeLayout() をそのまま流用するための最小限のダミー PanelDef。
 // x/y/open/childrenMode/collapsedOrgIds は座標計算そのものには使われない（型を満たすためだけ）。
 function makeFakePanel(orgId: string): PanelDef {
   return { id: orgId, orgId, x: 0, y: 0, open: true, childrenMode: 'windowed', collapsedOrgIds: [] }
 }
 
 export interface FlowLayoutInput<D extends Record<string, unknown>> {
-  orgIds:        string[]
-  orgById:       Map<string, Organization>
-  nodeType:      string
-  /**
-   * 全ノード共通の初期高さ（行数に応じた見積もりはしない）。実際の高さは
-   * マウント後にノード側で算出し、setNodes で自分の height と子孫の position.y を
-   * 更新する（RealOrgNode 参照）。ここでは座標計算の初期値としてのみ使う。
-   */
-  defaultHeight: number
-  buildData:     (orgId: string) => D
+  orgIds:         string[]
+  orgById:        Map<string, Organization>
+  nodeType:       string
+  /** 組織ごとの高さ見積もり（行数ベース等）。NODE_MAX_HEIGHT で内部的に頭打ちにする */
+  estimateHeight: (orgId: string) => number
+  buildData:      (orgId: string) => D
 }
 
 /**
  * 組織ID一覧 → 既存 computeLayout()（本番キャンバスと同じ木構造レイアウト）で座標計算
  * → React Flow の Node[]/Edge[] に変換する共通処理。
- * Phase 0（合成データのみ）・Phase 1（実データ・実RowCard）の両方から使う。
  */
 export function buildFlowLayout<D extends Record<string, unknown>>(
-  { orgIds, orgById, nodeType, defaultHeight, buildData }: FlowLayoutInput<D>,
+  { orgIds, orgById, nodeType, estimateHeight, buildData }: FlowLayoutInput<D>,
 ): { nodes: Node<D>[]; edges: Edge[]; rootNodeIds: string[] } {
   const panelHeights: Record<string, number> = {}
-  for (const orgId of orgIds) panelHeights[orgId] = defaultHeight
+  for (const orgId of orgIds) panelHeights[orgId] = Math.min(NODE_MAX_HEIGHT, estimateHeight(orgId))
 
   const panels = orgIds.map(makeFakePanel)
-  const posMap = computeLayout(panels, orgById, panelHeights, WINDOW_W)
+  const posMap = computeLayout(panels, orgById, panelHeights, NODE_WIDTH)
 
   const nodes: Node<D>[] = orgIds.map(orgId => ({
     id:       orgId,

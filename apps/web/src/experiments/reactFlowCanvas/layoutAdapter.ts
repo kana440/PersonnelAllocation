@@ -1,7 +1,6 @@
 import type { Node, Edge } from '@xyflow/react'
 import type { Organization } from '@personnel/domain/schemas'
-import { estimateTreeBodyHeight, EST_HEADER_H } from '../../components/canvas/panel/heightEstimate'
-import { buildFlowLayout } from './buildFlowLayout'
+import { buildFlowLayout, NODE_MAX_HEIGHT } from './buildFlowLayout'
 import type { SyntheticOrg, SyntheticRow } from './syntheticData'
 import type { OrgNodeData } from './OrgNode'
 
@@ -12,7 +11,7 @@ import type { OrgNodeData } from './OrgNode'
 export function buildNodesAndEdges(
   orgs: SyntheticOrg[],
   rows: SyntheticRow[],
-): { nodes: Node<OrgNodeData>[]; edges: Edge[] } {
+): { nodes: Node<OrgNodeData>[]; edges: Edge[]; rootNodeIds: string[] } {
   const orgById = new Map<string, Organization>(
     orgs.map(o => [o.id, { id: o.id, name: o.name, companyId: 'synthetic', parentId: o.parentId, level: 1 }]),
   )
@@ -28,7 +27,7 @@ export function buildNodesAndEdges(
     orgIds:   orgs.map(o => o.id),
     orgById,
     nodeType: 'orgNode',
-    estimateHeight: orgId => EST_HEADER_H + estimateTreeBodyHeight(rowsByOrgId.get(orgId)?.length ?? 0),
-    buildData:      orgId => ({ name: orgById.get(orgId)?.name ?? orgId, rows: rowsByOrgId.get(orgId) ?? [] }),
+    defaultHeight: NODE_MAX_HEIGHT,
+    buildData:     orgId => ({ name: orgById.get(orgId)?.name ?? orgId, rows: rowsByOrgId.get(orgId) ?? [] }),
   })
 }

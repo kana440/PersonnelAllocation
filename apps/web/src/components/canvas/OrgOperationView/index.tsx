@@ -17,6 +17,7 @@ import type { SecondmentInValues } from '../modals/SecondmentInAddModal'
 import type { EditPattern }    from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }        from '../CanvasModals'
 import { TreeWindowCanvas }    from '../TreeWindowCanvas'
+import { FlowCanvas }          from '../flow/FlowCanvas'
 import { CanvasQuickSearch }   from '../CanvasQuickSearch'
 import { DisplayFieldCombobox } from '../toolbar/DisplayFieldCombobox'
 import { OrgViewContext }      from '../OrgViewContext'
@@ -42,6 +43,7 @@ export function OrgOperationView() {
     masters,
   } = useStore()
   const comparisonMode = useCanvasLayoutStore(s => s.comparisonMode)
+  const canvasPanelStyle = useCanvasLayoutStore(s => s.canvasPanelStyle)
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
@@ -355,7 +357,9 @@ export function OrgOperationView() {
           onDragOverCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
           onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
         >
-          {comparisonMode ? <ComparisonSplitView /> : <TreeWindowCanvas />}
+          {comparisonMode
+            ? <ComparisonSplitView />
+            : canvasPanelStyle === 'tree' ? <FlowCanvas /> : <TreeWindowCanvas />}
         </div>
 
         <PatternDialogs

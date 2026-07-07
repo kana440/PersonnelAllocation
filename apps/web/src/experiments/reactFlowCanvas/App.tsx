@@ -9,7 +9,7 @@ const ROW_COUNT = 30000
 const nodeTypes = { orgNode: OrgNode }
 
 export function App() {
-  const { nodes, edges } = useMemo(() => {
+  const { nodes, edges, rootNodeIds } = useMemo(() => {
     const t0 = performance.now()
     const { orgs, rows } = generateSyntheticData(ORG_COUNT, ROW_COUNT)
     const t1 = performance.now()
@@ -20,5 +20,5 @@ export function App() {
     return result
   }, [])
 
-  return <ReactFlowCanvas initialNodes={nodes} initialEdges={edges} nodeTypes={nodeTypes} />
+  return <ReactFlowCanvas initialNodes={nodes} initialEdges={edges} nodeTypes={nodeTypes} rootNodeIds={rootNodeIds} />
 }
