@@ -43,16 +43,19 @@ function rowDisplayName(row: AllocationRow): string {
 /**
  * 2つの AllocationRow 配列の差分を計算する。
  *
- * @param before  変更前の行リスト
- * @param after   変更後の行リスト
- * @param matchFn 行の照合キー。null を返すと diff 対象外。
- *                デフォルト: rowId で照合（STEP2 用）
- *                STEP1 用:   r => r.groupEmployeeId ? `${r.groupEmployeeId}|${r.departmentCode ?? ''}` : null
+ * @param before    変更前の行リスト
+ * @param after     変更後の行リスト
+ * @param matchFn   行の照合キー。null を返すと diff 対象外。
+ *                  デフォルト: rowId で照合（STEP2 用）
+ *                  STEP1 用:   r => r.groupEmployeeId ? `${r.groupEmployeeId}|${r.departmentCode ?? ''}` : null
+ * @param diffFields 差分検出対象のフィールド一覧。省略時は FIELD_METADATA の after のみ（STEP2 委任ワークフローの既定動作）。
+ *                   STEP1 のマージ/リベースは ID・氏名・異動事由・メモ等も含めたいため `MERGEABLE_FIELDS` を明示的に渡す。
  */
 export function computeRowDiffs(
-  before:  AllocationRow[],
-  after:   AllocationRow[],
-  matchFn: (r: AllocationRow) => string | null = r => String(r.rowId),
+  before:     AllocationRow[],
+  after:      AllocationRow[],
+  matchFn:    (r: AllocationRow) => string | null = r => String(r.rowId),
+  diffFields: readonly (keyof AllocationRow)[] = DIFF_FIELDS,
 ): RowChangeSummary[] {
   const beforeMap = new Map<string, AllocationRow>()
   for (const r of before) {
@@ -85,7 +88,7 @@ export function computeRowDiffs(
     const aRow = afterMap.get(k)
     if (!aRow) continue
     const changes: FieldChange[] = []
-    for (const key of DIFF_FIELDS) {
+    for (const key of diffFields) {
       const bVal = bRow[key] as string | undefined
       const aVal = aRow[key] as string | undefined
       if (bVal !== aVal) changes.push({ fieldKey: String(key), before: bVal, after: aVal })

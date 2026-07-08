@@ -15,7 +15,7 @@ import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 
 export function MergeReviewView({ onClose }: { onClose: () => void }) {
   const {
-    pendingMerge, allocationList, afterOrganizations, beforeOrganizations,
+    pendingMerge, allocationList, afterOrganizations,
     updateMergeRowField, approveMergeRows, rejectMergeRows, returnMergeRows,
     releaseMergeSession, discardMergeSession,
   } = useStore(
@@ -23,7 +23,6 @@ export function MergeReviewView({ onClose }: { onClose: () => void }) {
       pendingMerge:         s.pendingMerge,
       allocationList:       s.allocationList,
       afterOrganizations:   s.afterOrganizations,
-      beforeOrganizations:  s.organizations,
       updateMergeRowField:  s.updateMergeRowField,
       approveMergeRows:     s.approveMergeRows,
       rejectMergeRows:      s.rejectMergeRows,
@@ -56,11 +55,6 @@ export function MergeReviewView({ onClose }: { onClose: () => void }) {
     () => new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
     [afterOrganizations],
   )
-  const beforeOrgByCode = useMemo(
-    () => new Map(beforeOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
-    [beforeOrganizations],
-  )
-
   // 表示対象は未承認の行のみ（committed/confirmed は実データ側 or 確認済みなのでレビュー対象外）
   const reviewableRows = useMemo(
     () => pendingMerge?.rows.filter(r => r.status === 'pending') ?? [],
@@ -252,7 +246,6 @@ export function MergeReviewView({ onClose }: { onClose: () => void }) {
           keyByRowId={keyByRowId}
           sessionRowByKey={sessionRowByKey}
           currentByNo={currentByNo}
-          beforeOrgByCode={beforeOrgByCode}
           selected={selected}
           toggleRow={toggleRow}
           allVisibleSelected={allVisibleSelected}

@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect, useMemo } from 'react'
-import { FIELD_METADATA } from '@personnel/domain/allocationRow'
+import { MERGEABLE_FIELDS, META_FIELDS } from '@personnel/domain/allocationRow'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
-import type { Organization } from '@personnel/domain/schemas'
 import { fieldLabel } from './helpers'
 import type { ReviewRow } from '../review/hooks/useReviewData'
 import type { MergeSessionRow } from '../../infrastructure/workspace'
@@ -16,7 +15,10 @@ const KIND_BADGE_CLS: Record<MergeSessionRow['kind'], string> = {
   modified: 'bg-yellow-100 text-yellow-700',
   removed:  'bg-red-100 text-red-700',
 }
-const DYN_FIELD_KEYS = FIELD_METADATA.map(m => m.after as string)
+// meta フィールド（ID・氏名・異動事由・メモ等）を先頭に、After フィールドを後ろに1列ずつ
+// 比較形式で表示する（MERGEABLE_FIELDS は meta が先頭に来る順序で定義されている）
+const DYN_FIELD_KEYS  = MERGEABLE_FIELDS.map(k => k as string)
+const META_FIELD_COUNT = META_FIELDS.length
 const DYN_W  = 96
 const ORG_H  = 30
 // 変更あり行は「取り込み値 / 現在値(取消線)」の2行スタックになるため、UnifiedTable の
@@ -33,7 +35,6 @@ interface Props {
   keyByRowId:             Map<number, string>
   sessionRowByKey:        Map<string, MergeSessionRow>
   currentByNo:            Map<string | undefined, AllocationRow>
-  beforeOrgByCode:        Map<string, Organization>
   selected:               Set<number>
   toggleRow:              (rowId: number) => void
   allVisibleSelected:     boolean
@@ -52,8 +53,9 @@ function findStartIdx(scrollTop: number, cumulative: number[]): number {
   return Math.max(0, lo - 1)
 }
 
-const thField  = 'px-1.5 py-1 text-left font-medium text-gray-600 bg-gray-100 text-[9px] whitespace-nowrap border-b border-gray-200'
-const COL_SPAN = 5 + DYN_FIELD_KEYS.length
+const thField     = 'px-1.5 py-1 text-left font-medium text-gray-600 bg-gray-100 text-[9px] whitespace-nowrap border-b border-gray-200'
+const thFieldMeta = 'px-1.5 py-1 text-left font-medium text-violet-700 bg-violet-50 text-[9px] whitespace-nowrap border-b border-violet-100'
+const COL_SPAN = 3 + DYN_FIELD_KEYS.length
 const TABLE_W  = 560 + DYN_FIELD_KEYS.length * DYN_W
 
 /**
@@ -100,7 +102,7 @@ function MergeDiffCell({
  * フィールドごとに1列へ統合する（Excel形式=左右2列並びは採用しない）。
  */
 export function MergeReviewTable({
-  groupedItems, keyByRowId, sessionRowByKey, currentByNo, beforeOrgByCode,
+  groupedItems, keyByRowId, sessionRowByKey, currentByNo,
   selected, toggleRow, allVisibleSelected, toggleSelectAllVisible, updateMergeRowField,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -148,8 +150,11 @@ export function MergeReviewTable({
       <table className="text-xs border-collapse [table-layout:fixed]" style={{ width: TABLE_W }}>
         <thead className="sticky top-0 z-10">
           <tr>
-            <th className="bg-gray-100 border-b border-gray-200" colSpan={5} />
-            <th colSpan={DYN_FIELD_KEYS.length} className="px-1.5 py-1 text-center font-medium text-white bg-indigo-700 text-[10px] whitespace-nowrap">
+            <th className="bg-gray-100 border-b border-gray-200" colSpan={3} />
+            <th colSpan={META_FIELD_COUNT} className="px-1.5 py-1 text-center font-medium text-white bg-violet-700 text-[10px] whitespace-nowrap">
+              ID・氏名・メタ情報
+            </th>
+            <th colSpan={DYN_FIELD_KEYS.length - META_FIELD_COUNT} className="px-1.5 py-1 text-center font-medium text-white bg-indigo-700 text-[10px] whitespace-nowrap">
               変更前後（変更あり = 青↓取消線）
             </th>
           </tr>
@@ -158,11 +163,9 @@ export function MergeReviewTable({
               <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} className="accent-blue-600" />
             </th>
             <th className="text-left px-2 py-2 text-gray-500 font-medium bg-gray-100 border-b border-gray-200 w-16">種別</th>
-            <th className="text-left px-2 py-2 text-gray-500 font-medium bg-gray-100 border-b border-gray-200">氏名</th>
-            <th className="text-left px-2 py-2 text-gray-500 font-medium bg-gray-100 border-b border-gray-200">旧組織</th>
-            <th className="text-left px-2 py-2 text-gray-500 font-medium bg-gray-100 border-b border-gray-200 w-16">要確認</th>
-            {DYN_FIELD_KEYS.map(key => (
-              <th key={key} className={thField} style={{ width: DYN_W }}>{fieldLabel(key)}</th>
+            <th className="text-left px-2 py-2 text-gray-500 font-medium bg-gray-100 border-b border-gray-200 w-20">No.</th>
+            {DYN_FIELD_KEYS.map((key, i) => (
+              <th key={key} className={i < META_FIELD_COUNT ? thFieldMeta : thField} style={{ width: DYN_W }}>{fieldLabel(key)}</th>
             ))}
           </tr>
         </thead>
@@ -195,8 +198,6 @@ export function MergeReviewTable({
             const kind       = sessionRow?.kind ?? 'modified'
             const currentRow = key ? currentByNo.get(key) : undefined
             const incoming   = sessionRow?.incomingRow
-            const prevOrgName = beforeOrgByCode.get(r.row.prevDepartmentCode as string ?? '')?.name
-              ?? (r.row.prevDepartmentCode as string | undefined)
 
             return (
               <tr key={r.row.rowId} style={{ height: ROW_H }} className="border-b border-gray-50 hover:bg-gray-50">
@@ -206,11 +207,7 @@ export function MergeReviewTable({
                 <td className="px-2 py-1 align-top">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${KIND_BADGE_CLS[kind]}`}>{KIND_LABEL[kind]}</span>
                 </td>
-                <td className="px-2 py-1 align-top text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis">{r.personName || r.row.userId || `No.${r.row.no ?? ''}`}</td>
-                <td className="px-2 py-1 align-top text-gray-400 text-[10px] whitespace-nowrap overflow-hidden text-ellipsis">{prevOrgName || '—'}</td>
-                <td className="px-2 py-1 align-top">
-                  {r.issues.length > 0 && <span className="text-red-600 text-[10px]">⚠ {r.issues.length}</span>}
-                </td>
+                <td className="px-2 py-1 align-top font-mono text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis">{r.row.no ?? ''}</td>
                 {DYN_FIELD_KEYS.map(fkey => {
                   const currentVal = currentRow ? String((currentRow as unknown as Record<string, unknown>)[fkey] ?? '') : ''
                   const incomingVal = incoming ? String((incoming as unknown as Record<string, unknown>)[fkey] ?? '') : undefined

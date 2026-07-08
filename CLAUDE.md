@@ -780,9 +780,10 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 | `specs/G3-ui/` | UI入力補助・レビュー表示仕様 | `01-row-editor-input-spec.md`, `02-review-display-spec.md` |
 | `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
 | `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |
-| `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）・連絡票ワークフロー（STEP1実装済み）** | `01-assignee-workflow.md`, `02-contact-workflow.md` |
+| `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）・連絡票ワークフロー・マージ/リベースの対話的レビュー（STEP1実装済み）** | `01-assignee-workflow.md`, `02-contact-workflow.md`, `03-merge-rebase-review.md` |
 | `specs/G7-server/` | サーバー移行仕様（Phase 1 〜 3） | `01-api-spec.md`（未作成） |
 | `docs/19-contact-workflow.md` | **連絡票 実装リファレンス**（アーキテクチャ・TSV形式・アンカー/フィルタ・D&D・デバッグ） | — |
+| `docs/22-merge-rebase-review.md` | **マージ/リベースの対話的レビュー 実装リファレンス**（No.キー・1段階承認・破棄=完全ロールバック・STEP2依頼モデルとの関係） | — |
 
 ### specを読んで実装するときの手順
 

@@ -11,7 +11,7 @@
  */
 
 import type { AllocationRow } from './allocationRow'
-import { FIELD_METADATA } from './allocationRow'
+import { FIELD_METADATA, META_FIELDS } from './allocationRow'
 import type { AllMasters } from './masters/aggregate'
 import type { Organization } from './schemas'
 import type { RowContext } from './context'
@@ -34,10 +34,18 @@ function hasAfterEdits(row: AllocationRow): boolean {
   return FIELD_METADATA.some(m => (row[m.before] ?? '') !== (row[m.after] ?? ''))
 }
 
-/** currentRow の after フィールド値を newBaseRow に合成した候補行を作る */
+/**
+ * currentRow の after フィールド値・meta フィールド値（ID・氏名・異動事由・メモ等。
+ * before/after ペアを持たないため hasAfterEdits では検出できないが、No.をキーに
+ * 引き継ぐという原則は業務フィールドと同じなので、候補行には常に現在値を反映する）を
+ * newBaseRow に合成した候補行を作る。
+ */
 function buildCandidateRow(newBaseRow: AllocationRow, currentRow: AllocationRow): AllocationRow {
   const candidate: AllocationRow = { ...newBaseRow }
   for (const key of AFTER_FIELDS) {
+    ;(candidate as Record<string, unknown>)[key] = currentRow[key]
+  }
+  for (const key of META_FIELDS) {
     ;(candidate as Record<string, unknown>)[key] = currentRow[key]
   }
   return candidate

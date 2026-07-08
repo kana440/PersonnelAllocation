@@ -8,6 +8,7 @@ import { computeRebasePlan } from '@personnel/domain/rebasePlan'
 import { computeRowDiffs, type RowChangeSummary } from '@personnel/domain/diffMerge'
 import { appService } from '../../application/HRApplicationService'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import { MERGEABLE_FIELDS } from '@personnel/domain/allocationRow'
 import type { ImportMode, AssigneeImportMode } from '../../application/importMerge'
 import type { MergeSession, MergeSessionRow } from '../../infrastructure/workspace'
 
@@ -65,7 +66,7 @@ export function ListIntegrationButton() {
       return (row ? noMatchFn(row) : null) ?? String(d.rowId)
     }
 
-    const allDiffs = computeRowDiffs(allocationList as AllocationRow[], imported, noMatchFn)
+    const allDiffs = computeRowDiffs(allocationList as AllocationRow[], imported, noMatchFn, MERGEABLE_FIELDS)
     const diffs = FIXED_IMPORT_MODE === 'append-new' ? allDiffs.filter(d => d.kind === 'added') : allDiffs
 
     const rows: MergeSessionRow[] = diffs.map(d => {

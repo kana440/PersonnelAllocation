@@ -12,7 +12,7 @@ import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 import { DEFAULT_SESSION } from '../application/userSession'
 import type { UserSession } from '../application/userSession'
 import type { PersistedPayload, MergeSession, MergeSessionRow, MergeHistoryEntry, MergeHistoryRowSummary } from '../infrastructure/workspace'
-import { FIELD_METADATA } from '@personnel/domain/allocationRow'
+import { MERGEABLE_FIELDS } from '@personnel/domain/allocationRow'
 
 // マージ/リベース履歴の保持上限（Undoスタックの MAX_UNDO と同じ考え方）
 const MAX_MERGE_HISTORY = 50
@@ -461,17 +461,18 @@ export const useStore = create<AppState>()((set, get) => {
         }
         if (replacements.length > 0) appService.acceptMergeRowsReplace(replacements, label)
       } else {
-        // マージ: After フィールドのみを反映（Prev はマージ元の実績として不変）
+        // マージ: After フィールド + meta フィールド（ID・氏名・異動事由・メモ等）を反映
+        // （Prev はマージ元の実績として不変。no はキー自体なので対象外）
         const modifyChanges: { rowId: number; changes: AfterValues }[] = []
         for (const r of targetRows) {
           if (r.kind !== 'modified' || !r.incomingRow) continue
           const current = allocationList.find(row => row.no === r.key)
           if (!current) continue
           const changes: Record<string, unknown> = {}
-          for (const m of FIELD_METADATA) {
-            const incomingVal = (r.incomingRow as unknown as Record<string, unknown>)[m.after]
-            const currentVal  = (current as unknown as Record<string, unknown>)[m.after]
-            if (incomingVal !== currentVal) changes[m.after as string] = incomingVal
+          for (const key of MERGEABLE_FIELDS) {
+            const incomingVal = (r.incomingRow as unknown as Record<string, unknown>)[key]
+            const currentVal  = (current as unknown as Record<string, unknown>)[key]
+            if (incomingVal !== currentVal) changes[key as string] = incomingVal
           }
           if (Object.keys(changes).length > 0) modifyChanges.push({ rowId: current.rowId, changes: changes as AfterValues })
         }

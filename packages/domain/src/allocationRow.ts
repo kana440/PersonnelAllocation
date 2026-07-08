@@ -110,6 +110,24 @@ export const BEFORE_AFTER_FIELD_PAIRS: ReadonlyArray<
   readonly [after: keyof AllocationList, before: keyof AllocationList]
 > = FIELD_METADATA.map(f => [f.after, f.before] as const)
 
+// ── meta フィールド（before/after ペアを持たない単一値）─────────────────────────
+// マージ/リベースの取り込み対象にも含める（ID・氏名・異動事由・メモ等の訂正を反映するため）。
+// lastNameKana/firstNameKana は Excel 列定義がない（rPh ふりがなから内部補完）ため含めない。
+export const META_FIELDS: ReadonlyArray<keyof AllocationList> = [
+  'userId', 'groupEmployeeId', 'employeeNumber',
+  'lastName', 'firstName',
+  'transferReason', 'memo', 'promotionSign', 'demotionReason', 'payGradeChangeSign',
+]
+
+// マージ/リベースで取り込み対象とする全フィールド（meta + position/org/jobInfo の after）。
+// no（マッチングキー自体）・prevXxx（Prevは別ルートで管理）・assignee（担当者専用モードで扱う）は含めない。
+// meta を先頭にしているのは表示順の都合（レビュー画面の列はこの順で並ぶため、ID・氏名・異動事由・
+// メモ等を position/org 系の30列超の後ろに埋もれさせず、まず目に入る位置に置くため）。
+export const MERGEABLE_FIELDS: ReadonlyArray<keyof AllocationList> = [
+  ...META_FIELDS,
+  ...FIELD_METADATA.map(f => f.after),
+]
+
 // after列を before列のコピーで初期化（操作適用前の no-change ベースライン）
 export function copyBeforeToAfter(row: AllocationRow): AllocationRow {
   const after: Partial<AllocationList> = {}
@@ -165,5 +183,7 @@ export type AfterValues = Partial<
     | 'unionFlag' | 'positionDiscretionaryWorkFlag' | 'discretionaryWorkFlag'
     | 'transferReason' | 'memo' | 'promotionSign' | 'demotionReason' | 'payGradeChangeSign'
     | 'assignee'
+    | 'userId' | 'groupEmployeeId' | 'employeeNumber'
+    | 'lastName' | 'firstName' | 'lastNameKana' | 'firstNameKana'
   >
 >
