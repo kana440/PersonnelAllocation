@@ -59,9 +59,14 @@ export type OrgTableItem =
   | {
       kind:      'org-header'
       orgId:     string | null
+      orgCode:   string
       orgName:   string
       orgPath:   string
       rowCount:  number
+      /** このヘッダーが「旧」組織データ由来か（新モードのフォールバックは旧、旧モードの主軸は旧） */
+      isOldSection: boolean
+      /** 主軸で解決できず反対側（フォールバック）でグループ化した行か */
+      isUnmapped:   boolean
     }
   | {
       kind:      'row'

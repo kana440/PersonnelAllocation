@@ -4,7 +4,7 @@ import type { CompactOrgSection } from './useCompactData'
 
 interface Props {
   section:        CompactOrgSection
-  onOrgClick:     (orgId: string) => void
+  onOrgClick:     (orgId: string, isOldSection: boolean) => void
   onPersonFocus:  (rowId: number) => void
   onDoubleClick:  (rowId: number) => void
 }
@@ -34,16 +34,16 @@ export const OrgSection = memo(function OrgSection({ section, onOrgClick, onPers
   const parentPath = pathParts.length > 1 ? pathParts.slice(0, -1).join(' › ') : ''
 
   return (
-    <div className={section.isUnmapped ? 'border-l-2 border-orange-300' : ''}>
+    <div className={section.isOldSection ? 'border-l-2 border-amber-300' : ''}>
       {/* セクションヘッダー */}
       <div
         className={`flex items-start gap-1 px-2 py-1 sticky top-0 z-10 select-none transition-colors ${
-          section.isUnmapped
-            ? 'bg-orange-50 hover:bg-orange-100'
+          section.isOldSection
+            ? 'bg-amber-50 hover:bg-amber-100'
             : 'bg-gray-100 hover:bg-gray-200'
         } ${section.orgId ? 'cursor-pointer' : 'cursor-default'}`}
         title={fullPath}
-        onClick={() => { if (section.orgId) onOrgClick(section.orgId) }}
+        onClick={() => { if (section.orgId) onOrgClick(section.orgId, section.isOldSection) }}
       >
         {/* 折りたたみトグル */}
         <button
@@ -55,10 +55,27 @@ export const OrgSection = memo(function OrgSection({ section, onOrgClick, onPers
 
         {/* 組織名（2行：葉名 + 親パス） */}
         <div className="flex-1 min-w-0 overflow-hidden">
-          <div className={`text-[10px] font-semibold truncate leading-tight ${
-            section.isUnmapped ? 'text-orange-700' : 'text-gray-800'
-          }`}>
-            {leafName}
+          <div className="flex items-center gap-1">
+            {/* 色だけに頼らず「旧」「旧のみ」「新のみ」「未設定」を明示するバッジ（a11y）。
+                旧優先モードは通常セクションも含めて「旧」を常時表示する（色だけだと見落として
+                旧データと気づかないまま編集してしまうのを防ぐため）。フェールオーバー
+                （isUnmapped）のときは「旧のみ」に変えて、通常表示と区別する。 */}
+            {section.isOldSection && (
+              <span className="flex-shrink-0 text-[8px] px-1 rounded bg-amber-200 text-amber-800 border border-amber-400 leading-tight">
+                {section.isUnmapped ? '旧のみ' : '旧'}
+              </span>
+            )}
+            {section.isUnmapped && !section.isOldSection && section.orgCode && (
+              <span className="flex-shrink-0 text-[8px] px-1 rounded bg-blue-100 text-blue-700 border border-blue-300 leading-tight">新のみ</span>
+            )}
+            {section.isUnmapped && !section.isOldSection && !section.orgCode && (
+              <span className="flex-shrink-0 text-[8px] px-1 rounded bg-gray-200 text-gray-600 border border-gray-300 leading-tight">未設定</span>
+            )}
+            <div className={`text-[10px] font-semibold truncate leading-tight ${
+              section.isOldSection ? 'text-amber-800' : 'text-gray-800'
+            }`}>
+              {leafName}
+            </div>
           </div>
           {parentPath && (
             <div className="text-[9px] text-gray-400 truncate leading-tight">

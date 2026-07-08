@@ -15,6 +15,7 @@ import {
 } from './treeWindowLayout'
 import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from './panel/compactGroupDefs'
 import { estimateTreeBodyHeight, estimateBandBodyHeight, EST_HEADER_H } from './panel/heightEstimate'
+import { isSlowPerf } from '../../utils/perfLog'
 
 // memo: OrgOperationView が selectedCardRowId 等の変化で再レンダーしても、
 // context が変わらない限りここは再レンダーしない（props なし）
@@ -117,12 +118,13 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
       })
     }
 
-    const perfLabel = `[perf] computeLayout (${standalonePanels.length} standalone panels / ${panels.length} total panels)`
-    // eslint-disable-next-line no-console
-    console.time(perfLabel)
+    const t0 = performance.now()
     const posMap = computeLayout(standalonePanels, orgById, effectiveHeights, winW)
-    // eslint-disable-next-line no-console
-    console.timeEnd(perfLabel)
+    const elapsed = performance.now() - t0
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] computeLayout: ${elapsed.toFixed(1)}ms (${standalonePanels.length} standalone panels / ${panels.length} total panels)`)
+    }
     layoutCacheRef.current = posMap
     return standalonePanels.map(p => {
       const pos = posMap.get(p.id)
@@ -192,8 +194,10 @@ export const TreeWindowCanvas = memo(function TreeWindowCanvas() {
   // 注: displayPanels.length は「開いている」総数。実際に描画されたのは visiblePanelIds.size
   useEffect(() => {
     const elapsed = performance.now() - renderStartRef.current
-    // eslint-disable-next-line no-console
-    console.log(`[perf] TreeWindowCanvas render→commit: ${elapsed.toFixed(1)}ms (${visiblePanelIds.size} panels rendered / ${displayPanels.length} open / ${panels.length} total)`)
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] TreeWindowCanvas render→commit: ${elapsed.toFixed(1)}ms (${visiblePanelIds.size} panels rendered / ${displayPanels.length} open / ${panels.length} total)`)
+    }
   })
 
   // ── ズームプリセットドロップダウン ────────────────────────────

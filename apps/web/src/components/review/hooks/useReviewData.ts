@@ -5,6 +5,7 @@ import { detectPatterns, type RowChanges, type DetectContext } from '@personnel/
 import { RowRuleCtx } from '@personnel/domain/rules/rowRule'
 import type { EditPattern } from '@personnel/domain/patterns/editPattern'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
+import { isSlowPerf } from '../../../utils/perfLog'
 
 export interface ReviewRow {
   row:            AllocationRow
@@ -71,9 +72,7 @@ export function useReviewData(): ReviewData {
   const rowRuleCtx = useMemo(() => new RowRuleCtx(masters, afterOrganizations), [masters, afterOrganizations])
 
   const rows = useMemo((): ReviewRow[] => {
-    const perfLabel = `[perf] useReviewData rows build (${allocationList.length} rows)`
-    // eslint-disable-next-line no-console
-    console.time(perfLabel)
+    const t0 = performance.now()
     const result = allocationList.map(row => {
       const changes    = detectPatterns(row, detectCtx)
       const person     = row.userId ? personBySfId.get(row.userId as string) : undefined
@@ -85,8 +84,11 @@ export function useReviewData(): ReviewData {
         personName:     person?.name ?? '',
       }
     })
-    // eslint-disable-next-line no-console
-    console.timeEnd(perfLabel)
+    const elapsed = performance.now() - t0
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] useReviewData rows build: ${elapsed.toFixed(1)}ms (${allocationList.length} rows)`)
+    }
     return result
   }, [allocationList, afterOrganizations, masters, detectCtx, personBySfId, rowRuleCtx])
 

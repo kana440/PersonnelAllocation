@@ -267,6 +267,56 @@ export class HRApplicationService {
     this.emit()
   }
 
+  // ── マージ/リベースの承認行をまとめて反映（addNewHireRow と同じ直接push方式） ──
+  /** 追加候補行をまとめて追加する（1 Undo エントリ） */
+  acceptMergeRowsAdd(rows: AllocationRow[], label: string): void {
+    if (this.isPreviewMode || rows.length === 0) return
+    let nextId = nextRowId(this.allocationList)
+    const newRows = rows.map(r => ({ ...r, rowId: nextId++ }))
+    this.undoStack.push({
+      rowDiffs: newRows.map(r => ({ rowId: r.rowId, before: null, after: r })),
+      label,
+    })
+    this.allocationList = [...this.allocationList, ...newRows]
+    this.emit()
+  }
+
+  /** 変更候補をまとめて適用する（executeBatch を利用し1 Undo エントリにまとめる） */
+  acceptMergeRowsModify(changes: { rowId: number; changes: AfterValues }[], label: string): ValidationResult {
+    return this.executeBatch(label, changes.map(c => new DirectEditOperation(c.rowId, c.changes, label)))
+  }
+
+  /**
+   * 行全体（prevXxx を含む）をまとめて置き換える（リベース専用）。
+   * リベースでは新しい要員配置リストのPrevが絶対の正のため、After フィールドのみを
+   * 更新する DirectEditOperation では不十分（prevXxx が古いまま残ってしまう）。
+   * rowId は維持したまま行全体を新しい内容に差し替える。
+   */
+  acceptMergeRowsReplace(replacements: { rowId: number; newRow: AllocationRow }[], label: string): void {
+    if (this.isPreviewMode || replacements.length === 0) return
+    const newRowByRowId = new Map(replacements.map(r => [r.rowId, { ...r.newRow, rowId: r.rowId }]))
+    const rowDiffs = this.allocationList
+      .filter(r => newRowByRowId.has(r.rowId))
+      .map(before => ({ rowId: before.rowId, before, after: newRowByRowId.get(before.rowId)! }))
+    if (rowDiffs.length === 0) return
+    this.undoStack.push({ rowDiffs, label })
+    this.allocationList = this.allocationList.map(r => newRowByRowId.get(r.rowId) ?? r)
+    this.emit()
+  }
+
+  /**
+   * allocationList を丸ごと別のスナップショットに置き換える（マージ/リベースの
+   * セッション破棄＝git の merge --abort 相当。承認済みの変更も含め、セッション開始時点の
+   * 状態に完全ロールバックする）。1 Undo エントリにまとめるので、破棄自体もUndoで戻せる。
+   */
+  restoreAllocationList(baseline: AllocationRow[], label: string): void {
+    if (this.isPreviewMode) return
+    const patch = this.undoStack.computePatch(this.allocationList, baseline, this.afterOrganizations)
+    this.undoStack.push({ ...patch, label })
+    this.allocationList = baseline
+    this.emit()
+  }
+
   // ── ポジション操作（positionOps.ts の EditCommand に委譲）────
 
   createVacantPosition(departmentCode: string, localJobTitle: string, extraFields?: Partial<AllocationRow>): void {

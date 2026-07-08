@@ -81,6 +81,36 @@ function checkRow(row: AllocationRow, index: E1Index): ValidationIssue[] {
   return []
 }
 
+/**
+ * 一括上司変更ピッカー用: 対象行群（selfPositionCodes）のいずれかに対して自己参照・
+ * 循環参照になってしまう候補ポジションコードの集合を返す（プロアクティブ除外用）。
+ * 既存の E1 チェック（checkRow）は事後的な検証だが、こちらは選択肢を事前に絞り込むために使う。
+ */
+export function computeInvalidManagerCandidates(
+  selfPositionCodes: ReadonlySet<string>,
+  allocationList:    readonly AllocationRow[],
+): Set<string> {
+  const { posToMgr } = buildE1Index(allocationList)
+  const invalid = new Set<string>()
+
+  for (const row of allocationList) {
+    const candidate = row.positionCode as string | undefined
+    if (!candidate || invalid.has(candidate)) continue
+
+    if (selfPositionCodes.has(candidate)) { invalid.add(candidate); continue }
+
+    let cur: string | undefined = posToMgr.get(candidate)
+    const visited = new Set<string>()
+    while (cur && !visited.has(cur)) {
+      visited.add(cur)
+      if (selfPositionCodes.has(cur)) { invalid.add(candidate); break }
+      cur = posToMgr.get(cur)
+    }
+  }
+
+  return invalid
+}
+
 export const managerChainRule = defineInterRowRule<E1Index>({
   id:    'E1-managerChain',
   scope: 'state',

@@ -21,6 +21,8 @@ export interface ImportedWorkbookResult {
   allocationRowCount:           number
   masterCompatibilityWarnings: CompatibilityWarning[]
   columnWarnings:               ColumnWarning[]
+  /** 読み込んだファイル名（URL読み込み時は URL から推測したファイル名） */
+  fileName:                     string
 }
 
 export type ProgressCallback = (message: string) => void

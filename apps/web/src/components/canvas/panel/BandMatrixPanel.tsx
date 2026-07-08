@@ -7,8 +7,7 @@ import type { DragData }           from '../OrgViewContext'
 import { NameChip }                from './NameChip'
 import type { PositionEntry }      from '../OrgViewContext'
 import { isVacantRow }             from '@personnel/domain/allocationRow'
-import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from './compactGroupDefs'
-import type { SortGroupsContext }  from './compactGroupDefs'
+import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID, sortGroupsByLineAndBand } from './compactGroupDefs'
 
 interface Props {
   orgId:   string
@@ -22,11 +21,11 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
   const {
     positionTreeByOrgId,
     organizations,
-    orgById,
     openBandDrop,
     openGroupFormDrop,
     setConfirmDialog,
     isHistoryPreviewMode,
+    topPositionCodeOfOrg,
   } = useOrgView()
 
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
@@ -64,26 +63,15 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
       else map.set(key, [entry])
     }
 
-    // ── ソート ──
-    let sortedKeys: string[]
-    if (groupDef.sortGroupsWithContext) {
-      const ctx: SortGroupsContext = {
-        masters,
-        positionCodeToRow,
-        orgById,
-        orgByExternalCode,
-        currentOrgId: orgId,
-      }
-      const groupsForSort = [...map.keys()].map(key => ({
-        key,
-        sampleRow: map.get(key)![0].row,
-      }))
-      sortedKeys = groupDef.sortGroupsWithContext(groupsForSort, ctx)
-    } else {
-      sortedKeys = groupDef.sortKeys([...map.keys()], masters)
-    }
+    // ── ソート: ライン長を含むグループが先頭 → 残りはグループ内バンドMAXの降順（全グループ共通） ──
+    const linePositionCode = topPositionCodeOfOrg(orgId)
+    const groupsForSort = [...map.entries()].map(([key, items]) => ({
+      key,
+      rows: items.map(e => e.row),
+    }))
+    const sortedKeys = sortGroupsByLineAndBand(groupsForSort, masters, linePositionCode)
 
-    // ── サブラベル（上司の所属組織名など） ──
+    // ── サブラベル（上司の所属組織名など）・見出しラベル ──
     return sortedKeys.map(key => {
       const items = map.get(key)!
 
@@ -99,9 +87,13 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
         }
       }
 
-      return { key, items, sublabel }
+      const label = groupDef.formatGroupLabel && items.length > 0
+        ? groupDef.formatGroupLabel(key, items[0].row, false)
+        : key
+
+      return { key, label, items, sublabel }
     })
-  }, [entries, groupDef, masters, orgByExternalCode, orgById, orgId, positionCodeToRow])
+  }, [entries, groupDef, masters, orgByExternalCode, orgId, positionCodeToRow, topPositionCodeOfOrg])
 
   const handleGroupDrop = useCallback((e: React.DragEvent, toKey: string) => {
     e.preventDefault()
@@ -119,11 +111,12 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
     if (!row || isVacantRow(row)) return
 
     if (behavior.kind === 'band-wizard') {
-      if (!behavior.canDrop(row, toKey, masters)) return
+      const groupSample = groupsRef.current.find(g => g.key === toKey)?.items[0]?.row
+      if (!behavior.canDrop(row, toKey, masters, groupSample)) return
       openBandDrop({
-        def:             behavior.getDef(row, toKey, masters),
+        def:             behavior.getDef(row, toKey, masters, groupSample),
         row,
-        overrideInitial: behavior.buildInitial(row, toKey),
+        overrideInitial: behavior.buildInitial(row, toKey, masters, groupSample),
       })
     } else if (behavior.kind === 'form') {
       if (!behavior.canDrop(row, toKey)) return
@@ -137,7 +130,7 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
       const groupSample = groupsRef.current.find(g => g.key === toKey)?.items[0]?.row
       const command = behavior.buildCommand(row, toKey, groupSample)
       setConfirmDialog({
-        message:   behavior.confirmMessage(row, toKey),
+        message:   behavior.confirmMessage(row, toKey, groupSample),
         onConfirm: () => { appService.executeOperation(command) },
       })
     }
@@ -151,7 +144,7 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
 
   return (
     <div className="p-1.5 space-y-1.5">
-      {groups.map(({ key, items, sublabel }) => (
+      {groups.map(({ key, label, items, sublabel }) => (
         <div
           key={key}
           onDragOver={hasDropBehavior ? e => {
@@ -169,7 +162,7 @@ export function BandMatrixPanel({ orgId, panelId }: Props) {
           <div className={`text-[9px] font-semibold tracking-wider mb-0.5 px-0.5 leading-none transition-colors flex items-baseline gap-1 ${
             dragOverKey === key ? 'text-blue-500' : 'text-gray-400'
           }`}>
-            <span>{key}</span>
+            <span className="whitespace-pre-line leading-tight">{label}</span>
             {sublabel && (
               <span className="font-normal tracking-normal text-gray-400">{sublabel}</span>
             )}

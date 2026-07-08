@@ -58,6 +58,14 @@ const ZOOM_MAX = 2.0
 interface CanvasLayoutState {
   panels: PanelDef[]
 
+  /**
+   * Excel ロード時、新組織側でメンバー組織の自動展開が有効になったか（AUTO_EXPAND_MAX_ORGS 判定）。
+   * 比較モード開始時、旧組織キャンバスも同じ判定結果に揃えるために参照する
+   * （新側だけ全展開・旧側はルートのみ、という見た目の非対称を避けるため）。
+   */
+  didAutoExpandMemberOrgs:    boolean
+  setDidAutoExpandMemberOrgs: (v: boolean) => void
+
   // ── ズーム（通常・比較モード共通） ───────────────────────────────
   canvasZoom:     number
   setCanvasZoom:  (v: number) => void
@@ -99,6 +107,9 @@ interface CanvasLayoutState {
    * 対象が見えるようにするための共通ヘルパー。兄弟・親の兄弟には触れない。
    */
   openOrgAncestors: (orgId: string, orgById: Map<string, Organization>) => void
+
+  /** openOrgAncestors の比較モード（旧組織 comparisonPanels）版 */
+  openComparisonOrgAncestors: (orgId: string, orgById: Map<string, Organization>) => void
 
   /**
    * 現在ドラッグ中のパネル ID。仮想化（画面外パネルの非描画）で、
@@ -143,6 +154,10 @@ interface CanvasLayoutState {
   scrollToBeforeRowRequest: { rowId: number; seq: number } | null
   requestScrollToBeforeRow: (rowId: number | null) => void
 
+  /** 非null のとき BeforeTreeWindowCanvas が対象組織パネルを中央にスクロールする（検索からの旧組織選択用）*/
+  scrollToBeforeOrgRequest: { orgId: string; seq: number } | null
+  requestScrollToBeforeOrg: (orgId: string | null) => void
+
   /** キャンバス外側スクロールコンテナの保存位置（表示切替後の即時復元に使用） */
   canvasScrollPos:     { left: number; top: number }
   saveCanvasScrollPos: (left: number, top: number) => void
@@ -186,6 +201,9 @@ interface CanvasLayoutState {
 
 export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
   panels: [],
+
+  didAutoExpandMemberOrgs:    false,
+  setDidAutoExpandMemberOrgs: (v) => set({ didAutoExpandMemberOrgs: v }),
 
   // ── ズーム ──────────────────────────────────────────────────────
   canvasZoom: 1,
@@ -348,6 +366,19 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     }))
   },
 
+  openComparisonOrgAncestors: (orgId, orgById) => {
+    const toOpen = new Set<string>()
+    let cur = orgById.get(orgId)
+    while (cur) {
+      toOpen.add(cur.id)
+      cur = cur.parentId ? orgById.get(cur.parentId) : undefined
+    }
+    if (toOpen.size === 0) return
+    set(s => ({
+      comparisonPanels: s.comparisonPanels.map(p => (toOpen.has(p.orgId) && !p.open) ? { ...p, open: true } : p),
+    }))
+  },
+
   draggingPanelId:    null,
   setDraggingPanelId: (panelId) => set({ draggingPanelId: panelId }),
 
@@ -395,6 +426,13 @@ export const useCanvasLayoutStore = create<CanvasLayoutState>()((set, get) => ({
     if (rowId === null) { set({ scrollToBeforeRowRequest: null }); return }
     const seq = (get().scrollToBeforeRowRequest?.seq ?? -1) + 1
     set({ scrollToBeforeRowRequest: { rowId, seq } })
+  },
+
+  scrollToBeforeOrgRequest: null,
+  requestScrollToBeforeOrg: (orgId) => {
+    if (orgId === null) { set({ scrollToBeforeOrgRequest: null }); return }
+    const seq = (get().scrollToBeforeOrgRequest?.seq ?? -1) + 1
+    set({ scrollToBeforeOrgRequest: { orgId, seq } })
   },
 
   // ── 比較モード ──────────────────────────────────────────────────

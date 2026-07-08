@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { normalizeSearch } from '../../../utils/normalizeSearch'
 import { appService } from '../../../application/HRApplicationService'
 import type { Person } from '@personnel/domain/schemas'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
@@ -74,79 +73,6 @@ export function BulkTransferReasonModal({ selectedPersonIds, persons, allocation
       <button
         onClick={handleApply}
         className="w-full py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-      >
-        {selectedPersonIds.size}名に適用
-      </button>
-    </ModalShell>
-  )
-}
-
-export function BulkManagerModal({ selectedPersonIds, persons, allocationList, onDone, onCancel }: BulkProps) {
-  const [search,          setSearch]          = useState('')
-  const [selectedPosCode, setSelectedPosCode] = useState('')
-  const [selectedName,    setSelectedName]    = useState('')
-
-  const candidates = allocationList.filter(r => r.positionCode && r.userId)
-  const q = normalizeSearch(search.trim())
-  const filtered = q
-    ? candidates.filter(r => {
-        const name = normalizeSearch(`${r.lastName ?? ''}${r.firstName ?? ''}`)
-        return name.includes(q) || normalizeSearch(r.positionCode ?? '').includes(q)
-      })
-    : candidates.slice(0, 30)
-
-  const handleApply = () => {
-    const rows = getPrimaryRows(selectedPersonIds, persons, allocationList)
-    for (const row of rows) {
-      appService.saveRow(row.rowId, { managerPositionCode: selectedPosCode, managerName: selectedName })
-    }
-    onDone()
-  }
-
-  return (
-    <ModalShell title="上司ポジション変更（一括）" count={selectedPersonIds.size} onCancel={onCancel}>
-      <div className="space-y-2">
-        <label className="text-xs text-gray-500">名前または管理コードで検索</label>
-        <input
-          autoFocus
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="名前で検索…"
-          className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-blue-400"
-        />
-        {selectedPosCode && (
-          <div className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1 font-medium">
-            選択中: {selectedName}（{selectedPosCode}）
-          </div>
-        )}
-        <div className="border border-gray-200 rounded-lg max-h-36 overflow-y-auto">
-          {filtered.map(r => {
-            const name = [r.lastName, r.firstName].filter(Boolean).join(' ')
-            return (
-              <button
-                key={r.rowId}
-                onClick={() => {
-                  setSelectedPosCode(r.positionCode ?? '')
-                  setSelectedName([r.lastName, r.firstName].filter(Boolean).join(', '))
-                }}
-                className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex gap-2 items-center border-b border-gray-100 last:border-0 ${
-                  r.positionCode === selectedPosCode ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-700'
-                }`}
-              >
-                <span className="flex-1 truncate">{name}</span>
-                <span className="flex-shrink-0 text-[10px] text-gray-400 tabular-nums">{r.positionCode}</span>
-              </button>
-            )
-          })}
-          {filtered.length === 0 && (
-            <div className="text-xs text-gray-400 text-center py-4">該当なし</div>
-          )}
-        </div>
-      </div>
-      <button
-        onClick={handleApply}
-        disabled={!selectedPosCode}
-        className="w-full py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
         {selectedPersonIds.size}名に適用
       </button>

@@ -21,6 +21,7 @@ import { PatternReferenceModal }    from '../common/PatternReferenceModal'
 import { OperationReferenceModal }  from '../common/OperationReferenceModal'
 import { IssueReferenceModal }      from '../common/IssueReferenceModal'
 import { DisplayPreferenceModal }   from '../common/DisplayPreferenceModal'
+import { SelectMenuButton }         from '../common/SelectMenuButton'
 
 type MainViewMode = 'canvas' | 'review'
 
@@ -277,34 +278,23 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
         <div className="flex items-center gap-2 ml-4">
           {mainViewMode === 'canvas' && (
             <>
-              {/* ツリー / コンパクト */}
-              <div className="flex items-stretch border border-gray-300 rounded overflow-hidden text-xs font-medium">
-                {([
-                  { id: 'tree', label: 'ツリー' },
-                  { id: 'band', label: 'コンパクト' },
-                ] as const).map(({ id, label }) => (
-                  <button
-                    key={id}
-                    onClick={() => setCanvasPanelStyle(id)}
-                    className={`px-2.5 py-1 transition-colors ${
-                      canvasPanelStyle === id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >{label}</button>
-                ))}
+              {/* 表示方法: 通常(詳細) / 属性別グループ表示（1クリックで選べるよう統合） */}
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] text-gray-500 whitespace-nowrap">表示方法:</span>
+                <SelectMenuButton
+                  value={canvasPanelStyle === 'band' ? `band:${compactGroupById}` : 'tree'}
+                  options={[
+                    { value: 'tree', label: '通常' },
+                    ...COMPACT_GROUP_DEFS.map(d => ({ value: `band:${d.id}`, label: `${d.label}別` })),
+                  ]}
+                  onChange={v => {
+                    if (v === 'tree') { setCanvasPanelStyle('tree'); return }
+                    setCanvasPanelStyle('band')
+                    setCompactGroupById(v.slice('band:'.length))
+                  }}
+                  title="組織の箱の中の表示方法（通常＝差分・ワーニング付きの詳細表示／属性別＝グループ化してドラッグで一括変更）"
+                />
               </div>
-              {/* コンパクト時のグループ単位 */}
-              {canvasPanelStyle === 'band' && (
-                <select
-                  value={compactGroupById}
-                  onChange={e => setCompactGroupById(e.target.value)}
-                  className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white text-gray-600 cursor-pointer"
-                  title="コンパクトビューのグループ単位"
-                >
-                  {COMPACT_GROUP_DEFS.map(d => (
-                    <option key={d.id} value={d.id}>{d.label}別</option>
-                  ))}
-                </select>
-              )}
               {/* 旧体制との比較 */}
               <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-gray-600 px-1">
                 <input
@@ -319,19 +309,16 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
           )}
           {mainViewMode === 'review' && (
             /* 比較形式 / Excel形式 */
-            <div className="flex items-stretch border border-gray-300 rounded overflow-hidden text-xs font-medium">
-              {([
-                { id: 'diff',          label: '比較形式' },
-                { id: 'side-by-side',  label: 'Excel形式' },
-              ] as const).map(({ id, label }) => (
-                <button
-                  key={id}
-                  onClick={() => setViewMode(id)}
-                  className={`px-2.5 py-1 transition-colors ${
-                    viewMode === id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                >{label}</button>
-              ))}
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-gray-500 whitespace-nowrap">表示方法:</span>
+              <SelectMenuButton
+                value={viewMode}
+                options={[
+                  { value: 'diff',         label: '比較形式' },
+                  { value: 'side-by-side', label: 'Excel形式' },
+                ]}
+                onChange={setViewMode}
+              />
             </div>
           )}
         </div>
@@ -393,7 +380,7 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
             style={{ width: navWidth }}
           >
             <div
-              className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 active:bg-blue-400 transition-colors z-10"
+              className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-blue-300 active:bg-blue-400 transition-colors z-20"
               onMouseDown={handleNavResizeStart}
               title="ドラッグで幅を調整"
             />
@@ -413,7 +400,7 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
         {/* 履歴パネル（折りたたみ式） */}
         {isHistoryOpen ? (
           <div className="flex-shrink-0 bg-white rounded-lg shadow overflow-hidden flex flex-col relative" style={{ width: historyWidth }}>
-            <div className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-300 transition-colors z-10" onMouseDown={handleHistoryResizeStart} />
+            <div className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-300 transition-colors z-20" onMouseDown={handleHistoryResizeStart} />
             <HistoryPanel onClose={() => setIsHistoryOpen(false)} />
           </div>
         ) : (

@@ -7,8 +7,9 @@ import type { PositionEntry, MemberEntry } from '../OrgViewContext'
 import { detectPatterns, type DetectContext } from '@personnel/domain/patterns/detection'
 import { validateRow } from '@personnel/domain/rules/validate/validateRow'
 import { RowRuleCtx } from '@personnel/domain/rules/rowRule'
-import { buildPositionDepthList } from '../panel/helpers'
+import { buildPositionDepthList, makeRowComparator } from '../panel/helpers'
 import { isAbsenceRow } from '../FloatingAbsencePanel/helpers'
+import { isSlowPerf } from '../../../utils/perfLog'
 
 interface UseOrgViewDataDeps {
   allAfterOrgs:        Organization[]
@@ -17,26 +18,6 @@ interface UseOrgViewDataDeps {
   allocationList:      AllocationRow[]
   masters:             AllMasters
   orgMapping:          Map<string, string[]>
-}
-
-/**
- * パネル内カードの表示順: positionBand の高さ降順 → 氏名の五十音順。
- * バンドの高さは masters.jobLevels の promotionDemotionWarningLevel で判定する。
- * 漢字氏名は Intl.Collator('ja') でベストエフォートのソート（フリガナ未対応）。
- */
-function makeRowComparator(masters: AllMasters): (a: AllocationRow, b: AllocationRow) => number {
-  const collator = new Intl.Collator('ja')
-  const levelOf  = (row: AllocationRow): number => {
-    const band = row.positionBand as string | undefined
-    return masters.jobLevels.find(e => e.label === band)?.promotionDemotionWarningLevel ?? -1
-  }
-  return (a, b) => {
-    const diff = levelOf(b) - levelOf(a)  // 降順（高バンド先頭）
-    if (diff !== 0) return diff
-    const nameA = [(a.lastName ?? ''), (a.firstName ?? '')].join('')
-    const nameB = [(b.lastName ?? ''), (b.firstName ?? '')].join('')
-    return collator.compare(nameA, nameB)
-  }
 }
 
 export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, allocationList, masters, orgMapping }: UseOrgViewDataDeps) {
@@ -110,9 +91,7 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
   }, [allocationList])
 
   const positionTreeByOrgId = useMemo((): Map<string, PositionEntry[]> => {
-    const perfLabel = `[perf] positionTreeByOrgId build (${allocationList.length} rows, ${afterOrgRowsById.size} orgs)`
-    // eslint-disable-next-line no-console
-    console.time(perfLabel)
+    const t0 = performance.now()
     const result = new Map<string, PositionEntry[]>()
     for (const [orgId, rows] of afterOrgRowsById) {
       // 同一 org 内の positionCode セット（外部上司判定用）
@@ -146,10 +125,13 @@ export function useOrgViewData({ allAfterOrgs, beforeOrganizations, persons, all
         }
       }))
     }
-    // eslint-disable-next-line no-console
-    console.timeEnd(perfLabel)
+    const elapsed = performance.now() - t0
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] positionTreeByOrgId build: ${elapsed.toFixed(1)}ms (${allocationList.length} rows, ${afterOrgRowsById.size} orgs)`)
+    }
     return result
-  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes, detectCtx, rowRuleCtx])
+  }, [afterOrgRowsById, personBySfId, rowComparator, allPositionCodes, detectCtx, rowRuleCtx, allocationList.length])
 
   return { afterOrgByCode, personBySfId, afterMembersByOrgId, positionTreeByOrgId }
 }

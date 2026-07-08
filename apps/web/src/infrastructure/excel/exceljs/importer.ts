@@ -40,6 +40,7 @@ export async function importWorkbook(
   fallbackCompanyName = 'インポートデータ',
   onProgress?: ProgressCallback,
   rawBuffer?: ArrayBuffer,
+  fileName = '',
 ): Promise<ImportedWorkbookResult> {
   const report = async (msg: string) => { onProgress?.(msg); await tick() }
 
@@ -110,7 +111,7 @@ export async function importWorkbook(
     }))
   } else { sheetsMissing.push(SHEET_ALLOCATION) }
 
-  return { masters, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, oldOrgEntries, allocationRowCount: allocationList.length, masterCompatibilityWarnings, columnWarnings }
+  return { masters, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, oldOrgEntries, allocationRowCount: allocationList.length, masterCompatibilityWarnings, columnWarnings, fileName }
 }
 
 export function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {
@@ -127,7 +128,7 @@ export function importFromFile(file: File, onProgress?: ProgressCallback): Promi
         const wb = new ExcelJS.Workbook()
         await wb.xlsx.load(data)
         const companyName = file.name.replace(/\.[^.]+$/, '').replace(/[_\-]?要員配置.*$/i, '').trim() || 'インポートデータ'
-        resolve(await importWorkbook(wb, companyName, onProgress, data))
+        resolve(await importWorkbook(wb, companyName, onProgress, data, file.name))
       } catch (err) { reject(err) }
     }
     reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'))
@@ -146,8 +147,9 @@ export async function importFromUrl(url: string, onProgress?: ProgressCallback):
   if (magic[0] !== 0x50 || magic[1] !== 0x4B) {
     throw new Error(`ファイルが見つかりません: ${url}`)
   }
-  setLastWorkbook(buffer, url.split('/').pop() ?? 'import.xlsx')
+  const urlFileName = url.split('/').pop() ?? 'import.xlsx'
+  setLastWorkbook(buffer, urlFileName)
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer)
-  return importWorkbook(wb, undefined, onProgress, buffer)
+  return importWorkbook(wb, undefined, onProgress, buffer, urlFileName)
 }

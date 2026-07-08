@@ -17,7 +17,6 @@ import type { SecondmentInValues } from '../modals/SecondmentInAddModal'
 import type { EditPattern }    from '@personnel/domain/patterns/editPattern'
 import { CanvasModals }        from '../CanvasModals'
 import { TreeWindowCanvas }    from '../TreeWindowCanvas'
-import { FlowCanvas }          from '../flow/FlowCanvas'
 import { CanvasQuickSearch }   from '../CanvasQuickSearch'
 import { DisplayFieldCombobox } from '../toolbar/DisplayFieldCombobox'
 import { OrgViewContext }      from '../OrgViewContext'
@@ -29,6 +28,7 @@ import { useOrgViewData }      from '../hooks/useOrgViewData'
 import { usePersonSelection }  from './usePersonSelection'
 import { PatternDialogs }      from './PatternDialogs'
 import { FloatingAbsencePanel } from '../FloatingAbsencePanel'
+import { isSlowPerf }          from '../../../utils/perfLog'
 
 export function OrgOperationView() {
   const store = useScopedStore()
@@ -43,7 +43,6 @@ export function OrgOperationView() {
     masters,
   } = useStore()
   const comparisonMode = useCanvasLayoutStore(s => s.comparisonMode)
-  const canvasPanelStyle = useCanvasLayoutStore(s => s.canvasPanelStyle)
   const {
     afterOrganizations: scopedAfterOrgs, persons: scopedPersons,
     allocationList: scopedAllocList,
@@ -75,9 +74,7 @@ export function OrgOperationView() {
 
   // orgId → サブツリー全体のアイテム数。O(N) で1回構築し全 TreeWindow が共有する
   const subtreeCountByOrgId = useMemo(() => {
-    const perfLabel = `[perf] subtreeCountByOrgId build (${organizations.length} orgs)`
-    // eslint-disable-next-line no-console
-    console.time(perfLabel)
+    const t0 = performance.now()
     const map = new Map<string, number>()
     const compute = (orgId: string): number => {
       const cached = map.get(orgId)
@@ -88,13 +85,16 @@ export function OrgOperationView() {
       return n
     }
     for (const org of organizations) compute(org.id)
-    // eslint-disable-next-line no-console
-    console.timeEnd(perfLabel)
+    const elapsed = performance.now() - t0
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] subtreeCountByOrgId build: ${elapsed.toFixed(1)}ms (${organizations.length} orgs)`)
+    }
     return map
   }, [positionTreeByOrgId, childrenByOrgId, organizations])
 
   // ── UI state ──────────────────────────────────────────────────────────────
-  const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [confirmDialog,       setConfirmDialog]       = useState<{ message: string; confirmLabel?: string; onConfirm: () => void } | null>(null)
   const [fieldPickerOpen,     setFieldPickerOpen]     = useState(false)
   const [moveModalOpen,       setMoveModalOpen]       = useState(false)
   const [bulkActionModal,     setBulkActionModal]     = useState<'transferReason' | 'manager' | 'secondment' | null>(null)
@@ -357,9 +357,7 @@ export function OrgOperationView() {
           onDragOverCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
           onDragEnterCapture={isHistoryPreviewMode ? e => { e.stopPropagation() } : undefined}
         >
-          {comparisonMode
-            ? <ComparisonSplitView />
-            : canvasPanelStyle === 'tree' ? <FlowCanvas /> : <TreeWindowCanvas />}
+          {comparisonMode ? <ComparisonSplitView /> : <TreeWindowCanvas />}
         </div>
 
         <PatternDialogs

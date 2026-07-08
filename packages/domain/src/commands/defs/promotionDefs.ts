@@ -303,7 +303,7 @@ export const demotionDef: EditOperation = {
   ],
 
   description: 'ポジションバンドを下げる降格を記入します。降格理由の入力が必須です。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから対応してください）。',
-  entryPoints:      ['personMenu'] as const,
+  entryPoints:      ['personMenu', 'dragIntent'] as const,
   availabilityNote: '在席者（userId あり）の本務行かつ正社員。ロック操作中は不可。',
 
   availableFor: () => AVAILABLE,
@@ -416,10 +416,16 @@ export const titleChangeDef: EditOperation = {
   badge:       'jobChange',
 
   description: '昇降格を伴わない役職名（フリータイトル）の変更を記入します。役職を入力するとフリータイトルの自動提案が表示されます。',
-  entryPoints:      ['personMenu'] as const,
+  entryPoints:      ['personMenu', 'dragIntent'] as const,
   availabilityNote: '在席者（userId あり）の本務行。ロック操作中は不可。',
 
   availableFor: () => AVAILABLE,
+
+  // 簡易モード: 役職名だけ入力（バンド・役職グループへのドラッグ&ドロップで使用）
+  quickInputs: [
+    { field: 'officialPositionCode', required: true },
+    { field: 'localJobTitle',        required: false },
+  ],
 
   inputs: [
     { field: 'transferReason', required: false, options: [TR.DIV_TRANSFER_RESTRUCTURE, TR.DIV_TRANSFER], optionsMode: 'suggest' },
@@ -511,7 +517,7 @@ export const mpTrackSwitchDef: EditOperation = {
   group:       'jobClassification',
   badge:       'jobChange',
   description: '給与等級が変わらないM職・P職間の職務区分切替を記入します。現在のバンドと役職名の組み合わせから切替先の候補を自動提案します。',
-  entryPoints:      ['personMenu'] as const,
+  entryPoints:      ['personMenu', 'dragIntent'] as const,
   availabilityNote: '在席者（userId あり）の本務行かつ正社員。M職またはP職系バンドが設定されている場合に有効。ロック操作中は不可。',
 
   availableFor: (row, masters) => {

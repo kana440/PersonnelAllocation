@@ -63,8 +63,8 @@ function loadUnavailableOperationDisplay(): UnavailableOperationDisplay {
 
 function loadCompactGroupById(): string {
   try {
-    return localStorage.getItem(COMPACT_GROUP_STORAGE_KEY) ?? 'positionBand'
-  } catch { return 'positionBand' }
+    return localStorage.getItem(COMPACT_GROUP_STORAGE_KEY) ?? 'bandRole'
+  } catch { return 'bandRole' }
 }
 
 interface CanvasDisplayState {

@@ -7,12 +7,13 @@ import type { DropIntentState, DropOpState, DragBatchItem } from './hooks/useDro
 import { useMemo }                   from 'react'
 import { appService }                from '../../application/HRApplicationService'
 import { MoveRowsToOrgOperation }    from '@personnel/domain/commands/handlers/moveRowsToOrg'
-import { ConfirmDialog }             from './modals/ConfirmDialog'
-import { SelectMoveModal }           from './modals/SelectMoveModal'
+import { ResetToInitialOperation, hasResetBaseline } from '@personnel/domain/commands/handlers/resetToInitial'
+import { ConfirmDialog }             from '../common/ConfirmDialog'
+import { SelectMoveModal }           from '../common/SelectMoveModal'
+import { BulkManagerPositionModal }  from '../common/BulkManagerPositionModal'
 import { BulkMoveModal }             from './modals/BulkMoveModal'
 import {
   BulkTransferReasonModal,
-  BulkManagerModal,
   BulkSecondmentModal,
 } from './modals/BulkActionModals'
 import { CanvasFieldPicker }   from './CanvasFieldPicker'
@@ -41,8 +42,8 @@ export interface CanvasModalsProps {
   /** バンド間ドラッグ: quickInputs フォームで開く昇格/降格操作 */
   bandDropOpState:    DropOpState | null
   setBandDropOpState: (v: DropOpState | null) => void
-  confirmDialog:      { message: string; onConfirm: () => void } | null
-  setConfirmDialog:   (v: { message: string; onConfirm: () => void } | null) => void
+  confirmDialog:      { message: string; confirmLabel?: string; onConfirm: () => void } | null
+  setConfirmDialog:   (v: { message: string; confirmLabel?: string; onConfirm: () => void } | null) => void
   fieldPickerOpen:             boolean
   setFieldPickerOpen:          (v: boolean) => void
   restoreVacantPositionOpen:   boolean
@@ -105,6 +106,37 @@ export function CanvasModals({
     exitSelectMode()
   }
 
+  const resolveSelectedRowIds = (): number[] => {
+    const rowIds: number[] = []
+    for (const personId of selectedPersonIds) {
+      const person = persons.find(p => p.id === personId)
+      if (!person?.sfPersonId) continue
+      const primary = allocationList.find(r => r.userId === person.sfPersonId && r.concurrentType !== '兼務')
+                   ?? allocationList.find(r => r.userId === person.sfPersonId)
+      if (primary) rowIds.push(primary.rowId)
+    }
+    return rowIds
+  }
+
+  const handleResetToInitial = () => {
+    const rowIds = resolveSelectedRowIds()
+    const rows = rowIds.map(id => allocationList.find(r => r.rowId === id)).filter((r): r is AllocationRow => !!r)
+    const eligible = rows.filter(hasResetBaseline)
+    const skipped  = rows.length - eligible.length
+    if (eligible.length === 0) return
+    setConfirmDialog({
+      message:
+        `選択した${eligible.length}名を初期状態（インポート時点）に戻します。\n異動事由・メモもクリアされます。` +
+        (skipped > 0 ? `\n（${skipped}名は新規追加行のため対象外です）` : '') +
+        `\nよろしいですか？`,
+      confirmLabel: '初期状態に戻す',
+      onConfirm: () => {
+        appService.executeBatch('初期状態に戻す', eligible.map(r => new ResetToInitialOperation(r.rowId)))
+        exitSelectMode()
+      },
+    })
+  }
+
   return (
     <>
       {/* 選択モード アクションバー */}
@@ -116,6 +148,8 @@ export function CanvasModals({
           <button onClick={() => setBulkActionModal('manager')}        className="px-2.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 font-medium transition-colors">上司変更</button>
           <button onClick={() => setBulkActionModal('transferReason')} className="px-2.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 font-medium transition-colors">異動事由</button>
           <button onClick={() => setBulkActionModal('secondment')}     className="px-2.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 font-medium transition-colors">出向</button>
+          <div className="w-px h-4 bg-gray-600" />
+          <button onClick={handleResetToInitial} className="px-2.5 py-1 rounded-full bg-red-600 hover:bg-red-500 font-medium transition-colors">初期に戻す</button>
           <div className="w-px h-4 bg-gray-600" />
           <button onClick={exitSelectMode} className="px-2.5 py-1 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">解除</button>
         </div>
@@ -140,10 +174,10 @@ export function CanvasModals({
         />
       )}
       {bulkActionModal === 'manager' && (
-        <BulkManagerModal
-          selectedPersonIds={selectedPersonIds}
-          persons={persons}
+        <BulkManagerPositionModal
+          rows={resolveSelectedRowIds().map(id => allocationList.find(r => r.rowId === id)).filter((r): r is AllocationRow => !!r)}
           allocationList={allocationList}
+          afterOrganizations={allAfterOrgsUnscoped}
           onDone={() => { setBulkActionModal(null); exitSelectMode() }}
           onCancel={() => setBulkActionModal(null)}
         />
@@ -214,6 +248,7 @@ export function CanvasModals({
       {confirmDialog && (
         <ConfirmDialog
           message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
         />

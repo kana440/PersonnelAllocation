@@ -4,7 +4,8 @@ import { useStore } from '../../../store/useStore'
 import { useReviewFilterStore } from '../../../store/reviewFilterStore'
 import { useReviewData } from '../hooks/useReviewData'
 import { BEFORE_AFTER_FIELD_PAIRS } from '@personnel/domain/allocationRow'
-import { FIELD_DISPLAY_LABELS } from '@personnel/domain/csvImport/allocationList/labels'
+import type { EditPattern } from '@personnel/domain/patterns/editPattern'
+import { FIELD_DISPLAY_LABELS, ALLOCATION_LIST_FIELDS } from '@personnel/domain/csvImport/allocationList/labels'
 import { DirectEditOperation } from '@personnel/domain/commands/handlers/directEdit'
 import { appService } from '../../../application/HRApplicationService'
 import { buildOrgPathMap } from '../components/BulkFieldEditModal/helpers'
@@ -13,14 +14,21 @@ import { filterRows, buildIssueGroups } from './helpers'
 import { FilterBar }          from './FilterBar'
 import { UnifiedTable }       from './UnifiedTable'
 import { SelectionActionBar } from './SelectionActionBar'
-import { type DisplayField, type IssueGroupDef, type OrgTableItem } from './types'
-import { buildPositionDepthList } from '../../canvas/panel/helpers'
+import { DEFAULT_FILTER, type DisplayField, type IssueGroupDef, type OrgTableItem } from './types'
+import { buildPositionDepthList, makeRowComparator } from '../../canvas/panel/helpers'
+import { isSlowPerf } from '../../../utils/perfLog'
 
-const ALL_DISPLAY_FIELDS: DisplayField[] = BEFORE_AFTER_FIELD_PAIRS.map(([afterKey, prevKey]) => ({
-  afterKey: String(afterKey),
-  prevKey:  String(prevKey),
-  label:    FIELD_DISPLAY_LABELS[String(afterKey)] ?? String(afterKey),
-}))
+// テーブルの列順は Excel の列順（ALLOCATION_LIST_FIELDS の並び）に揃える。
+// FIELD_METADATA（→ BEFORE_AFTER_FIELD_PAIRS）は binding 分類順で他用途にも使われているため、
+// 定義自体は変えず、表示専用にここで並べ替える。
+const EXCEL_COLUMN_ORDER = new Map(ALLOCATION_LIST_FIELDS.map((f, i) => [f.key, i]))
+const ALL_DISPLAY_FIELDS: DisplayField[] = [...BEFORE_AFTER_FIELD_PAIRS]
+  .sort((a, b) => (EXCEL_COLUMN_ORDER.get(String(a[0])) ?? 0) - (EXCEL_COLUMN_ORDER.get(String(b[0])) ?? 0))
+  .map(([afterKey, prevKey]) => ({
+    afterKey: String(afterKey),
+    prevKey:  String(prevKey),
+    label:    FIELD_DISPLAY_LABELS[String(afterKey)] ?? String(afterKey),
+  }))
 
 
 export function UnifiedReviewView() {
@@ -29,10 +37,11 @@ export function UnifiedReviewView() {
   renderStartRef.current = performance.now()
 
   const data = useReviewData()
-  const { afterOrganizations, masters, selectedRowId } = useStore(useShallow(s => ({
-    afterOrganizations: s.afterOrganizations,
-    masters:            s.masters,
-    selectedRowId:      s.selectedRowId,
+  const { afterOrganizations, beforeOrganizations, masters, selectedRowId } = useStore(useShallow(s => ({
+    afterOrganizations:  s.afterOrganizations,
+    beforeOrganizations: s.organizations,
+    masters:             s.masters,
+    selectedRowId:       s.selectedRowId,
   })))
   const { selectRow, enterOperationPanel, selectPersonAndFocusOrg, selectOrg, persons } = useStore(useShallow(s => ({
     selectRow:               s.selectRow,
@@ -51,14 +60,18 @@ export function UnifiedReviewView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // マウント時のみ
 
-  const { filter, searchInput, viewMode, setFilter, setSearchInput, patchFilter } =
+  const { filter, searchInput, viewMode, showOldOrg, navMode, setFilter, setSearchInput, patchFilter, setShowOldOrg, switchNavMode } =
     useReviewFilterStore(useShallow(s => ({
       filter:         s.filter,
       searchInput:    s.searchInput,
       viewMode:       s.viewMode,
+      showOldOrg:     s.showOldOrg,
+      navMode:        s.navMode,
       setFilter:      s.setFilter,
       setSearchInput: s.setSearchInput,
       patchFilter:    s.patchFilter,
+      setShowOldOrg:  s.setShowOldOrg,
+      switchNavMode:  s.switchNavMode,
     })))
 
   // searchInput → filter.searchText のデバウンス（200ms）
@@ -67,7 +80,8 @@ export function UnifiedReviewView() {
     return () => clearTimeout(t)
   }, [searchInput, patchFilter])
 
-  const orgPathMap = useMemo(() => buildOrgPathMap(afterOrganizations), [afterOrganizations])
+  const orgPathMap    = useMemo(() => buildOrgPathMap(afterOrganizations),  [afterOrganizations])
+  const beforePathMap = useMemo(() => buildOrgPathMap(beforeOrganizations), [beforeOrganizations])
 
   const filteredRows = useMemo(
     () => filterRows(data.rows, filter, orgPathMap),
@@ -75,19 +89,32 @@ export function UnifiedReviewView() {
   )
 
   // ── 組織別にグループ化し、キャンバスと同じツリー順でソートした OrgTableItem[] を構築 ──
+  // showOldOrg で「主グルーピング軸」と「反対側（フォールバック）」を入れ替える。
+  // 主軸の組織が無い/解決できない行も、反対側の組織でグループ化して末尾に表示する
+  // （Nav バーと同じ考え方 — 行が消えず、Excel の行数と一致するようにするため）。
   const items = useMemo((): OrgTableItem[] => {
-    const perfLabel = `[perf] UnifiedReviewView items build (${data.rows.length} rows, ${filteredRows.length} filtered)`
-    // eslint-disable-next-line no-console
-    console.time(perfLabel)
-    const afterOrgByCode = new Map(
-      afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])
-    )
+    const t0 = performance.now()
 
-    // 全行を org code でグループ化（DFS sort に org 内の全行が必要なため data.rows を使う）
+    const afterOrgByCode  = new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
+    const beforeOrgByCode = new Map(beforeOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o]))
+    const primaryOrgByCode     = showOldOrg ? beforeOrgByCode : afterOrgByCode
+    const primaryPathMap       = showOldOrg ? beforePathMap   : orgPathMap
+    const counterpartOrgByCode = showOldOrg ? afterOrgByCode  : beforeOrgByCode
+    const counterpartPathMap   = showOldOrg ? orgPathMap      : beforePathMap
+    const getPrimaryCode     = (row: typeof data.rows[number]['row']) =>
+      (showOldOrg ? row.prevDepartmentCode : row.departmentCode) as string | undefined
+    const getCounterpartCode = (row: typeof data.rows[number]['row']) =>
+      (showOldOrg ? row.departmentCode : row.prevDepartmentCode) as string | undefined
+    const getPosCode = (row: typeof data.rows[number]['row']) =>
+      (showOldOrg ? row.prevPositionCode : row.positionCode) as string | undefined
+    const getMgrCode = (row: typeof data.rows[number]['row']) =>
+      (showOldOrg ? row.prevManagerPositionCode : row.managerPositionCode) as string | undefined
+
+    // 全行を主軸の org code でグループ化（DFS sort に org 内の全行が必要なため data.rows を使う）
     const allRowsByOrgCode = new Map<string, typeof data.rows>()
     for (const rr of data.rows) {
-      const code = rr.row.departmentCode as string | undefined
-      if (!code) continue
+      const code = getPrimaryCode(rr.row)
+      if (!code || !primaryOrgByCode.has(code)) continue
       const arr = allRowsByOrgCode.get(code)
       if (arr) arr.push(rr)
       else allRowsByOrgCode.set(code, [rr])
@@ -100,24 +127,24 @@ export function UnifiedReviewView() {
     // フィルタ後行が所属する org code 一覧を orgPath 昇順でソート
     const usedOrgCodes = new Set<string>()
     for (const rr of filteredRows) {
-      const code = rr.row.departmentCode as string | undefined
-      if (code) usedOrgCodes.add(code)
+      const code = getPrimaryCode(rr.row)
+      if (code && primaryOrgByCode.has(code)) usedOrgCodes.add(code)
     }
     const sortedOrgCodes = [...usedOrgCodes].sort((a, b) =>
-      (orgPathMap.get(a) ?? a).localeCompare(orgPathMap.get(b) ?? b, 'ja')
+      (primaryPathMap.get(a) ?? a).localeCompare(primaryPathMap.get(b) ?? b, 'ja')
     )
 
     const result: OrgTableItem[] = []
 
+    const rowComparator = makeRowComparator(masters, showOldOrg ? 'prevPositionBand' : 'positionBand')
+
     for (const code of sortedOrgCodes) {
       const allOrgRows = allRowsByOrgCode.get(code) ?? []
 
-      // キャンバスと同じ順序: buildPositionDepthList（マネージャーポジション DFS）
-      const depthList = buildPositionDepthList(
-        allOrgRows.map(rr => rr.row),
-        r => r.positionCode as string | undefined,
-        r => r.managerPositionCode as string | undefined,
-      )
+      // キャンバスと同じ順序: 同一階層内をバンド降順→氏名かな順でソートしてから
+      // buildPositionDepthList（マネージャーポジション DFS）で親子関係を構築する
+      const sortedRows = [...allOrgRows].sort((a, b) => rowComparator(a.row, b.row))
+      const depthList = buildPositionDepthList(sortedRows.map(rr => rr.row), getPosCode, getMgrCode)
 
       // DFS 順でフィルタ後の行だけ抽出
       const sortedFiltered = depthList
@@ -127,29 +154,80 @@ export function UnifiedReviewView() {
 
       if (sortedFiltered.length === 0) continue
 
-      const org     = afterOrgByCode.get(code)
-      const orgPath = orgPathMap.get(code) ?? code
+      const org     = primaryOrgByCode.get(code)
+      const orgPath = primaryPathMap.get(code) ?? code
+      // 「旧」かどうかはバッジで示す（左Navの OrgSection と同じ a11y 方針）。名前文字列への埋め込みはしない
       const orgName = org?.name ?? code
 
-      result.push({ kind: 'org-header', orgId: org?.id ?? null, orgName, orgPath, rowCount: sortedFiltered.length })
+      result.push({
+        kind: 'org-header', orgId: org?.id ?? null, orgCode: code, orgName, orgPath,
+        rowCount: sortedFiltered.length, isOldSection: showOldOrg, isUnmapped: false,
+      })
       for (const rr of sortedFiltered) {
         result.push({ kind: 'row', reviewRow: rr })
       }
     }
 
-    // departmentCode 未設定の行を末尾に追加
-    const noOrgRows = filteredRows.filter(rr => !(rr.row.departmentCode as string | undefined))
+    // 主軸の組織が無い/解決できない行は、反対側の組織でグループ化して末尾に追加
+    // （例: 新モードで旧組織にしか居ない人 → 「旧: ○○」、旧モードで新組織にしか居ない人 → 「【新のみ】○○」）
+    const fallbackRows = filteredRows.filter(rr => {
+      const code = getPrimaryCode(rr.row)
+      return !code || !primaryOrgByCode.has(code)
+    })
+    const fallbackByCounterpartCode = new Map<string, typeof filteredRows>()
+    const noOrgRows: typeof filteredRows = []
+    for (const rr of fallbackRows) {
+      const cCode = getCounterpartCode(rr.row)
+      if (!cCode) { noOrgRows.push(rr); continue }
+      const arr = fallbackByCounterpartCode.get(cCode)
+      if (arr) arr.push(rr); else fallbackByCounterpartCode.set(cCode, [rr])
+    }
+    const sortedCounterpartCodes = [...fallbackByCounterpartCode.keys()].sort((a, b) =>
+      (counterpartPathMap.get(a) ?? a).localeCompare(counterpartPathMap.get(b) ?? b, 'ja')
+    )
+    for (const code of sortedCounterpartCodes) {
+      const rows    = fallbackByCounterpartCode.get(code)!
+      const org     = counterpartOrgByCode.get(code)
+      const sorted  = [...rows].sort((a, b) => rowComparator(a.row, b.row))
+      result.push({
+        kind: 'org-header', orgId: org?.id ?? null, orgCode: code, orgName: org?.name ?? code,
+        orgPath: counterpartPathMap.get(code) ?? code, rowCount: sorted.length,
+        isOldSection: !showOldOrg, isUnmapped: true,
+      })
+      for (const rr of sorted) result.push({ kind: 'row', reviewRow: rr })
+    }
     if (noOrgRows.length > 0) {
-      result.push({ kind: 'org-header', orgId: null, orgName: '（組織未設定）', orgPath: '', rowCount: noOrgRows.length })
+      result.push({
+        kind: 'org-header', orgId: null, orgCode: '', orgName: '（組織未設定）', orgPath: '',
+        rowCount: noOrgRows.length, isOldSection: false, isUnmapped: true,
+      })
       for (const rr of noOrgRows) result.push({ kind: 'row', reviewRow: rr })
     }
 
-    // eslint-disable-next-line no-console
-    console.timeEnd(perfLabel)
+    const elapsed = performance.now() - t0
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] UnifiedReviewView items build: ${elapsed.toFixed(1)}ms (${data.rows.length} rows, ${filteredRows.length} filtered)`)
+    }
     return result
-  }, [data.rows, filteredRows, afterOrganizations, orgPathMap])
+  }, [data.rows, filteredRows, afterOrganizations, beforeOrganizations, orgPathMap, beforePathMap, masters, showOldOrg])
 
-  const issueGroups = useMemo(() => buildIssueGroups(data.rows), [data.rows])
+  // タブ・チップの件数バッジ用の母集団: 検索・詳細条件のみ反映し、changedOnly/issuesOnly/
+  // activePatterns/activeIssueKey（タブ自体・チップ自体の選択状態）では狭めない。
+  // 選択中の他チップ・タブによってさらに件数が狭まるとミスリーディングになるため（左Nav と同じ方針）。
+  const rowsForCounts = useMemo(
+    () => filterRows(data.rows, { ...DEFAULT_FILTER, searchText: filter.searchText, fieldConditions: filter.fieldConditions }, orgPathMap),
+    [data.rows, filter.searchText, filter.fieldConditions, orgPathMap]
+  )
+  const issueGroups = useMemo(() => buildIssueGroups(rowsForCounts), [rowsForCounts])
+
+  const patternCounts = useMemo(() => {
+    const counts = new Map<EditPattern, number>()
+    for (const rr of rowsForCounts) {
+      for (const p of rr.activePatterns) counts.set(p, (counts.get(p) ?? 0) + 1)
+    }
+    return counts
+  }, [rowsForCounts])
 
   const transferReasonOptions = useMemo(
     () => masters.transferReasons.map(e => e.label),
@@ -157,8 +235,8 @@ export function UnifiedReviewView() {
   )
 
   const changedCount = useMemo(
-    () => data.rows.filter(r => r.changes.diffCount > 0).length,
-    [data.rows]
+    () => rowsForCounts.filter(r => r.changes.diffCount > 0).length,
+    [rowsForCounts]
   )
 
   const personBySfId = useMemo(
@@ -192,8 +270,10 @@ export function UnifiedReviewView() {
   // [perf] このレンダーが実際に DOM へ commit されるまでの所要時間
   useEffect(() => {
     const elapsed = performance.now() - renderStartRef.current
-    // eslint-disable-next-line no-console
-    console.log(`[perf] UnifiedReviewView render→commit: ${elapsed.toFixed(1)}ms (${items.length} table rows/headers)`)
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] UnifiedReviewView render→commit: ${elapsed.toFixed(1)}ms (${items.length} table rows/headers)`)
+    }
   })
 
   return (
@@ -203,13 +283,17 @@ export function UnifiedReviewView() {
         onFilterChange={setFilter}
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
-        summary={data.summary}
+        patternCounts={patternCounts}
         issueGroups={issueGroups}
         filteredCount={filteredRows.length}
-        totalRows={data.rows.length}
+        totalRows={rowsForCounts.length}
         changedCount={changedCount}
         masters={masters}
         onOpenBulkModal={(group) => setBulkModal(group)}
+        navMode={navMode}
+        switchNavMode={switchNavMode}
+        showOldOrg={showOldOrg}
+        setShowOldOrg={setShowOldOrg}
       />
       <SelectionActionBar />
       <UnifiedTable

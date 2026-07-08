@@ -17,6 +17,7 @@ import {
 import { COMPACT_GROUP_DEFS, DEFAULT_COMPACT_GROUP_ID } from '../panel/compactGroupDefs'
 import { estimateTreeBodyHeight, estimateBandBodyHeight, EST_HEADER_H } from '../panel/heightEstimate'
 import { usePanelVirtualization } from '../hooks/usePanelVirtualization'
+import { getAllBeforeMemberOrgIds, collectExpandAncestorClosure } from '../../setup/panelInit'
 
 export function BeforeTreeWindowCanvas() {
   const beforeOrganizations = useStore(s => s.beforeOrganizations)
@@ -34,6 +35,7 @@ export function BeforeTreeWindowCanvas() {
     canvasZoom, stepCanvasZoom,
     canvasPanelStyle,
     draggingPanelId,
+    didAutoExpandMemberOrgs,
   } = useCanvasLayoutStore(useShallow(s => ({
     comparisonPanels:     s.comparisonPanels,
     comparisonOrgMapping: s.comparisonOrgMapping,
@@ -45,6 +47,7 @@ export function BeforeTreeWindowCanvas() {
     stepCanvasZoom:       s.stepCanvasZoom,
     canvasPanelStyle:        s.canvasPanelStyle,
     draggingPanelId:      s.draggingPanelId,
+    didAutoExpandMemberOrgs: s.didAutoExpandMemberOrgs,
   })))
   const winW = VIEW_MODE_WIDTHS[canvasPanelStyle]
   const compactGroupById = useCanvasDisplayStore(s => s.compactGroupById)
@@ -74,8 +77,10 @@ export function BeforeTreeWindowCanvas() {
     return m
   }, [beforeOrganizations])
 
-  // 比較モード開始時にパネルを初期化。ルート組織のみ自動展開する
-  // （全ての祖先を自動展開すると大規模データで描画がフリーズするため。子孫はチップから手動展開する）
+  // 比較モード開始時にパネルを初期化。デフォルトはルート組織のみ自動展開する
+  // （全ての祖先を自動展開すると大規模データで描画がフリーズするため。子孫はチップから手動展開する）。
+  // ただし新組織側が閾値以下でメンバー組織を全展開できていた場合は、旧組織側だけルートのみで
+  // 非対称にならないよう、旧組織側もメンバー組織を全展開して揃える。
   // comparisonPanels.length を dep に含めることで clearPanels() 後も再初期化できる
   useEffect(() => {
     if (comparisonPanels.length > 0) return  // guard: 既に初期化済み
@@ -88,8 +93,13 @@ export function BeforeTreeWindowCanvas() {
       const isRoot = !org.parentId || !orgIdSet.has(org.parentId)
       if (isRoot) openIds.add(org.id)
     }
+    if (didAutoExpandMemberOrgs) {
+      const memberOrgIds = getAllBeforeMemberOrgIds(allocationList, beforeOrganizations)
+      const closure = collectExpandAncestorClosure(memberOrgIds, beforeOrgById)
+      for (const id of closure) openIds.add(id)
+    }
     initComparisonPanels(ids, openIds)
-  }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [beforeOrganizations, initComparisonPanels, comparisonPanels.length, didAutoExpandMemberOrgs, allocationList, beforeOrgById]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // orgId → その org に所属していた rows を O(N+3000) で構築
   const beforeRowsByOrgId = useMemo(() => {
@@ -213,6 +223,7 @@ export function BeforeTreeWindowCanvas() {
   const selectedCardRowId    = useStore(s => s.selectedCardRowId)
   const selectedCardSource   = useStore(s => s.selectedCardSource)
   const scrollToBeforeRowRequest = useCanvasLayoutStore(s => s.scrollToBeforeRowRequest)
+  const scrollToBeforeOrgRequest = useCanvasLayoutStore(s => s.scrollToBeforeOrgRequest)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const displayPanelsRef = useRef(displayPanels)
   useEffect(() => { displayPanelsRef.current = displayPanels }, [displayPanels])
@@ -278,6 +289,49 @@ export function BeforeTreeWindowCanvas() {
     if (!scrollToBeforeRowRequest) return
     revealBeforeRow(scrollToBeforeRowRequest.rowId)
   }, [scrollToBeforeRowRequest, revealBeforeRow])
+
+  // 組織パネル自体を中央にスクロール（検索での旧組織選択用）。
+  // revealBeforeRow と同じ祖先展開＋2フレーム座標ジャンプの手順だが、
+  // 対象は行ではなくパネル自身（data-panelid）。
+  const revealBeforeOrg = useCallback((orgId: string) => {
+    const viewOrgs = beforeOrganizations.filter(o => !o.isAbandoned)
+    const orgMap = new Map(viewOrgs.map(o => [o.id, o]))
+    const curPanels = useCanvasLayoutStore.getState().comparisonPanels
+    const panelMap = new Map(curPanels.map(p => [p.orgId, p]))
+    const chain: string[] = []
+    let cur = orgMap.get(orgId)
+    while (cur) {
+      chain.unshift(cur.id)
+      cur = cur.parentId ? orgMap.get(cur.parentId) : undefined
+    }
+    for (const id of chain) {
+      const panel = panelMap.get(id)
+      if (panel && !panel.open) setComparisonOrgOpen(id, true)
+    }
+
+    requestAnimationFrame(() => {
+      const el = scrollerRef.current
+      if (!el) return
+      const panel = displayPanelsRef.current.find(p => p.orgId === orgId)
+      if (panel) {
+        const panelH = effectiveHeights[panel.id] ?? EST_HEADER_H
+        const { left, top } = computeScrollToPanel(panel, winW, panelH, canvasZoom, el.clientWidth, el.clientHeight)
+        el.scrollLeft = left
+        el.scrollTop  = top
+      }
+      requestAnimationFrame(() => {
+        const panelId = displayPanelsRef.current.find(p => p.orgId === orgId)?.id
+        if (!panelId) return
+        el.querySelector<HTMLElement>(`[data-panelid="${panelId}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+      })
+    })
+  }, [beforeOrganizations, setComparisonOrgOpen, effectiveHeights, winW, canvasZoom])
+
+  useEffect(() => {
+    if (!scrollToBeforeOrgRequest) return
+    revealBeforeOrg(scrollToBeforeOrgRequest.orgId)
+  }, [scrollToBeforeOrgRequest, revealBeforeOrg])
 
   // ── Ctrl+Wheel ズーム（TreeWindowCanvas と共有） ─────────────────
   // standalonePanels.length > 0 を dep に含めることで、比較モード開始後に

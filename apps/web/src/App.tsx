@@ -7,7 +7,9 @@ import { useStore }           from './store/useStore'
 import { useUserSession }     from './store/useUserSession'
 import { useMasterStore }   from './store/masterStore'
 import { ScopeSelector }          from './components/header/ScopeSelector'
-import { MergeImportButton }      from './components/header/MergeImportButton'
+import { ListIntegrationButton }  from './components/header/ListIntegrationButton'
+import { MergeReviewView }        from './components/mergeReview/MergeReviewView'
+import { MergeHistoryModal }      from './components/mergeReview/MergeHistoryModal'
 import { AssigneeWizard }         from './components/header/AssigneeWizard'
 import { SplitExportButton }      from './components/header/SplitExportButton'
 import { EditViewCore, HeaderButton } from './components/editor/EditViewCore'
@@ -71,7 +73,7 @@ interface Props {
 }
 
 export default function App({ onExit }: Props = {}) {
-  const { isLoading } = useStore()
+  const { isLoading, fileName, pendingMerge, mergeReviewOpen, setMergeReviewOpen, mergeHistory } = useStore()
   const { isChecked, checkStorage } = useMasterStore()
 
   const [appMode,      setAppMode]      = useState<'editor' | 'admin'>('editor')
@@ -79,6 +81,7 @@ export default function App({ onExit }: Props = {}) {
   const [clearDialogOpen,     setClearDialogOpen]     = useState(false)
   const [assigneeWizardOpen,  setAssigneeWizardOpen]  = useState(false)
   const [contactSettingsOpen, setContactSettingsOpen] = useState(false)
+  const [mergeHistoryOpen,    setMergeHistoryOpen]    = useState(false)
 
   const { isPanelOpen: isContactPanelOpen, openPanel: openContactPanel, contacts } = useContactStore(
     useShallow(s => ({ isPanelOpen: s.isPanelOpen, openPanel: s.openPanel, contacts: s.contacts }))
@@ -103,10 +106,10 @@ export default function App({ onExit }: Props = {}) {
 
   const saveWorkspace = useCallback(() => {
     if (!sessionReady || appMode !== 'editor') return
-    const { effectiveDate, userSession } = useStore.getState()
+    const { effectiveDate, userSession, fileName, pendingMerge, mergeHistory } = useStore.getState()
     const snapshot = appService.getSnapshot()
     if (snapshot.allocationList.length === 0) return
-    const payload = buildPersistedPayload(snapshot, effectiveDate, userSession)
+    const payload = buildPersistedPayload(snapshot, effectiveDate, userSession, fileName, pendingMerge, mergeHistory)
     const meta    = buildWorkspaceMeta(payload)
     workspaceStore.save(meta, payload).catch(console.error)
   }, [sessionReady, appMode])
@@ -171,12 +174,34 @@ export default function App({ onExit }: Props = {}) {
               </button>
             )}
             <h1 className="text-base font-bold tracking-tight">要員配置リスト編集</h1>
+            {fileName && (
+              <span className="text-xs text-gray-400 truncate max-w-[220px]" title={fileName}>{fileName}</span>
+            )}
+            {pendingMerge && (
+              <button
+                onClick={() => setMergeReviewOpen(true)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-600 text-white hover:bg-amber-500 transition-colors"
+                title="進行中のマージ/リベースレビューを開く"
+              >
+                🔀 {pendingMerge.mode === 'rebase' ? 'リベース' : 'マージ'}レビュー{' '}
+                {pendingMerge.rows.filter(r => r.status === 'pending').length}件
+              </button>
+            )}
             <ScopeSelector />
           </>
         }
         headerMid={
           <>
-            <MergeImportButton />
+            <ListIntegrationButton />
+            {mergeHistory.length > 0 && (
+              <button
+                onClick={() => setMergeHistoryOpen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                title="過去のマージ/リベースの記録を見る"
+              >
+                📜 履歴
+              </button>
+            )}
             <AssigneeWizardButton onOpen={() => setAssigneeWizardOpen(true)} />
             <SplitExportButton />
             <AdminAssigneeFilterSelect />
@@ -214,6 +239,16 @@ export default function App({ onExit }: Props = {}) {
           </>
         }
       />
+
+      {/* マージ/リベースレビュー */}
+      {mergeReviewOpen && (
+        <MergeReviewView onClose={() => setMergeReviewOpen(false)} />
+      )}
+
+      {/* マージ/リベース履歴 */}
+      {mergeHistoryOpen && (
+        <MergeHistoryModal history={mergeHistory} onClose={() => setMergeHistoryOpen(false)} />
+      )}
 
       {/* 連絡票パネル（固定サイドパネル） */}
       <ContactPanel />

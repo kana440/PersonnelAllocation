@@ -78,12 +78,17 @@ export function useCanvasInteraction(scrollerRef: React.RefObject<HTMLDivElement
 
   useEffect(() => {
     if (!band) return
+    // mousemove は高頻度で発火するため、setBand（TreeWindowCanvas の再レンダーを引き起こす）は
+    // 1フレームに1回までに間引く（矩形選択の当たり判定自体は mouseup 時に最新の座標で行うため
+    // 間引いても選択結果は変わらない）
+    let raf = 0
     const onMove = (e: MouseEvent) => {
-      const r = { ...bandRef.current!, x2: e.clientX, y2: e.clientY }
-      bandRef.current = r
-      setBand(r)
+      bandRef.current = { ...bandRef.current!, x2: e.clientX, y2: e.clientY }
+      if (raf) return
+      raf = requestAnimationFrame(() => { raf = 0; setBand(bandRef.current) })
     }
     const onUp = () => {
+      if (raf) cancelAnimationFrame(raf)
       const rb = bandRef.current
       if (rb) {
         const left = Math.min(rb.x1, rb.x2), right  = Math.max(rb.x1, rb.x2)

@@ -189,7 +189,7 @@ export function FilterDetailPanel({ fieldConditions, onSetField, onClearAll, onC
           className="text-[9px] text-gray-400 hover:text-red-600 disabled:opacity-30 underline">全クリア</button>
         <button onClick={onClose} className="text-[9px] text-gray-400 hover:text-gray-700 ml-1">▲ 畳む</button>
       </div>
-      <div className="max-h-80 overflow-y-auto space-y-3">
+      <div className="max-h-52 overflow-y-auto space-y-3">
         {renderSection('共通情報', 'bg-gray-100 text-gray-600',     COMMON_FIELDS, [])}
         {renderSection('新',       'bg-blue-100 text-blue-700',     AFTER_MAIN,  AFTER_FLAGS)}
         {renderSection('旧',       'bg-amber-50 text-amber-700',    BEFORE_MAIN, BEFORE_FLAGS)}

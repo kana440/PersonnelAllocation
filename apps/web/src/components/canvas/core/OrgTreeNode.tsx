@@ -13,7 +13,7 @@ interface Props {
   collapsedOrgs?:  ReadonlySet<string>
   onOrgCollapse?:  (id: string) => void
   onOrgExpand?:    (id: string) => void
-  onNavigate:   (orgId: string) => void
+  onNavigate?:  (orgId: string) => void
   isRoot?:      boolean
 }
 
@@ -122,7 +122,7 @@ export function OrgTreeNode({ orgId, panelId, config, adapter, collapsedOrgs, on
   return (
     <div>
       <div className={`group flex items-center gap-1.5 px-1 py-0.5 rounded ${hoverClass} cursor-pointer`}
-        onDoubleClick={e => { e.stopPropagation(); onNavigate(orgId) }}>
+        onDoubleClick={onNavigate ? (e => { e.stopPropagation(); onNavigate(orgId) }) : undefined}>
         <span className="flex-1 text-xs font-medium text-gray-700 truncate">{org.name}</span>
         <span className={`text-[9px] text-gray-300 ${iconHover} opacity-0 group-hover:opacity-100 flex-shrink-0`}>⤵</span>
       </div>
@@ -174,7 +174,7 @@ function InlineOrgSection({ child, childPanelId, count, config, adapter, collaps
   collapsedOrgs?: ReadonlySet<string>
   onOrgCollapse?: (id: string) => void
   onOrgExpand?:   (id: string) => void
-  onNavigate:    (orgId: string) => void
+  onNavigate?:   (orgId: string) => void
   isSelected?:   boolean
   onCollapse:    () => void
 }) {

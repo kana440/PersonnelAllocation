@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { OrgCombobox } from '../../common/OrgCombobox'
+import { OrgCombobox } from './OrgCombobox'
 import type { Organization } from '@personnel/domain/schemas'
 
 interface SelectMoveModalProps {

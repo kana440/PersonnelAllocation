@@ -11,7 +11,32 @@ import type { ImportMode, AssigneeImportMode, MergeResult } from '../application
 import type { PositionCodeAssignment, UnassignedPosition } from '../ports'
 import { DEFAULT_SESSION } from '../application/userSession'
 import type { UserSession } from '../application/userSession'
-import type { PersistedPayload } from '../infrastructure/workspace'
+import type { PersistedPayload, MergeSession, MergeSessionRow, MergeHistoryEntry, MergeHistoryRowSummary } from '../infrastructure/workspace'
+import { FIELD_METADATA } from '@personnel/domain/allocationRow'
+
+// マージ/リベース履歴の保持上限（Undoスタックの MAX_UNDO と同じ考え方）
+const MAX_MERGE_HISTORY = 50
+
+/** 終了したセッションから履歴エントリを作る。abandonedOutcome=true のとき pending 行は 'abandoned' 扱い */
+function buildMergeHistoryEntry(session: MergeSession, endReason: 'released' | 'discarded'): MergeHistoryEntry {
+  const rows: MergeHistoryRowSummary[] = session.rows.map(r => {
+    const outcome: MergeHistoryRowSummary['outcome'] = r.status === 'pending' ? 'abandoned' : r.status
+    return {
+      key:      r.key,
+      kind:     r.kind,
+      outcome,
+      ...(outcome === 'returned' ? { assignee: r.incomingRow?.assignee } : {}),
+    }
+  })
+  return {
+    mode:           session.mode,
+    sourceFileName: session.sourceFileName,
+    importedAt:     session.importedAt,
+    endedAt:        new Date().toISOString(),
+    endReason,
+    rows,
+  }
+}
 
 // ── org ナビゲーションヘルパー（ストアアクション用）───────────────
 function buildIdMap(orgs: Organization[]): Map<string, Organization> {
@@ -75,6 +100,10 @@ interface UIState {
   orgMapping:           Map<string, string[]>  // 旧組織ID → 新組織IDリスト
   userSession:          UserSession             // 現在のユーザーセッション（ロール + 担当者名）
   adminAssigneeFilter:  string | null          // 管理者モードでの担当者プレビューフィルタ（UI表示用）
+  fileName:             string | null          // 読み込んだ Excel ファイル名（ヘッダー表示用）
+  pendingMerge:         MergeSession | null    // 進行中のマージ/リベースレビュー（セッションの一部として永続化）
+  mergeReviewOpen:      boolean                // レビューモーダルの開閉（UI一時状態。永続化しない）
+  mergeHistory:         MergeHistoryEntry[]    // 終了したマージ/リベースセッションの記録（新しい順）
 }
 
 // ── アクション ────────────────────────────────────────────────────
@@ -160,6 +189,26 @@ interface Actions {
   setUserSession: (session: UserSession) => void
   setAdminAssigneeFilter: (name: string | null) => void
 
+  // マージ/リベースの進行中レビュー（1段階承認: 承認した瞬間に実データへ反映）
+  setPendingMerge:     (session: MergeSession | null) => void
+  /** レビュー中の候補行フィールドをインライン編集する（承認前のみ有効） */
+  updateMergeRowField: (key: string, field: string, value: unknown) => void
+  /** pending → committed/confirmed。added/modified はここで実データに反映、removed は確認のみ */
+  approveMergeRows:    (keys: string[]) => void
+  /** pending → rejected（added/modified のみ）。取り込まない・再提出も求めない。データ変更なし */
+  rejectMergeRows:     (keys: string[]) => void
+  /** pending → returned（added/modified のみ）。担当者に再提出を依頼。データ変更なし */
+  returnMergeRows:     (keys: string[]) => void
+  /** 全行が終端状態になっている前提でリリースする（履歴に記録してセッションをクリア） */
+  releaseMergeSession: () => void
+  /**
+   * セッションを破棄する（git の merge --abort 相当）。baselineAllocationList があれば
+   * 承認済みの変更も含めて完全ロールバックし、履歴に記録してセッションをクリアする。
+   */
+  discardMergeSession: () => void
+  /** レビューモーダルの開閉（UI一時状態。永続化しない） */
+  setMergeReviewOpen:  (open: boolean) => void
+
   // 後方互換（既存コンポーネントが参照している場合のみ残す）
   setRawImportedRows: (rows: AllocationRow[]) => void
 }
@@ -195,6 +244,10 @@ export const useStore = create<AppState>()((set, get) => {
     orgMapping:           new Map<string, string[]>(),
     userSession:          DEFAULT_SESSION,
     adminAssigneeFilter:  null,
+    fileName:             null,
+    pendingMerge:         null,
+    mergeReviewOpen:      false,
+    mergeHistory:         [],
 
     // ── アクション ────────────────────────────────────────────────
     loadExcelData: async (result) => {
@@ -206,7 +259,7 @@ export const useStore = create<AppState>()((set, get) => {
         masters:           result.masters,
       })
       await save(result.masters)
-      set({ isLoading: false, selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set() })
+      set({ isLoading: false, selectedOrgId: null, selectedPersonId: null, selectedCardRowId: null, selectedCardSource: null, selectedRowId: null, focusedOrgId: null, expandedChipIds: new Set(), fileName: result.fileName })
       // パネルをリセット（SetupView でモード別に再構築する）
       const { clearPanels } = await import('../store/canvasLayoutStore').then(m => ({
         clearPanels: m.useCanvasLayoutStore.getState().clearPanels,
@@ -228,6 +281,9 @@ export const useStore = create<AppState>()((set, get) => {
         isLoading:          false,
         effectiveDate:      payload.effectiveDate,
         userSession:        payload.userSession,
+        fileName:           payload.fileName,
+        pendingMerge:       payload.pendingMerge,
+        mergeHistory:       payload.mergeHistory ?? [],
         selectedOrgId:      null,
         selectedPersonId:   null,
         selectedCardRowId:  null,
@@ -364,6 +420,121 @@ export const useStore = create<AppState>()((set, get) => {
     setAdminAssigneeFilter: (name) => set({ adminAssigneeFilter: name }),
 
     setRawImportedRows: (_rows) => { /* no-op: 後方互換 */ },
+
+    // ── マージ/リベースの進行中レビュー（1段階承認: 承認した瞬間に実データへ反映）───
+    setPendingMerge: (session) => set({ pendingMerge: session }),
+
+    updateMergeRowField: (key, field, value) => {
+      const { pendingMerge } = get()
+      if (!pendingMerge) return
+      const rows = pendingMerge.rows.map(r => {
+        if (r.key !== key || !r.incomingRow) return r
+        if (r.status !== 'pending') return r  // 承認済みは編集不可
+        return { ...r, incomingRow: { ...r.incomingRow, [field]: value } }
+      })
+      set({ pendingMerge: { ...pendingMerge, rows } })
+    },
+
+    // pending → committed/confirmed。added/modified はここで実データに反映、removed は確認のみ
+    approveMergeRows: (keys) => {
+      const { pendingMerge, allocationList } = get()
+      if (!pendingMerge) return
+      const keySet = new Set(keys)
+      const targetRows = pendingMerge.rows.filter(r => keySet.has(r.key) && r.status === 'pending')
+      if (targetRows.length === 0) return
+
+      const addRows = targetRows
+        .filter(r => r.kind === 'added' && r.incomingRow)
+        .map(r => r.incomingRow!)
+
+      const label = `${pendingMerge.mode === 'rebase' ? 'リベース' : 'マージ'}: ${targetRows.length}行`
+      if (addRows.length > 0) appService.acceptMergeRowsAdd(addRows, label)
+
+      if (pendingMerge.mode === 'rebase') {
+        // リベース: 新しいPrevが絶対の正のため、prevXxx を含む行全体を置き換える
+        const replacements: { rowId: number; newRow: AllocationRow }[] = []
+        for (const r of targetRows) {
+          if (r.kind !== 'modified' || !r.incomingRow) continue
+          const current = allocationList.find(row => row.no === r.key)
+          if (!current) continue
+          replacements.push({ rowId: current.rowId, newRow: r.incomingRow })
+        }
+        if (replacements.length > 0) appService.acceptMergeRowsReplace(replacements, label)
+      } else {
+        // マージ: After フィールドのみを反映（Prev はマージ元の実績として不変）
+        const modifyChanges: { rowId: number; changes: AfterValues }[] = []
+        for (const r of targetRows) {
+          if (r.kind !== 'modified' || !r.incomingRow) continue
+          const current = allocationList.find(row => row.no === r.key)
+          if (!current) continue
+          const changes: Record<string, unknown> = {}
+          for (const m of FIELD_METADATA) {
+            const incomingVal = (r.incomingRow as unknown as Record<string, unknown>)[m.after]
+            const currentVal  = (current as unknown as Record<string, unknown>)[m.after]
+            if (incomingVal !== currentVal) changes[m.after as string] = incomingVal
+          }
+          if (Object.keys(changes).length > 0) modifyChanges.push({ rowId: current.rowId, changes: changes as AfterValues })
+        }
+        if (modifyChanges.length > 0) appService.acceptMergeRowsModify(modifyChanges, label)
+      }
+
+      const newStatus = (r: MergeSessionRow) => r.kind === 'removed' ? 'confirmed' as const : 'committed' as const
+      const updatedRows = pendingMerge.rows.map(r => keySet.has(r.key) && r.status === 'pending' ? { ...r, status: newStatus(r) } : r)
+      set({ pendingMerge: { ...pendingMerge, rows: updatedRows } })
+    },
+
+    // pending → rejected（removed には使わない。データ変更なし・終端状態）
+    rejectMergeRows: (keys) => {
+      const { pendingMerge } = get()
+      if (!pendingMerge) return
+      const keySet = new Set(keys)
+      const rows = pendingMerge.rows.map(r =>
+        keySet.has(r.key) && r.status === 'pending' && r.kind !== 'removed'
+          ? { ...r, status: 'rejected' as const }
+          : r
+      )
+      set({ pendingMerge: { ...pendingMerge, rows } })
+    },
+
+    // pending → returned（removed には使わない。データ変更なし・終端状態。担当者は incomingRow.assignee で分かる）
+    returnMergeRows: (keys) => {
+      const { pendingMerge } = get()
+      if (!pendingMerge) return
+      const keySet = new Set(keys)
+      const rows = pendingMerge.rows.map(r =>
+        keySet.has(r.key) && r.status === 'pending' && r.kind !== 'removed'
+          ? { ...r, status: 'returned' as const }
+          : r
+      )
+      set({ pendingMerge: { ...pendingMerge, rows } })
+    },
+
+    releaseMergeSession: () => {
+      const { pendingMerge, mergeHistory } = get()
+      if (!pendingMerge) return
+      const entry = buildMergeHistoryEntry(pendingMerge, 'released')
+      set({
+        pendingMerge:  null,
+        mergeHistory: [entry, ...mergeHistory].slice(0, MAX_MERGE_HISTORY),
+      })
+    },
+
+    // git の merge --abort 相当: baselineAllocationList があれば承認済みの変更も含め完全ロールバックする
+    discardMergeSession: () => {
+      const { pendingMerge, mergeHistory } = get()
+      if (!pendingMerge) return
+      if (pendingMerge.baselineAllocationList) {
+        const label = `${pendingMerge.mode === 'rebase' ? 'リベース' : 'マージ'}破棄: ${pendingMerge.sourceFileName}`
+        appService.restoreAllocationList(pendingMerge.baselineAllocationList, label)
+      }
+      const entry = buildMergeHistoryEntry(pendingMerge, 'discarded')
+      set({
+        pendingMerge:  null,
+        mergeHistory: [entry, ...mergeHistory].slice(0, MAX_MERGE_HISTORY),
+      })
+    },
+
+    setMergeReviewOpen: (open) => set({ mergeReviewOpen: open }),
 
     setEffectiveDate:        (date) => set({ effectiveDate: date }),
     setOverviewViewMode:     (mode) => set({ overviewViewMode: mode }),

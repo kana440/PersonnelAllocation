@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useLayoutEffect } from 'react'
 import { useCanvasLayoutStore } from '../../../store/canvasLayoutStore'
 import type { PanelDef } from '../../../store/canvasLayoutStore'
 import { computeVisibleRect, panelRect, rectsIntersect } from '../treeWindowLayout'
+import { isSlowPerf } from '../../../utils/perfLog'
 
 /**
  * 開いているパネル数がこの件数以下なら、可視判定を一切せず常に全件を描画対象にする。
@@ -51,8 +52,11 @@ export function usePanelVirtualization(
       }
     }
 
-    // eslint-disable-next-line no-console
-    console.log(`[perf] usePanelVirtualization recompute: ${(performance.now() - t0).toFixed(1)}ms (${next.size} visible / ${displayPanels.length} open panels)`)
+    const elapsed = performance.now() - t0
+    if (isSlowPerf(elapsed)) {
+      // eslint-disable-next-line no-console
+      console.log(`[perf] usePanelVirtualization recompute: ${elapsed.toFixed(1)}ms (${next.size} visible / ${displayPanels.length} open panels)`)
+    }
     setVisiblePanelIds(prev => {
       if (prev.size === next.size && [...next].every(id => prev.has(id))) return prev
       return next

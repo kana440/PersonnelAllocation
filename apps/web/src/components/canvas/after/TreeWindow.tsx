@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useCallback, useMemo, memo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { isSecondmentOrg }         from '@personnel/domain/rules/derive'
 import { useOrgView }              from '../OrgViewContext'
@@ -20,7 +20,10 @@ interface TreeWindowProps {
   isSelected?: boolean
 }
 
-export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
+// memo: マーキー選択のドラッグ中（ラバーバンド矩形の再描画）などで TreeWindowCanvas が
+// 頻繁に再レンダーされても、panel/isSelected が変わらない限り再レンダーしない
+// （素の関数コンポーネントだと、可視パネル全部が mousemove のたびに無駄に再描画されていた）
+export const TreeWindow = memo(function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   const {
     organizations, orgById, childrenByOrgId, positionTreeByOrgId,
     subtreeCountByOrgId,
@@ -28,20 +31,19 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
   } = useOrgView()
 
   const {
-    panels, setPosition, toggleOpen, setOrgOpen, addPanel,
+    panels, setPosition, setOrgOpen, addPanel,
     setChildrenMode, setCollapsedOrgIds, removeOrgPanels, setPanelHeight,
     canvasPanelStyle,
   } = useCanvasLayoutStore(useShallow(s => ({
     panels:             s.panels,
     setPosition:        s.setPosition,
-    toggleOpen:         s.toggleOpen,
     setOrgOpen:         s.setOrgOpen,
     addPanel:           s.addPanel,
     setChildrenMode:    s.setChildrenMode,
     setCollapsedOrgIds: s.setCollapsedOrgIds,
     removeOrgPanels:    s.removeOrgPanels,
     setPanelHeight:     s.setPanelHeight,
-    canvasPanelStyle:      s.canvasPanelStyle,
+    canvasPanelStyle:   s.canvasPanelStyle,
   })))
 
   const masters   = useStore(s => s.masters)
@@ -60,21 +62,17 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
 
   const headerBg = getHeaderBg(panel.orgId)
 
-  // ── ブレッドクラムナビゲーション ───────────────────────────────
-  const [rootPath, setRootPath] = useState([panel.orgId])
-  useEffect(() => { setRootPath([panel.orgId]) }, [panel.orgId])
-  const currentRootId = rootPath[rootPath.length - 1]
+  const currentRootId = panel.orgId
   const currentOrg    = orgById.get(currentRootId)
 
-  const navigateTo    = useCallback((childOrgId: string) => {
-    setRootPath(prev => [...prev, childOrgId])
-    setCollapsedOrgIds(panel.id, [])
-  }, [panel.id, setCollapsedOrgIds])
-
-  const navigateToIdx = useCallback((idx: number) => {
-    setRootPath(prev => prev.slice(0, idx + 1))
-    setCollapsedOrgIds(panel.id, [])
-  }, [panel.id, setCollapsedOrgIds])
+  // ── 親組織フォーカス ─────────────────────────────────────────────
+  const panelByOrgId  = useMemo(() => new Map(panels.map(p => [p.orgId, p])), [panels])
+  const onFocusParent = useCallback(() => {
+    const parentId = currentOrg?.parentId
+    if (!parentId) return
+    if (!panelByOrgId.get(parentId)) addPanel(parentId)
+    selectOrg(parentId)
+  }, [currentOrg, panelByOrgId, addPanel, selectOrg])
 
   // ── 折りたたみ状態 ───────────────────────────────────────────────
   const collapsedOrgs = useMemo(() => new Set(panel.collapsedOrgIds), [panel.collapsedOrgIds])
@@ -87,19 +85,8 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
     [panel.id, panel.collapsedOrgIds, setCollapsedOrgIds],
   )
 
-  // ── 開閉トグル ───────────────────────────────────────────────────
-  const handleToggleOpen = useCallback(() => {
-    const nextOpen = !panel.open
-    toggleOpen(panel.id)
-    if (nextOpen) selectOrg(panel.orgId)
-    else selectOrg(orgById.get(panel.orgId)?.parentId ?? panel.orgId)
-  }, [panel, toggleOpen, selectOrg, orgById])
-
   const totalCount = subtreeCountByOrgId.get(currentRootId) ?? 0
   const isDragOver = dragOverOrgId === currentRootId
-
-  // ── パネル O(1) ルックアップ Map ────────────────────────────────
-  const panelByOrgId = useMemo(() => new Map(panels.map(p => [p.orgId, p])), [panels])
 
   // ── PanelTreeAdapter（after 側） ────────────────────────────────
   const adapter: PanelTreeAdapter = useMemo(() => ({
@@ -165,13 +152,10 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
       renderHeader={onHeaderMouseDown => (
         <TreeWindowHeader
           panel={panel}
-          rootPath={rootPath}
-          organizations={organizations}
           currentOrg={currentOrg}
           totalCount={totalCount}
           headerBg={headerBg}
-          onToggleOpen={handleToggleOpen}
-          onNavigateToIdx={navigateToIdx}
+          onFocusParent={currentOrg?.parentId ? onFocusParent : undefined}
           onHeaderMouseDown={onHeaderMouseDown}
         />
       )}
@@ -208,7 +192,7 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
               collapsedOrgs={collapsedOrgs}
               onOrgCollapse={onOrgCollapse}
               onOrgExpand={onOrgExpand}
-              onNavigate={navigateTo}
+              onNavigate={undefined}
               isRoot
             />
           </div>
@@ -216,4 +200,4 @@ export function TreeWindow({ panel, isSelected = false }: TreeWindowProps) {
       }}
     />
   )
-}
+})

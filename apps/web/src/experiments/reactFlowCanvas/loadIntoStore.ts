@@ -45,5 +45,6 @@ export async function loadSyntheticIntoStore(orgs: SyntheticOrg[], rows: Synthet
     allocationRowCount:           allocationList.length,
     masterCompatibilityWarnings: [],
     columnWarnings:              [],
+    fileName:                    'synthetic',
   })
 }

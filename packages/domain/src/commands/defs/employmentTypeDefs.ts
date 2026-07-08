@@ -44,10 +44,16 @@ export const jobTypeChangeDef: EditOperation = {
   badge:      'jobChange',
 
   description: 'ジョブファミリー・ジョブタイプを変更します。jobType × band → payGrade の導出により、band が変わらなくても給与等級が変わる場合があります。給与等級が変わる場合はポジション変更も必要です（フォーム内 [変更] ボタンから対応）。',
-  entryPoints:      ['personMenu'] as const,
+  entryPoints:      ['personMenu', 'dragIntent'] as const,
   availabilityNote: '在席者（userId あり）の本務行かつ正社員。ロック操作中は不可。',
 
   availableFor: () => AVAILABLE,
+
+  // 簡易モード: ジョブファミリー・ジョブタイプだけ入力（JF・JTグループへのドラッグ&ドロップで使用）
+  quickInputs: [
+    { field: 'jobFamily', required: false },
+    { field: 'jobType',   required: true  },
+  ],
 
   inputs: [
     // ── ヘッダーインジケーター（自動導出サイン）───────────────────────────

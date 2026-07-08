@@ -1,19 +1,27 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useStore }             from '../../store/useStore'
+import { useCanvasLayoutStore } from '../../store/canvasLayoutStore'
 import { useCanvasPanelNav }    from '../layout/OrgPersonNav/useCanvasPanelNav'
 import { buildOrgPathMap }      from '../review/components/BulkFieldEditModal/helpers'
 import { normalizeSearch, normalizeName } from '../../utils/normalizeSearch'
 
-type OrgCandidate    = { kind: 'org';    orgId: string; name: string; code: string; pathLabel: string }
-type PersonCandidate = { kind: 'person'; rowId: number; orgId: string; name: string; userId: string }
+type OrgCandidate    = { kind: 'org';    orgId: string; name: string; code: string; pathLabel: string; isBefore: boolean }
+type PersonCandidate = { kind: 'person'; rowId: number; orgId: string; name: string; userId: string; isBefore: boolean }
 type Candidate = OrgCandidate | PersonCandidate
 
 const MAX_ORG = 6; const MAX_PERSON = 8
 
 export function CanvasQuickSearch() {
-  const afterOrganizations = useStore(s => s.afterOrganizations)
-  const allocationList     = useStore(s => s.allocationList)
+  const afterOrganizations  = useStore(s => s.afterOrganizations)
+  const beforeOrganizations = useStore(s => s.organizations)
+  const allocationList      = useStore(s => s.allocationList)
   const { handleOrgClick, handlePersonClick } = useCanvasPanelNav(afterOrganizations, () => {})
+
+  // 比較モード時のみ「旧」も検索対象にする（旧キャンバスが存在するときだけ意味があるため）
+  const comparisonMode              = useCanvasLayoutStore(s => s.comparisonMode)
+  const openComparisonOrgAncestors  = useCanvasLayoutStore(s => s.openComparisonOrgAncestors)
+  const requestScrollToBeforeRow    = useCanvasLayoutStore(s => s.requestScrollToBeforeRow)
+  const requestScrollToBeforeOrg    = useCanvasLayoutStore(s => s.requestScrollToBeforeOrg)
 
   const [query,    setQuery]    = useState('')
   const [isOpen,   setIsOpen]   = useState(false)
@@ -42,11 +50,20 @@ export function CanvasQuickSearch() {
     return () => document.removeEventListener('mousedown', handler)
   }, [isOpen])
 
-  const orgPathMap = useMemo(() => buildOrgPathMap(afterOrganizations), [afterOrganizations])
+  const orgPathMap       = useMemo(() => buildOrgPathMap(afterOrganizations),  [afterOrganizations])
+  const beforeOrgPathMap = useMemo(() => buildOrgPathMap(beforeOrganizations), [beforeOrganizations])
 
   const afterOrgByCode = useMemo(
     () => new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
     [afterOrganizations],
+  )
+  const beforeOrgByCode = useMemo(
+    () => new Map(beforeOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
+    [beforeOrganizations],
+  )
+  const beforeOrgById = useMemo(
+    () => new Map(beforeOrganizations.map(o => [o.id, o])),
+    [beforeOrganizations],
   )
 
   const candidates = useMemo((): Candidate[] => {
@@ -55,17 +72,34 @@ export function CanvasQuickSearch() {
     const qName = normalizeName(debounced)
     const results: Candidate[] = []
 
-    let orgCount = 0
+    // 新組織キャンバス・旧組織キャンバスは別々のパネル空間なので、コードが一致していても
+    // 検索結果としては別々に出す（まとめると「どちらのキャンバスに飛ぶか」が曖昧になるため）。
+    // 新・旧で候補数の上限も別カウンタにする（片方だけで埋まって他方が出なくなるのを防ぐ）。
+    let afterOrgCount = 0
     for (const org of afterOrganizations) {
-      if (orgCount >= MAX_ORG) break
+      if (afterOrgCount >= MAX_ORG) break
       if (org.isAbandoned) continue
       const nameN = normalizeSearch(org.name)
       const codeN = normalizeSearch(org.externalCode ?? '')
-      const pathN = normalizeSearch(orgPathMap.get(org.externalCode ?? '') ?? '')
-      if (nameN.includes(q) || codeN.includes(q) || pathN.includes(q)) {
+      if (nameN.includes(q) || codeN.includes(q)) {
         const path = orgPathMap.get(org.externalCode ?? '') ?? ''
-        results.push({ kind: 'org', orgId: org.id, name: org.name, code: org.externalCode ?? '', pathLabel: path })
-        orgCount++
+        results.push({ kind: 'org', orgId: org.id, name: org.name, code: org.externalCode ?? '', pathLabel: path, isBefore: false })
+        afterOrgCount++
+      }
+    }
+
+    // 比較モード時は旧組織も検索対象にする（同じ検索ボックスのまま、結果に「旧」バッジを付ける）
+    if (comparisonMode) {
+      let beforeOrgCount = 0
+      for (const org of beforeOrganizations) {
+        if (beforeOrgCount >= MAX_ORG) break
+        const nameN = normalizeSearch(org.name)
+        const codeN = normalizeSearch(org.externalCode ?? '')
+        if (nameN.includes(q) || codeN.includes(q)) {
+          const path = beforeOrgPathMap.get(org.externalCode ?? '') ?? ''
+          results.push({ kind: 'org', orgId: org.id, name: org.name, code: org.externalCode ?? '', pathLabel: path, isBefore: true })
+          beforeOrgCount++
+        }
       }
     }
 
@@ -77,19 +111,40 @@ export function CanvasQuickSearch() {
       const kana     = normalizeName([row.lastNameKana, row.firstNameKana].filter(Boolean).join(''))
       const userId   = normalizeSearch(row.userId ?? '')
       if (fullName.includes(qName) || kana.includes(qName) || userId.includes(q)) {
-        const org  = row.departmentCode ? afterOrgByCode.get(String(row.departmentCode)) : undefined
         const name = [row.lastName, row.firstName].filter(Boolean).join(' ') || row.userId || `#${row.rowId}`
-        results.push({ kind: 'person', rowId: row.rowId, orgId: org?.id ?? '', name, userId: row.userId ?? '' })
+        const afterOrg = row.departmentCode ? afterOrgByCode.get(String(row.departmentCode)) : undefined
+        if (afterOrg) {
+          results.push({ kind: 'person', rowId: row.rowId, orgId: afterOrg.id, name, userId: row.userId ?? '', isBefore: false })
+        } else if (comparisonMode && row.prevDepartmentCode) {
+          // 新組織が無い（比較モードでのみ意味がある）行は旧組織側に飛べるようにする
+          const beforeOrg = beforeOrgByCode.get(String(row.prevDepartmentCode))
+          results.push({ kind: 'person', rowId: row.rowId, orgId: beforeOrg?.id ?? '', name, userId: row.userId ?? '', isBefore: true })
+        } else {
+          results.push({ kind: 'person', rowId: row.rowId, orgId: '', name, userId: row.userId ?? '', isBefore: false })
+        }
         personCount++
       }
     }
 
     return results
-  }, [debounced, afterOrganizations, allocationList, orgPathMap, afterOrgByCode])
+  }, [debounced, afterOrganizations, beforeOrganizations, allocationList, orgPathMap, beforeOrgPathMap, afterOrgByCode, beforeOrgByCode, comparisonMode])
 
   const handleSelect = (c: Candidate) => {
-    if (c.kind === 'org') handleOrgClick(c.orgId)
-    else                  handlePersonClick(c.rowId, c.orgId)
+    if (c.kind === 'org') {
+      if (c.isBefore) {
+        openComparisonOrgAncestors(c.orgId, beforeOrgById)
+        requestScrollToBeforeOrg(c.orgId)
+      } else {
+        handleOrgClick(c.orgId)
+      }
+    } else {
+      if (c.isBefore) {
+        if (c.orgId) openComparisonOrgAncestors(c.orgId, beforeOrgById)
+        requestScrollToBeforeRow(c.rowId)
+      } else {
+        handlePersonClick(c.rowId, c.orgId)
+      }
+    }
     setQuery('')
     setIsOpen(false)
   }
@@ -146,7 +201,12 @@ export function CanvasQuickSearch() {
                 >
                   <span className="flex-shrink-0 text-sm">{c.kind === 'org' ? '🏢' : '👤'}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] text-gray-800 font-medium truncate">{c.name}</div>
+                    <div className="text-[11px] text-gray-800 font-medium truncate flex items-center gap-1">
+                      {c.isBefore && (
+                        <span className="flex-shrink-0 text-[9px] px-1 rounded bg-amber-100 text-amber-700 border border-amber-300">旧</span>
+                      )}
+                      <span className="truncate">{c.name}</span>
+                    </div>
                     <div className="text-[9px] text-gray-400 truncate">
                       {c.kind === 'org' ? (c.pathLabel || c.code) : c.userId}
                     </div>

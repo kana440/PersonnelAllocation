@@ -7,18 +7,16 @@ import { isUninitializedRow, applyAfterInit } from '../../application/setup/afte
 import { SetupHelp } from './SetupHelp'
 import { AfterInitWizard } from './AfterInitWizard'
 import { ModeSelectStep } from './ModeSelectStep'
-import { getAssigneeOrgIds, getAllMemberOrgIds } from './panelInit'
+import { getAssigneeOrgIds, getAllMemberOrgIds, collectExpandAncestorClosure } from './panelInit'
 import { workspaceStore } from '../../infrastructure/workspace'
 import type { WorkspaceMeta } from '../../infrastructure/workspace'
 
 const LOCAL_SAMPLE_FILES = ['sample.xlsm']
 
-// TODO(検証用・一時的): 仮想化後に「管理者モードで配下に人がいる組織を初回から
-// 自動展開」してもパフォーマンス上問題ないか比較検証するためのフラグ。
-// true  = 従来通り全人員在籍組織を自動展開
-// false = 現行のルート組織のみ自動展開（デフォルト）
-// 検証が終わったら false 側の分岐だけ残してこのフラグごと削除すること。
-const ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS = false
+// メンバー組織の祖先を自動展開すると、開くことになる組織数が多い大規模データでは
+// 描画がフリーズするため、実際に open:true になる組織数（祖先含む）がこの件数以下の
+// ときだけ自動展開する。超える場合はルート組織のみ開き、手動展開・検索・フォーカスで辿る。
+const AUTO_EXPAND_MAX_ORGS = 100
 
 type Phase =
   | { kind: 'checking' }
@@ -105,18 +103,22 @@ export function SetupView({ onReady }: Props) {
     role: 'admin' | 'assignee',
     assigneeName: string | null,
   ) => {
-    const { initPanelsForOrgs } = useCanvasLayoutStore.getState()
+    const { initPanelsForOrgs, setDidAutoExpandMemberOrgs } = useCanvasLayoutStore.getState()
     const orgIds = result.afterOrganizations.map(o => o.id)
     const orgById = new Map(result.afterOrganizations.map(o => [o.id, o]))
 
-    // 管理者・担当者どちらも初期表示ではルート組織のみ開く
-    // （メンバー組織の祖先を全自動展開すると大規模データで描画がフリーズするため）。
+    // メンバーが属する組織（管理者は全員、担当者は自分の担当分のみ）を候補にし、
+    // 実際に開くことになる組織数（祖先含む）が閾値以下のときだけ自動展開する。
     // 子孫はチップから手動展開するか、下の focusOrg によるサイドバーフォーカス・検索から辿る。
-    // ※ ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS=true の間は検証用に管理者モードのみ従来挙動に戻す
-    const memberOrgIds = (role === 'admin' && ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS)
-      ? getAllMemberOrgIds(result.allocationList, result.afterOrganizations)
-      : []
+    const candidateMemberOrgIds = role === 'assignee'
+      ? getAssigneeOrgIds(result.allocationList, result.afterOrganizations, assigneeName)
+      : getAllMemberOrgIds(result.allocationList, result.afterOrganizations)
+    const expandClosure = collectExpandAncestorClosure(candidateMemberOrgIds, orgById)
+    const shouldAutoExpand = expandClosure.size <= AUTO_EXPAND_MAX_ORGS
+    const memberOrgIds = shouldAutoExpand ? candidateMemberOrgIds : []
     initPanelsForOrgs(orgIds, memberOrgIds, orgById)
+    // 比較モード開始時、旧組織キャンバスもこの判定結果に揃える（新側だけ全展開になるのを防ぐ）
+    setDidAutoExpandMemberOrgs(shouldAutoExpand)
 
     // 担当者モード: サイドバーを最初の担当組織にフォーカス（キャンバスパネルの自動展開はしない）
     if (role === 'assignee') {
@@ -161,11 +163,15 @@ export function SetupView({ onReady }: Props) {
     const { role, assigneeName } = payload.userSession
     const orgIds      = payload.afterOrganizations.map(o => o.id)
     const orgById = new Map(payload.afterOrganizations.map(o => [o.id, o]))
-    // 管理者・担当者どちらもルート組織のみ自動展開する（initCanvas と同じ理由）
-    const memberOrgIds = (role === 'admin' && ADMIN_AUTO_EXPAND_ALL_MEMBER_ORGS)
-      ? getAllMemberOrgIds(payload.allocationList, payload.afterOrganizations)
-      : []
+    // 閾値以下のときだけ自動展開する（initCanvas と同じ理由）
+    const candidateMemberOrgIds = role === 'assignee'
+      ? getAssigneeOrgIds(payload.allocationList, payload.afterOrganizations, assigneeName)
+      : getAllMemberOrgIds(payload.allocationList, payload.afterOrganizations)
+    const expandClosure = collectExpandAncestorClosure(candidateMemberOrgIds, orgById)
+    const shouldAutoExpand = expandClosure.size <= AUTO_EXPAND_MAX_ORGS
+    const memberOrgIds = shouldAutoExpand ? candidateMemberOrgIds : []
     useCanvasLayoutStore.getState().initPanelsForOrgs(orgIds, memberOrgIds, orgById)
+    useCanvasLayoutStore.getState().setDidAutoExpandMemberOrgs(shouldAutoExpand)
     if (role === 'assignee') {
       const assigneeOrgIds = getAssigneeOrgIds(payload.allocationList, payload.afterOrganizations, assigneeName)
       if (assigneeOrgIds.length > 0) focusOrg(assigneeOrgIds[0])
@@ -412,6 +418,7 @@ function ResumeView({ entries, onResume, onNewFile }: {
 
       <div className="border border-blue-200 rounded-xl p-4 bg-blue-50 space-y-1.5">
         <div className="text-sm font-medium text-blue-800">{entry.effectiveDate} 基準</div>
+        {entry.fileName && <div className="text-xs text-blue-700 truncate">{entry.fileName}</div>}
         <div className="text-xs text-blue-600">{roleLabel} ・ {entry.rowCount.toLocaleString()} 行</div>
         <div className="text-xs text-gray-400">{dateStr} {timeStr} 保存</div>
       </div>

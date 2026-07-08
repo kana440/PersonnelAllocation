@@ -743,6 +743,7 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 - `FieldBinding` の分類は暫定。HR 運用ルールに合わせて要レビュー
 - 削除済みパネル UI（削除済みポジション・人の復活操作）
 - AI から位置操作（positionOps）を呼べるように `aiTools.ts` に未追加
+- 本番キャンバスの React Flow (`@xyflow/react`) 移行は一時中断（`docs/21-reactflow-migration-investigation.md` 参照）。`canvas/flow/` に統合コードが残置されているが `OrgOperationView` からは未接続
 
 ---
 

@@ -3,6 +3,7 @@ import { BEFORE_AFTER_FIELD_PAIRS } from '@personnel/domain/allocationRow'
 import { ALLOCATION_LIST_LABEL_MAP } from '@personnel/domain/csvImport/allocationList/labels'
 import { RESOLUTION_DEFS } from '@personnel/domain/rules/resolve'
 import { resolveIssueMeta } from '@personnel/domain/rules/validate/issueTypeMeta'
+import { normalizeName } from '../../../utils/normalizeSearch'
 import type { ReviewRow } from '../hooks/useReviewData'
 import type { UnifiedFilter, IssueGroupDef } from './types'
 export { PATTERN_CHIP_DEFS, PATTERN_LABEL_MAP } from '../../common/patternChips'
@@ -43,9 +44,18 @@ function rowMatchesTokens(
   // OR 条件: どれか1つのトークンにマッチすれば通過（トークンは normalizeToHalf + lowercase 済み）
   return tokens.some(q => {
     if (field === '__all__') {
-      const ro = row.row as Record<string, unknown>
-      return Object.values(ro).some(v => v != null && normalizeToHalf(String(v)).toLowerCase().includes(q))
-        || normalizeToHalf(getSearchStr(row.row, '__orgPath__', orgPathMap)).toLowerCase().includes(q)
+      // 既定の検索対象は左Navバーと揃え、氏名・かな・組織パスのみにする（上司名等その他の
+      // フィールドを含めた全項目検索は、詳細条件パネルで個別フィールドを指定して行う）。
+      // normalizeName でひらがな⇔カタカナ・スペース差異も吸収する（左Navと同じロジック）。
+      const r  = row.row
+      const nq = normalizeName(q)
+      return (
+        normalizeName([r.lastName, r.firstName].filter(Boolean).join('')).includes(nq) ||
+        normalizeName([r.lastNameKana, r.firstNameKana].filter(Boolean).join('')).includes(nq) ||
+        normalizeName(r.lastNameKana  ?? '').includes(nq) ||
+        normalizeName(r.firstNameKana ?? '').includes(nq) ||
+        normalizeName(getSearchStr(r, '__orgPath__', orgPathMap)).includes(nq)
+      )
     }
     return normalizeToHalf(getSearchStr(row.row, field, orgPathMap)).toLowerCase().includes(q)
   })

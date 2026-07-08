@@ -3,6 +3,7 @@ import { useShallow }             from 'zustand/react/shallow'
 import { useStore }               from '../../../store/useStore'
 import { useReviewFilterStore }   from '../../../store/reviewFilterStore'
 import { useRowSelectionStore }   from '../../../store/rowSelectionStore'
+import { useCanvasLayoutStore }   from '../../../store/canvasLayoutStore'
 import { useCanvasPanelNav }      from './useCanvasPanelNav'
 import { PATTERN_CHIP_DEFS }       from '../../common/patternChips'
 
@@ -11,8 +12,6 @@ import { OrgSection }             from './OrgSection'
 import { useCompactData }         from './useCompactData'
 import type { IssueGroupDef }     from '../../review/UnifiedReviewView/types'
 import type { EditPattern }       from '@personnel/domain/patterns/editPattern'
-
-type NavMode = 'all' | 'changes' | 'issues'
 
 const CHANGE_PATTERNS: EditPattern[] = [
   'orgTransfer', 'orgRestructure', 'promotion', 'demotion',
@@ -27,6 +26,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
   const enterOperationPanel = useStore(s => s.enterOperationPanel)
   const allocationList      = useStore(s => s.allocationList)
   const afterOrganizations  = useStore(s => s.afterOrganizations)
+  const beforeOrganizations = useStore(s => s.organizations)
 
   const { selectedRowIds, toggleAll, setRows, clearSelection } = useRowSelectionStore(
     useShallow(s => ({ selectedRowIds: s.selectedRowIds, toggleAll: s.toggleAll, setRows: s.setRows, clearSelection: s.clearSelection }))
@@ -34,12 +34,32 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
 
   const { handlePersonClick, handleOrgClick } = useCanvasPanelNav(afterOrganizations, () => {})
 
+  // 「旧」セクションの組織ヘッダークリック: 比較モード時のみ旧キャンバスをフォーカス
+  // （比較モードでなければ旧組織を表示するキャンバスが存在しないため、フォーカスしようがない）
+  const comparisonMode             = useCanvasLayoutStore(s => s.comparisonMode)
+  const openComparisonOrgAncestors = useCanvasLayoutStore(s => s.openComparisonOrgAncestors)
+  const requestScrollToBeforeOrg   = useCanvasLayoutStore(s => s.requestScrollToBeforeOrg)
+  const beforeOrgById = useMemo(
+    () => new Map(beforeOrganizations.map(o => [o.id, o])),
+    [beforeOrganizations],
+  )
+  const handleNavOrgClick = useCallback((orgId: string, isOldSection: boolean) => {
+    if (isOldSection) {
+      if (!comparisonMode) return
+      openComparisonOrgAncestors(orgId, beforeOrgById)
+      requestScrollToBeforeOrg(orgId)
+      return
+    }
+    handleOrgClick(orgId)
+  }, [comparisonMode, openComparisonOrgAncestors, requestScrollToBeforeOrg, beforeOrgById, handleOrgClick])
+
   const {
-    searchInput, showOldOrg, showMembersOnly,
-    setSearchInput, setShowOldOrg, setShowMembersOnly,
+    searchInput, showOldOrg, showMembersOnly, navMode,
+    setSearchInput, setShowOldOrg, setShowMembersOnly, switchNavMode,
   } = useReviewFilterStore(useShallow(s => ({
-    searchInput: s.searchInput, showOldOrg: s.showOldOrg, showMembersOnly: s.showMembersOnly,
+    searchInput: s.searchInput, showOldOrg: s.showOldOrg, showMembersOnly: s.showMembersOnly, navMode: s.navMode,
     setSearchInput: s.setSearchInput, setShowOldOrg: s.setShowOldOrg, setShowMembersOnly: s.setShowMembersOnly,
+    switchNavMode: s.switchNavMode,
   })))
 
   const activePatterns     = useReviewFilterStore(s => s.filter.activePatterns)
@@ -48,7 +68,6 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
 
   const { sections, totalCount, changedCount, patternCounts, filteredRowIds, issueGroups } = useCompactData()
 
-  const [navMode,   setNavMode]   = useState<NavMode>('all')
   const [bulkModal, setBulkModal] = useState<IssueGroupDef | null>(null)
   const searchRef = useRef<HTMLTextAreaElement>(null)
 
@@ -59,17 +78,6 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 80)}px`
   }, [searchInput])
-
-  const switchMode = useCallback((mode: NavMode) => {
-    setNavMode(mode)
-    if (mode === 'all') {
-      patchFilter({ changedOnly: false, issuesOnly: false, activePatterns: new Set(), activeIssueKey: '' })
-    } else if (mode === 'changes') {
-      patchFilter({ changedOnly: true, issuesOnly: false, activeIssueKey: '' })
-    } else {
-      patchFilter({ issuesOnly: true, changedOnly: false, activePatterns: new Set(), activeIssueKey: '' })
-    }
-  }, [patchFilter])
 
   const afterOrgByExt = useMemo(
     () => new Map(afterOrganizations.filter(o => o.externalCode).map(o => [o.externalCode!, o])),
@@ -125,28 +133,28 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
           {(['all', 'changes', 'issues'] as const).map(m => (
             <button
               key={m}
-              onClick={() => switchMode(m)}
-              className={`flex-1 py-0.5 text-[10px] font-medium transition-colors ${
+              onClick={() => switchNavMode(m)}
+              className={`flex-1 py-1 text-[10px] font-medium transition-colors ${
                 navMode === m
                   ? m === 'issues' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
                   : 'bg-white text-gray-500 hover:bg-gray-50'
               }`}
             >
-              {m === 'all'     && '全体'}
-              {m === 'changes' && <>変更{changedCount  > 0 && <span className={`ml-1 text-[9px] ${navMode === 'changes' ? 'opacity-75' : 'text-blue-500'}`}>{changedCount}</span>}</>}
-              {m === 'issues'  && <>問題{issueRowCount > 0 && <span className={`ml-1 text-[9px] ${navMode === 'issues'  ? 'opacity-75' : 'text-red-500'}`}>{issueRowCount}</span>}</>}
+              {m === 'all'     && <>全て{totalCount > 0 && <span className={`ml-1 text-[9px] ${navMode === 'all' ? 'opacity-75' : 'text-gray-400'}`}>{totalCount}</span>}</>}
+              {m === 'changes' && <>変更ごと{changedCount  > 0 && <span className={`ml-1 text-[9px] ${navMode === 'changes' ? 'opacity-75' : 'text-blue-500'}`}>{changedCount}</span>}</>}
+              {m === 'issues'  && <>要確認{issueRowCount > 0 && <span className={`ml-1 text-[9px] ${navMode === 'issues'  ? 'opacity-75' : 'text-red-500'}`}>{issueRowCount}</span>}</>}
             </button>
           ))}
         </div>
 
-        {/* 検索 + 新/旧 */}
-        <div className="flex items-start gap-1">
+        {/* 検索 + 組織のグループ化 */}
+        <div className="flex items-start gap-1 flex-wrap">
           <div className="relative flex-1 min-w-0">
             <textarea
               ref={searchRef}
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              placeholder={"氏名・組織を検索…\n（改行でOR）"}
+              placeholder={`氏名・${showOldOrg ? '旧' : '新'}組織を検索…\n（改行でOR）`}
               rows={1}
               style={{ resize: 'none', overflow: 'hidden' }}
               className="w-full text-[11px] border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300 leading-relaxed"
@@ -155,16 +163,40 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
           {searchInput && (
             <button onClick={() => setSearchInput('')} className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0 mt-1">✕</button>
           )}
-          <button
-            onClick={() => setShowOldOrg(!showOldOrg)}
-            title={showOldOrg ? '旧組織でグループ中' : '新組織でグループ中'}
-            className={`flex-shrink-0 px-1.5 py-1 rounded text-[10px] font-medium border transition-colors mt-0 ${
-              showOldOrg ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200'
-            }`}
-          >
-            {showOldOrg ? '旧' : '新'}
-          </button>
+          <div className="flex rounded overflow-hidden border border-gray-300 flex-shrink-0">
+            <button
+              onClick={() => setShowOldOrg(false)}
+              title="新組織でグループ化"
+              className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                !showOldOrg ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              新
+            </button>
+            <button
+              onClick={() => setShowOldOrg(true)}
+              title="旧組織でグループ化"
+              className={`px-2 py-1 text-[10px] font-medium transition-colors border-l border-gray-300 ${
+                showOldOrg ? 'bg-amber-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              旧
+            </button>
+          </div>
         </div>
+
+        {/* 全体モード: メンバーなし組織も表示するか */}
+        {navMode === 'all' && (
+          <label className="flex items-center gap-1.5 text-[10px] text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={!showMembersOnly}
+              onChange={e => setShowMembersOnly(!e.target.checked)}
+              className="accent-blue-600"
+            />
+            メンバーなし組織も表示
+          </label>
+        )}
 
         {/* 変更モード: 種別チップ */}
         {navMode === 'changes' && (
@@ -176,8 +208,8 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
                   key={b.key}
                   onClick={() => togglePattern(b.key)}
                   className={`px-1 py-0.5 rounded border text-[9px] font-medium transition-all whitespace-nowrap ${
-                    active        ? b.color
-                    : b.count > 0 ? 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-50'
+                    active        ? b.activeColor
+                    : b.count > 0 ? b.color
                     :               'bg-gray-50 text-gray-300 border-gray-100'
                   }`}
                 >
@@ -255,18 +287,6 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
             {totalCount}人
             {navMode === 'changes' && changedCount > 0 && <span className="text-blue-600 ml-1">（{changedCount}変更）</span>}
           </span>
-          {navMode === 'all' && (
-            <button
-              onClick={() => setShowMembersOnly(!showMembersOnly)}
-              className={`ml-auto px-1.5 py-0.5 rounded text-[9px] font-medium border transition-colors whitespace-nowrap ${
-                showMembersOnly
-                  ? 'bg-blue-50 text-blue-600 border-blue-200'
-                  : 'bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200'
-              }`}
-            >
-              {showMembersOnly ? '有人のみ' : '全組織'}
-            </button>
-          )}
         </div>
       </div>
 
@@ -281,7 +301,7 @@ export function OrgPersonNav({ onDoubleClick }: Props) {
           <OrgSection
             key={`${section.orgCode || '__none__'}_${section.isUnmapped}`}
             section={section}
-            onOrgClick={handleOrgClick}
+            onOrgClick={handleNavOrgClick}
             onPersonFocus={handlePersonFocus}
             onDoubleClick={handleDoubleClick}
           />

@@ -2,8 +2,8 @@ import { useMemo }               from 'react'
 import { useShallow }            from 'zustand/react/shallow'
 import { useOrgView }            from '../OrgViewContext'
 import type { DragData, PositionEntry } from '../OrgViewContext'
-import { EDIT_PATTERN_META }     from '@personnel/domain/patterns/editPattern'
-import { resolveIssueMeta }      from '@personnel/domain/rules/validate/issueTypeMeta'
+import { EDIT_PATTERN_META, ALL_EDIT_PATTERNS } from '@personnel/domain/patterns/editPattern'
+import { resolveIssueMeta, ISSUE_TYPE_METAS }   from '@personnel/domain/rules/validate/issueTypeMeta'
 import { useCanvasDisplayStore } from '../../../store/canvasDisplayStore'
 import { useDisplayPreferenceStore } from '../../../store/displayPreferenceStore'
 import { useStore }              from '../../../store/useStore'
@@ -31,6 +31,12 @@ const AUTO_DIFF_FIELDS: AutoDiffField[] = [
 ]
 
 const FIELD_LEVEL_IDS = new Set(['field_constraint', 'field_constraint_conditional'])
+
+// チップが+Nで隠れたとき本質的な情報が埋もれないよう、優先度の高いもの（例: 昇格は
+// それに伴う給与等級変更・ポジション変更より重要）から表示する。優先順は既存の定義済み
+// 配列の並び（ALL_EDIT_PATTERNS・ISSUE_TYPE_METAS）をそのまま使う。
+const PATTERN_PRIORITY = new Map(ALL_EDIT_PATTERNS.map((p, i) => [p, i]))
+const ISSUE_PRIORITY   = new Map(ISSUE_TYPE_METAS.map((m, i) => [m.id, i]))
 
 const DEST_BADGE_COLORS = [
   'bg-blue-100 text-blue-700',
@@ -394,11 +400,21 @@ export function RowCard({
 
         {/* 変更差分セクション: 変更フィールドの差分 + 変更チップ + 問題チップ */}
         {!isVacant && (() => {
-          const visiblePatternChips = [...activePatterns].filter(p => visiblePatterns.has(p))
-          const visibleIssueChips   = validationIssues.filter(i => {
-            const meta = resolveIssueMeta(i)
-            return meta ? visibleIssueIds.has(meta.id) : false
-          })
+          // 優先度順（本質的なもの→派生的なもの）にソートしてから表示する。
+          // +Nで隠れるのは優先度が低いもの（派生的な変更・ワーニング等）になる。
+          const visiblePatternChips = [...activePatterns]
+            .filter(p => visiblePatterns.has(p))
+            .sort((a, b) => (PATTERN_PRIORITY.get(a) ?? 999) - (PATTERN_PRIORITY.get(b) ?? 999))
+          const visibleIssueChips = validationIssues
+            .filter(i => {
+              const meta = resolveIssueMeta(i)
+              return meta ? visibleIssueIds.has(meta.id) : false
+            })
+            .sort((a, b) => {
+              const pa = ISSUE_PRIORITY.get(resolveIssueMeta(a)?.id ?? '') ?? 999
+              const pb = ISSUE_PRIORITY.get(resolveIssueMeta(b)?.id ?? '') ?? 999
+              return pa - pb
+            })
           if (changedFields.length === 0 && visiblePatternChips.length === 0 && visibleIssueChips.length === 0) return null
           return (
             <div className="mt-0.5 min-w-0">

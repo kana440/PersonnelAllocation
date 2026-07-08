@@ -1,5 +1,27 @@
 import type { Organization } from '@personnel/domain/schemas'
 import { type AllocationRow, isVacantRow } from '@personnel/domain/allocationRow'
+import type { AllMasters } from '@personnel/domain/masters/aggregate'
+
+/**
+ * 同一階層内（同じ上司を持つ行同士）の並び順: バンド等級降順 → 氏名かな順。
+ * buildPositionDepthList と組み合わせて使う（DFS の各階層内の兄弟順を決める）。
+ * キャンバスのツリー表示・表形式（UnifiedReviewView）・左Navバー（OrgPersonNav）で共通して使う
+ * — 別々に実装すると表示によって並び順がズレるため、必ずこれを使うこと。
+ */
+export function makeRowComparator(masters: AllMasters, band: 'positionBand' | 'prevPositionBand' = 'positionBand') {
+  const collator = new Intl.Collator('ja')
+  const levelOf  = (row: AllocationRow): number => {
+    const b = row[band] as string | undefined
+    return masters.jobLevels.find(e => e.label === b)?.promotionDemotionWarningLevel ?? -1
+  }
+  return (a: AllocationRow, b: AllocationRow): number => {
+    const diff = levelOf(b) - levelOf(a)  // 降順（高バンド先頭）
+    if (diff !== 0) return diff
+    const nameA = [(a.lastName ?? ''), (a.firstName ?? '')].join('')
+    const nameB = [(b.lastName ?? ''), (b.firstName ?? '')].join('')
+    return collator.compare(nameA, nameB)
+  }
+}
 
 /**
  * ポジションコードとマネージャーポジションコードの関係から、行を DFS 順に並べて depth を付与する。

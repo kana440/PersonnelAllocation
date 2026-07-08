@@ -277,18 +277,42 @@ export function UnifiedTable({
                 <tr
                   key={`org-${globalIdx}`}
                   style={{ height: ORG_H }}
-                  className={`sticky z-[5] ${item.orgId ? 'cursor-pointer hover:bg-gray-200' : 'cursor-default'}`}
+                  className={`sticky z-[5] ${item.orgId ? 'cursor-pointer' : 'cursor-default'} ${
+                    item.isOldSection ? 'hover:bg-amber-100' : 'hover:bg-gray-200'
+                  }`}
                   onClick={() => { if (item.orgId) onOrgClick(item.orgId) }}
                 >
                   <td
                     colSpan={COL_SPAN}
-                    className="px-3 border-b border-gray-300 bg-gray-100 overflow-hidden"
+                    className={`px-3 border-b overflow-hidden ${
+                      item.isOldSection
+                        ? 'border-amber-300 bg-amber-50'
+                        : 'border-gray-300 bg-gray-100'
+                    }`}
                     style={{ height: ORG_H }}
                   >
                     <div className="flex items-center gap-2 h-full">
                       <div className="min-w-0 overflow-hidden">
-                        <div className="text-[10px] font-semibold text-gray-700 truncate leading-tight">
-                          {leafName}
+                        <div className="flex items-center gap-1">
+                          {/* 色だけに頼らず「旧」「旧のみ」「新のみ」「未設定」を明示するバッジ（a11y）。
+                              左Nav の OrgSection と同じ方針: 旧優先モードは通常セクションも含めて
+                              「旧」を常時表示し、フェールオーバー（isUnmapped）のときは「旧のみ」にする。 */}
+                          {item.isOldSection && (
+                            <span className="flex-shrink-0 text-[8px] px-1 rounded bg-amber-200 text-amber-800 border border-amber-400 leading-tight">
+                              {item.isUnmapped ? '旧のみ' : '旧'}
+                            </span>
+                          )}
+                          {item.isUnmapped && !item.isOldSection && item.orgCode && (
+                            <span className="flex-shrink-0 text-[8px] px-1 rounded bg-blue-100 text-blue-700 border border-blue-300 leading-tight">新のみ</span>
+                          )}
+                          {item.isUnmapped && !item.isOldSection && !item.orgCode && (
+                            <span className="flex-shrink-0 text-[8px] px-1 rounded bg-gray-200 text-gray-600 border border-gray-300 leading-tight">未設定</span>
+                          )}
+                          <div className={`text-[10px] font-semibold truncate leading-tight ${
+                            item.isOldSection ? 'text-amber-800' : 'text-gray-700'
+                          }`}>
+                            {leafName}
+                          </div>
                         </div>
                         {parentPath && (
                           <div className="text-[9px] text-gray-400 truncate leading-none">
