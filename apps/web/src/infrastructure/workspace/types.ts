@@ -38,6 +38,11 @@ export interface MergeSession {
   /** merge モードのみ */
   importMode?:     ImportMode
   assigneeMode?:   AssigneeImportMode
+  /**
+   * merge モードのみ。提出ファイルの組織マスタ（新/旧）件数が現在のセッションと異なる場合の警告文。
+   * 組織改編後に配布された古いファイルが混在している可能性を示すための非ブロッキング警告。
+   */
+  masterMismatchWarning?: string
   rows:           MergeSessionRow[]
   /**
    * rebase モードのみ。実編集のない行（Prevとの差分なし）はレビューを待たず

@@ -42,6 +42,8 @@ export interface DomainSnapshot {
   persons:                   Person[]
   canUndo:                   boolean
   canRedo:                   boolean
+  /** Undo履歴が上限（50件）を超えて最古のものが破棄されたことがあるか */
+  undoHistoryTrimmed:        boolean
   undoHistory:               HistoryEntry[]
   historyCurrentPosition:    number              // = past.length（現在位置）
   isHistoryPreviewMode:      boolean
@@ -106,6 +108,7 @@ export class HRApplicationService {
       persons:             this.cachedPersons,
       canUndo:             !this.isPreviewMode && this.undoStack.canUndo,
       canRedo:             !this.isPreviewMode && this.undoStack.canRedo,
+      undoHistoryTrimmed:  this.undoStack.wasTrimmed,
       undoHistory:         this.undoStack.getFullHistory(),
       historyCurrentPosition:    this.undoStack.pastLength,
       isHistoryPreviewMode:      this.historyPreviewPosition !== null,

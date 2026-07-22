@@ -280,6 +280,33 @@ operationRole: {
 | `NoChange` | `transferReason === 変更なし && !prevTransferReason` | `NoChangeCancel` |
 | `EmploymentExtension` | 雇用延長フラグ条件 | — |
 
+### `softLock`（緩やかな排他ロック）
+
+`lock`（strict）とは別に、**他のロック系操作のみをブロックし、通常操作は通す**第3の排他モードが存在する（`packages/domain/src/commands/defs/index.ts` の `resolveAvailability`）。
+
+```typescript
+operationRole: {
+  kind:        'softLock',
+  ownedFields: ['transferReason', 'leaveOfAbsenceSign'],  // この softLock が「所有」するフィールド
+  isActive:            (row) => !!row.leaveOfAbsenceSign,
+  isActiveThisSession: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
+}
+```
+
+`resolveAvailability` での扱い（strict lock との違い）:
+
+| ロック種別 | 他の lock/softLock 操作 | 通常操作 |
+|---|---|---|
+| `lock`（strict） | ブロック | ブロック |
+| `softLock` | ブロック | **許可**（`availableFor` を通過すれば実行できる） |
+
+softLock は「他のロック操作とは競合させたいが、通常の編集までは止めたくない」場面で使う。ただし通常操作が softLock の `ownedFields` を上書きしてしまうと矛盾したデータになるため、`OperationFormView`（`apps/web/.../PersonOperationPanel/OperationFormView/index.tsx`）側で二重に防止している:
+
+- **Layer 2**（表示）: アクティブな softLock の `ownedFields` に該当する入力欄を readOnly 表示する
+- **Layer 1**（送信直前）: `onSubmit` 実行の直前に `ownedFields` の値を行の現在値で強制的に上書きし、フォーム側の入力が誤って `ownedFields` を書き換えてもデータには反映されないようにする
+
+**現在 `softLock` を使っている操作**: `SecondmentOutSF`／`SecondmentOutNonSF`（`secondmentMainDefs.ts`）、`LeaveOfAbsence`／`ReturnFromLeave`（`personDefs.ts`）
+
 ---
 
 ## EditOperation の補足フラグ

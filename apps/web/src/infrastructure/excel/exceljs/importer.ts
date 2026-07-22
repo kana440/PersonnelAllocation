@@ -114,7 +114,11 @@ export async function importWorkbook(
   return { masters, beforeOrganizations, afterOrganizations, allocationList, sheetsFound, sheetsMissing, orgEntries, oldOrgEntries, allocationRowCount: allocationList.length, masterCompatibilityWarnings, columnWarnings, fileName }
 }
 
-export function importFromFile(file: File, onProgress?: ProgressCallback): Promise<ImportedWorkbookResult> {
+export function importFromFile(
+  file:       File,
+  onProgress?: ProgressCallback,
+  options?:   { setAsTemplate?: boolean },
+): Promise<ImportedWorkbookResult> {
   return new Promise((resolve, reject) => {
     onProgress?.('ファイルを読み込み中...')
     const reader = new FileReader()
@@ -124,7 +128,12 @@ export function importFromFile(file: File, onProgress?: ProgressCallback): Promi
         if (!data) throw new Error('ファイルの読み込みに失敗しました')
         onProgress?.('Excelを解析中...')
         await tick()
-        setLastWorkbook(data, file.name)
+        // setAsTemplate: false のとき、この呼び出しを「エクスポート時の書式テンプレート」として
+        // 採用しない（マージ取込用 — 元ファイルに追記するだけなのでテンプレートは変えない）。
+        // リベース取込・通常インポートは省略時の true のまま（新しい基準ファイルに載せ替えるため）。
+        // これを守らないと、マージ後のエクスポートが「最後に取り込んだ提出ファイル」を
+        // テンプレートにしてしまい、元ファイルの他シート・書式が失われる。
+        if (options?.setAsTemplate !== false) setLastWorkbook(data, file.name)
         const wb = new ExcelJS.Workbook()
         await wb.xlsx.load(data)
         const companyName = file.name.replace(/\.[^.]+$/, '').replace(/[_\-]?要員配置.*$/i, '').trim() || 'インポートデータ'

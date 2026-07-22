@@ -235,6 +235,14 @@ export function ExcelPreview({ showExport = true }: { showExport?: boolean }) {
             >
               📤 エクスポート
             </button>
+            <button
+              onClick={() => setExportDialogOpen(true)}
+              disabled={rows.length === 0}
+              title="組織を選んで一部だけエクスポート"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs border border-gray-300 rounded bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              📤 組織を選んで出力
+            </button>
           </div>
         )}
 

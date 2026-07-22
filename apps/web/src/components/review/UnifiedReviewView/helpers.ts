@@ -76,7 +76,7 @@ export function filterRows(
   if (filter.searchText) {
     const tokens = parseSearchTokens(filter.searchText)
     if (tokens.length > 0)
-      list = list.filter(r => rowMatchesTokens(r, tokens, filter.searchField, orgPathMap))
+      list = list.filter(r => rowMatchesTokens(r, tokens, '__all__', orgPathMap))
   }
   // 詳細条件: フィールドごとに AND 絞り込み（各フィールド内は OR）
   if (filter.fieldConditions) {

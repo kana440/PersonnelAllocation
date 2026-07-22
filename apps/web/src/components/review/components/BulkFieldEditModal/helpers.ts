@@ -5,7 +5,7 @@ import type { Organization } from '@personnel/domain/schemas'
 
 /** 一括適用ではなく行ごとのインライン編集を使うフィールド */
 export const INLINE_EDIT_FIELDS = new Set([
-  'userId', 'groupEmployeeId', 'employeeNumber',
+  'userId', 'groupEmployeeId', 'employeeNumber', 'assignee',
 ])
 
 /** jobFamily+jobType を1つのペアエラーとして扱う際の合成フィールドキー */

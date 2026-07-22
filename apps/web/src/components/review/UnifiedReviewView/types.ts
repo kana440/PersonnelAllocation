@@ -5,7 +5,6 @@ import type { AllocationRow } from '@personnel/domain/allocationRow'
 export type ViewMode = 'diff' | 'side-by-side'
 
 export interface UnifiedFilter {
-  searchField:     string
   searchText:      string
   changedOnly:     boolean
   issuesOnly:      boolean
@@ -17,7 +16,6 @@ export interface UnifiedFilter {
 }
 
 export const DEFAULT_FILTER: UnifiedFilter = {
-  searchField:     '__all__',
   searchText:      '',
   changedOnly:     false,
   issuesOnly:      false,
@@ -41,11 +39,6 @@ export interface IssueGroupDef {
   suggestedPatch?: Partial<AllocationRow>
   /** RESOLUTION_DEFS.filter() で取得した全修正案（空配列の場合は汎用ドロップダウンにフォールバック） */
   resolutionDefs:  ValidationResolutionDef[]
-}
-
-export interface SearchFieldOption {
-  value: string
-  label: string
 }
 
 export interface DisplayField {

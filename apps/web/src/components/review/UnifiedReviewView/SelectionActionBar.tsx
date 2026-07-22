@@ -28,7 +28,7 @@ export function SelectionActionBar() {
   )
   const dispatch = useUICommandStore(s => s.dispatch)
 
-  const [modal, setModal] = useState<'orgTransfer' | 'transferReason' | 'manager' | null>(null)
+  const [modal, setModal] = useState<'orgTransfer' | 'transferReason' | 'manager' | 'assignee' | null>(null)
   const [resetConfirm, setResetConfirm] = useState<{ message: string; rowIds: number[] } | null>(null)
   const count = selectedRowIds.size
 
@@ -106,6 +106,14 @@ export function SelectionActionBar() {
           👤 上司変更
         </button>
 
+        {/* 担当者（複数可・行ごとに個別入力） */}
+        <button
+          onClick={() => setModal('assignee')}
+          className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-blue-700 hover:bg-blue-50 whitespace-nowrap"
+        >
+          🏷 担当者
+        </button>
+
         {/* 昇格（1件のみ） */}
         <button
           disabled={!isSingle}
@@ -155,6 +163,14 @@ export function SelectionActionBar() {
       {modal === 'transferReason' && (
         <BulkFieldEditModal
           field="transferReason"
+          rowIds={rowIds}
+          onClose={() => { setModal(null); clearSelection() }}
+        />
+      )}
+
+      {modal === 'assignee' && (
+        <BulkFieldEditModal
+          field="assignee"
           rowIds={rowIds}
           onClose={() => { setModal(null); clearSelection() }}
         />

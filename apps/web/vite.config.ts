@@ -5,6 +5,11 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import path from 'path'
 
 export default defineConfig(({ mode }) => {
+  // NOTE: LLM_PROXY_TARGET below is the legacy same-origin-proxy approach and is superseded by
+  // apps/server's /api/ai proxy (see apps/web/.env.local.example, apps/server/.env.example).
+  // The old approach still baked the real LLM key into the browser bundle; kept here only for
+  // backward compatibility with existing dev setups.
+  //
   // loadEnv with '' prefix reads ALL .env vars (not just VITE_ ones).
   // These are intentionally unprefixed — server-side only, never baked into the browser bundle.
   const env = loadEnv(mode, process.cwd(), '')

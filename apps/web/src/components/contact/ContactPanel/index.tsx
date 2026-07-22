@@ -11,11 +11,12 @@ import { ThreadView }   from './ThreadView'
 
 export function ContactPanel() {
   const { isPanelOpen, activeTab, selectedId, isFormOpen, contacts,
-          closePanel, setTab, openForm, load, sync, syncResult } = useContactStore(
+          closePanel, setTab, openForm, load, sync, syncResult, writePermissionDenied } = useContactStore(
     useShallow(s => ({
       isPanelOpen: s.isPanelOpen, activeTab: s.activeTab, selectedId: s.selectedId,
       isFormOpen: s.isFormOpen, contacts: s.contacts, closePanel: s.closePanel,
       setTab: s.setTab, openForm: s.openForm, load: s.load, sync: s.sync, syncResult: s.syncResult,
+      writePermissionDenied: s.writePermissionDenied,
     }))
   )
   const myEmail = useSettingsStore(s => s.myEmail)
@@ -64,6 +65,14 @@ export function ContactPanel() {
           <button onClick={closePanel} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
         </div>
       </div>
+
+      {/* Excel書込み権限が確認できない場合の警告 */}
+      {writePermissionDenied && (
+        <div className="mx-3 mt-2 rounded px-3 py-2 text-[11px] bg-amber-50 border border-amber-300 text-amber-800 flex-shrink-0">
+          ⚠ Excelファイルへの書き込み権限が確認できませんでした。この操作はローカルにのみ保存され、Excelには反映されていません。
+          「⚙」から設定を開き、ファイルを選び直してください。
+        </div>
+      )}
 
       {/* タブ */}
       <div className="flex border-b border-gray-200 flex-shrink-0">

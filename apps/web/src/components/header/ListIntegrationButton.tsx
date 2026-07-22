@@ -38,6 +38,26 @@ const noMatchFn = (r: AllocationRow): string | null => r.no?.trim() || null
  */
 export function ListIntegrationButton() {
   const { allocationList, masters, afterOrganizations, setPendingMerge, setMergeReviewOpen } = useStore()
+
+  /** 提出ファイルの組織マスタ件数（新/旧）が現在のセッションと異なれば警告文を返す（一致なら undefined） */
+  const buildMasterMismatchWarning = (
+    orgEntries:    ImportedWorkbookResult['orgEntries'],
+    oldOrgEntries: ImportedWorkbookResult['oldOrgEntries'],
+  ): string | undefined => {
+    const currentAfterCount  = masters.orgMasterEntries.filter(e => e.phase === 'after').length
+    const currentBeforeCount = masters.orgMasterEntries.filter(e => e.phase === 'before').length
+    const incomingAfterCount  = orgEntries.length
+    const incomingBeforeCount = oldOrgEntries.length
+
+    const diffs: string[] = []
+    if (incomingAfterCount !== currentAfterCount)
+      diffs.push(`新組織: 現在${currentAfterCount}件 / 提出ファイル${incomingAfterCount}件`)
+    if (incomingBeforeCount !== currentBeforeCount)
+      diffs.push(`旧組織: 現在${currentBeforeCount}件 / 提出ファイル${incomingBeforeCount}件`)
+    if (diffs.length === 0) return undefined
+
+    return `提出ファイルの組織マスタ件数が現在のセッションと一致しません（${diffs.join('、')}）。組織改編後に配布された古いファイルが混在している可能性があります。`
+  }
   const { capabilities } = useUserSession()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -53,7 +73,12 @@ export function ListIntegrationButton() {
     fileInputRef.current?.click()
   }
 
-  const buildMergeSession = (imported: AllocationRow[], fileName: string): MergeSession => {
+  const buildMergeSession = (
+    imported:      AllocationRow[],
+    fileName:      string,
+    orgEntries:    ImportedWorkbookResult['orgEntries'],
+    oldOrgEntries: ImportedWorkbookResult['oldOrgEntries'],
+  ): MergeSession => {
     const importedByNo = new Map<string, AllocationRow>()
     for (const r of imported) { const no = noMatchFn(r); if (no) importedByNo.set(no, r) }
     const existingByNo = new Map<string, AllocationRow>()
@@ -83,6 +108,7 @@ export function ListIntegrationButton() {
     return {
       mode: 'merge', sourceFileName: fileName, importedAt: new Date().toISOString(),
       importMode: FIXED_IMPORT_MODE, assigneeMode: FIXED_ASSIGNEE_MODE, rows,
+      masterMismatchWarning: buildMasterMismatchWarning(orgEntries, oldOrgEntries),
     }
   }
 
@@ -118,7 +144,7 @@ export function ListIntegrationButton() {
     const baselineAllocationList = useStore.getState().allocationList
 
     const session = mode === 'merge'
-      ? buildMergeSession(result.allocationList, result.fileName)
+      ? buildMergeSession(result.allocationList, result.fileName, result.orgEntries, result.oldOrgEntries)
       : buildRebaseSession(result.allocationList, result.fileName)
 
     setPendingMerge({ ...session, baselineAllocationList })
@@ -132,7 +158,9 @@ export function ListIntegrationButton() {
     e.target.value = ''
     setStep({ kind: 'loading', progress: '解析中...' })
     try {
-      const result = await importFromFile(file, msg => setStep({ kind: 'loading', progress: msg }))
+      // マージ: 既存の元ファイルに追記するだけなので、書式テンプレートは変えない（setAsTemplate: false）。
+      // リベース: 新しい基準ファイルに載せ替える操作なので、テンプレートもこのファイルに切り替える（true）。
+      const result = await importFromFile(file, msg => setStep({ kind: 'loading', progress: msg }), { setAsTemplate: mode === 'rebase' })
       if (!result) { setStep({ kind: 'error', message: 'ファイルの読み込みに失敗しました' }); return }
       const noCheck = validateNoColumn(result.allocationList)
       if (!noCheck.ok) {

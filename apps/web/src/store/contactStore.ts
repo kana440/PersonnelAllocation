@@ -1,5 +1,5 @@
 import { create } from 'zustand/react'
-import { rebuildContactService } from '../infrastructure/contact'
+import { rebuildContactService, fileSource } from '../infrastructure/contact'
 import { toHeaderTsv, toRequestTsv, toFullTsv } from '../infrastructure/contact'
 import { useSettingsStore } from './settingsStore'
 import type { SubmitResult } from '../application/ContactService'
@@ -10,6 +10,19 @@ function svc() {
   return rebuildContactService(mode)
 }
 
+/**
+ * ファイル書き込み系の操作の前に呼ぶ。ブラウザ再起動直後は readwrite 権限が
+ * 未確認のままになっている（fileSource.isWritable() === false）ため、
+ * ユーザー操作（ボタンクリック）のタイミングで明示的に再要求する。
+ * これを呼ばないと、権限が無いまま Excel への書き込みが黙ってスキップされる。
+ */
+async function ensureWritePermission(): Promise<void> {
+  if (useSettingsStore.getState().contactSourceMode !== 'file') return
+  if (fileSource.isWritable()) { useContactStore.setState({ writePermissionDenied: false }); return }
+  const granted = await fileSource.requestPermission()
+  useContactStore.setState({ writePermissionDenied: !granted })
+}
+
 interface ContactState {
   contacts:    ContactRecord[]
   isLoading:   boolean
@@ -18,6 +31,8 @@ interface ContactState {
   selectedId:  string | null
   isFormOpen:  boolean
   syncResult:  SyncResult | null
+  /** Excelへの readwrite 権限が確認できなかった（再要求しても拒否/取得不可）場合 true */
+  writePermissionDenied: boolean
 
   openPanel:     () => void
   closePanel:    () => void
@@ -47,6 +62,7 @@ export const useContactStore = create<ContactState>()((set, _get) => ({
   selectedId:  null,
   isFormOpen:  false,
   syncResult:  null,
+  writePermissionDenied: false,
 
   openPanel:  () => set({ isPanelOpen: true }),
   closePanel: () => set({ isPanelOpen: false, selectedId: null, isFormOpen: false }),
@@ -68,6 +84,7 @@ export const useContactStore = create<ContactState>()((set, _get) => ({
   sync: async () => {
     set({ isLoading: true })
     try {
+      await ensureWritePermission()
       const result = await svc().syncFromSource()
       set({ syncResult: result })
       const contacts = await svc().getAll()
@@ -78,6 +95,7 @@ export const useContactStore = create<ContactState>()((set, _get) => ({
   },
 
   create: async (params) => {
+    await ensureWritePermission()
     const record = await svc().create(params)
     const contacts = await svc().getAll()
     set({ contacts, isFormOpen: false, selectedId: record.id })
@@ -85,6 +103,7 @@ export const useContactStore = create<ContactState>()((set, _get) => ({
   },
 
   submitMessage: async (id, msg) => {
+    await ensureWritePermission()
     const result = await svc().submitMessage(id, msg)
     const contacts = await svc().getAll()
     set({ contacts })
@@ -104,6 +123,7 @@ export const useContactStore = create<ContactState>()((set, _get) => ({
   },
 
   setAnchor: async (id, anchor) => {
+    await ensureWritePermission()
     await svc().setAnchor(id, anchor)
     const contacts = await svc().getAll()
     set({ contacts })

@@ -25,6 +25,7 @@ interface Props {
 
 function resolveLabel(field: string): string {
   if (field === JOB_PAIR_FIELD) return 'ジョブタイプ・ジョブファミリー'
+  if (field === 'assignee')     return '担当者'
   return ALLOCATION_LIST_LABEL_MAP[field]?.ja ?? field
 }
 

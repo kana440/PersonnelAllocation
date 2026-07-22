@@ -223,6 +223,12 @@ export function MergeReviewView({ onClose }: { onClose: () => void }) {
           承認した行はその場で実データに反映されます（Undoで戻せます）。まだ判断できない行はそのまま未処理で残せます。
         </div>
 
+        {pendingMerge.masterMismatchWarning && (
+          <div className="px-5 py-1.5 bg-red-50 border-b border-red-100 text-[11px] text-red-700 flex-shrink-0">
+            ⚠ {pendingMerge.masterMismatchWarning}
+          </div>
+        )}
+
         <FilterBar
           filter={filter}
           onFilterChange={setFilter}

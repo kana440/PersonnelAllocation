@@ -11,6 +11,8 @@ import { authenticated, requireRole } from './auth/index.ts'
 import authRoutes       from './routes/auth.ts'
 import roundRoutes      from './routes/rounds.ts'
 import submissionRoutes from './routes/submissions.ts'
+import aiRoutes         from './routes/ai.ts'
+import domainRoutes     from './routes/domain.ts'
 import adminUserRoutes     from './routes/admin/users.ts'
 import adminPositionRoutes from './routes/admin/positions.ts'
 import adminSkillRoutes    from './routes/admin/skills.ts'
@@ -32,6 +34,13 @@ const app = new Hono()
   .route('/api/rounds',      roundRoutes)
   .route('/api/submissions', submissionRoutes)
   .route('/api/admin',       adminApp)
+  // ai.ts / domain.ts は OpenAPIHono を .basePath() で組み立てているため、
+  // ここではプレフィックス無しでルートにマウントする（basePath 側に既に /api/ai・/api/domain を含む）。
+  // STEP1 には認証機構が無いため authenticated を通さない。
+  // ai.ts は AI_PROXY_SHARED_SECRET によるアクセス制御をルート内で行う。
+  // domain.ts は今のところ allocationList を扱わない読み取り専用の軽い計算のみを公開している。
+  .route('/', aiRoutes)
+  .route('/', domainRoutes)
   .get('/', (c) => c.json({ message: 'PersonnelAllocation Server', status: 'ok' }))
 
 export default app

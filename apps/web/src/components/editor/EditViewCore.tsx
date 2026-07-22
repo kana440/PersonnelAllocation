@@ -66,6 +66,7 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
   const redo           = useStore(s => s.redo)
   const canUndo        = useStore(s => s.canUndo)
   const canRedo        = useStore(s => s.canRedo)
+  const undoHistoryTrimmed = useStore(s => s.undoHistoryTrimmed)
   const masterWarnings = useStore(s => s.masterWarnings)
 
   // export 用
@@ -185,8 +186,15 @@ export function EditViewCore({ headerLeft, headerMid, headerRight, topBanner }: 
         {headerLeft}
         {headerMid}
         <div className="ml-auto flex items-center gap-2">
-          <HeaderButton onClick={undo} disabled={!canUndo} title="元に戻す (Ctrl+Z)">
+          <HeaderButton
+            onClick={undo}
+            disabled={!canUndo}
+            title={undoHistoryTrimmed
+              ? '元に戻す (Ctrl+Z)\n※ 履歴が上限（50件）に達したため、最も古い操作は元に戻せません'
+              : '元に戻す (Ctrl+Z)'}
+          >
             <span>&#x21A9;</span><span>Undo</span>
+            {undoHistoryTrimmed && <span className="text-amber-400" title="履歴上限に達しています">⚠</span>}
           </HeaderButton>
           <HeaderButton onClick={redo} disabled={!canRedo} title="やり直し (Ctrl+Y)">
             <span>Redo</span><span>&#x21AA;</span>

@@ -51,6 +51,7 @@ export function parseAllocationSheet(raw: unknown[][]): ParseAllocationSheetResu
   }
 
   const rows: AllocationList[] = []
+  let noMissingCount = 0
   for (let i = headerIdx + 1; i < raw.length; i++) {
     const dataRow = raw[i] as unknown[]
     if (dataRow.every(c => c === '' || c == null)) continue
@@ -69,8 +70,11 @@ export function parseAllocationSheet(raw: unknown[][]): ParseAllocationSheetResu
       if (val !== '' && val != null) entry['assignee'] = String(val)
     }
 
-    if (!entry.no) continue
+    if (!entry.no) { noMissingCount++; continue }
     rows.push(AllocationListSchema.parse(entry))
+  }
+  if (noMissingCount > 0) {
+    columnWarnings.push({ sheet: SHEET, message: `No.が未入力の行が${noMissingCount}件あり、取り込み対象から除外されました。` })
   }
   return { rows, columnWarnings }
 }

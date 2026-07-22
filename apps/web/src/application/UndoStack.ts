@@ -28,15 +28,18 @@ export interface HistoryEntry {
 const MAX_UNDO = 50
 
 export class UndoStack {
-  private past:   StatePatch[] = []
-  private future: StatePatch[] = []
+  private past:    StatePatch[] = []
+  private future:  StatePatch[] = []
+  /** MAX_UNDO を超えて最古の履歴がサイレントに破棄されたことがあれば true */
+  private trimmed = false
 
   get canUndo(): boolean { return this.past.length > 0 }
   get canRedo(): boolean { return this.future.length > 0 }
+  get wasTrimmed(): boolean { return this.trimmed }
 
   push(patch: StatePatch): void {
     this.past.push(patch)
-    if (this.past.length > MAX_UNDO) this.past.shift()
+    if (this.past.length > MAX_UNDO) { this.past.shift(); this.trimmed = true }
     this.future = []
   }
 
@@ -104,8 +107,9 @@ export class UndoStack {
   }
 
   clear(): void {
-    this.past   = []
-    this.future = []
+    this.past    = []
+    this.future  = []
+    this.trimmed = false
   }
 
   computePatch(
