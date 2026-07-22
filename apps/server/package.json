@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "start": "tsx --env-file-if-exists=.env src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:reset": "node -e \"const{rmSync,existsSync}=require('fs');const p='data/pglite';if(existsSync(p)){rmSync(p,{recursive:true,force:true});console.log('deleted:',p)}else{console.log('no data to reset')};console.log('Done. Run npm run dev to re-initialize.')\""
   },
