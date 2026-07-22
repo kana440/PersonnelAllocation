@@ -1,4 +1,9 @@
-# React Flow 移行調査（一時中断・2026-07）
+# React Flow 移行調査（見送り・2026-07）
+
+> **2026-07-22 追記**: この移行は見送ることとし、試作コード（`apps/web/src/experiments/reactFlowCanvas/`・
+> `apps/web/src/components/canvas/flow/`）と `@xyflow/react` 依存は削除済み。
+> 本ドキュメントは知見の記録として残す。再検討する場合は下記の内容、特に
+> 「統合作業でつまずいた具体的な技術的落とし穴」「再挑戦する場合の推奨事項」を参照。
 
 ## 背景
 

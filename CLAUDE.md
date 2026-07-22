@@ -15,9 +15,13 @@ npm run dev:step2         # STEP2 モードで起動（.env.local 設定不要�
 npm run build             # 本番ビルド
 npm run test              # vitest（apps/web 内）
 
-# サーバー（STEP2 DEV）
+# サーバー（STEP2 DEV、および STEP1 で AI チャットを使う場合）
 npm run dev:server        # Hono + PGlite サーバー起動（port 3000）
 npm run db:reset          # PGlite データをリセット
+
+# Web + サーバーを同時起動（AI チャットを使うなら STEP1 でもこちらを使う）
+npm run dev:step1:full    # apps/server + STEP1
+npm run dev:step2:full    # apps/server + STEP2
 
 # 型チェック（推奨: まとめて実行）
 npm run typecheck         # 全パッケージ一括（web + server + domain）
@@ -743,7 +747,7 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 - `FieldBinding` の分類は暫定。HR 運用ルールに合わせて要レビュー
 - 削除済みパネル UI（削除済みポジション・人の復活操作）
 - AI から位置操作（positionOps）を呼べるように `aiTools.ts` に未追加
-- 本番キャンバスの React Flow (`@xyflow/react`) 移行は一時中断（`docs/21-reactflow-migration-investigation.md` 参照）。`canvas/flow/` に統合コードが残置されているが `OrgOperationView` からは未接続
+- 本番キャンバスの React Flow (`@xyflow/react`) 移行は調査の上、見送り済み（2026-07-22）。試作コード（`experiments/reactFlowCanvas/`・`canvas/flow/`）・依存パッケージは削除済み。調査結果・技術的な知見は `docs/21-reactflow-migration-investigation.md` に記録済み。再検討する場合はまずそちらを参照
 
 ---
 
