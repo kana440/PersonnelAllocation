@@ -67,32 +67,42 @@ async function chatCompletionsHandler(c: any): Promise<Response> {
     + '/chat/completions'
 
   const body = await c.req.text()
+  const reqHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(env.AI_LLM_API_KEY_SCHEME === 'api-key'
+      ? { 'api-key': env.AI_LLM_API_KEY }
+      : { 'Authorization': `Bearer ${env.AI_LLM_API_KEY}` }),
+  }
 
   console.log(
-    `[ai-proxy] → ${upstreamUrl} scheme=${env.AI_LLM_API_KEY_SCHEME} key=${maskSecret(env.AI_LLM_API_KEY)}`
+    `[ai-proxy] → POST ${upstreamUrl}\n`
+    + `  raw model param = ${JSON.stringify(model)}\n`
+    + `  headers sent    = ${JSON.stringify(Object.keys(reqHeaders))} (${env.AI_LLM_API_KEY_SCHEME}: ${maskSecret(env.AI_LLM_API_KEY)})\n`
+    + `  body length     = ${body.length}`
   )
 
   let upstreamRes: Response
   try {
     upstreamRes = await fetch(upstreamUrl, {
       method:  'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(env.AI_LLM_API_KEY_SCHEME === 'api-key'
-          ? { 'api-key': env.AI_LLM_API_KEY }
-          : { 'Authorization': `Bearer ${env.AI_LLM_API_KEY}` }),
-      },
+      headers: reqHeaders,
       body,
       ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
     } as RequestInit)
   } catch (err) {
+    console.error(`[ai-proxy] fetch自体が失敗: ${String(err)}`)
     return c.json({ error: `LLMサーバーへの接続に失敗しました: ${String(err)}` }, 502)
   }
 
   // 純粋なパススルー: upstream のステータスコードをそのまま返す
   const resBody = await upstreamRes.text()
   if (!upstreamRes.ok) {
-    console.error(`[ai-proxy] ← ${upstreamRes.status} ${upstreamUrl}: ${resBody.slice(0, 300)}`)
+    const resHeaders = Object.fromEntries(upstreamRes.headers.entries())
+    console.error(
+      `[ai-proxy] ← ${upstreamRes.status} ${upstreamUrl}\n`
+      + `  response headers = ${JSON.stringify(resHeaders)}\n`
+      + `  response body    = ${resBody.slice(0, 500)}`
+    )
   }
   return new Response(resBody, {
     status:  upstreamRes.status,
