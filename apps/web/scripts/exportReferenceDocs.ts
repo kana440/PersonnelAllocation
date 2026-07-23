@@ -6,6 +6,9 @@
 //
 // 実行: npm run export:docs --workspace=apps/web
 import ExcelJS from 'exceljs'
+import { fileURLToPath } from 'node:url'
+import { mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
 import {
   ALL_EDIT_OPERATIONS,
   type EditOperation,
@@ -16,7 +19,9 @@ import { ALL_EDIT_PATTERNS, EDIT_PATTERN_META } from '@personnel/domain/patterns
 import { ISSUE_TYPE_METAS } from '@personnel/domain/rules/validate/issueTypeMeta'
 import { patternsForPreset, issueIdsForPreset } from '../src/store/displayPreferenceStore'
 
-const OUTPUT_PATH = new URL('../exports/reference-docs.xlsx', import.meta.url)
+// URL.pathname はパーセントエンコードされたままなので、日本語等を含むパスや
+// Windows のドライブレター（/C:/... 形式）を正しく扱うために fileURLToPath() を使う。
+const OUTPUT_PATH = fileURLToPath(new URL('../exports/reference-docs.xlsx', import.meta.url))
 
 const OPERATION_GROUP_LABEL: Record<string, string> = {
   jobClassification:     '職務情報',
@@ -197,8 +202,9 @@ async function main() {
   presetSheet.addRow([])
   presetSheet.addRow(['※ 「カスタム」プリセットは初期状態が「標準」と同じで、そこからユーザーが個別に ON/OFF するため一覧化していません。'])
 
-  await wb.xlsx.writeFile(OUTPUT_PATH.pathname)
-  console.log(`書き出し完了: ${OUTPUT_PATH.pathname}`)
+  mkdirSync(dirname(OUTPUT_PATH), { recursive: true })
+  await wb.xlsx.writeFile(OUTPUT_PATH)
+  console.log(`書き出し完了: ${OUTPUT_PATH}`)
   console.log(`  操作一覧: ${ALL_EDIT_OPERATIONS.length}件`)
   console.log(`  問題種別一覧: ${ISSUE_TYPE_METAS.length}件`)
   console.log(`  変更パターン一覧: ${Object.keys(EDIT_PATTERN_META).length}件`)
