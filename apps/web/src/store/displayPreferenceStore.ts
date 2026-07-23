@@ -7,7 +7,7 @@ import { ISSUE_TYPE_METAS } from '@personnel/domain/rules/validate/issueTypeMeta
 export type DisplayPreset = 'full' | 'standard' | 'beginner' | 'custom'
 
 /** 初心者向けプリセットで表示するパターン（主要10種） */
-const BEGINNER_PATTERNS: ReadonlySet<EditPattern> = new Set<EditPattern>([
+export const BEGINNER_PATTERNS: ReadonlySet<EditPattern> = new Set<EditPattern>([
   'promotion', 'demotion',
   'orgTransfer', 'newPosition',
   'leaveOfAbsence', 'returnFromLeave',
@@ -15,7 +15,7 @@ const BEGINNER_PATTERNS: ReadonlySet<EditPattern> = new Set<EditPattern>([
   'secondmentOut',
 ])
 
-function patternsForPreset(preset: DisplayPreset): Set<EditPattern> {
+export function patternsForPreset(preset: DisplayPreset): Set<EditPattern> {
   switch (preset) {
     case 'full':
       return new Set(ALL_EDIT_PATTERNS)
@@ -28,7 +28,7 @@ function patternsForPreset(preset: DisplayPreset): Set<EditPattern> {
   }
 }
 
-function issueIdsForPreset(preset: DisplayPreset): Set<string> {
+export function issueIdsForPreset(preset: DisplayPreset): Set<string> {
   switch (preset) {
     case 'full':
       return new Set(ISSUE_TYPE_METAS.map(m => m.id))

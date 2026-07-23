@@ -22,7 +22,7 @@ export const leaveOfAbsenceDef: EditOperation = {
 
   description: '4/1付で休職する場合は個別対応します。3/31以前の休職については通常の申請を行った上で、必要な異動をしてください。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ休職フラグ未設定。他のロック操作中は不可。',
+  availabilityNote: '在席者（userId あり）で、インポート時点で休職フラグが未設定の行。',
 
   operationRole: {
     kind:        'softLock',
@@ -146,7 +146,7 @@ export const returnFromLeaveDef: EditOperation = {
 
   description: '4/1付で復職します。4/1以前に復職を行う場合は通常の申請をした上で、4/1時点の異動情報（例：組織変更（組改）など）が必要でしたら入力してください。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ休職フラグ設定済み。ロック操作中は不可。',
+  availabilityNote: '休職フラグが設定されている行。',
 
   operationRole: {
     kind:        'softLock',
@@ -270,7 +270,7 @@ export const resignationDef: EditOperation = {
 
   description: '4/1付で退職（または解任済み）として登録します。設定後は他の操作がロックされます。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: '在席者（userId あり）の本務行。設定後は他の全操作をロック。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。',
 
   operationRole: {
     kind:                'lock',
@@ -372,7 +372,7 @@ export const employmentTransferDef: EditOperation = {
 
   description: '4/1付でグループ外または他社へ移籍する場合に設定します。移籍後の氏名・組織・バンドなど必要な情報を入力してください。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: '在席者（userId あり）の本務行。4/1付移籍。設定後は他の全操作をロック。',
+  availabilityNote: '組織移管（transferReason=組織移管）が設定されている行を除き常に有効。',
 
   operationRole: {
     kind:                'lock',
@@ -512,7 +512,7 @@ export const noChangeDef: EditOperation = {
 
   description: '変更がない場合に選択してください。after 項目は発令前の値が維持されます。セッション内で変更済みの項目がある場合は確認ダイアログが表示されます。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: '在籍者（userId あり）の本務行。「変更なし」を設定すると after が before 値に固定される（softLock）。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。設定すると after フィールドが before 値に固定される。',
 
   operationRole: {
     kind:                'lock',
@@ -616,7 +616,7 @@ export const resetToBeforeDef: EditOperation = {
 
   description: '⚠ 警告：全ての after 項目を before（インポート前）の値に戻します。未割当の旧組織から誤って割り当てた行を元に戻すときに使います。実行するとセッション内の変更がすべて失われ、組織「未割当」状態に戻ります。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: '任意の行。after フィールドを before 値に全リセット。セッション内変更がすべて失われる。',
+  availabilityNote: '在席者（userId あり）の行。after フィールドを before 値に全リセット。セッション内変更がすべて失われる。',
 
   availableFor: (row) =>
     row.userId ? AVAILABLE : unavailable('人物がアサインされていない行には使えません'),

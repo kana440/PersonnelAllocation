@@ -45,7 +45,7 @@ export const jobTypeChangeDef: EditOperation = {
 
   description: 'ジョブファミリー・ジョブタイプを変更します。jobType × band → payGrade の導出により、band が変わらなくても給与等級が変わる場合があります。給与等級が変わる場合はポジション変更も必要です（フォーム内 [変更] ボタンから対応）。',
   entryPoints:      ['personMenu', 'dragIntent'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ正社員。ロック操作中は不可。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。',
 
   availableFor: () => AVAILABLE,
 
@@ -120,7 +120,7 @@ export const employmentExtensionDef: EditOperation = {
 
   description: '３月末に雇用延長する対象者については、当個別に雇用延長登録いたします。申請書上は申請区分を入力いただき、他の入力項目は空欄にしてください。',
   entryPoints:      ['personMenu'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ雇用延長対象者（isEmploymentExtension）。ロック操作中は不可。',
+  availabilityNote: '雇用延長対象バンドの行、または正社員の行。',
 
   operationRole: {
     kind:                'lock',
@@ -182,7 +182,7 @@ export const employmentTypeChangeDef: EditOperation = {
 
   description: '雇用タイプ変更の手続きを記入します。バンドや給与等級など関連項目も必要に応じて変更してください。',
   entryPoints:      ['personMenu'] as const,
-  availabilityNote: '在席者（userId あり）の本務行。雇用タイプ変更手続として登録。ロック操作中は不可。',
+  availabilityNote: '在席者（userId あり）の行（本務・兼務いずれも対象）。雇用タイプ変更手続として登録。',
 
   availableFor: (row) =>
     row.userId ? AVAILABLE : unavailable('担当者が配属されていない行には設定できません'),

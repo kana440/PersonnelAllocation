@@ -21,6 +21,8 @@ const schema = z.object({
   AI_LLM_BASE_URL:        z.string().optional(),  // 例: https://your-llm.internal/v1/{model}
   AI_LLM_API_KEY:         z.string().optional(),
   AI_LLM_API_KEY_SCHEME:  z.enum(['bearer', 'api-key']).default('bearer'),
+  // 社内プロキシ経由でないと LLM ベンダーに到達できない環境向け（例: http://proxy.corporate:8080）
+  AI_LLM_HTTP_PROXY:      z.string().optional(),
   // STEP1 には認証機構が無いため、この共有シークレットで最低限のアクセス制御を行う
   // （クライアントは VITE_AI_API_KEY にこの値を設定し、Authorization ヘッダーとして送る）。
   AI_PROXY_SHARED_SECRET: z.string().optional(),

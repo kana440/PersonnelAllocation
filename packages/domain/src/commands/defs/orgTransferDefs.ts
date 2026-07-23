@@ -25,7 +25,7 @@ export const orgTransferDef: EditOperation = {
 
   description: '本務行の在席者を別の組織へ異動します。異動先の組織コードを選択すると関係部門〜チームが自動導出されます。勤務場所・コストセンターは自動転記しないため、マスタと異なる場合は手動で修正してください。部下がいる場合は個別対応が必要です。',
   entryPoints:     ['personMenu', 'dragIntent'],
-  availabilityNote: '在席者（userId あり）の本務行。ドラッグで組織パネルにドロップしても起動できる。ロック操作中は不可。',
+  availabilityNote: '在席者（userId あり）の本務行。ドラッグで組織パネルにドロップしても起動できる。',
 
   availableFor(row) {
     if (!row.userId)          return unavailable('担当者が配属されていない行には設定できません')
@@ -170,7 +170,7 @@ export const orgRestructureDef: EditOperation = {
 
   description: '組織改編（組改）に伴い、在席者の組織コードを新しいコードに付け替えます。在席者はそのまま維持され、組織コードのみ変更されます。勤務場所・コストセンターは自動転記しないため、マスタと異なる場合は手動で修正してください。',
   entryPoints:     ['personMenu', 'dragIntent'],
-  availabilityNote: '在席者（userId あり）または空席ポジションの本務行。組織改編による組織コード付け替えに使う。ロック操作中は不可。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。組織改編による組織コード付け替えに使う。',
 
   availableFor: () => AVAILABLE,
 

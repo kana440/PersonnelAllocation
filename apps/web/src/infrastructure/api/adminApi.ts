@@ -1,12 +1,14 @@
 // 管理画面用 API クライアント
-// X-User-Id ヘッダーでユーザーを識別する（デモ用スタブ認証）
+// 内部実装は Hono RPC（client.ts の hc<AppType>）。サーバーのルート定義から
+// URL・リクエスト/レスポンスの型が自動で同期される（手書きの fetch は使わない）。
+// 呼び出し元（19ファイル）への影響をゼロにするため、公開する関数の形は変えていない。
 import type { RowChangeSummary } from '@personnel/domain/diffMerge'
 import type { AllocationRow } from '@personnel/domain/allocationRow'
 import type { Organization }  from '@personnel/domain/schemas'
 import type { AllMasters }    from '@personnel/domain/masters/aggregate'
+import { client } from './client'
 
-const ADMIN_BASE = 'http://localhost:3000/api/admin'
-const API_BASE   = 'http://localhost:3000/api'
+const API_BASE = 'http://localhost:3000/api'
 
 export type UserRole = 'admin' | 'coordinator' | 'member'
 
@@ -166,20 +168,10 @@ export interface SkillUpsertBody {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// hc のレスポンスは Response 互換。旧 apiFetch と同じエラー処理・204対応をここで揃える。
 
-function getCurrentUserId(): string {
-  return sessionStorage.getItem('demo_user_id') ?? 'user-admin'
-}
-
-async function apiFetch<T>(base: string, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': getCurrentUserId(),
-      ...init?.headers,
-    },
-  })
+async function unwrap<T>(resPromise: Response | Promise<Response>): Promise<T> {
+  const res = await resPromise
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string }
     throw new Error(body.error ?? `HTTP ${res.status}`)
@@ -188,77 +180,72 @@ async function apiFetch<T>(base: string, path: string, init?: RequestInit): Prom
   return res.json() as Promise<T>
 }
 
-const admin = <T>(path: string, init?: RequestInit) => apiFetch<T>(ADMIN_BASE, path, init)
-const api   = <T>(path: string, init?: RequestInit) => apiFetch<T>(API_BASE,   path, init)
-
 export const adminApi = {
   users: {
-    list:   ()                               => admin<AdminUser[]>('/users'),
-    get:    (id: string)                     => admin<AdminUser>(`/users/${id}`),
-    create: (body: UserBody)                 => admin<AdminUser>('/users', { method: 'POST', body: JSON.stringify(body) }),
+    list:   ()                               => unwrap<AdminUser[]>(client.api.admin.users.$get()),
+    get:    (id: string)                     => unwrap<AdminUser>(client.api.admin.users[':id'].$get({ param: { id } })),
+    create: (body: UserBody)                 => unwrap<AdminUser>(client.api.admin.users.$post({ json: body })),
     update: (id: string, body: Partial<UserBody>) =>
-      admin<AdminUser>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-    delete: (id: string)                     => admin<void>(`/users/${id}`, { method: 'DELETE' }),
+      unwrap<AdminUser>(client.api.admin.users[':id'].$put({ param: { id }, json: body })),
+    delete: (id: string)                     => unwrap<void>(client.api.admin.users[':id'].$delete({ param: { id } })),
   },
   positions: {
     list:         (status?: PositionStatus) =>
-      admin<AdminPosition[]>(status ? `/positions?status=${status}` : '/positions'),
-    summary:      ()                        => admin<PositionSummary>('/positions/summary'),
+      unwrap<AdminPosition[]>(client.api.admin.positions.$get({ query: status ? { status } : {} })),
+    summary:      ()                        => unwrap<PositionSummary>(client.api.admin.positions.summary.$get()),
     bulkRegister: (codes: string[])         =>
-      admin<BulkRegisterResult>('/positions/bulk', { method: 'POST', body: JSON.stringify({ codes }) }),
+      unwrap<BulkRegisterResult>(client.api.admin.positions.bulk.$post({ json: { codes } })),
     update:       (code: string, body: PositionUpdateBody) =>
-      admin<AdminPosition>(`/positions/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(body) }),
+      unwrap<AdminPosition>(client.api.admin.positions[':code'].$put({ param: { code }, json: body })),
     delete:       (code: string)            =>
-      admin<void>(`/positions/${encodeURIComponent(code)}`, { method: 'DELETE' }),
+      unwrap<void>(client.api.admin.positions[':code'].$delete({ param: { code } })),
   },
   rounds: {
-    list:       ()                              => api<ApiRound[]>('/rounds'),
-    get:        (id: string)                    => api<ApiRound>(`/rounds/${id}`),
+    list:       ()                              => unwrap<ApiRound[]>(client.api.rounds.$get()),
+    get:        (id: string)                    => unwrap<ApiRound>(client.api.rounds[':id'].$get({ param: { id } })),
     create:     (body: CreateRoundBody)         =>
-      api<{ id: string; roundCompanyId: string; rowCount: number }>('/rounds', { method: 'POST', body: JSON.stringify(body) }),
-    getCompanies: (id: string)                  => api<ApiRoundCompany[]>(`/rounds/${id}/companies`),
-    getTree:    (id: string)                    => api<ApiSubmission[]>(`/rounds/${id}/tree`),
+      unwrap<{ id: string; roundCompanyId: string; rowCount: number }>(
+        // サーバー側の zValidator スキーマは body の詳細まで厳密に絞っていないため、
+        // 呼び出し側の CreateRoundBody をそのまま渡す（hc の json 型と多少の緩さがある）。
+        client.api.rounds.$post({ json: body as never })),
+    getCompanies: (id: string)                  => unwrap<ApiRoundCompany[]>(client.api.rounds[':id'].companies.$get({ param: { id } })),
+    getTree:    (id: string)                    => unwrap<ApiSubmission[]>(client.api.rounds[':id'].tree.$get({ param: { id } })),
     getMasters: (id: string, companyId: string) =>
-      api<RoundMasters>(`/rounds/${id}/companies/${companyId}/masters`),
+      unwrap<RoundMasters>(client.api.rounds[':id'].companies[':companyId'].masters.$get({ param: { id, companyId } })),
     getExcelUrl: (id: string, companyId: string) =>
       `${API_BASE}/rounds/${id}/companies/${companyId}/excel`,
     finalize:   (id: string)                    =>
-      api<{ status: string; rowCount: number }>(`/rounds/${id}/finalize`, { method: 'POST' }),
+      unwrap<{ status: string; rowCount: number }>(client.api.rounds[':id'].finalize.$post({ param: { id } })),
   },
   submissions: {
-    list:            ()                                  => api<ApiSubmission[]>('/submissions'),
-    get:             (id: string)                        => api<ApiSubmission>(`/submissions/${id}`),
+    list:            ()                                  => unwrap<ApiSubmission[]>(client.api.submissions.$get()),
+    get:             (id: string)                        => unwrap<ApiSubmission>(client.api.submissions[':id'].$get({ param: { id } })),
     create:          (body: CreateSubmissionBody)        =>
-      api<{ id: string }>('/submissions', { method: 'POST', body: JSON.stringify(body) }),
-    getRows:         (id: string)                        => api<AllocationRow[]>(`/submissions/${id}/rows`),
-    getChildren:     (id: string)                        => api<ApiSubmission[]>(`/submissions/${id}/children`),
+      unwrap<{ id: string }>(client.api.submissions.$post({ json: body as never })),
+    getRows:         (id: string)                        => unwrap<AllocationRow[]>(client.api.submissions[':id'].rows.$get({ param: { id } })),
+    getChildren:     (id: string)                        => unwrap<ApiSubmission[]>(client.api.submissions[':id'].children.$get({ param: { id } })),
     putRows:         (id: string, rows: unknown[])       =>
-      api<{ saved: number }>(`/submissions/${id}/rows`, { method: 'PUT', body: JSON.stringify(rows) }),
+      unwrap<{ saved: number }>(client.api.submissions[':id'].rows.$put({ param: { id }, json: rows as never })),
     submit:          (id: string, opts?: { force?: boolean }) =>
-      api<{ status: string }>(`/submissions/${id}/submit`, {
-        method: 'POST',
-        body: JSON.stringify(opts ?? {}),
-        headers: { 'Content-Type': 'application/json' },
-      }),
+      unwrap<{ status: string }>(client.api.submissions[':id'].submit.$post({ param: { id }, json: opts ?? {} })),
     merge:           (id: string) =>
-      api<{ status: string; conflicts: { rowId: number; fields: string[] }[] }>(
-        `/submissions/${id}/merge`, { method: 'POST' }),
+      unwrap<{ status: string; conflicts: { rowId: number; fields: string[] }[] }>(
+        client.api.submissions[':id'].merge.$post({ param: { id } })),
     sync:            (id: string) =>
-      api<{ conflicts: { rowId: number; fields: string[] }[] }>(
-        `/submissions/${id}/sync`, { method: 'POST' }),
+      unwrap<{ conflicts: { rowId: number; fields: string[] }[] }>(
+        client.api.submissions[':id'].sync.$post({ param: { id } })),
     requestRevision: (id: string, comment: string) =>
-      api<{ status: string }>(`/submissions/${id}/request-revision`, {
-        method: 'POST', body: JSON.stringify({ comment }),
-      }),
+      unwrap<{ status: string }>(
+        client.api.submissions[':id']['request-revision'].$post({ param: { id }, json: { comment } })),
     getChildDiffs: (id: string) =>
-      api<{ children: ChildDiff[] }>(`/submissions/${id}/child-diffs`),
+      unwrap<{ children: ChildDiff[] }>(client.api.submissions[':id']['child-diffs'].$get({ param: { id } })),
   },
   skills: {
     list:   () =>
-      admin<ApiSkill[]>('/skills'),
+      unwrap<ApiSkill[]>(client.api.admin.skills.$get()),
     upsert: (slug: string, body: SkillUpsertBody) =>
-      admin<ApiSkill>(`/skills/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(body) }),
+      unwrap<ApiSkill>(client.api.admin.skills[':slug'].$put({ param: { slug }, json: body })),
     delete: (slug: string) =>
-      admin<void>(`/skills/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+      unwrap<void>(client.api.admin.skills[':slug'].$delete({ param: { slug } })),
   },
 }

@@ -19,6 +19,7 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.7.11",
     "pg": "^8.21.0",
+    "undici": "^7.28.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

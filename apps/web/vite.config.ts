@@ -12,6 +12,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@personnel/domain': path.resolve(__dirname, '../../packages/domain/src'),
+      // hc<AppType>() 用（apps/web/src/infrastructure/api/client.ts）。
+      // AppType は import type でのみ使われるため実際のバンドルには含まれないが、
+      // 念のため tsconfig.json の paths と揃えておく。
+      '@server':           path.resolve(__dirname, '../server/src'),
     },
     dedupe: ['react', 'react-dom'],
   },

@@ -6,8 +6,6 @@ import { getDb } from '../../db/database.ts'
 import { positions } from '../../db/schema.ts'
 import type { AuthVariables } from '../../auth/index.ts'
 
-const app = new Hono<{ Variables: AuthVariables }>()
-
 const SF_CODE = /^P\d{8}$/
 
 const bulkRegisterSchema = z.object({
@@ -50,94 +48,96 @@ function toAdminPosition(row: typeof positions.$inferSelect): AdminPosition {
   }
 }
 
-// ポジション一覧（status でフィルタ可能）
-app.get('/', async (c) => {
-  const db = await getDb()
-  const status = c.req.query('status')
-  const rows = status
-    ? await db.select().from(positions).where(eq(positions.status, status)).orderBy(positions.code)
-    : await db.select().from(positions).orderBy(positions.status, positions.code)
-  return c.json(rows.map(toAdminPosition))
-})
-
-// ステータス別件数サマリ
-app.get('/summary', async (c) => {
-  const db = await getDb()
-  const rows = await db
-    .select({ status: positions.status, count: sql<number>`COUNT(*)::int` })
-    .from(positions)
-    .groupBy(positions.status)
-  const summary = { available: 0, in_use: 0, retired: 0 }
-  rows.forEach(r => {
-    if (r.status in summary) summary[r.status as keyof typeof summary] = r.count
-  })
-  return c.json(summary)
-})
-
-// 一括登録
-app.post('/bulk', zValidator('json', bulkRegisterSchema), async (c) => {
-  const user = c.get('user')
-  const { codes } = c.req.valid('json')
-  const db = await getDb()
-
-  const registered: string[] = []
-  const skipped: string[] = []
-
-  await db.transaction(async (tx) => {
-    for (const code of codes) {
-      const result = await tx
-        .insert(positions)
-        .values({ code, registeredBy: user.id })
-        .onConflictDoNothing()
-      // PGlite の onConflictDoNothing は rowsAffected を返す
-      if ((result as unknown as { rowCount: number }).rowCount > 0) registered.push(code)
-      else skipped.push(code)
-    }
+// RPC（hc<AppType>）で型推論できるよう、ルート登録は1つのチェーンにする（auth.ts参照）。
+const app = new Hono<{ Variables: AuthVariables }>()
+  // ポジション一覧（status でフィルタ可能）
+  .get('/', async (c) => {
+    const db = await getDb()
+    const status = c.req.query('status')
+    const rows = status
+      ? await db.select().from(positions).where(eq(positions.status, status)).orderBy(positions.code)
+      : await db.select().from(positions).orderBy(positions.status, positions.code)
+    return c.json(rows.map(toAdminPosition))
   })
 
-  return c.json({ registered, skipped } satisfies BulkRegisterResult, 201)
-})
+  // ステータス別件数サマリ
+  .get('/summary', async (c) => {
+    const db = await getDb()
+    const rows = await db
+      .select({ status: positions.status, count: sql<number>`COUNT(*)::int` })
+      .from(positions)
+      .groupBy(positions.status)
+    const summary = { available: 0, in_use: 0, retired: 0 }
+    rows.forEach(r => {
+      if (r.status in summary) summary[r.status as keyof typeof summary] = r.count
+    })
+    return c.json(summary)
+  })
 
-// ポジション更新
-app.put('/:code', zValidator('json', positionUpdateSchema), async (c) => {
-  const code = c.req.param('code')
-  const body = c.req.valid('json')
-  const db = await getDb()
+  // 一括登録
+  .post('/bulk', zValidator('json', bulkRegisterSchema), async (c) => {
+    const user = c.get('user')
+    const { codes } = c.req.valid('json')
+    const db = await getDb()
 
-  const [existing] = await db
-    .select({ code: positions.code })
-    .from(positions)
-    .where(eq(positions.code, code))
-    .limit(1)
-  if (!existing) return c.json({ error: 'Not found' }, 404)
+    const registered: string[] = []
+    const skipped: string[] = []
 
-  const patch: Partial<typeof positions.$inferInsert> = { updatedAt: sql`now()` as unknown as string }
-  if (body.status     !== undefined) patch.status     = body.status
-  if (body.acquiredBy !== undefined) patch.acquiredBy = body.acquiredBy
-  if (body.acquiredAt !== undefined) patch.acquiredAt = body.acquiredAt
-  if (body.notes      !== undefined) patch.notes      = body.notes
+    await db.transaction(async (tx) => {
+      for (const code of codes) {
+        const result = await tx
+          .insert(positions)
+          .values({ code, registeredBy: user.id })
+          .onConflictDoNothing()
+        // PGlite の onConflictDoNothing は rowsAffected を返す
+        if ((result as unknown as { rowCount: number }).rowCount > 0) registered.push(code)
+        else skipped.push(code)
+      }
+    })
 
-  await db.update(positions).set(patch).where(eq(positions.code, code))
+    return c.json({ registered, skipped } satisfies BulkRegisterResult, 201)
+  })
 
-  const [updated] = await db.select().from(positions).where(eq(positions.code, code)).limit(1)
-  return c.json(toAdminPosition(updated))
-})
+  // ポジション更新
+  .put('/:code', zValidator('json', positionUpdateSchema), async (c) => {
+    const code = c.req.param('code')
+    const body = c.req.valid('json')
+    const db = await getDb()
 
-// プールから削除（available のみ）
-app.delete('/:code', async (c) => {
-  const code = c.req.param('code')
-  const db = await getDb()
+    const [existing] = await db
+      .select({ code: positions.code })
+      .from(positions)
+      .where(eq(positions.code, code))
+      .limit(1)
+    if (!existing) return c.json({ error: 'Not found' }, 404)
 
-  const [row] = await db
-    .select({ code: positions.code, status: positions.status })
-    .from(positions)
-    .where(eq(positions.code, code))
-    .limit(1)
-  if (!row) return c.json({ error: 'Not found' }, 404)
-  if (row.status !== 'available') return c.json({ error: '利用可能状態のコードのみ削除できます' }, 409)
+    const patch: Partial<typeof positions.$inferInsert> = { updatedAt: sql`now()` as unknown as string }
+    if (body.status     !== undefined) patch.status     = body.status
+    if (body.acquiredBy !== undefined) patch.acquiredBy = body.acquiredBy
+    if (body.acquiredAt !== undefined) patch.acquiredAt = body.acquiredAt
+    if (body.notes      !== undefined) patch.notes      = body.notes
 
-  await db.delete(positions).where(eq(positions.code, code))
-  return c.body(null, 204)
-})
+    await db.update(positions).set(patch).where(eq(positions.code, code))
+
+    const [updated] = await db.select().from(positions).where(eq(positions.code, code)).limit(1)
+    return c.json(toAdminPosition(updated))
+  })
+
+  // プールから削除（available のみ）
+  .delete('/:code', async (c) => {
+    const code = c.req.param('code')
+    const db = await getDb()
+
+    const [row] = await db
+      .select({ code: positions.code, status: positions.status })
+      .from(positions)
+      .where(eq(positions.code, code))
+      .limit(1)
+    if (!row) return c.json({ error: 'Not found' }, 404)
+    if (row.status !== 'available') return c.json({ error: '利用可能状態のコードのみ削除できます' }, 409)
+
+    await db.delete(positions).where(eq(positions.code, code))
+    return c.body(null, 204)
+  })
 
 export default app

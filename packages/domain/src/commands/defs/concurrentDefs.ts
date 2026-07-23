@@ -22,7 +22,7 @@ export const concurrentAddDef: EditOperation = {
   badge: 'concurrent',
   description: '本務行の社員を社内の別組織で兼務させます。本務行の氏名・雇用タイプをコピーして兼務行を作成し、兼務先組織・バンド等を入力します。',
   entryPoints:     ['personMenu'],
-  availabilityNote: '在席者（userId あり）の本務行。兼務行・出向箱には設定不可。ロック操作中は不可。',
+  availabilityNote: '在席者（userId あり）の本務行。兼務行・出向箱には設定不可。',
 
   availableFor(row) {
     if (!row.userId)            return unavailable('担当者が配属されていない行には設定できません')

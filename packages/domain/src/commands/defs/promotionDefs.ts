@@ -185,7 +185,7 @@ export const promotionDef: EditOperation = {
 
   description: 'ポジションバンドを上げる昇格を記入します。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから新規採番または既存空きポジションへの移動を選択してください）。',
   entryPoints:      ['personMenu', 'dragIntent'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ正社員。休職・退職・変更なし等のロック操作中は不可。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。',
 
   availableFor: () => AVAILABLE,
 
@@ -304,7 +304,7 @@ export const demotionDef: EditOperation = {
 
   description: 'ポジションバンドを下げる降格を記入します。降格理由の入力が必須です。ポジションバンド変更によりバンド・給与等級が自動導出されます。給与等級が変わる場合はポジション変更が必要です（フォーム内「変更」ボタンから対応してください）。',
   entryPoints:      ['personMenu', 'dragIntent'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ正社員。ロック操作中は不可。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。降格理由の入力が必須。',
 
   availableFor: () => AVAILABLE,
 
@@ -417,7 +417,7 @@ export const titleChangeDef: EditOperation = {
 
   description: '昇降格を伴わない役職名（フリータイトル）の変更を記入します。役職を入力するとフリータイトルの自動提案が表示されます。',
   entryPoints:      ['personMenu', 'dragIntent'] as const,
-  availabilityNote: '在席者（userId あり）の本務行。ロック操作中は不可。',
+  availabilityNote: '常に有効（対象を行の状態で絞り込まない）。',
 
   availableFor: () => AVAILABLE,
 
@@ -518,7 +518,7 @@ export const mpTrackSwitchDef: EditOperation = {
   badge:       'jobChange',
   description: '給与等級が変わらないM職・P職間の職務区分切替を記入します。現在のバンドと役職名の組み合わせから切替先の候補を自動提案します。',
   entryPoints:      ['personMenu', 'dragIntent'] as const,
-  availabilityNote: '在席者（userId あり）の本務行かつ正社員。M職またはP職系バンドが設定されている場合に有効。ロック操作中は不可。',
+  availabilityNote: '在席者（userId あり）で、M職P職切替マトリクス（または読み替えバンド）上に切替候補が存在する行。',
 
   availableFor: (row, masters) => {
     if (!row.userId) return unavailable('在席者がいません')

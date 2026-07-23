@@ -22,7 +22,7 @@ export const managerChangeDef: EditOperation = {
   badge:      'transfer',
   description: 'ポジションの上司（レポートライン）を変更します。上司ポジションを選ぶと上司名が自動入力されます。',
   entryPoints:     ['personMenu'] as const,
-  availabilityNote: 'positionCode が設定されている行（在席・空席ともに可）。ロック操作中は不可。',
+  availabilityNote: 'positionCode が設定されている行（在席・空席ともに可）。',
 
   availableFor: (row) =>
     row.positionCode ? AVAILABLE : unavailable('ポジションコードが設定されていない行には設定できません'),

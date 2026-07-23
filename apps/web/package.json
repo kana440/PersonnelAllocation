@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "depcruise": "depcruise --config .dependency-cruiser.cjs src",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "export:docs": "tsx scripts/exportReferenceDocs.ts"
   },
   "dependencies": {
     "@personnel/domain": "*",
@@ -33,6 +34,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "dependency-cruiser": "^17.4.3",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.19.4",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"

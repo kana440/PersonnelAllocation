@@ -8,38 +8,38 @@ import {
   type AuthVariables,
 } from '../auth/index.ts'
 
+// RPC（hc<AppType>）で型推論できるよう、ルート登録は1つのチェーンにする。
+// 別々の文（app.get(...); app.post(...)）にすると、export時の app の型に
+// 後から追加したルートが反映されない（TypeScriptの型再代入の仕組み上）。
 const app = new Hono<{ Variables: AuthVariables }>()
+  // 現在のユーザー情報（認証必須）
+  .get('/me', authenticated, (c) => c.json(c.get('user')))
 
-// 現在のユーザー情報（認証必須）
-app.get('/me', authenticated, (c) => c.json(c.get('user')))
+  // デモ用: ユーザー一覧（スタブ認証のユーザー切り替え UI 用）
+  .get('/users', async (c) => c.json(await listAuthUsers()))
 
-// デモ用: ユーザー一覧（スタブ認証のユーザー切り替え UI 用）
-app.get('/users', async (c) => c.json(await listAuthUsers()))
-
-// ── Dev stub: JWT Cookie 発行 ──────────────────────────────────────────────
-// 開発時のユーザー切り替え用。X-User-Id ヘッダーと併用可。
-// NODE_ENV=production では 404 を返す。
-
-app.post('/stub-login', async (c) => {
-  if (process.env.NODE_ENV === 'production') {
-    return c.json({ error: 'Not available in production' }, 404)
-  }
-  const { userId } = await c.req.json<{ userId: string }>()
-  const user = await resolveUserById(userId)
-  if (!user) return c.json({ error: 'User not found' }, 404)
-  const token = await issueToken(user)
-  setCookie(c, 'session', token, {
-    httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 28800,
+  // ── Dev stub: JWT Cookie 発行 ────────────────────────────────────────────
+  // 開発時のユーザー切り替え用。X-User-Id ヘッダーと併用可。
+  // NODE_ENV=production では 404 を返す。
+  .post('/stub-login', async (c) => {
+    if (process.env.NODE_ENV === 'production') {
+      return c.json({ error: 'Not available in production' }, 404)
+    }
+    const { userId } = await c.req.json<{ userId: string }>()
+    const user = await resolveUserById(userId)
+    if (!user) return c.json({ error: 'User not found' }, 404)
+    const token = await issueToken(user)
+    setCookie(c, 'session', token, {
+      httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 28800,
+    })
+    return c.json(user)
   })
-  return c.json(user)
-})
 
-// ── ログアウト ────────────────────────────────────────────────────────────────
-
-app.post('/logout', (c) => {
-  deleteCookie(c, 'session', { path: '/' })
-  return c.json({ ok: true })
-})
+  // ── ログアウト ──────────────────────────────────────────────────────────
+  .post('/logout', (c) => {
+    deleteCookie(c, 'session', { path: '/' })
+    return c.json({ ok: true })
+  })
 
 // ── SAML SSO（本番）─────────────────────────────────────────────────────────
 // IdP メタデータが確定したら以下を実装する。

@@ -13,9 +13,14 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
+import { ProxyAgent } from 'undici'
 import { env } from '../env.ts'
 
 const app = new OpenAPIHono().basePath('/api/ai')
+
+// AI_LLM_HTTP_PROXY が設定されている環境（社内プロキシ経由でないとLLMベンダーに到達できない）向け。
+// Node の組み込み fetch は HTTP_PROXY 系の環境変数を自動では見ないため、明示的に dispatcher を渡す。
+const proxyDispatcher = env.AI_LLM_HTTP_PROXY ? new ProxyAgent(env.AI_LLM_HTTP_PROXY) : undefined
 
 const chatCompletionsRoute = createRoute({
   method:  'post',
@@ -67,7 +72,8 @@ async function chatCompletionsHandler(c: any): Promise<Response> {
           : { 'Authorization': `Bearer ${env.AI_LLM_API_KEY}` }),
       },
       body,
-    })
+      ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
+    } as RequestInit)
   } catch (err) {
     return c.json({ error: `LLMサーバーへの接続に失敗しました: ${String(err)}` }, 502)
   }

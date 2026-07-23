@@ -26,6 +26,9 @@ npm-debug.log*
 # TypeScript cache
 *.tsbuildinfo
 
+# 生成物（要件定義用Excelエクスポート等）
+apps/web/exports/
+
 # Sample data (contains real data — do not commit)
 apps/web/public/.local/*
 !apps/web/public/.local/README.txt

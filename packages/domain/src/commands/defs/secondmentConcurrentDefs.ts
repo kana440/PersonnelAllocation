@@ -23,7 +23,7 @@ export const concurrentSecondmentOutNonSFDef: EditOperation = {
   badge: 'secondment',
   description: 'SF未統合の関連会社へ兼務で出向します。本務行はそのまま維持され、兼務出向情報（出向先会社名・出向先組織）が本務行に付加されます。',
   entryPoints:      ['personMenu'],
-  availabilityNote: '正社員の本務行のみ。SF非統合先への兼務出向。本務行はそのまま維持される。ロック操作中は不可。',
+  availabilityNote: '正社員の本務行のみ。SF非統合先への兼務出向。本務行はそのまま維持される。',
 
   availableFor(row, ms) {
     if (!isRegularEmployee(row, ms)) return unavailable('正社員のみ対象です')
