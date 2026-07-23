@@ -22,6 +22,13 @@ const app = new OpenAPIHono().basePath('/api/ai')
 // Node の組み込み fetch は HTTP_PROXY 系の環境変数を自動では見ないため、明示的に dispatcher を渡す。
 const proxyDispatcher = env.AI_LLM_HTTP_PROXY ? new ProxyAgent(env.AI_LLM_HTTP_PROXY) : undefined
 
+// デバッグ用: 秘密鍵は先頭/末尾数文字と長さだけ出す（.env コピペ時の改行混入等の検出用）
+function maskSecret(v: string): string {
+  const trimmedLen = v.trim().length
+  const lenNote = trimmedLen !== v.length ? `len=${v.length}(trim後${trimmedLen})` : `len=${v.length}`
+  return v.length <= 8 ? `${'*'.repeat(v.length)} ${lenNote}` : `${v.slice(0, 4)}...${v.slice(-4)} ${lenNote}`
+}
+
 const chatCompletionsRoute = createRoute({
   method:  'post',
   path:    '/{model}/chat/completions',
@@ -61,6 +68,10 @@ async function chatCompletionsHandler(c: any): Promise<Response> {
 
   const body = await c.req.text()
 
+  console.log(
+    `[ai-proxy] → ${upstreamUrl} scheme=${env.AI_LLM_API_KEY_SCHEME} key=${maskSecret(env.AI_LLM_API_KEY)}`
+  )
+
   let upstreamRes: Response
   try {
     upstreamRes = await fetch(upstreamUrl, {
@@ -80,6 +91,9 @@ async function chatCompletionsHandler(c: any): Promise<Response> {
 
   // 純粋なパススルー: upstream のステータスコードをそのまま返す
   const resBody = await upstreamRes.text()
+  if (!upstreamRes.ok) {
+    console.error(`[ai-proxy] ← ${upstreamRes.status} ${upstreamUrl}: ${resBody.slice(0, 300)}`)
+  }
   return new Response(resBody, {
     status:  upstreamRes.status,
     headers: { 'Content-Type': 'application/json' },
