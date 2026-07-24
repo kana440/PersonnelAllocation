@@ -8,9 +8,9 @@
 
 | 概念 | ファイル | 役割 |
 |---|---|---|
-| `OperationDef` | `src/domain/commands/defs/*.ts` | メニュー表示条件・フォーム定義・初期値計算の宣言 |
-| `EditCommand` | `src/domain/commands/handlers/*.ts` | validate / apply の純粋関数実装 |
-| `DomainContext` | `src/domain/commands/types.ts` | validate/apply に渡す読み取り専用コンテキスト |
+| `OperationDef` | `packages/domain/src/commands/defs/*.ts` | メニュー表示条件・フォーム定義・初期値計算の宣言 |
+| `EditCommand` | `packages/domain/src/commands/handlers/*.ts` | validate / apply の純粋関数実装 |
+| `DomainContext` | `packages/domain/src/commands/types.ts` | validate/apply に渡す読み取り専用コンテキスト |
 
 ```
 ユーザーがメニューを選択
@@ -27,15 +27,17 @@
 ## 2. テストインフラの構成
 
 ```
-tests/
+apps/web/tests/
   helpers/
     fixtures.ts          # AllocationRow・AllCodeLists のモックデータ
     runner.ts            # バリデーション・オプション検証用ランナー
     operationRunner.ts   # OperationDef・EditCommand 検証用ランナー
   validation/            # A〜W系バリデーションのシナリオテスト
   operations/            # 操作パターンのシナリオテスト（新規追加はここに）
-  options/               # オプション絞り込みのシナリオテスト
+  choices/               # 選択肢絞り込みのシナリオテスト
 ```
+
+ドメイン層のコードは `@personnel/domain/...` エイリアスで import する（`tests/` は `apps/web/` 配下だが `packages/domain` を直接参照する）。
 
 ### fixtures.ts の使い方
 
@@ -67,8 +69,8 @@ const cl = makeCL({
 
 ```typescript
 import { runOperationScenarios } from '../helpers/operationRunner'
-import { promotionDef } from '../../src/domain/commands/defs/jobClassificationDefs'
-import { PromotionOperation } from '../../src/domain/commands/handlers/patternOps'
+import { promotionDef } from '@personnel/domain/commands/defs/jobClassificationDefs'
+import { PromotionOperation } from '@personnel/domain/commands/handlers/patternOps'
 
 runOperationScenarios('昇格操作', promotionDef, [
   // --- availableFor のテスト ---
@@ -141,26 +143,23 @@ runOperationScenarios('昇格操作', promotionDef, [
 
 ## 4. バリデーションのテスト（runner）
 
-`tests/helpers/runner.ts` の `runScenarios()` を使う。
+`tests/helpers/runner.ts` の `runScenarios()` を使う。内部で `validateRow()`（error/warning 判定）と
+`getGroupedFieldOptions()`（選択肢の valid/invalid 判定）の両方を呼べる。
 
 ```typescript
-import { runScenarios, strict } from '../helpers/runner'
+import { runScenarios } from '../helpers/runner'
 
 runScenarios('F1: 出向受入のとき band は出向受入対応のものに限定', [
   {
     id: 'F1-1',
     desc: '出向受入 + 社員バンド → エラー',
     row: { employmentType: '出向受入社員', band: 'M4' },
-    // FIELD_CONSTRAINTS の制約チェックは guide モードではエラーにならない。
-    // strict() で明示的に strict モードにする。
-    strictnessOverrides: strict('band'),
     expect: { errorFields: ['band'] },
   },
   {
     id: 'F1-2',
     desc: '出向受入タイプのとき band の選択肢は出向受入のみ',
     row: { employmentType: '出向受入社員' },
-    // オプション絞り込みは strictnessOverrides 不要
     expect: {
       options: [{ field: 'band', includes: ['OM3'], excludes: ['M4'] }],
     },
@@ -168,80 +167,27 @@ runScenarios('F1: 出向受入のとき band は出向受入対応のものに�
 ])
 ```
 
-### `strict()` ヘルパーについて
-
-`GLOBAL_DEFAULT_STRICTNESS = 'guide'` のため、FIELD_CONSTRAINTS の制約チェックはデフォルトでエラーを出さない（選択肢の分類のみ行う）。
-
-エラー発生を期待するテストでは `strictnessOverrides: strict('fieldName')` を指定する。
-
-```typescript
-// 単一フィールド
-strictnessOverrides: strict('band')
-
-// 複数フィールド
-strictnessOverrides: strict('band', 'payGrade', 'leaveOfAbsenceSign')
-```
+`expect.errorFields` は該当フィールドに issue（error/warning どちらでも可）があることを検証する —
+エラーになるか警告になるかは `FieldRule.validation`（`rules/field.ts`）の宣言で決まるため、
+テスト側で strictness を指定する仕組みは存在しない（`FieldStrictness` / `GLOBAL_DEFAULT_STRICTNESS` は廃止済み。
+`docs/18-domain-field-rules.md` 8章参照）。`expect.noErrorFields` は issue がないことを、
+`expect.options` は `getGroupedFieldOptions()` の valid 配列に対する includes/excludes を検証する。
 
 ---
 
 ## 5. 新しい操作パターンを追加するときの手順
 
-### Step 1: EditPattern に新ラベルを追加
+登録の全体順序（`EditPattern` 追加 → `detect()` 実装 → `EditCommand` 実装 → バリデーション検出条件追加 →
+`OperationDef` 実装・登録 → `SummaryView.tsx` 登録 → 複数行なら `EditScenario`）は
+root `CLAUDE.md` の「業務操作の追加方法」に従う。ここでは繰り返さない。
+
+TDD で進める場合は、`EditCommand` を実装したら **`OperationDef` を書く前に** シナリオテストを先に書く。
 
 ```typescript
-// src/domain/patterns/editPatterns.ts
-export const EDIT_PATTERNS = [
-  // ...
-  'myNewPattern',
-] as const
-```
-
-### Step 2: EditCommand を実装
-
-```typescript
-// src/domain/commands/handlers/myNewOps.ts
-import type { EditCommand, DomainContext, OperationResult, ValidationResult } from '../types'
-import { ok, fail } from '../types'
-
-export interface MyNewFields {
-  someField?: string
-}
-
-export class MyNewOperation implements EditCommand {
-  readonly kind = 'MyNew'
-
-  constructor(
-    private readonly rowId:  number,
-    private readonly fields: MyNewFields,
-  ) {}
-
-  validate(ctx: DomainContext): ValidationResult {
-    const row = ctx.allocationList.find(r => r.rowId === this.rowId)
-    if (!row) return fail(`行が見つかりません (rowId: ${this.rowId})`)
-    if (!this.fields.someField) return fail('someField は必須です')
-    return ok()
-  }
-
-  apply(ctx: DomainContext): OperationResult {
-    return {
-      updatedList: ctx.allocationList.map(r =>
-        r.rowId === this.rowId
-          ? { ...r, someField: this.fields.someField }
-          : r
-      ),
-      label: `新しい操作: ...`,
-    }
-  }
-}
-```
-
-### Step 3: テストを先に書く（TDD）
-
-```typescript
-// tests/operations/myNew.test.ts
+// apps/web/tests/operations/myNew.test.ts
 import { runOperationScenarios } from '../helpers/operationRunner'
-import { myNewDef } from '../../src/domain/commands/defs/myNewDefs'
-import { MyNewOperation } from '../../src/domain/commands/handlers/myNewOps'
+import { myNewDef } from '@personnel/domain/commands/defs/myNewDefs'
+import { MyNewOperation } from '@personnel/domain/commands/handlers/myNewOps'
 
 runOperationScenarios('新しい操作', myNewDef, [
   {
@@ -273,45 +219,11 @@ runOperationScenarios('新しい操作', myNewDef, [
 ])
 ```
 
-### Step 4: OperationDef を実装
+このテストは `OperationDef`（`myNewDef`）の実装前から書けるので、先に赤にしてから
+`availableFor` / `createCommand` を実装して緑にする、という順序で進められる。
 
-```typescript
-// src/domain/commands/defs/myNewDefs.ts
-import type { OperationDef } from '../types'
-import { MyNewOperation } from '../../commands/handlers/myNewOps'
-
-export const myNewDef: OperationDef = {
-  id:         'MyNew',
-  label:      '新しい操作',
-  group:      'jobClassification',
-  badgeColor: 'bg-blue-100 text-blue-700',
-
-  availableFor: (row, cl) => /* 条件 */,
-  inputs: [
-    { field: 'someField', required: true },
-  ],
-  deriveInitial: (row) => ({ someField: row.someField }),
-  createCommand: (rowId, input) =>
-    new MyNewOperation(rowId, { someField: input.someField as string }),
-}
-```
-
-### Step 5: ALL_OPERATION_DEFS に登録
-
-```typescript
-// src/domain/commands/defs/index.ts
-import { myNewDef } from './defs/myNewDefs'
-
-export const ALL_OPERATION_DEFS: OperationDef[] = [
-  // ...
-  myNewDef,
-]
-```
-
-### Step 6: バリデーション検出条件を追加（必須）
-
-`CLAUDE.md` の業務操作追加手順 Step 3 を参照。
-Excel 後方互換のリストア保証のために必須。
+バリデーション検出条件の追加（Excel 後方互換のリストア保証に必須）は
+root `CLAUDE.md` の業務操作追加手順を参照。
 
 ---
 
@@ -323,7 +235,7 @@ Excel 後方互換のリストア保証のために必須。
 ヘルパー関数自体を直接テストするのが効果的。
 
 ```typescript
-import { isRegularEmployee } from '../../src/domain/commands/defs/helpers'
+import { isRegularEmployee } from '@personnel/domain/commands/defs/helpers'
 
 test('isRegularEmployee: 社員タイプは true', () => {
   const row = makePersonRow()

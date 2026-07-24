@@ -25,22 +25,12 @@
 
 ### 1.1 transfer の判定詳細
 
-```
-orgMapping（旧組織ID → 新組織ID[]）から sameOrgPairs を構築:
-  "prevExternalCode|afterExternalCode" の Set
-
-transfer = (departmentCode != prevDepartmentCode)
-         AND NOT sameOrgPairs.has(`${prevCode}|${afterCode}`)
-```
-
-→ 旧組織・新組織が対応関係にある場合は transfer を付与しない（同一組織内の昇降格として扱う）。
+`orgMapping`（旧組織ID → 新組織ID[]）から `"prevExternalCode|afterExternalCode"` の Set（`sameOrgPairs`）を構築し、`departmentCode != prevDepartmentCode` かつ `sameOrgPairs` に含まれない場合のみ transfer とする。旧組織・新組織が対応関係にある場合は transfer を付与しない（同一組織内の昇降格として扱う）。
 
 ### 1.2 promotion / demotion と transfer の同時成立
 
-- **transfer + promotion**: 組織をまたいで昇格した → 「異動+昇級」
-- **transfer + demotion**: 組織をまたいで降格した → 「異動+降級」
-- **promotion のみ**: 同一（対応）組織内でバンドが上がった → 「昇級」（新ポジション必須 ← validateRow参照）
-- **demotion のみ**: 同一（対応）組織内でバンドが下がった → 「降級」（新ポジション必須）
+- **transfer + promotion/demotion**: 組織をまたいで昇降格した → 「異動+昇級/降級」
+- **promotion/demotion のみ**: 同一（対応）組織内でバンドが変わった → 「昇級/降級」（新ポジション必須 ← validateRow参照）
 
 ---
 
@@ -48,14 +38,7 @@ transfer = (departmentCode != prevDepartmentCode)
 
 ### 2.1 昇級・降級時のポジション扱い
 
-**✓ 確定ルール**: 昇級・降級（promotion / demotion）が発生した場合、同一のポジションコードを継続使用しない。新ポジションに登録し直す。
-
-**実装**: `validateBandChangeRequiresNewPosition` が positionCode 未変更を ERROR で検出。
-
-```
-if (promotion || demotion) && !transfer && positionCode == prevPositionCode
-  → ERROR: 新ポジションへの登録が必要
-```
+**✓ 確定ルール**: 昇級・降級（promotion / demotion）が発生した場合、同一のポジションコードを継続使用しない。新ポジションに登録し直す。`validateBandChangeRequiresNewPosition` が「promotion/demotion かつ transferなし かつ positionCode未変更」を ERROR で検出する。
 
 ### 2.2 異動時のポジション扱い
 
@@ -73,17 +56,9 @@ if (promotion || demotion) && !transfer && positionCode == prevPositionCode
 
 ### 3.1 managerName の導出
 
-**✓ 確定ルール**: `managerName` は `managerPositionCode` に在席している人物の氏名から自動補完する。
+**✓ 確定ルール**: `managerName` は `managerPositionCode` に在席している人物（`allocationList.find(r => r.positionCode === code && r.userId)`）の `${lastName}${firstName}` から自動補完する。
 
-```
-managerPositionCode → allocationList.find(r => r.positionCode === code && r.userId)
-  → `${lastName}${firstName}`
-```
-
-❓ **業務確認待ち**:
-- managerPositionCodeが空席だった場合、managerNameは空にするか？
-- managerPositionCodeが未設定の場合、UIでの扱いは？
-- 兼務の場合、上司は本務ポジションの上司を参照するか？
+❓ **業務確認待ち**: managerPositionCode が空席・未設定の場合の扱い / 兼務行は本務ポジションの上司を参照するか
 
 ### 3.2 レポートライン
 
@@ -93,24 +68,20 @@ managerPositionCode → allocationList.find(r => r.positionCode === code && r.us
 
 ## 4. 兼務ルール
 
-| ルール | 状態 | 詳細 |
-|---|---|---|
-| `concurrentType = '兼務'` の行は兼務 | ✓ | CLAUDE.md記載 |
-| `concurrentType` が '兼務' の時のみ `concurrentReason` を表示・必須化 | ✗ | UIで未実装 |
-| 兼務行に上司は本務ポジションから引く | ❓ | 業務確認待ち |
-| 一人の人物に複数の兼務行を持てるか | ❓ | 業務確認待ち |
+| ルール | 状態 |
+|---|---|
+| `concurrentType = '兼務'` の行は兼務 | ✓ |
+| `concurrentType` が '兼務' の時のみ `concurrentReason` を表示・必須化 | ✗ UIで未実装 |
+| 兼務行に上司は本務ポジションから引く | ❓ 業務確認待ち |
+| 一人の人物に複数の兼務行を持てるか | ❓ 業務確認待ち |
 
 ---
 
 ## 5. 出向ルール
 
-❓ **業務確認待ち（大半未定義）**
+**✓ 定義済み**: 出向操作（本務出向・兼務出向・SF統合先/SF外・受入/解除の全パターン）、人物識別フィールドの照合キー、レコード変化の詳細は `specs/G2-domain/06-secondment-rules.md` に定義済み。同ドキュメント §2 に `secondmentFromCompany` / `secondmentFromEmployeeNumber` / `secondmentToCompany` の設定タイミングも記載。
 
-| フィールド | 用途 | 確認事項 |
-|---|---|---|
-| `secondmentFromCompany` | 出向元会社 | どのタイミングで設定されるか |
-| `secondmentFromEmployeeNumber` | 出向元社員番号 | 自社Excelに含まれるか |
-| `secondmentToCompany` | 出向先会社 | departmentCodeとの関係 |
+自社の SF 設定が Global Assignment 動作になっているかは ❓ 業務確認待ち（`06-secondment-rules.md` §2-2 参照）。
 
 **✓ 実装済みルール**: `secondmentToCompany` あり + `departmentCode` なし → WARNING
 
@@ -118,27 +89,21 @@ managerPositionCode → allocationList.find(r => r.positionCode === code && r.us
 
 ## 6. 組織コードと組織階層フィールドの関係
 
-❓ **業務確認待ち**:
+**✓ 確定ルール**: `businessUnit`〜`team` は `departmentCode` から `orgMasterEntries`（組織マスタ）を使って自動補完される。手入力ではない（手動上書きは可）。
 
-`departmentCode`（SF組織コード）が確定した時、以下のフィールドはどのように決まるか：
-
-- `businessUnit`: departmentCodeから自動的に決まるか、手入力か
-- `division`: 同上
-- `subDivision`: 同上
-- `group`: 同上
-- `team`: 同上
-
-**仮説**: これらはSFシステム上の組織階層から引き継がれる（orgMasterに含まれるか？）。
+- 補完タイミング: (1) エディタで `departmentCode` を変更したとき、(2) 異動・空席作成等のドメインオペレーション実行時、(3) ヘッダーの「↻組織」ボタンによる一括再導出
+- 実装: `OrgEditorRow`（`apps/web/src/components/editor/RowEditorPanel/OrgEditorRow.tsx`）が選択時に `orgMasterEntries` から一括セット
+- 詳細は `specs/G1-fields/01-field-definitions.md` §4 参照
 
 ---
 
 ## 7. バンド・給与等級ルール
 
-❓ **業務確認待ち（大半未定義）**:
+**✓ 確定ルール**: `payGrade` と `band` の対応関係は実装済み（F2条件、`packages/domain/src/rules/field.ts` 'f2_payGrade'）。`payGrade.band` が選択中 `band` の `promotionDemotionBand` と一致し、`payGrade.compensationCategory` が `jobType.compensationCategory` と一致するものに選択肢を絞り込む。
 
-- `band`（人バンド）と `positionBand`（ポジションバンド）は基本的に一致するか？
-- 乖離が許容されるケースは？（例: 昇格待ち、降格猶予期間）
-- `payGrade` の有効値と `band` との対応関係
+❓ **業務確認待ち**:
+
+- `band`（人バンド）と `positionBand`（ポジションバンド）は基本的に一致するか？乖離が許容されるケースは？（例: 昇格待ち、降格猶予期間）
 - `band` の有効値一覧（マスタに定義なし。Excelシートに記載あるか？）
 
 ---
@@ -166,10 +131,8 @@ managerPositionCode → allocationList.find(r => r.positionCode === code && r.us
 
 優先度の高い順：
 
-1. ❓ `band` の有効値一覧
-2. ❓ `businessUnit`〜`team` は `departmentCode` から自動補完か手入力か
+1. ❓ `band` の有効値一覧・`positionBand` との乖離許容
+2. ❓ 異動時のポジションコード引き継ぎルール（新規作成 or 旧コード継承）
 3. ❓ 昇降格時の `managerPositionCode` 扱い（ポジション新規作成に伴う上司設定）
 4. ❓ 兼務行における上司の参照元
-5. ❓ 異動時のポジションコード引き継ぎルール
-6. ❓ `promotionSign` / `payGradeChangeSign` の有効値
-7. ❓ 出向フィールド群の業務フロー
+5. ❓ 自社の SF 設定が Global Assignment 動作になっているか（`06-secondment-rules.md` §2-2）

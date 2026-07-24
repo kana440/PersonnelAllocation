@@ -16,9 +16,9 @@
 |---|---|---|---|---|---|
 | `transferReason` | 申請区分(異動事由) | ✓ | `combobox` | `transferReasons` | 発令の主分類。ComboInput実装済み |
 | `memo` | メモ | ✓ | `text` | — | 自由記述 |
-| `promotionSign` | 昇降格サイン | △ | `select` | — | **TODO: 有効値を確認**（例: "1"=昇格, "-1"=降格？） |
-| `demotionReason` | 降格理由 | △ | `combobox` | `demotionReasons` | combobox化未実装 |
-| `payGradeChangeSign` | 給与等級変更サイン | △ | `select` | — | **TODO: 有効値を確認** |
+| `promotionSign` | 昇降格サイン | ✓ | `readonly`（バッジ表示） | — | '1'=昇格あり / ''=なし。band/payGrade変更から自動導出（`rules/derive/promotionFields.ts`）。編集不可・導出値の表示のみ |
+| `demotionReason` | 降格理由 | ✓ | `select` | `demotionReasons` | `MetaSection` に select 実装済み |
+| `payGradeChangeSign` | 給与等級変更サイン | ✓ | `readonly`（バッジ表示） | — | '1'=変更あり / ''=なし。payGrade変更から自動導出。編集不可・導出値の表示のみ |
 
 ---
 
@@ -41,8 +41,8 @@
 | afterKey | 表示名 | 実装状況 | 目標入力種別 | masterKey | 備考 |
 |---|---|---|---|---|---|
 | `positionCode` | ポジションコード | △ | `readonly`/`auto` | — | 通常は操作で自動生成。直接編集は原則しない。`_pos_` prefix = 内部採番 |
-| `departmentCode` | 組織コード | ✗ | `org-search` | `afterOrganizations` | **OrgCombobox が既存コンポーネントとして存在。未ワイヤー** |
-| `officialPositionCode` | 役職 | ✗ | `select` | `officialPositions` | マスタ定義あり・未ワイヤー |
+| `departmentCode` | 組織コード | ✓ | `org-search` | `afterOrganizations` | `OrgEditorRow`（`OrgSearchDialog`）実装済み。選択時 businessUnit〜team を `orgMasterEntries` から自動補完 |
+| `officialPositionCode` | 役職 | ✓ | `select` | `officialPositions` | 実装済み |
 | `localJobTitle` | フリータイトル | ✗ | `text` | — | 自由記述。officialPositionCodeと連動確認 **TODO** |
 | `managerPositionCode` | 上司ポジションコード | ✓ | `position-search` | `allocationList` | ManagerPositionRow コンポーネント実装済み。人名で検索しポジションコードをセット。選択時 managerName も自動入力 |
 | `positionBand` | ポジション_バンド | ✓ | `select` | `jobLevels` | jobLevels.label を表示・格納（band と同じリスト） |
@@ -51,23 +51,19 @@
 | `trainingPositionFlag` | 業務研修ポジション | ✓ | `select` | `trainingPositions` | CodeEntry[]。マスタから select 表示 |
 | `jobFamily` | ジョブファミリー | ✓ | `select` | `jobFamilies` | 実装済み。変更時 jobType/payGrade をクリア |
 | `jobType` | ジョブタイプ | ✓ | `select` | `subJobFamilies` | jobFamily 連動フィルタ実装済み。変更時 payGrade 自動導出 |
-| `location` | 勤務場所 | ✗ | `select` | `workLocations` | マスタ定義あり・未ワイヤー |
+| `location` | 勤務場所 | ✓ | `select` | `workLocations` | 実装済み |
 | `costCenter` | コストセンター | ✗ | `text` | — | **TODO: マスタで管理すべきか確認** |
 
 ---
 
 ## 4. 組織階層フィールド（binding: position）
 
-> `departmentCode`（組織コード）から自動補完される。`orgMasterEntries` の `phase='after'` エントリを優先して使用する。
-> 自動補完されるタイミング: (1) エディタで departmentCode を変更したとき、(2) ドメインオペレーション（移動・異動・空席作成等）実行時、(3) ヘッダーの「↻組織」ボタンで一括再導出。
+> `departmentCode`（組織コード）から `orgMasterEntries`（`phase='after'` 優先）を使って自動補完される。
+> タイミング: (1) エディタで departmentCode 変更時、(2) ドメインオペレーション実行時、(3) ヘッダー「↻組織」ボタンで一括再導出。
 
 | afterKey | 表示名 | 実装状況 | 目標入力種別 | 備考 |
 |---|---|---|---|---|
-| `businessUnit` | ビジネスユニット | ✓ | `auto` (手動上書き可) | `departmentCode` 変更時に `orgMasterEntries` から自動補完（操作時・エディタ両方） |
-| `division` | 部門 | ✓ | `auto` (手動上書き可) | 同上 |
-| `subDivision` | 統括部 | ✓ | `auto` (手動上書き可) | 同上（OrgMasterEntry.department → subDivision にマッピング） |
-| `group` | グループ | ✓ | `auto` (手動上書き可) | 同上 |
-| `team` | チーム | ✓ | `auto` (手動上書き可) | 同上 |
+| `businessUnit`〜`team`（5フィールド） | ビジネスユニット/部門/統括部/グループ/チーム | ✓ | `auto` (手動上書き可) | `departmentCode` 変更時に `orgMasterEntries` から自動補完（操作時・エディタ両方） |
 
 ---
 
@@ -76,50 +72,25 @@
 | afterKey | 表示名 | 実装状況 | 目標入力種別 | masterKey | 備考 |
 |---|---|---|---|---|---|
 | `concurrentType` | 本務兼務区分 | ✓ | `select` | `concurrentTypes` | 実装済み |
-| `concurrentReason` | 兼務理由 | ✗ | `combobox` | `concurrentReasons` | マスタ定義あり・未ワイヤー。concurrentType='兼務'の時のみ表示 |
-| `secondmentFromCompany` | 出向元会社 | ✗ | `select` | `companyFilters` | **TODO: companyFiltersから選択か自由入力か確認** |
+| `concurrentReason` | 兼務理由 | ✓ | `combobox` | `concurrentReasons` | 実装済み。常時表示（concurrentType='兼務'時のみ表示する条件表示は未実装 → G2-01 §4参照） |
+| `secondmentFromCompany` | 出向元会社 | ✓ | `select` | `companies` | `companies`マスタから選択（companyFiltersではない） |
 | `secondmentFromEmployeeNumber` | 出向元会社社員番号 | ✗ | `text` | — | 自由テキスト |
-| `secondmentToCompany` | 出向先会社 | ✗ | `select` | `companyFilters` | 同上 |
+| `secondmentToCompany` | 出向先会社 | ✓ | `select` | `companies` | 同上 |
 | `managerName` | 上司氏名 | ✓ | `auto` (手動上書き可) | — | `managerPositionCode`選択時・操作時に自動入力（"姓, 名" 形式）。一括再導出は「↻上司姓名」ボタン / AI `propose_re_derive_manager_names` |
 
 ---
 
 ## 6. 読み取り専用（個人識別子）
 
-これらは編集画面でも常に読み取り専用。
-
-| key | 表示名 | 備考 |
-|---|---|---|
-| `userId` | ユーザー/社員ID | SF Person ID |
-| `employeeNumber` | 社員番号 | |
-| `lastName` | 姓 | |
-| `firstName` | 名 | |
-| `groupEmployeeId` | グループ社員ID | |
-| `groupEmployeeNumber` | グループ社員番号（推定） | |
-
----
-
-## 7. 実装優先順位（提案）
-
-| 優先度 | フィールド群 | 理由 |
-|---|---|---|
-| 🔴 高 | `departmentCode`（org-search） | 最頻用フィールド。OrgComboboxが既にある |
-| 🔴 高 | `officialPositionCode`, `payGrade`, `location` | マスタ定義済み・ワイヤーのみ |
-| 🔴 高 | 各種flagフィールド（flag-select化） | 現状テキスト入力で誤入力リスク大 |
-| 🟡 中 | `managerPositionCode` + `managerName`自動補完 | 専用UIが必要 |
-| 🟡 中 | `businessUnit`〜`team`の自動補完 | 業務ルール確認後 |
-| 🟡 中 | `concurrentReason`, `demotionReason` | combobox化 |
-| 🟢 低 | `band`, `positionBand` | 有効値一覧が不明 |
-| 🟢 低 | `secondmentFromCompany`, `secondmentToCompany` | 使用頻度低 |
+編集画面でも常に読み取り専用: `userId`（SF Person ID）, `employeeNumber`, `lastName`, `firstName`, `groupEmployeeId`, `groupEmployeeNumber`（推定）。
 
 ---
 
 ## 未確認事項（業務ルール確認が必要）
 
+大半のフィールドはワイヤー済み。残る未確認事項は以下の通り。
+
 - [ ] `band` の有効値一覧（マスタに定義なし。Excelシートにあるか？）
 - [ ] `positionBand` と `band` の乖離は許容されるか
-- [ ] `promotionSign`, `payGradeChangeSign` の有効値（現状 "1"/"" として実装）
 - [ ] `localJobTitle` と `officialPositionCode` の使い分けルール
-- [x] `businessUnit`〜`team` は `departmentCode` から `orgMasterEntries` を使って自動補完（操作時・エディタ両方）。一括再導出ボタンあり
-- [x] `leaveOfAbsenceSign` の値形式 → '1'=休職中 / ''=通常（checkbox UI）
-- [x] `managerName` は managerPositionCode 選択時・操作時に自動入力。一括再導出あり
+- [ ] `costCenter` はマスタで管理すべきか（現状 `text` 自由入力）

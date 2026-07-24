@@ -1,7 +1,7 @@
 # G2-05 業務操作カタログ
 
 SummaryView の UI セクション順に全操作を列挙する。
-詳細な新規行追加操作の要件は `04-new-row-operations.md` を参照。
+新規行追加操作のフィールド要件マトリクスは §9 を参照。
 
 ---
 
@@ -119,13 +119,57 @@ SummaryView の UI セクション順に全操作を列挙する。
 
 ## 8. 組織パネルからの新規行追加（追加ボタン）
 
-SummaryView には表示されない。組織パネルのボタンから起動する。
-詳細フィールド仕様は `04-new-row-operations.md` を参照。
+SummaryView には表示されない。組織パネルのボタンから起動する（`ConcurrentAddNew` のみ本務行メニューからのコピー追加にも対応）。
+フィールド要件マトリクスは §9 参照。
 
-| ID | ラベル | 状態 |
-|---|---|---|
-| `ConcurrentAddNew` | 社内兼務追加（新規） | ✓ |
-| `SecondmentInNewSF` | 本務出向受入 新規（SF） | ✓ |
-| `SecondmentInNewNonSF` | 本務出向受入 新規（非SF） | ✓ |
-| `ConcurrentSecondmentInNewSF` | 兼務出向受入 新規（SF） | ✓ |
-| `ConcurrentSecondmentInNewNonSF` | 兼務出向受入 新規（非SF） | ✓ |
+| ID | ラベル | 起動元 | 状態 |
+|---|---|---|---|
+| `ConcurrentAddNew` | 社内兼務追加（新規/コピー） | 組織パネルの追加ボタン / 本務行のメニュー | ✓ |
+| `SecondmentInNewSF` | 本務出向受入 新規（SF） | 組織パネルの追加ボタン | ✓ |
+| `SecondmentInNewNonSF` | 本務出向受入 新規（非SF） | 組織パネルの追加ボタン | ✓ |
+| `ConcurrentSecondmentInNewSF` | 兼務出向受入 新規（SF） | 組織パネルの追加ボタン | ✓ |
+| `ConcurrentSecondmentInNewNonSF` | 兼務出向受入 新規（非SF） | 組織パネルの追加ボタン | ✓ |
+
+---
+
+## 9. 新規行追加操作 フィールド要件マトリクス
+
+上記5操作（`ConcurrentAddNew` / `SecondmentInNewSF` / `SecondmentInNewNonSF` / `ConcurrentSecondmentInNewSF` / `ConcurrentSecondmentInNewNonSF`）に共通するフィールド仕様。
+
+### 共通フィールド仕様
+
+| フィールド | 新規追加デフォルト | コピー追加デフォルト | 必須 | 編集可 |
+|---|---|---|---|---|
+| `lastName` / `firstName` | 空 | src コピー | **必須** | 可 |
+| `groupEmployeeId` / `employeeNumber` | 空 | src コピー | 任意 | 不可（表示） |
+| `userId` | 空 | **空**（SF では兼務でも別 ID が発行される） | 任意 | 可 |
+| `positionCode` | 新規採番 `_pos_XXX` | 新規採番 | 自動 | 可 |
+| `departmentCode` | 組織ボタンから引き継ぎ | 空（picker 必須） | 任意 | 可（picker） |
+| `businessUnit`〜`team` | departmentCode から自動導出 | 同左 | 自動 | 不可 |
+| `positionBand` | 空 | **空**（src 引き継がない） | 任意 | 可（絞り込みなし） |
+| `jobFamily` / `jobType` | 空 | src コピー | 任意 | 可 |
+| `officialPositionCode` | 空 | 空 | 任意 | 可 |
+| `trainingPositionFlag` | `'0'`（いいえ） | `'0'` | 自動 | 可 |
+| `positionUnionFlag` / `unionFlag` | 空 | 空 | 任意 | 可 |
+| `employmentType` | 空（操作別デフォルトあり） | src コピー（操作別制約あり） | 任意 | 操作による |
+
+> **最低保存条件**: `lastName` + `firstName` + `concurrentType`（自動）があれば保存可。AI 検索が氏名を使用するため氏名は必須。他フィールドは後から担当者が記入するケースあり。
+> `concurrentType` は操作により固定値（`ConcurrentAddNew`系=兼務／その他=空）。`concurrentReason` は各操作とも任意入力。
+
+### 操作別の差分
+
+| 操作 | concurrentType | employmentType 候補フィルタ | secondmentFromCompany | secondmentFromEmployeeNumber | band/payGrade フィルタ |
+|---|---|---|---|---|---|
+| `ConcurrentAddNew`（社内兼務追加） | `'兼務'`（固定） | — | — | — | `isConcurrent=true` |
+| `SecondmentInNewSF`（本務出向受入・SF） | 空（本務） | `isSecondmentAcceptance=true` | **必須** | **必須**（SFは社員番号で名寄せ） | `isSecondmentAcceptance=true` |
+| `SecondmentInNewNonSF`（本務出向受入・非SF） | 空（本務） | `isSecondmentAcceptance=true` | **必須** | 任意（非SFは社員番号不明のケースあり） | `isSecondmentAcceptance=true` |
+| `ConcurrentSecondmentInNewSF`（兼務出向受入・SF） | `'兼務'`（固定） | `isSecondmentAcceptance=true` | **必須** | **必須** | `isConcurrent=true`（出向受入でも兼務バンド適用） |
+| `ConcurrentSecondmentInNewNonSF`（兼務出向受入・非SF） | `'兼務'`（固定） | `isSecondmentAcceptance=true` | **必須** | 任意 | `isConcurrent=true` |
+
+いずれも `positionBand` の絞り込みはなし。
+
+### 組織パネル 追加ボタン UI 仕様
+
+- 場所: キャンバス上の各組織ボックス内。ドロップダウン/分割ボタンで5種を選択
+- 起動時の初期値: `departmentCode` = その組織の externalCode、`businessUnit`〜`team` を自動セット
+- フォームは既存の `OperationFormView`（新規追加モード）を再利用

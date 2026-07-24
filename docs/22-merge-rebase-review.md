@@ -26,44 +26,31 @@ STEP1（Excel ローカル運用）で、外部から届いた要員配置デー
 ## アーキテクチャ全体像
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ UI 層                                                              │
-│   ListIntegrationButton      ─ マージ/リベース統合エントリポイント   │
-│     ├─ choose-mode ステップ  ─ 「マージ」「新バージョンに載せ替え」を選ぶ│
-│     └─ overwrite-confirm     ─ 既存の未承認セッションがあれば確認     │
-│   MergeReviewView            ─ レビュー画面本体（フィルタ・件数・履歴）│
-│     ├─ MergeReviewTable      ─ 仮想化テーブル本体（比較形式表示）     │
-│     └─ MergeReviewFooter     ─ 承認/却下/差し戻し/破棄/リリース      │
-│   MergeHistoryModal          ─ 過去のセッションの記録閲覧            │
-└──────────────────┬───────────────────────────────────────────────┘
-                   │ Zustand（useStore.ts）
-┌──────────────────▼───────────────────────────────────────────────┐
-│ Store 層（useStore.ts）                                            │
-│   pendingMerge: MergeSession | null   ─ 進行中セッション（1つのみ）  │
-│   mergeHistory: MergeHistoryEntry[]  ─ 終了したセッションの記録     │
-│   approveMergeRows / rejectMergeRows / returnMergeRows             │
-│   releaseMergeSession / discardMergeSession                        │
-└──────────────────┬───────────────────────────────────────────────┘
-                   │
-┌──────────────────▼───────────────────────────────────────────────┐
-│ Application 層（HRApplicationService）                             │
-│   acceptMergeRowsAdd / acceptMergeRowsModify / acceptMergeRowsReplace│
-│   restoreAllocationList  ─ 破棄時の完全ロールバック（1 Undoエントリ）│
-└──────────────────┬───────────────────────────────────────────────┘
-                   │
-┌──────────────────▼───────────────────────────────────────────────┐
-│ Domain 層（packages/domain/src/）                                  │
-│   importValidation.ts  ─ validateNoColumn（No.必須・重複チェック）  │
-│   diffMerge.ts          ─ computeRowDiffs（STEP2委任と共有）        │
-│   rebasePlan.ts         ─ computeRebasePlan（新Prev+旧Afterの合成）  │
-│   allocationRow.ts      ─ META_FIELDS / MERGEABLE_FIELDS            │
-└──────────────────┬───────────────────────────────────────────────┘
-                   │
-┌──────────────────▼───────────────────────────────────────────────┐
-│ Infrastructure 層（infrastructure/workspace/）                     │
-│   PersistedPayload.pendingMerge / mergeHistory                     │
-│   （専用の永続化ストアは作らず、既存の autosave payload に同居）    │
-└──────────────────────────────────────────────────────────────────┘
+UI 層
+  ListIntegrationButton  ─ マージ/リベース統合エントリポイント
+    ├─ choose-mode ステップ  ─「マージ」「新バージョンに載せ替え」を選ぶ
+    └─ overwrite-confirm     ─ 既存の未承認セッションがあれば確認
+  MergeReviewView  ─ レビュー画面本体（フィルタ・件数・履歴）→ MergeReviewTable（仮想化・比較形式）+ MergeReviewFooter（承認/却下/差し戻し/破棄/リリース）
+  MergeHistoryModal  ─ 過去のセッションの記録閲覧
+       │ Zustand（useStore.ts）
+Store 層（useStore.ts）
+  pendingMerge: MergeSession | null  ─ 進行中セッション（1つのみ）
+  mergeHistory: MergeHistoryEntry[]  ─ 終了したセッションの記録
+  approveMergeRows / rejectMergeRows / returnMergeRows / releaseMergeSession / discardMergeSession
+       │
+Application 層（HRApplicationService）
+  acceptMergeRowsAdd / acceptMergeRowsModify / acceptMergeRowsReplace
+  restoreAllocationList  ─ 破棄時の完全ロールバック（1 Undoエントリ）
+       │
+Domain 層（packages/domain/src/）
+  importValidation.ts  ─ validateNoColumn（No.必須・重複チェック）
+  diffMerge.ts          ─ computeRowDiffs（STEP2委任と共有）
+  rebasePlan.ts         ─ computeRebasePlan（新Prev+旧Afterの合成）
+  allocationRow.ts      ─ META_FIELDS / MERGEABLE_FIELDS
+       │
+Infrastructure 層（infrastructure/workspace/）
+  PersistedPayload.pendingMerge / mergeHistory
+  （専用の永続化ストアは作らず、既存の autosave payload に同居）
 ```
 
 ---
@@ -113,18 +100,7 @@ interface MergeHistoryEntry {
 
 ## 行の状態遷移（1段階承認）
 
-```
-                    ┌──────────┐
-   ┌──────────────► │ pending  │ ◄──────────────┐
-   │                └────┬─────┘                │
-   │       ┌──────────────┼──────────────┐       │
-   │       ▼              ▼              ▼       │ セッション破棄
-   │  承認（committed/  却下（rejected）  差し戻し   │ （baselineへ
-   │  confirmed）        データ変更なし  （returned） │  完全ロールバック）
-   │  実データに反映      終端状態        データ変更なし │
-   │                                     終端状態  │
-   └─────────────────────────────────────────────┘
-```
+`pending` から3方向に遷移し、いずれも終端状態（`committed`/`confirmed` は実データに反映、`rejected`/`returned` はデータ変更なし）。セッション破棄はどの状態からでも `baselineAllocationList` へ完全ロールバックする。
 
 - **added/modified**: 承認 → `committed`（実データに反映）／却下 → `rejected`／差し戻し → `returned`
 - **removed**（取り込み元にない行）: 承認に相当する操作は「確認」のみ → `confirmed`（データ変更なし）
@@ -134,97 +110,20 @@ interface MergeHistoryEntry {
 
 ---
 
-## 3. 設計の経緯（何を、なぜ変えたか）
+## 3. 主要な決定
 
-この機能は最初のプラン承認後も、実装者からの疑問・利用シーンの深掘りで何度も設計が変わっている。
-以下は時系列で見た主要な転換点。
+実装者からの疑問・利用シーンの深掘りを経て、当初プランから以下の点が確定している。
 
-### No.（Excel No.列）が唯一の正式なキー
-
-当初 `groupEmployeeId + departmentCode` をマッチングキーと想定していたが、これは正式なIDではなく、
-運用上は Excel の **No.列** が唯一の一意キーとして扱われていることが判明した。
-取り込み元ファイルは「No.が全行に存在し、重複がないこと」を事前にブロッキングチェックする
-（`validateNoColumn`）。
-
-### 削除は絶対に行わない
-
-退職者も行削除ではなく退職フラグで表現する運用のため、「取り込み元にない行」（`removed` kind）は
-自動削除の対象にしない。マージ・リベースどちらでも「確認のみ」（データ変更なしの `confirmed`）に
-とどめる。
-
-### ステージング → 1段階承認への回帰
-
-最初は Git のステージング（`git add` して `git commit`）を模した2段階（ステージング→コミット）で
-実装した。コミット前に何度でも差し戻し・編集できる安全性を狙ったが、実際に使ってみると
-「リリースが活性化しない」（ステージングしただけでコミットし忘れる）「コミットのイメージが難しい」
-という指摘が繰り返された。中間状態が2つ以上あるとかえって分かりにくくなる、という反省を踏まえ、
-**1段階承認**（承認した瞬間に実データへ反映。差し戻したい行は単に承認せず残す）に単純化した。
-承認前の `incomingRow` インライン編集で「直してから確定」のニーズはカバーできている。
-
-### 破棄は git の `merge --abort` と同じ意味に
-
-1段階承認にしたことで「破棄」の意味が曖昧になった。当初は「セッションの追跡情報を消すだけ、
-承認済みの変更は実データに残る」という実装だったが、これは実質ワークアラウンドだった。
-「破棄する操作には、それまで仮で決めたものもロールバックしたいと自然と思う」という指摘を受け、
-セッション開始直後（リベースの自動反映より前）に `allocationList` のスナップショットを取っておき、
-破棄時はそこへ完全ロールバックするよう作り直した（`HRApplicationService.restoreAllocationList`）。
-ステージングは再導入せず、UIは1段階承認のまま、破棄だけを本物のロールバックにした。
-
-### 行レベルの結果を3択に拡張（承認・却下・差し戻し）
-
-「担当者に、これだけ直しておいてと渡して、再提出されたものだけ取り込みたい」という運用ニーズから、
-GitHubのPRレビュー（Approve / Close without merging / Request changes）に相当する3択に拡張した。
-差し戻し先の特定には新しい紐付け構造を作らず、分割エクスポート時点で既に実名が入っている
-`assignee` フィールドをそのまま使っている。再提出ファイルを「以前差し戻した行への回答」として
-自動連携する仕組みは意図的に作っていない（次にその担当者のファイルが来ても普通の新規マージとして
-扱えば運用は回る、というスコープ判断）。
-
-### 表示形式は「比較形式」、列順はGitの「ours/theirs」に寄せる
-
-レビュー画面の表示は一度「Excel形式」（取り込み値列群・現在値列群を左右に並べる side-by-side、
-列順は現在値=右・取り込み値=左）で作ったが、「比較形式（`UnifiedReviewView` の diff モードと同じ、
-1フィールド1列で変更前後をスタック表示）にしてほしい」という指摘で作り直した。列数が半分になり、
-仮想化とも相性がよい。なお列順（取り込み値が左・現在値が右）は、他画面のPrev/After比較の慣習
-（旧→左・新→右）とは逆にしている。ここはPrev/Afterではなく Git の「ours/theirs」に近い概念だから、
-という位置づけ。
-
-### 取り込み対象フィールドの拡張とSTEP2との共存
-
-当初はポジション・組織などの `FIELD_METADATA`（before/afterペアを持つ業務フィールド）しか
-差分検出・反映していなかったが、「ID・氏名・異動事由・メモも取り込み対象にしてほしい」という
-指摘で `META_FIELDS`（before/afterペアを持たない単一値フィールド）を追加し、
-`MERGEABLE_FIELDS = META_FIELDS + FIELD_METADATA.after` として拡張した。
-
-ここで重要なのは、差分計算の中核関数 `computeRowDiffs`（`packages/domain/src/diffMerge.ts`）が
-**STEP2の委任ワークフロー**（`apps/server/src/routes/submissions.ts` の `mergeSubmission`）とも
-共有されている点。STEP2側のデフォルト挙動（`FIELD_METADATA` のみを差分対象にする）を変えないよう、
-`computeRowDiffs` に第4引数 `diffFields`（省略可）を追加してオプトインにした。STEP1のマージだけが
-明示的に `MERGEABLE_FIELDS` を渡す。vitestの既存テスト（`non-DIFF_FIELDS（rowId・userId）は
-changes に含まれない`）がSTEP2のデフォルト経路を今も保証している。
-
-### 仮想化・列順の実務的な調整
-
-「この表は３万行の時も大丈夫なように仮想化されてますか？」という指摘で、`UnifiedTable.tsx` と
-同じ手動仮想化（累積高さ配列 + 二分探索 + 前後パディング行）を追加した。リベースは全社規模の
-差し替えを扱いうるため、マージ（担当者1人分の提出物）ほど行数が小さいとは限らない、という理由。
-
-またメタフィールド（ID・氏名・異動事由・メモ）は業務フィールド（30列超）の後ろに置くと
-画面の遠く右側に埋もれて見えなくなるため、**メタフィールドを列の先頭**に配置し、ヘッダーの色も
-分けた（紫＝メタ情報、藍＝業務フィールド）。
-
-### インポートプレビュー・オプション選択画面の廃止
-
-初期実装では、ファイル取り込み後に差分プレビュー（`RowDiffTable`）とインポートオプション選択
-（全件置換/新規追記・担当者情報の上書き/保持）の画面を挟んでいたが、どちらも「マージレビュー画面で
-十分」「オプションはデフォルト固定でいい」という指摘で廃止した。インポートオプションは
-`FIXED_IMPORT_MODE='replace-all'` / `FIXED_ASSIGNEE_MODE='overwrite'` に固定している。
-
-### セッション終了時の履歴記録
-
-「結果が消えてしまうと担当者間のフォローが難しい」という指摘から、セッションが終了する
-（リリース or 破棄）たびに `MergeHistoryEntry` を記録するようにした。STEP1にはサーバーも
-正式な監査基盤もないため、行キー・種別・最終結果（反映/確認/却下/差し戻し/未解決のまま終了）・
-差し戻し先の担当者名だけを持つ軽量なサマリーにとどめている。
+- **マッチングキーは No.（Excel No.列）**。`groupEmployeeId + departmentCode` は正式な ID ではないため不採用。取り込み元ファイルは「No.が全行に存在し重複がないこと」を事前にブロッキングチェックする（`validateNoColumn`）
+- **削除は絶対に行わない**。退職者も行削除ではなく退職フラグで表現する運用のため、「取り込み元にない行」（`removed` kind）は自動削除せず「確認のみ」（データ変更なしの `confirmed`）にとどめる
+- **1段階承認**（ステージングは再導入しない）。承認した瞬間に実データへ反映し、差し戻したい行は単に承認せず残す。承認前の `incomingRow` インライン編集で「直してから確定」のニーズをカバーする
+- **破棄は完全ロールバック**（git の `merge --abort` 相当）。セッション開始直後に `allocationList` のスナップショットを取り、破棄時はそこへ戻す（`HRApplicationService.restoreAllocationList`）。「承認済みの変更は実データに残る」ワークアラウンドは不採用
+- **行レベルの結果は3択**（承認・却下・差し戻し、GitHub PR レビュー相当）。差し戻し先の特定は既存の `assignee` フィールドを流用し、新しい紐付け構造は作らない。再提出ファイルの自動連携（「差し戻した行への回答」検出）も作らない
+- **表示形式は比較形式**（`UnifiedReviewView` の diff モードと同じ1フィールド1列スタック表示）。列順（取り込み値=左・現在値=右）は Prev/After の慣習とは逆に、Git の「ours/theirs」に寄せている
+- **差分対象フィールドは `MERGEABLE_FIELDS`**（`META_FIELDS` + `FIELD_METADATA.after`）まで拡張。中核関数 `computeRowDiffs`（`packages/domain/src/diffMerge.ts`）は STEP2 の委任ワークフロー（`mergeSubmission`）とも共有されているため、第4引数 `diffFields`（省略可）でオプトインにし、STEP2 側のデフォルト（`FIELD_METADATA` のみ）は変えていない
+- **3万行想定で仮想化必須**。`UnifiedTable.tsx` と同じ手動仮想化（累積高さ配列 + 二分探索 + 前後パディング行）を追加。メタフィールド（ID・氏名・異動事由・メモ）は列の先頭に固定しヘッダー色を分離（紫＝メタ情報、藍＝業務フィールド）
+- **インポートプレビュー・オプション選択画面は廃止**。マージレビュー画面に統合し、インポートオプションは `FIXED_IMPORT_MODE='replace-all'` / `FIXED_ASSIGNEE_MODE='overwrite'` に固定
+- **セッション終了時に `MergeHistoryEntry` を記録**。行キー・種別・最終結果・差し戻し先担当者名のみを持つ軽量なサマリー（STEP1 にはサーバー監査基盤がないため）
 
 ---
 
@@ -241,8 +140,7 @@ STEP2には既に、Excel運用の「スナップショット渡し → 担当�
 | feature ブランチ | coordinator の `submission_rows` |
 | `git merge`（手動） | 親が「マージする」→ 3-way merge（snapshot/ours/theirs） |
 
-本機能（STEP1のマージ/リベースレビュー）とSTEP2の依頼モデルは、**同じ `diffMerge.ts` の
-`computeRowDiffs` を共有**しているが、以下の点で明確に異なる。
+本機能とSTEP2の依頼モデルは、**同じ `diffMerge.ts` の `computeRowDiffs` を共有**しているが、以下の点で明確に異なる。
 
 | 観点 | STEP1（本機能） | STEP2（依頼モデル） |
 |---|---|---|
@@ -253,14 +151,7 @@ STEP2には既に、Excel運用の「スナップショット渡し → 担当�
 | 途中状態の保存 | `PersistedPayload.pendingMerge`（ブラウザのみ） | `submissions` テーブル（サーバー） |
 | 履歴 | `mergeHistory`（軽量ローカルログ） | `submissions.status`・`conflict_fields`（DB） |
 
-`pendingMerge` を専用ストアではなく既存の `PersistedPayload` に同居させた設計判断は、
-**将来STEP2の「Round・Submission」的なセッション概念へ自然に拡張できるようにする**という
-意図に基づく。実際にSTEP2へ移行する際は、`pendingMerge`/`mergeHistory` のデータ構造をほぼそのまま
-`submissions` テーブルの列（`snapshot_data` 相当）にマッピングできる見込み。
-
-STEP1では「人間が1行ずつ判断する」設計にしたのは、STEP1が単一ユーザー・単一セッションのため
-Gitのような真の並行編集競合が起きないから。STEP2で真の3-way mergeが必要になるのは、複数の
-coordinatorが同時に同じRoundを編集しうるため。
+STEP1が「人間が1行ずつ判断する」設計なのは、単一ユーザー・単一セッションのため Git のような真の並行編集競合が起きないから。STEP2で自動3-way mergeが必要なのは、複数の coordinator が同時に同じ Round を編集しうるため。`pendingMerge` を専用ストアでなく既存の `PersistedPayload` に同居させたのは、将来 STEP2 の Round/Submission 的なセッション概念へ拡張しやすくする意図（`snapshot_data` 相当へほぼそのままマッピングできる見込み）。
 
 ---
 

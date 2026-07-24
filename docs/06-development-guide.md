@@ -4,265 +4,70 @@
 
 | 変更対象 | 変更ファイル |
 |---|---|
-| 要員配置リストの列定義 | `src/domain/csvImport/allocationList/labels.ts` の `ALLOCATION_LIST_FIELDS` |
-| after / prev* の対応表 | `src/domain/allocationRow.ts` の `BEFORE_AFTER_FIELD_PAIRS` |
-| 組織CD一覧の列 | `src/infrastructure/excelImport.ts` の `parseOrgMaster` |
-| エクスポート列 | `src/infrastructure/excelIO.ts` の `EXPORT_FIELDS` |
+| 要員配置リストの列定義 | `packages/domain/src/csvImport/allocationList/labels.ts` の `ALLOCATION_LIST_FIELDS` |
+| after / prev* の対応表 | `packages/domain/src/allocationRow.ts` の `BEFORE_AFTER_FIELD_PAIRS` |
+| 組織CD一覧の列 | `apps/web/src/infrastructure/excel/shared/orgMasterParser.ts` の `parseOrgMaster` |
+| エクスポート列 | `apps/web/src/infrastructure/excel/zip/core.ts` の `EXPORT_FIELDS`（`ALLOCATION_LIST_FIELDS` の re-export） |
 
 ---
 
-## 操作ハンドラーの追加（最重要）
+## 新しい業務操作の追加
 
-新しい意味のある HR 操作（例: `MoveToOrg`「異動」）を追加する手順。
+`EditCommand` の実装手順・登録順序（`EditPattern` → 検出 → `EditCommand` → バリデーション →
+`EditOperation` → `SummaryView.tsx` → `EditScenario`）は root `CLAUDE.md` の
+「業務操作の追加方法」に一本化されている。**このドキュメントでは繰り返さない。** 実装するときはまずそちらを読む。
 
-### Step 1: ハンドラーファイルを作成
-
-`src/domain/commands/handlers/moveToOrg.ts` を作成する。
-
-```typescript
-import type { EditCommand, DomainContext, OperationResult, ValidationResult } from '../types'
-import { ok, failField } from '../types'
-
-// 操作が必要とするパラメータ
-interface MoveToOrgParams {
-  userId:         string
-  toOrgCode:      string   // 異動先組織コード
-  transferReason: string
-  effectiveDate:  string
-}
-
-export class MoveToOrgOperation implements EditCommand {
-  readonly kind = 'MoveToOrg'
-
-  constructor(private readonly params: MoveToOrgParams) {}
-
-  // 純粋関数: 現在の状態に対して操作が有効かを検証
-  validate(ctx: DomainContext): ValidationResult {
-    const { userId, toOrgCode } = this.params
-    const rows = ctx.allocationList.filter(r => r.userId === userId)
-    if (rows.length === 0) return failField('userId', `ユーザー ${userId} が見つかりません`)
-
-    const orgExists = ctx.afterOrganizations.some(
-      o => o.externalCode === toOrgCode || o.id === toOrgCode
-    )
-    if (!orgExists) return failField('toOrgCode', `組織コード ${toOrgCode} が見つかりません`)
-
-    return ok()
-  }
-
-  // 純粋関数: 新しい allocationList を返す
-  apply(ctx: DomainContext): OperationResult {
-    const { userId, toOrgCode, transferReason } = this.params
-    const updatedList = ctx.allocationList.map(row => {
-      if (row.userId !== userId || row.concurrentType === '兼務') return row
-      return { ...row, departmentCode: toOrgCode, transferReason }
-    })
-    return {
-      updatedList,
-      label: `異動: ${userId} → ${toOrgCode}`,
-    }
-  }
-}
-```
-
-### Step 2: UI から呼ぶ（フォームコンポーネント内）
-
-```typescript
-import { MoveToOrgOperation } from '../domain/commands/handlers/moveToOrg'
-import { useStore } from '../store/useStore'
-
-function MoveToOrgForm({ userId, onClose }) {
-  const { executeOperation } = useStore()
-
-  const handleSubmit = (toOrgCode, transferReason) => {
-    const op = new MoveToOrgOperation({ userId, toOrgCode, transferReason, effectiveDate })
-    const result = executeOperation(op)
-    if (!result.ok) {
-      // エラー表示
-      showErrors(result.errors)
-      return
-    }
-    onClose()
-  }
-  // ...
-}
-```
-
-### Step 3: AI から呼ぶ
-
-`aiTools.executeOperation(op)` を使う。AI は自然言語から userId・toOrgCode を抽出して渡す。
-
-### Step 4: テストを書く
-
-```typescript
-// tests/operations/moveToOrg.test.ts
-import { runOperationScenarios } from '../helpers/operationRunner'
-import { MoveToOrgOperation } from '../../src/domain/commands/handlers/moveToOrg'
-
-const ctx = {
-  allocationList:     [/* テスト用 AllocationRow */],
-  afterOrganizations: [{ id: 'ORG_A', externalCode: 'A001', ... }],
-  codeLists:          EMPTY_CODE_LISTS,
-}
-
-test('validate: 存在しない userId は失敗', () => {
-  const op = new MoveToOrgOperation({ userId: 'NONE', toOrgCode: 'A001', ... })
-  expect(op.validate(ctx).ok).toBe(false)
-})
-
-test('apply: 本務行の departmentCode が更新される', () => {
-  const op = new MoveToOrgOperation({ userId: 'U001', toOrgCode: 'A001', ... })
-  const result = op.apply(ctx)
-  const row = result.updatedList.find(r => r.userId === 'U001')
-  expect(row?.departmentCode).toBe('A001')
-})
-```
+TDD での進め方（テストヘルパー・`OperationScenario` の書き方）は `docs/07-tdd-guide.md` を参照。
 
 ---
 
 ## バリデーションルールの追加
 
-`src/domain/validation/validateRow.ts` にルール関数を追加する。
+新しいバリデーションは `packages/domain/src/rules/field.ts`（`FIELD_RULES` / エイリアス `FIELD_CONSTRAINTS`）に宣言を追加するのが基本。
+W系（ワーニング）のようにマスタ照合だけで表現できないルールは
+`packages/domain/src/rules/row/`（単行スコープ）または `packages/domain/src/rules/interRow/`（行間スコープ）に
+`RowRule` / `InterRowRule` として実装する。
 
-### 追加例: 兼務行に兼務理由が必須
-
-```typescript
-function validateConcurrentReason(row: AllocationRow): ValidationIssue[] {
-  if (row.concurrentType === '兼務' && !row.concurrentReason) {
-    return [{ field: 'concurrentReason', level: 'error', message: '兼務の場合は兼務理由が必須です' }]
-  }
-  return []
-}
-
-// validateRow() のリストに追加
-export function validateRow(row, orgs, codeLists): ValidationIssue[] {
-  return [
-    ...validateRequiredAfterFields(row),
-    ...validateDepartmentCode(row, orgs),
-    ...validateBandChangeReason(row),
-    ...validateSecondmentConsistency(row),
-    ...validateConcurrentReason(row),  // ← 追加
-  ]
-}
-```
-
-ルール関数を追加するだけで、Web UI（RowEditorPanel）と AI（validateOperation）の両方で自動的に使われる。
+設計の詳細（3軸宣言・3フェーズパイプライン・系統一覧）は `docs/18-domain-field-rules.md` を参照。
+ルール関数を追加するだけで、Web UI（フォーム）と AI（`propose_*` ツール）の両方で自動的に使われる — 別々に実装しない。
 
 ---
 
 ## AI Tool の追加
 
-AI が使えるツールを追加する場合は `createAITools()` の return に関数を追加する。
+AI が使えるツールを追加する場合は `apps/web/src/application/aiTools/` の該当カテゴリファイル
+（`read.ts` / `write.ts` / `review.ts` / `diagnose.ts`）の `*Methods` ファクトリ関数に追加する。
+`HRApplicationService` の既存メソッドに委譲し、ロジックを重複して書かない。
 
-### 追加例: 異動候補の提案
+### 追加例: 異動候補の提案（`write.ts`）
 
 ```typescript
-// src/application/aiTools.ts 内に追加
 function suggestTransferTargets(userId: string): PersonSearchResult[] {
   const rows = getPersonRows(userId)
   if (rows.length === 0) return []
   const currentBand = rows[0].band
   // 同バンドで空き組織を返す（例）
-  return findPersons({}).filter(p => p.orgCode !== rows[0].departmentCode)
-    .slice(0, 5)
+  return findPersons({}).filter(p => p.orgCode !== rows[0].departmentCode).slice(0, 5)
 }
 
-// createAITools() の return に追加
+// createWriteMethods() の return に追加
 return { ..., suggestTransferTargets }
 ```
 
----
-
-## パターン実装の追加（Pattern Detection）
-
-操作のパターン判定を追加する。AI が「この人は出向パターンっぽい」と判定するために使う。
-
-### インターフェース
-
-```typescript
-// src/domain/operationPatterns/types.ts
-interface IOperationPattern {
-  match(rows: AllocationRow[]): PatternMatchResult  // 純粋関数
-  apply(rows, values): AllocationRow[]               // 純粋関数
-}
-```
-
-### 追加例: 出向パターン
-
-```typescript
-// src/domain/operationPatterns/secondmentPattern.ts
-export const secondmentPattern: IOperationPattern = {
-  id: 'secondment',
-  name: '出向',
-  requiredRowCount: 2,
-
-  match(rows) {
-    const hasSecondment = rows.some(r => r.employmentType === '出向')
-    return {
-      matched:    hasSecondment,
-      confidence: hasSecondment ? 0.9 : 0.0,
-      mismatches: hasSecondment ? [] : ['出向行が見つかりません'],
-    }
-  },
-
-  apply(rows, values) {
-    // rows の after フィールドを values で更新して返す
-    return rows.map(r => ({ ...r, ...values }))
-  }
-}
-```
-
-### HRApplicationService に登録
-
-```typescript
-// src/infrastructure/container.ts（または main.tsx）
-appService.registerPatterns([secondmentPattern, ...])
-```
+LLM に見せるツール定義（名前・パラメータ schema・`kind`）は別レイヤーの
+`apps/web/src/infrastructure/ai/toolRegistry/` に追加する。ツール種別（read/render/navigate/execute/confirm）の
+判断基準は root `CLAUDE.md` の「AI ツール」セクションを参照。
 
 ---
 
-## SuccessFactors アダプターの追加（将来）
+## パターン検出（AI が操作パターンを判定する仕組み）
 
-### Step 1: データソースを実装
+「この人は出向パターンっぽい」といった変更種別の自動判定は
+`packages/domain/src/patterns/defs/`（`jobClassification` / `position` / `person` / `secondment` / `legacy` ごとに分割）の
+`detect()` 純粋関数として実装されており、`editPatternMatcher.ts` が集約する。
 
-```typescript
-// src/adapters/salesforce/SFDataSource.ts
-import type { IAllocationDataSource, AllocationData } from '../../ports'
-
-export class SFDataSource implements IAllocationDataSource {
-  constructor(private readonly apiClient: SFApiClient) {}
-
-  async load(): Promise<AllocationData> {
-    const [employees, orgs, codeLists] = await Promise.all([
-      this.apiClient.getEmployees(),
-      this.apiClient.getOrganizations(),
-      this.apiClient.getPicklists(),
-    ])
-    return {
-      allocationList:      toAllocationRows(employees),
-      beforeOrganizations: toOrganizations(orgs),
-      afterOrganizations:  toOrganizations(orgs),
-      companies:           toCompanies(orgs),
-      codeLists:           toCodeLists(codeLists),
-    }
-  }
-}
-```
-
-### Step 2: HRApplicationService に loadFromSource を追加
-
-```typescript
-// src/application/HRApplicationService.ts に追加
-async loadFromSource(source: IAllocationDataSource): Promise<void> {
-  const data = await source.load()
-  this.loadExcelData(data)  // 内部形式は同じ
-}
-```
-
-### Step 3: SetupView.tsx に選択肢を追加
-
-Excel 読み込みと SF 読み込みを選べる UI を追加するだけ。
-ドメイン層・バリデーション・AI Tools は変更不要。
+新しいパターンを追加する手順は root `CLAUDE.md`「業務操作の追加方法」の Step 1・2（`EditPattern` 追加 →
+`detect()` 実装）を参照。ここでは繰り返さない。
 
 ---
 
@@ -286,15 +91,12 @@ Excel 読み込みと SF 読み込みを選べる UI を追加するだけ。
 
 ### Q: AI と Web UI でバリデーションが違う動きをしないか？
 
-同じ `executeOperation()` を通るので同一。
-`validate()` は同じコードが呼ばれる。
+同じ `executeOperation()` を通るので同一。`validate()` は同じコードが呼ばれる。
 
 ### Q: エラーが出たとき状態はどうなる？
 
-`validate()` が失敗した場合、`checkpoint()` も `apply()` も呼ばれない。
-状態は変化しない。
+`validate()` が失敗した場合、`checkpoint()` も `apply()` も呼ばれない。状態は変化しない。
 
 ### Q: テストで Zustand や React が必要？
 
-ドメイン層（Module A〜E）と AI Tools（Module G）のテストは
-Zustand も React も不要。Node.js で純粋に動く。
+ドメイン層（`packages/domain/src/`）と AI Tools（`aiTools/`）のテストは Zustand も React も不要。Node.js で純粋に動く。

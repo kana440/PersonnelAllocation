@@ -1,6 +1,6 @@
 # ポジション・人ドメインモデルと Excel 後方互換性
 
-> 作成: 2026-05-23  
+> 作成: 2026-05-23
 > 対象: ドメイン設計・Excel インポート/エクスポート実装者
 
 ---
@@ -12,8 +12,10 @@
 | エンティティ | ドメインキー | 説明 |
 |------------|------------|------|
 | **ポジション** | `positionCode` | 組織の中の「席」。人がいなくても存在できる |
-| **人（メンバー）** | `groupEmployeeId` | 従業員。ポジションがなくても組織にいられる |
+| **人（メンバー）** | `groupEmployeeId`（= `userId`） | 従業員。ポジションがなくても組織にいられる |
 | **配属** | — | ポジションと人の 1:1 紐付け関係 |
+
+`AllocationRow` の主要フィールド（`rowId` / `positionCode` / `userId` / `departmentCode` / `prevXxx` 等）はルート `CLAUDE.md`「中心データ型: AllocationRow」節を参照。
 
 ---
 
@@ -41,8 +43,7 @@ Excel の 1 行は「ポジション情報＋人情報」の合体行。ドメ�
 
 ## 3. フィールドの色分け（FieldBinding）
 
-各フィールドはポジション・人・配属・メタのいずれかに属する。
-操作時（移動・削除・紐付け解除）の挙動がこの分類で決まる。
+各フィールドはポジション・人・配属・メタのいずれかに属する。操作時（移動・削除・紐付け解除）の挙動がこの分類で決まる。
 
 ```typescript
 type FieldBinding =
@@ -63,64 +64,24 @@ type FieldBinding =
 | `allocation` | — | — | **リセット** | リセット | リセット |
 | `meta` | コピーしない | コピーしない | 残る | 残る | 残る |
 
-### フィールド分類（暫定・後から整理予定）
+### フィールド分類の代表例（正確な一覧は `allocationRow.ts` の `FIELD_METADATA` 参照）
 
-```typescript
-// src/domain/allocationRow.ts に実装予定
-export const FIELD_METADATA: ReadonlyArray<{
-  after:   keyof AllocationList
-  before:  keyof AllocationList
-  binding: FieldBinding
-}> = [
-  // ── position ────────────────────────────────────────────────
-  { after: 'positionCode',               before: 'prevPositionCode',               binding: 'position' },
-  { after: 'localJobTitle',              before: 'prevLocalJobTitle',              binding: 'position' },
-  { after: 'officialPositionCode',       before: 'prevOfficialPositionCode',       binding: 'position' },
-  { after: 'departmentCode',             before: 'prevDepartmentCode',             binding: 'position' },
-  { after: 'managerPositionCode',        before: 'prevManagerPositionCode',        binding: 'position' },
-  { after: 'positionBand',               before: 'prevPositionBand',               binding: 'position' },
-  { after: 'positionUnionFlag',          before: 'prevPositionUnionFlag',          binding: 'position' },
-  { after: 'positionDiscretionaryWorkFlag', before: 'prevPositionDiscretionaryWorkFlag', binding: 'position' },
-  { after: 'trainingPositionFlag',       before: 'prevTrainingPositionFlag',       binding: 'position' },
-  { after: 'jobFamily',                  before: 'prevJobFamily',                  binding: 'position' },
-  { after: 'jobType',                    before: 'prevJobType',                    binding: 'position' },
-  { after: 'businessUnit',              before: 'prevBusinessUnit',               binding: 'position' },
-  { after: 'division',                   before: 'prevDivision',                   binding: 'position' },
-  { after: 'subDivision',               before: 'prevSubDivision',               binding: 'position' },
-  { after: 'group',                      before: 'prevGroup',                      binding: 'position' },
-  { after: 'team',                       before: 'prevTeam',                       binding: 'position' },
-  { after: 'location',                   before: 'prevLocation',                   binding: 'position' },
-  { after: 'costCenter',                 before: 'prevCostCenter',                 binding: 'position' },
+| binding | 代表フィールド |
+|---|---|
+| `position` | positionCode, localJobTitle, officialPositionCode, departmentCode, managerPositionCode, positionBand, jobFamily, jobType, businessUnit〜team, location, costCenter |
+| `person` | employmentType, band, payGrade, unionFlag, discretionaryWorkFlag, nonUnionAgreementFlag, leaveOfAbsenceSign |
+| `allocation` | concurrentType, concurrentReason, secondmentFromCompany, secondmentFromEmployeeNumber, secondmentToCompany, managerName |
+| `meta`（before 対応なし・行固有） | transferReason, memo, promotionSign, demotionReason, payGradeChangeSign, no, exclusionReason |
 
-  // ── person ──────────────────────────────────────────────────
-  { after: 'employmentType',             before: 'prevEmploymentType',             binding: 'person' },
-  { after: 'band',                       before: 'prevBand',                       binding: 'person' },
-  { after: 'payGrade',                   before: 'prevPayGrade',                   binding: 'person' },
-  { after: 'unionFlag',                  before: 'prevUnionFlag',                  binding: 'person' },
-  { after: 'discretionaryWorkFlag',      before: 'prevDiscretionaryWorkFlag',      binding: 'person' },
-  { after: 'nonUnionAgreementFlag',      before: 'prevNonUnionAgreementFlag',      binding: 'person' },
-  { after: 'leaveOfAbsenceSign',                  before: 'prevLeaveOfAbsenceSign',                  binding: 'person' },
-
-  // ── allocation ──────────────────────────────────────────────
-  { after: 'concurrentType',             before: 'prevConcurrentType',             binding: 'allocation' },
-  { after: 'concurrentReason',           before: 'prevConcurrentReason',           binding: 'allocation' },
-  { after: 'secondmentFromCompany',      before: 'prevSecondmentFromCompany',      binding: 'allocation' },
-  { after: 'secondmentFromEmployeeNumber', before: 'prevSecondmentFromEmployeeNumber', binding: 'allocation' },
-  { after: 'secondmentToCompany',        before: 'prevSecondmentToCompany',        binding: 'allocation' },
-  { after: 'managerName',                before: 'prevManagerName',                binding: 'allocation' },
-]
-// meta フィールド（before対応なし・行固有）
-// transferReason, memo, promotionSign, demotionReason, payGradeChangeSign, no, exclusionReason
-```
-
-> **TODO**: 各フィールドの binding 分類は暫定。実際の HR 運用ルールに合わせて後から修正する。  
-> `fieldsByBinding(b)` ヘルパー関数を使って操作側から宣言的に取得できる設計にしておく。
+> **TODO**: 各フィールドの binding 分類は暫定。実際の HR 運用ルールに合わせて後から修正する（`fieldsByBinding(b)` ヘルパーで宣言的に取得できる設計にしてある）。
 
 ---
 
-## 4. 各操作とAllocationRowへの影響
+## 4. 各操作と AllocationRow への影響
 
-### 操作1: [×] 人を外す（ポジション↔人の紐付け解除）
+空きポジションへの配属・空席化の詳細な行遷移（人基軸マージ・`leaveSourceVacant`・バンド上書き）は `docs/10-vacant-position.md` を正とする。要点のみ:
+
+### 操作1: 人を外す（ポジション↔人の紐付け解除）
 
 **Before**: 在席行 `{ positionCode: 'A', userId: 'P', ... }`
 
@@ -129,66 +90,24 @@ export const FIELD_METADATA: ReadonlyArray<{
 | 行 | 変化 |
 |----|------|
 | 空席行（元の行を更新） | `userId = undefined`、`allocation` フィールドをリセット |
-| 未アサイン行（新規追加） | `positionCode = undefined`、`position` フィールドをblank、`person` フィールドは保持、`departmentCode = 同じ` |
+| 未アサイン行（新規追加） | `positionCode = undefined`、`position` フィールドをblank、`person` フィールドは保持 |
 
-**例外**: その人が同組織に兼務等の別行を既に持つ場合は未アサイン行の追加不要。
+**例外**: その人が同組織に兼務等の別行を既に持つ場合は未アサイン行の追加不要。実装: `UnassignPersonFromPositionOperation`（`commands/handlers/positionOps.ts`）。
 
----
+### 操作2: 空席ポジションへの配属（人基軸マージ）
 
-### 操作2: 空席ポジションに人をドロップ（配属）
-
-**Case A: 人が未アサイン行を持つ**
-
-| 行 | 変化 |
-|----|------|
-| 空席行 | `userId` をセット、`person` フィールドを未アサイン行からコピー、`allocation` フィールドを初期化、`managerName` を managerPositionCode から再導出 |
-| 未アサイン行 | **削除** |
-
-**Case B: 人が別の在席行を持つ**
-
-| 行 | 変化 |
-|----|------|
-| 空席行 | `userId` をセット、`person` フィールドを元の在席行からコピー、`allocation` フィールドを初期化、`managerName` を managerPositionCode から再導出 |
-| 元の在席行 | `userId = undefined`、`allocation` フィールドをリセット（空席化） |
-
----
+`assignPersonToVacant(personRow, vacantRow, ctx, options)` が実行する。**生き残るのは人行、削除されるのは空席行**（人は継続的に存在し、ポジションは人に紐づくという業務実態に合わせた設計）。ケース分岐（未アサイン人 / 在籍人・`leaveSourceVacant` の有無）は `docs/10-vacant-position.md` を参照。
 
 ### 操作3: ポジション新規作成
 
-1. **作成ボタン** → 内部採番 `positionCode`（`_pos_xxxx`）+ `userId = undefined` の空席行を追加
-   - `departmentCode` から `orgMasterEntries` を参照して `businessUnit`〜`team` を自動補完
-2. **人の配属** → 操作2（空席にドロップ）と同じフロー
-
-> 「1ドラッグで作成+配属」のUI（旧実装）はこの2ステップに分離する。
-
----
+1. **作成ボタン** → 内部採番 `positionCode`（`_pos_xxxx`）+ `userId = undefined` の空席行を追加（`departmentCode` から `orgMasterEntries` を参照して `businessUnit`〜`team` を自動補完）
+2. **人の配属** → 操作2（空席への配属）と同じフロー
 
 ### 操作4: 席ごと別組織移動（左枠ドラッグ）
 
 - 行の `departmentCode` を変更し、`businessUnit`〜`team` を `orgMasterEntries` から自動補完
-- `managerPositionCode` は意図的に維持する（担当者が手動で更新することを想定）
-- 行数は変わらない
-- 人も一緒に移動する
-
-**空席ポジションのドラッグ対応**（`isVacant && !!positionCode`）:
-- `positionCode` がある空席行もドラッグ可能（カーソル: `cursor-grab`）
-- **別組織パネルにドロップ** → 操作4と同じ（`departmentCode` 変更）
-- **別のポジションカードにドロップ** → `SetPositionManagerOperation`（`managerPositionCode` 変更）でレポートライン調整
-  - ドラッグデータは `dragType: 'position'` + `fromRowId` で識別
-  - 在籍カード上にドロップした場合も同じく `handleDropPositionOnPosition` が処理
-
----
-
-### 操作4b: ポジションのレポートライン変更（カード間ドロップ）
-
-空席・在籍問わずポジションコードを持つ行を、別のポジションカードにドロップすると上司ポジションを変更できる。
-
-| ドラッグ元 | ドロップ先 | 処理 |
-|---|---|---|
-| 空席カード（`dragType: 'position'`） | 任意のカード | ドロップ先カードの `positionCode` をドラッグ元行の `managerPositionCode` に設定 |
-| 在籍カード（`dragType: 'person'`） | 別の在籍カード（上端 35%） | 従来の人の移動フロー（`DragIntentPicker`） |
-
----
+- `managerPositionCode` は意図的に維持する（担当者が手動で更新することを想定）。行数は変わらず、人も一緒に移動する
+- 空席ポジション（`isVacant && !!positionCode`）もドラッグ可能。別組織パネルにドロップ → 上記と同じ。別のポジションカードにドロップ → `SetPositionManagerOperation` でレポートライン調整（`dragType: 'position'` + `fromRowId` で識別）
 
 ### 操作5a: ポジション削除
 
@@ -199,8 +118,6 @@ export const FIELD_METADATA: ReadonlyArray<{
 
 削除済みポジションは「削除済みパネル」から復活可能（別の組織の空席に再配属、または削除フラグ解除で復元）。
 
----
-
 ### 操作5b: 人削除
 
 | 条件 | 処理 |
@@ -208,12 +125,7 @@ export const FIELD_METADATA: ReadonlyArray<{
 | `prevUserId` が空（今セッションで追加した人） | 行を**物理削除**。Undo で復元可能 |
 | `prevUserId` あり（既存社員） | 行に削除フラグ（ソフトデリート）。ポジションは空席化。Excel 出力: 移動区分=削除 |
 
-**物理削除のリスク**:
-- セッション中は Undo で復元できる
-- 確定出力・再インポート後は復元不可（再追加が必要）
-- `prevUserId` がないということは「before状態にいない人」なので、before側への影響はない
-
-削除済みの人は「削除済みパネル」から有効な空席ポジションに再配属可能（`prevUserId` ありの場合のみ）。
+物理削除はセッション中は Undo で復元できるが、確定出力・再インポート後は復元不可（再追加が必要）。`prevUserId` がない = before状態にいない人なので before側への影響はない。削除済みの人は「削除済みパネル」から有効な空席ポジションに再配属可能（`prevUserId` ありの場合のみ）。
 
 ---
 
@@ -243,11 +155,11 @@ export const FIELD_METADATA: ReadonlyArray<{
 |---|---|---|
 | 1 | `FIELD_METADATA` を `allocationRow.ts` に追加し、`BEFORE_AFTER_FIELD_PAIRS` を置き換え | ✅ 完了 |
 | 2 | `unassignPersonFromPosition` を「1行→2行分割」モデルに修正 | ✅ 完了 |
-| 3 | `assignPersonToVacantPosition` を「未アサイン行削除 or 元在席行の空席化」に修正 | ✅ 完了 |
+| 3 | `assignPersonToVacantPosition` を人基軸マージモデルに修正 | ✅ 完了 |
 | 4 | `createAndAssignPosition` を廃止し、「ポジション作成ボタン→空席にドロップ」の2ステップUIに変更 | ✅ 完了 |
 | 5 | ポジション削除と人削除を独立した操作として実装（削除フラグ + 行分割） | ✅ 完了 |
-| 6 | Excel 出力時の `positionCode` blank 判定（`_pos_` プレフィックスチェック） | ✅ 完了（exceljs/xlsx 両エクスポーター） |
-| 7 | 各フィールドの `binding` 分類を HR 運用ルールに合わせてレビュー・確定 | 🚧 暫定のまま |
-| 8 | 削除済みパネル UI（削除済みポジション・人の復活操作） | 🚧 未着手 |
-| 9 | ポジション操作を `EditCommand` 化して Undo 対象に | 🚧 未着手 |
-| 10 | `aiTools` にポジション操作を追加（AI から呼べるように） | 🚧 未着手 |
+| 6 | Excel 出力時の `positionCode` blank 判定（`_pos_` プレフィックスチェック） | ✅ 完了 |
+| 7 | ポジション操作（作成・削除・配属・空席化）を `EditCommand` 化して Undo 対象に | ✅ 完了（`commands/handlers/positionOps.ts`） |
+| 8 | `aiTools` にポジション操作を追加（AI から呼べるように） | ✅ 完了（`application/aiTools/write.ts`: `createVacantPosition` / `assignPersonToVacantPosition` / `removePosition` 等、`read.ts`: `findVacantPositions`） |
+| 9 | 各フィールドの `binding` 分類を HR 運用ルールに合わせてレビュー・確定 | 🚧 暫定のまま |
+| 10 | 削除済みパネル UI（削除済みポジション・人の復活操作） | 🚧 未着手 |

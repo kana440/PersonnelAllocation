@@ -123,18 +123,6 @@
 - 本務出向解除（帰任）: operationId="SecondmentOutReleaseSF" or "NonSFSecondmentRelease"
 ```
 
-## 4. 未確認ルール（確認後に追加）
-
-```
-# TODO: 以下は業務確認後に追記する
-
-## 兼務の上司参照ルール
-
-## bandの有効値と意味
-```
-
----
-
 ## 4. バリデーション確認ルール（AI が必ず守ること）
 
 ```

@@ -78,29 +78,11 @@ useChatHandlers が request_structured_planning を受け取る
 
 ## 将来設計案（未実装）: Intent-First + Tier 分類
 
-> 以下は**未実装の設計案**。現在の実装（Fast Path / Structured Path）とは別物。
-> 必要に応じて将来のフェーズで実装を検討する。
-
-### 概要
-
-現在の Fast Path / Structured Path に加えて、意図分類（Intent Classifier）を前段に置き、
-ルーティングをより精密にする案。
-
-```
-Step 1: Intent Classification（第1プロンプト、ツールなし）
-  → { tier: 'guide' | 'simple_write' | 'wizard', intent, params, needsClarification }
-  
-Step 2: Tier別実行
-  Tier 1 (Guide)     : ツールなし。質問への回答・説明のみ。
-  Tier 2 (Simple)    : 1〜2往復。params が揃っていれば propose_* を直接呼ぶ。
-  Tier 3 (Wizard)    : ステップ分解。UI がステップ一覧を表示してユーザーが1つずつ承認。
-```
-
-### 実装上の前提確認が必要な事項
-
-- [ ] カスタム LLM が `response_format: json_schema` をサポートするか（非対応なら `json_object` + few-shot にフォールバック）
-- [ ] カスタム LLM の streaming 実装が tool call arguments を正しく分割するか
-- [ ] `parallel_tool_calls` オプションをサポートするか
+現在の Fast Path / Structured Path とは別に、意図分類（Intent Classifier）を前段に置いて
+`guide`（説明のみ）/ `simple_write`（1〜2往復で propose_* 直接実行）/ `wizard`（ステップ分解して1つずつ承認）
+の3段階にルーティングを精密化する案がある。未実装であり、必要になれば別途フェーズを切って検討する。
+採用時はカスタム LLM の `response_format: json_schema` 対応・streaming での tool call arguments 分割・
+`parallel_tool_calls` 対応状況を前提確認する必要がある。
 
 ---
 

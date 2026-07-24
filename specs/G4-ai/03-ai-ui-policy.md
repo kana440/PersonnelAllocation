@@ -81,42 +81,25 @@ uiCommandStore（AI → UI、一方通行キュー）
 
 formStateStore（フォーム ↔ AI、双方向）
   publish({ rowId, operationId, values })  ← フォームが変更されるたびに公開
-  snapshot                                 ← AI が ui_get_form_state で読む
-  suggestField(field, value)               ← AI が ui_suggest_form_field で書く
+  snapshot / suggestField(field, value)    ← AI が ui_get_form_state / ui_suggest_form_field で読み書き
   pendingSuggestion                        ← フォームが subscribe して handleChange に流す
 ```
 
-### AIとフォームの協調フロー
+### AIとフォームの協調フロー（例：昇格フォーム）
 
-```
-1. ユーザー「〇〇さんの昇格フォームを開いて」
-2. AI → findPersons で rowId 取得
-3. AI → ui_open_operation（operationId: 'Promotion', prefill: { ... }）
-   → uiCommandStore に dispatch
-   → PersonOperationPanel がフォームを開き、prefill 値を初期入力
-4. フォームが formStateStore に現在値を公開
-5. ユーザー「どのバンドを選べばいい？」
-6. AI → ui_get_form_state → bandRecommendations.oneStep を回答
-7. AI → ui_suggest_form_field（field: 'positionBand', value: 'M5'）
-   → formStateStore.suggestField() → フォームの handleChange に流れる
-   → onFieldChange の連動導出（band → payGrade 等）が正しく走る
-8. ユーザーが残りを確認して送信
-```
+1. AI が `findPersons` で `rowId` を取得し、`ui_open_operation` で `uiCommandStore` に dispatch
+   → `PersonOperationPanel` がフォームを開き `prefill` 値を初期入力
+2. フォームが現在値を `formStateStore` に公開し続ける
+3. ユーザーが「どのバンドを選べばいい？」→ AI が `ui_get_form_state` で `bandRecommendations.oneStep` を回答
+4. AI が `ui_suggest_form_field` で値をセット → `formStateStore.suggestField()` → フォームの `handleChange` に流れ、
+   `onFieldChange` の連動導出（band → payGrade 等）も正しく走る
+5. ユーザーが残りを確認して送信（AI は送信しない）
 
 ### AIが使えるUIツール（navigate kind — Fast Path で使用可能）
 
-| ツール | 用途 |
-|---|---|
-| `ui_set_main_view` | 組織図（canvas）／表形式（review）を切り替える |
-| `ui_set_canvas_display` | ツリー/コンパクト切替・グループ単位・旧体制比較ON/OFFをまとめて制御 |
-| `ui_show_person` | 氏名・IDで検索してキャンバス上にフォーカス |
-| `ui_focus_row` | rowId で直接フォーカス |
-| `ui_open_operation` | 操作フォームを開いて値を事前入力 |
-| `ui_get_form_state` | フォームの現在状態（入力値・推奨選択肢）を読む |
-| `ui_suggest_form_field` | フォームの特定フィールドに値をセット |
-
-> これらはUIの表示・操作補助のみ。ドメインデータは変更しない。
-> ユーザーが最終的にフォームを確認して送信することで、通常の Operation モデル経由の変更が行われる。
+現在のツール一覧は CLAUDE.md root の「navigate ツールの現在セット」参照。
+これらはUIの表示・操作補助のみ。ドメインデータは変更しない。
+ユーザーが最終的にフォームを確認して送信することで、通常の Operation モデル経由の変更が行われる。
 
 ---
 
@@ -168,21 +151,14 @@ AI がユーザーの代わりに**UI を操作する必要がある**とき。�
 
 ## 実装状況
 
-| 優先事項 | 状態 | 備考 |
-|---|---|---|
-| Operation モデルの充実（FIELD_METADATA・FieldBinding） | ✅ 完了 | `allocationRow.ts` |
-| AI チャット UI（Fast Path / Structured Path） | ✅ 完了 | `agentRunner.ts` |
-| AI への Operation 注入（agentRunner + Tool Use） | ✅ 実装済み | `toolRegistry.ts` |
-| UI ナビゲーションツール（navigate kind） | ✅ 完了 | `ui_*` プレフィックス |
-| AI ↔ フォーム双方向ブリッジ | ✅ 完了 | `uiCommandStore` / `formStateStore` |
-| AI によるポジション操作（assign / unassign 等） | 🚧 **未対応** | `aiTools` に未公開 |
+Operation モデル・Fast/Structured Path・navigate ツール・AI ↔ フォーム双方向ブリッジは実装済み。
+未対応は AI によるポジション操作（assign / unassign 等）のみ（`aiTools` に未公開。CLAUDE.md 既知未着手事項）。
 
 ---
 
 ## 将来方針（バックエンド）
 
-現在はSPAで完結するクリーンアーキテクチャを維持する。
-
-- **SuccessFactors API等のCORS問題** → バックエンドをAPIプロキシとして追加。ドメインはフロントに残す
-- **複数担当者による共同編集** → サーバー側に単一状態が必要なため、別プロジェクトとして改めて設計する。現時点では対象外
-- 現在のポート／アダプター構造は将来のバックエンド移行を考慮した設計になっており、インフラ層の差し替えでドメインを移植できる
+現在はSPAで完結するクリーンアーキテクチャを維持する。SuccessFactors API 等の CORS 問題が生じた場合はバックエンドを
+APIプロキシとして追加し、ドメインはフロントに残す。複数担当者による共同編集はサーバー側に単一状態が必要なため、
+現時点では対象外とし別プロジェクトとして改めて設計する。現在のポート／アダプター構造は将来のバックエンド移行を
+考慮した設計になっており、インフラ層の差し替えでドメインを移植できる。

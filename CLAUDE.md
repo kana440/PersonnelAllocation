@@ -746,8 +746,7 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 
 - `FieldBinding` の分類は暫定。HR 運用ルールに合わせて要レビュー
 - 削除済みパネル UI（削除済みポジション・人の復活操作）
-- AI から位置操作（positionOps）を呼べるように `aiTools.ts` に未追加
-- 本番キャンバスの React Flow (`@xyflow/react`) 移行は調査の上、見送り済み（2026-07-22）。試作コード（`experiments/reactFlowCanvas/`・`canvas/flow/`）・依存パッケージは削除済み。調査結果・技術的な知見は `docs/21-reactflow-migration-investigation.md` に記録済み。再検討する場合はまずそちらを参照
+- 本番キャンバスの React Flow (`@xyflow/react`) 移行は調査の上、見送り済み（2026-07-22）。試作コード・依存パッケージは削除済み。再検討する場合は、ノード数千件規模でのパフォーマンス（仮想化・再レンダー制御）が既存の `canvas/core/` 実装と同等以上か要検証
 
 ---
 
@@ -780,12 +779,12 @@ masters: { ...EMPTY_MASTERS, ...(serverResponse.masters as Partial<AllMasters>) 
 |---|---|---|
 | `specs/00-cross-cutting.md` | **変更種別ごとの横断的影響チェックリスト（実装時に必ず確認）** | — |
 | `specs/G1-fields/` | フィールド定義・入力種別・codeList対応 | `01-field-definitions.md` |
-| `specs/G2-domain/` | 業務ルール・バリデーション規則 | `01-business-rules.md`, `02-validation-rules.md`, `04-new-row-operations.md`, `05-operations-catalog.md` |
+| `specs/G2-domain/` | 業務ルール・バリデーション規則 | `01-business-rules.md`, `02-validation-rules.md`, `05-operations-catalog.md` |
 | `specs/G3-ui/` | UI入力補助・レビュー表示仕様 | `01-row-editor-input-spec.md`, `02-review-display-spec.md` |
-| `specs/G4-ai/` | AI Tools設計・システムプロンプト | `01-tools-spec.md`, `02-system-prompt-rules.md` |
-| `specs/G5-automation/` | GitHub Actions自動化ワークフロー | `01-github-actions-spec.md` |
+| `specs/G4-ai/` | AI Tools設計・システムプロンプト（確定版ツール一覧は`08-tool-reference.md`） | `00-design-philosophy.md`, `02-system-prompt-rules.md`, `08-tool-reference.md` |
 | `specs/G6-workflow/` | **担当者ワークフロー（分割配布・マージ・上司名補完）・連絡票ワークフロー・マージ/リベースの対話的レビュー（STEP1実装済み）** | `01-assignee-workflow.md`, `02-contact-workflow.md`, `03-merge-rebase-review.md` |
-| `specs/G7-server/` | サーバー移行仕様（Phase 1 〜 3） | `01-api-spec.md`（未作成） |
+| `specs/G7-server/` | サーバー移行仕様（DBスキーマ設計・実装済み） | `02-schema-design.md` |
+| `specs/G8-delegation/` | Round/Submission スナップショット・3-wayマージ実装詳細 | `01-snapshot-merge.md` |
 | `docs/19-contact-workflow.md` | **連絡票 実装リファレンス**（アーキテクチャ・TSV形式・アンカー/フィルタ・D&D・デバッグ） | — |
 | `docs/22-merge-rebase-review.md` | **マージ/リベースの対話的レビュー 実装リファレンス**（No.キー・1段階承認・破棄=完全ロールバック・STEP2依頼モデルとの関係） | — |
 

@@ -32,10 +32,12 @@ src/
     auth.ts             ← /api/auth
     rounds.ts           ← /api/rounds（ラウンド CRUD + Excel アップロード）
     submissions.ts      ← /api/submissions（提出・委任・3-way merge）
-    revisions.ts        ← /api/revisions（改訂履歴）
+    ai.ts               ← /api/ai（LLM プロキシ。STEP1/STEP2 共通）
+    domain.ts           ← /api/domain（読み取り専用の軽量ドメイン計算）
     admin/
       users.ts          ← /api/admin/users（ユーザー CRUD）
       positions.ts      ← /api/admin/positions（ポジション管理）
+      skills.ts         ← /api/admin/skills（AI スキル管理）
 drizzle.config.ts       ← drizzle-kit 設定（dialect: postgresql）
 data/pglite/            ← PGlite データディレクトリ（gitignore 対象）
 ```
@@ -112,12 +114,15 @@ const rows = await db.select({
 | テーブル | 用途 |
 |---|---|
 | `users` | ユーザー（id, email, name, role） |
-| `rounds` | ラウンド（作業単位。Excel ファイルを保持） |
-| `round_files` | ラウンドに紐づく Excel ファイル（base64 text） |
+| `rounds` | ラウンド（作業単位） |
+| `round_companies` | ラウンド × 会社（Round は複数会社をまとめる単位） |
+| `round_company_files` | ラウンド×会社に紐づく Excel ファイル（base64 text） |
 | `allocation_rows` | AllocationRow を JSON で保存 |
 | `submissions` | 提出・委任（3-way merge の branch 単位） |
 | `submission_rows` | Submission ごとの行スナップショット |
-| `revisions` | 改訂履歴（提出・差し戻しのログ） |
+| `notifications` | 委任・提出・差し戻し等の通知ログ |
+
+Revision（改訂履歴）管理は検討の上、実装しないことを決定済み（`docs/12-step2-requirements.md` §13 参照。確定状態は `allocation_rows` を持つ closed Round が代替する）。
 
 ## 認証 stub の使い方
 

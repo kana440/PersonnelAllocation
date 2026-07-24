@@ -12,7 +12,7 @@
 | ファイル | 対象読者 | 内容 |
 |---|---|---|
 | [01-requirements.md](./01-requirements.md) | 全員 | 要件定義。何を作るか、スコープ、ユーザー、業務ルール |
-| [02-architecture.md](./02-architecture.md) | エンジニア | クリーンアーキテクチャの層構成とデータフロー全体図 |
+| [02-architecture.md](./02-architecture.md) | エンジニア | クリーンアーキテクチャの層構成・データフロー・モジュール依存関係 |
 | [04-domain-model.md](./04-domain-model.md) | エンジニア | ポジション・人・AllocationRow の 4 状態・FieldBinding |
 | [05-operation-framework.md](./05-operation-framework.md) | エンジニア | EditCommand・EditPattern・EditScenario の設計思想と拡張手順 |
 | [06-development-guide.md](./06-development-guide.md) | エンジニア | 機能追加の具体的な手順（操作・バリデーション・AI Tool） |
@@ -21,11 +21,17 @@
 
 | ファイル | 対象読者 | 内容 |
 |---|---|---|
-| [03-modules.md](./03-modules.md) | エンジニア | モジュール一覧・依存関係・公開 API |
 | [07-tdd-guide.md](./07-tdd-guide.md) | エンジニア | 業務操作パターンの TDD ガイド |
 | [08-ai-architecture.md](./08-ai-architecture.md) | エンジニア | AI チャットの Intent-First + Tier 実行アーキテクチャ |
+| [10-vacant-position.md](./10-vacant-position.md) | エンジニア | 空席ポジションのアサイン・空席化ロジック |
 | [11-db-initialization.md](./11-db-initialization.md) | エンジニア | DB 初期化・マイグレーション（Drizzle ORM + PGlite / Aurora） |
 | [15-fullstack-typesafety.md](./15-fullstack-typesafety.md) | エンジニア | フルスタック型安全構成（Drizzle → Hono RPC → React） |
+| [16-ai-feedback-loop.md](./16-ai-feedback-loop.md) | エンジニア | AI フィードバックループ（STEP1実装済み・STEP2は構想のみ） |
+| [17-canvas-generic-tree.md](./17-canvas-generic-tree.md) | エンジニア | キャンバス汎用ツリー設計（after/before 統合・PanelTreeAdapter） |
+| [18-domain-field-rules.md](./18-domain-field-rules.md) | エンジニア | FieldRule・3層バリデーション/導出パイプライン設計 |
+| [19-contact-workflow.md](./19-contact-workflow.md) | エンジニア | 連絡票（ContactPanel）実装リファレンス |
+| [20-validation-resolution-framework.md](./20-validation-resolution-framework.md) | エンジニア | ValidationIssue・ResolutionDef の2層設計 |
+| [22-merge-rebase-review.md](./22-merge-rebase-review.md) | エンジニア | マージ/リベースの対話的レビュー 実装リファレンス |
 
 ### STEP2（サーバー移行）
 
@@ -33,20 +39,14 @@
 |---|---|---|
 | [12-step2-requirements.md](./12-step2-requirements.md) | 全員 | STEP2 サービス要件・ToBe 業務フロー |
 | [13-screen-design.md](./13-screen-design.md) | エンジニア | STEP2 画面設計・実装進捗 |
-| [14-delegation-model.md](./14-delegation-model.md) | エンジニア | 依頼・スナップショット・3-way マージモデル |
-| [09-migration-vision.md](./09-migration-vision.md) | 企画・エンジニア | 移行の背景・フェーズ設計（なぜ STEP2 が必要か） |
+| [14-delegation-model.md](./14-delegation-model.md) | エンジニア | 依頼・スナップショット・3-way マージモデル（データモデルの正） |
 
-### UI アーキテクチャ
-
-| ファイル | 対象読者 | 内容 |
-|---|---|---|
-| [17-canvas-generic-tree.md](./17-canvas-generic-tree.md) | エンジニア | キャンバス汎用ツリー設計（after/before 統合・PanelTreeAdapter・パフォーマンス） |
-
-### 課題・提案
+### 業務要件（移植判断用）
 
 | ファイル | 対象読者 | 内容 |
 |---|---|---|
-| [10-improvement-proposals.md](./10-improvement-proposals.md) | エンジニア | 既知の技術課題・改善提案 |
+| [23-org-view-edit-requirements.md](./23-org-view-edit-requirements.md) | 企画・エンジニア | STEP1組織図view/edit機能の業務要件（他ツールへの移植判断用） |
+| [24-org-view-edit-known-issues.md](./24-org-view-edit-known-issues.md) | エンジニア | 23の既知課題・保留中の設計判断 |
 
 ## 読む順番
 
@@ -63,7 +63,7 @@
 上記 1-5 に加えて:
 
 6. [12-step2-requirements.md](./12-step2-requirements.md) — STEP2 の目的と業務フロー
-7. [14-delegation-model.md](./14-delegation-model.md) — 依頼ツリーとマージの設計
+7. [14-delegation-model.md](./14-delegation-model.md) — 依頼ツリーとマージの設計（データモデルの正）
 8. [13-screen-design.md](./13-screen-design.md) — 画面一覧と実装状況
 
 ## 主要ファイルマップ（クイックリファレンス）
@@ -78,26 +78,31 @@ packages/domain/src/               ← ドメイン層（外部依存ゼロ・@p
     handlers/                           操作ハンドラー実装（DirectEdit など）
     defs/                               OperationDef 宣言（メニュー条件・フォーム定義）
   patterns/                           EditPattern 分類・差分検出
-  validation/                         バリデーション A〜W 系（純粋関数）
-  choices/                            選択肢生成・組織ツリー操作
-  masters/                            マスタデータ型定義・AllCodeLists 集約
+  rules/
+    field.ts                            FieldRule・FIELD_RULES
+    row/ interRow/                      RowRule・InterRowRule 実装
+    validate/                           バリデーション A〜W 系（純粋関数）
+    derive/                             フィールド自動導出
+    options/                            選択肢生成・組織ツリー操作
+    resolve/                            ValidationResolutionDef
+  masters/                            マスタデータ型定義・AllMasters 集約
   csvImport/                          Excel/CSV 解釈ロジック（純粋関数）
   diffMerge.ts                        3-way マージ・diff 計算（STEP2 用）
 
 apps/web/src/                      ← React Web UI（STEP1 + STEP2 共存）
   application/
     HRApplicationService.ts           Single Source of Truth（状態管理）
-    aiTools.ts                        AI 向け Tool 関数群
+    aiTools/                          AI 向け Tool 関数群（read/write/review/diagnose）
   infrastructure/
     excel/                            Excel エクスポート
     masters/                          LocalStorage 実装
-    ai/                               AI チャット実装
-    api/adminApi.ts                   STEP2 API クライアント
+    ai/                                AI チャット実装・toolRegistry/
+    api/adminApi.ts                   STEP2 API クライアント（hc<AppType>() ベース）
   components/
     admin/AdminView/                  管理画面（STEP2）
     step2/                            PortalView・SubmissionEditView など（STEP2）
     editor/                           発令編集（STEP1/STEP2 共通コア）
-    canvas/                           組織図・レポートライン
+    canvas/core/                      組織図キャンバス共通実装（PanelTreeAdapter・OrgTreeConfig）
     sidebar/                          組織・人物検索
     common/                           共通 UI パーツ
   config/features.ts                  Feature Flags（STEP1/STEP2 出し分け）
@@ -112,6 +117,8 @@ apps/server/src/                   ← STEP2 バックエンド（Hono + PGlite/
     auth.ts                           認証ルート
     rounds.ts                         Round CRUD
     submissions.ts                    Submission ライフサイクル（提出・マージ・差し戻し）
-    revisions.ts                      Revision 確定
+    ai.ts                             LLM プロキシ（STEP1/STEP2 共通）
+    domain.ts                         読み取り専用の軽量ドメイン計算
+    admin/                            ユーザー・ポジション・AIスキル管理
   auth/stub.ts                        認証スタブ（将来: SSO アダプタに差替）
 ```

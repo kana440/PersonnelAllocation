@@ -32,29 +32,18 @@ Excel にはデータは残るが「いつ・誰が・何の目的で行った�
 - **操作の実体ではない。表示・集計・メニューの語彙である。**
 - UI のバッジ・操作メニュー・レビュー件数集計に使用する。
 - Excel インポート後でも確定的に検出できることが設計上の要件。
-- 実装: `src/domain/patterns/editPatterns.ts`
+- 実装: `packages/domain/src/patterns/editPatterns.ts`
 
 ### 2. EditCommand（単行の原子操作）
 
-1 人・1 行への変更を表すオブジェクト。GoF Command パターン。
+1 人・1 行への変更を表すオブジェクト。GoF Command パターン。インターフェース定義・実装テンプレートはルート `CLAUDE.md`「単一操作の追加」節を参照（`kind` / `validate(ctx)` / `apply(ctx)`）。
 
-```typescript
-interface EditCommand {
-  readonly kind: string               // EditPattern 値（分類ラベル）
-  validate(ctx: DomainContext): ValidationResult   // EditCommand のメソッド（変更しない）
-  apply(ctx: DomainContext): OperationResult       // EditCommand のメソッド（変更しない）
-}
-```
-
-- 実装: `src/domain/commands/types.ts`（旧 `IDomainOperation`）
-- **UndoStack への差分積み上げ単位。**
-- ポートとして公開される。
-- 具体クラス（`PromotionOperation` 等）は `implements EditCommand` で実装する。
+- 実装: `packages/domain/src/commands/types.ts`（旧 `IDomainOperation`）
+- **UndoStack への差分積み上げ単位。** ポートとして公開される。
 
 ### 3. EditScenario（複合操作・入力マクロ）
 
-1 件以上の EditCommand を業務意図でまとめた複合操作。
-GoF Scenario パターン。
+1 件以上の EditCommand を業務意図でまとめた複合操作。GoF Scenario パターン。
 
 ```typescript
 interface EditScenario {
@@ -110,67 +99,13 @@ EditPattern 検出設計とバリデーション設計は **対になって機�
 
 ## 操作フロー
 
-### App ネイティブ操作（UI / AI）
+**App ネイティブ操作（UI / AI）**:
+`EditScenario`（label + EditCommand[]）→ validate（各 Command を順に検証。前 Command の適用結果を次の検証 Context に反映）→ txId 発行（同一 Scenario の全 Command に同じ txId）→ apply（順に適用。中間状態を次の Command の Context として渡す）→ `UndoStack.push`（全差分を1つの StatePatch に集約）→ emit（Zustand 再同期）。
 
-```
-UI / AI
-  → EditScenario（label + EditCommand[]）
-      ↓
-  validate（各 Command を順に検証。前 Command の適用結果を次の検証 Context に反映）
-      ↓
-  txId 発行（同一 Scenario の全 Command に同じ txId を割り当て）
-      ↓
-  apply（順に適用。中間状態を次の Command の Context として渡す）
-      ↓
-  UndoStack.push（全差分を1つの StatePatch に集約。label と txId を記録）
-      ↓
-  emit（Zustand 再同期）
-```
+**Excel インポート（後方互換）**:
+Excel（データのみ・操作メタデータなし）→ データ差分検出 → EditPattern 検出（単行・確定的）+ positionCode 継承チェーン追跡（複数行の cascade 候補）→ バリデーション（EditPattern 未検出の変更行 → エラー。リストア保証の維持）→ レビュー画面でグループ表示（確認不要・自動・全件）。
 
-### Excel インポート（後方互換）
-
-```
-Excel（データのみ・操作メタデータなし）
-  ↓
-データ差分検出
-  ↓
-EditPattern 検出（単行・確定的）
-positionCode 継承チェーン追跡（複数行の cascade 候補）
-  ↓
-バリデーション
-  EditPattern 未検出の変更行 → エラー（リストア保証の維持）
-  ↓
-レビュー画面でグループ表示（確認不要・自動・全件）
-```
-
-cascade 検出はヒューリスティックだが、**バリデーションが「検出不能なパターンを保存させない」**
-制約として機能するため、保存済みのデータは 100% 検出可能となる。
-
----
-
-## 関係図
-
-```
-                  ポートで公開
-                 ┌─────────────┐
-                 │ EditScenario   │  ← 業務意図・複合操作
-                 │ label       │
-                 │ commands[]  │
-                 └──────┬──────┘
-                        │ 1..n
-                 ┌──────▼──────┐
-                 │ EditCommand │  ← 単行の原子操作・UndoStack 差分単位
-                 │ kind:string │    (EditPattern 値を kind として持つ)
-                 │ validate()  │
-                 │ apply()     │
-                 └──────┬──────┘
-                        │ kind 属性が参照
-                 ┌──────▼──────┐
-                 │ EditPattern │  ← 分類ラベル（ポート非公開）
-                 │ 'orgTransfer'│    UI・集計・メニューの語彙
-                 │ 'promotion' │
-                 └─────────────┘
-```
+cascade 検出はヒューリスティックだが、**バリデーションが「検出不能なパターンを保存させない」**制約として機能するため、保存済みのデータは 100% 検出可能となる。
 
 ---
 
@@ -216,46 +151,13 @@ interface MultiRowOperationDef {
 
 ### overrideSectionVals によるルーティング渡し
 
-`SecondmentOutChooser` のように別ステップで入力した値を `MultiRowFormView` に渡す場合、
-`PanelView` の `{ multiRowDef; rowId; overrideSectionVals }` でセクション別初期値を注入できる。
-
-```typescript
-// PanelView 型（PersonOperationPanel/types.ts）
-type PanelView =
-  | 'summary'
-  | 'directEdit'
-  | { def:         EditOperation;        rowId: number }
-  | { multiRowDef: MultiRowOperationDef; rowId: number; overrideSectionVals?: Partial<Record<string, string>>[] }
-  | { chooser:     'secondmentOut';      rowId: number }   // SF判定ルーティングステップ
-```
+`SecondmentOutChooser` のように別ステップで入力した値を `MultiRowFormView` に渡す場合、`PanelView` 型（`PersonOperationPanel/types.ts`）の `{ multiRowDef; rowId; overrideSectionVals?: Partial<Record<string, string>>[] }` バリアントでセクション別初期値を注入できる（他のバリアント: `'summary'` / `'directEdit'` / `{ def: EditOperation; rowId }` / `{ chooser: 'secondmentOut'; rowId }` = SF判定ルーティングステップ）。
 
 ---
 
 ## 排他ロック（operationRole）
 
-行レベルの操作排他制御。特定の操作が実行済みの行で、他の操作を抑止する仕組み。
-
-### ロールの種類
-
-| `kind` | 意味 |
-|---|---|
-| `lock` | この操作が実行されると行を「ロック状態」にする。他の操作をブロック |
-| `lockCancel` | 対応する `lock` を取り消す。`of` に lock 操作の `id` を指定 |
-| `normal` | 排他に参加しない（省略時も同じ） |
-
-### `lock` の宣言
-
-```typescript
-operationRole: {
-  kind:                'lock',
-  isActive:            (row) => !!row.leaveOfAbsenceSign,
-  // isActive との違い: セッション内で設定した場合のみ true（prev フィールドが空）
-  isActiveThisSession: (row) => !!row.leaveOfAbsenceSign && !row.prevLeaveOfAbsenceSign,
-}
-```
-
-- `isActive` — インポート前からの状態も含む（「元々休職中」も検出）
-- `isActiveThisSession` — このセッション中に設定した場合のみ（`lockCancel` の表示条件に使用）
+行レベルの操作排他制御。特定の操作が実行済みの行で、他の操作を抑止する仕組み。`kind: 'lock' | 'lockCancel' | 'normal'` の基本形と `isActive` / `isActiveThisSession` の使い分けはルート `CLAUDE.md`「排他ロック（operationRole）」節を参照。以下は `resolveAvailability` の詳細ロジックと `softLock`（CLAUDE.md 未収録）。
 
 ### `resolveAvailability` のロジック
 
@@ -300,10 +202,7 @@ operationRole: {
 | `lock`（strict） | ブロック | ブロック |
 | `softLock` | ブロック | **許可**（`availableFor` を通過すれば実行できる） |
 
-softLock は「他のロック操作とは競合させたいが、通常の編集までは止めたくない」場面で使う。ただし通常操作が softLock の `ownedFields` を上書きしてしまうと矛盾したデータになるため、`OperationFormView`（`apps/web/.../PersonOperationPanel/OperationFormView/index.tsx`）側で二重に防止している:
-
-- **Layer 2**（表示）: アクティブな softLock の `ownedFields` に該当する入力欄を readOnly 表示する
-- **Layer 1**（送信直前）: `onSubmit` 実行の直前に `ownedFields` の値を行の現在値で強制的に上書きし、フォーム側の入力が誤って `ownedFields` を書き換えてもデータには反映されないようにする
+softLock は「他のロック操作とは競合させたいが、通常の編集までは止めたくない」場面で使う。ただし通常操作が softLock の `ownedFields` を上書きしてしまうと矛盾したデータになるため、`OperationFormView`（`apps/web/.../PersonOperationPanel/OperationFormView/index.tsx`）側で二重に防止している: **表示**（アクティブな softLock の `ownedFields` に該当する入力欄を readOnly 表示）と、**送信直前**（`onSubmit` 実行の直前に `ownedFields` の値を行の現在値で強制的に上書きし、フォーム側の入力が誤って書き換えてもデータには反映されないようにする）。
 
 **現在 `softLock` を使っている操作**: `SecondmentOutSF`／`SecondmentOutNonSF`（`secondmentMainDefs.ts`）、`LeaveOfAbsence`／`ReturnFromLeave`（`personDefs.ts`）
 
@@ -311,11 +210,7 @@ softLock は「他のロック操作とは競合させたいが、通常の編�
 
 ## EditOperation の補足フラグ
 
-| フラグ | 型 | 意味 |
-|---|---|---|
-| `supportsLeaveVacant` | `boolean \| undefined` | `true` のとき DragIntentPicker でこのカードに「元のポジションを空席として残す」チェックボックスを表示する（現在 `orgTransferDef` のみ `true`） |
-| `description` | `string \| undefined` | フォーム上部に表示する業務注意事項テキスト |
-| `inputs[].inputType` | `'checkbox' \| undefined` | `'checkbox'` のとき truthy/falsy をチェックボックスで表示（readOnly と組み合わせて固定値の確認に使う） |
+`supportsLeaveVacant` / `description` / `inputs[].inputType: 'checkbox'` の一覧はルート `CLAUDE.md`「`EditOperation` の補足オプション」節を参照（正）。
 
 ---
 
@@ -396,38 +291,16 @@ interface ValidationResolutionDef {
 
 どちらも `createCommand(rowId, values): EditCommand` を返す点で統一されている。
 
-**使用フロー**:
+**使用フロー**: ① `[...RESOLUTION_DEFS].reverse().find(d => d.match(issue))` で問題を ResolutionDef に照合 → ② `dryRunResolution(def, row, suggestedValue, ctx)` でドライラン（`{ ok, updatedRow, changedFields }` を副作用なしで返す。UI の確認表示に使う）→ ③ 確定したら `def.createCommand(rowId, { [def.field]: confirmedValue })` を `cmd.validate(ctx).ok` 確認の上 `appService.executeOperation(cmd)` で実行。
 
-```typescript
-// 1. 問題を ResolutionDef に照合
-const def = [...RESOLUTION_DEFS].reverse().find(d => d.match(issue))
-
-// 2. ドライラン（UI での確認表示に使う）
-const preview = dryRunResolution(def, row, suggestedValue, ctx)
-// → { ok, updatedRow, changedFields } を返す（apply() を副作用なしで実行）
-
-// 3. 確定したら実行
-const cmd = def.createCommand(rowId, { [def.field]: confirmedValue })
-if (cmd.validate(ctx).ok) appService.executeOperation(cmd)
-```
-
-`RESOLUTION_DEFS` は後ろから検索することで、汎用定義より特化定義が先にマッチする。
-（例: `officialPositionCode` の error 全般 → `officialPos-error`、出向関連の同フィールド → `officialPos-secondment`）
+`RESOLUTION_DEFS` は後ろから検索することで、汎用定義より特化定義が先にマッチする（例: `officialPositionCode` の error 全般 → `officialPos-error`、出向関連の同フィールド → `officialPos-secondment`）。
 
 ---
 
 ## 拡張方法
 
-新しい業務操作を追加する手順（**この順序を守ること**）:
+新しい業務操作を追加する手順（1〜7 はルート `CLAUDE.md`「新しい操作を追加するときの手順」節と同一。守るべき順序はそちらを正とする）。本書からの追加事項:
 
-1. `EditPattern` に新ラベルを追加（`packages/domain/src/patterns/editPatterns.ts`）
-2. `packages/domain/src/patterns/defs/` の該当グループファイルに `detect()` を実装
-3. `EditCommand` の実装を追加（`packages/domain/src/commands/handlers/`）
-4. **バリデーションに検出条件を追加**（リストア保証の維持・必須）
-5. `OperationDef` を追加（`packages/domain/src/commands/defs/`）して `DEFS` 配列に登録
-6. **`SummaryView.tsx` の `SECTIONS` に追加**（`apps/web/src/components/editor/PersonOperationPanel/SummaryView.tsx`）— 省略すると UI に表示されない
-7. `EditScenario` の具体実装を追加（複数行にまたがる場合・`packages/domain/src/commands/scenarios.ts`）
 8. TDD ガイドに従ってテストを追加（`docs/07-tdd-guide.md`）
 
-手順 4 を省略するとリストア保証が崩れるため、EditPattern 追加と
-バリデーション追加は **必ずセットで行う**。
+手順 4（バリデーションへの検出条件追加）を省略するとリストア保証が崩れるため、EditPattern 追加とバリデーション追加は **必ずセットで行う**（詳細は本書冒頭「リストア可能性の保証」節）。

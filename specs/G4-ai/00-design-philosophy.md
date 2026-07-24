@@ -28,7 +28,7 @@ executeOperation(op) → executeScenario の後方互換ラッパー
 ```
 
 この収束点より先（ドメイン層）は Web と AI で完全に共有される。
-操作フレームワークの詳細は `docs/12-operation-framework.md` を参照。
+操作フレームワークの詳細は `docs/05-operation-framework.md` を参照。
 
 ---
 
@@ -212,72 +212,21 @@ buildProposal でのプレビュー計算に使うことも許容する。
 
 ---
 
-## 6. 未解決の懸念事項（要検討）
+## 6. リファクタリング完了事項
 
-リファクタリング後も残る設計上の懸念事項。優先度順に記載する。
+かつて「未解決の懸念事項」として記載していた分割・型整理は完了済み。
 
-### A. `aiTools.ts` の肥大化（780行）
-
-現状の問題：
-- 1ファイルにread/write/review/utility すべてのメソッドが混在している
-- CLAUDE.md ルール「1ファイル上限200行」に対して大幅超過
-
-**推奨対応**:
-```
-src/application/
-  aiTools/
-    index.ts          ← 外部向け export + createAITools の合成
-    read.ts           ← findPersons, getPersonDetail, getOrgTreeData など
-    write.ts          ← executeBulkTransfer, executeFieldEdit など
-    review.ts         ← getReviewSummary, getValidationDiagnosis など
-    orgTree.ts        ← buildOrgTree ヘルパー
-```
-
-### B. `buildProposal` ロジックが toolRegistry に混在（量が多い）
-
-toolRegistry.ts 全体 849行のうち、`buildProposal` 実装で約400行を占める。
-これは「LLM プロトコルアダプター」という役割に対して重すぎる。
-
-**推奨対応**:
-```
-src/infrastructure/ai/
-  toolRegistry.ts     ← ToolDefinition + routing のみ（thin）
-  proposalBuilders.ts ← confirm ツールの buildProposal 実装
-```
-
-ただし `proposalBuilders.ts` が `appService` と `PersonDiff` 型を必要とするため、
-infrastructure → application の依存が正当化されるか要検討。
-
-### C. `SelectedRowContext` の型が `chatSession.ts` に定義されている
-
-`aiTools.getRowContext()` の戻り値型が `chatSession.ts` から import されている：
-```typescript
-function getRowContext(rowId: number): import('./chatSession').SelectedRowContext | null
-```
-
-`SelectedRowContext` は他の AI 向け型（`PersonDiff` など）と同様に `aiTypes.ts` に置くべき。
-**低優先度**。型の移動だけなので影響範囲は小さい。
-
-### D. `propose_create_position.executeOnApprove` が新規行IDを取得するために appService を読む
-
-```typescript
-executeOnApprove: args => {
-  aiTools.createVacantPosition(orgCode, localJobTitle)
-  const snap   = appService.getSnapshot()                // ← read-only だが toolRegistry が直接呼ぶ
-  const newRow = [...snap.allocationList].reverse().find(...)
-  return { applied: true, newPositionRowId: newRow?.rowId }
-},
-```
-
-`aiTools.createVacantPosition()` が新規 rowId を返すようにすれば解消できる。
-**低優先度**。
+- `aiTools.ts` の肥大化 → `src/application/aiTools/`（`index.ts` / `read.ts` / `write.ts` / `review.ts` / `diagnose.ts` / `orgTree.ts` / `types.ts`）に分割済み
+- `toolRegistry.ts` の肥大化 → `src/infrastructure/ai/toolRegistry/`（`index.ts` / `readTools.ts` / `renderTools.ts` / `navigateTools.ts` / `operationTools.ts` / `helpers.ts` / `types.ts`）に分割済み
+- `SelectedRowContext` 型 → `aiTypes.ts` に定義済み（`chatSession.ts` は後方互換のため re-export のみ）
+- `propose_create_position` の新規行ID取得 → `aiTools.createVacantPosition()` が `newRowId` を直接返す形に変更済み
 
 ---
 
-## 8. 関連ドキュメント
+## 7. 関連ドキュメント
 
-- `specs/G4-ai/01-tools-spec.md` — 実装済み・予定ツール一覧
+- `specs/G4-ai/08-tool-reference.md` — 確定版ツール仕様（引数・戻り値・ルーティング）
 - `specs/G4-ai/02-system-prompt-rules.md` — システムプロンプト設計
-- `docs/07-ai-ui-policy.md` — AI と UI の役割分担
-- `src/application/aiTools.ts` — AI BFF 実装
-- `src/infrastructure/ai/toolRegistry.ts` — LLM プロトコルアダプター実装
+- `specs/G4-ai/03-ai-ui-policy.md` — AI と UI の役割分担
+- `src/application/aiTools/` — AI BFF 実装
+- `src/infrastructure/ai/toolRegistry/` — LLM プロトコルアダプター実装

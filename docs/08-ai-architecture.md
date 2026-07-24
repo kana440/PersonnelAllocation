@@ -5,6 +5,9 @@
 本システムの AI チャット機能は OpenAI 互換 API（カスタム LLM）を使用する。
 設計方針は「**Intent-First + Tier 実行**」— まずユーザーの意図を分類し、複雑さに応じた実行戦略を選ぶ。
 
+ツール種別（read/render/navigate/execute/confirm）・`aiTools/` の構成・navigate ツール一覧・AI→UI
+コマンドパターンは root `CLAUDE.md` の「AI ツール」セクションを参照（ここでは繰り返さない）。
+
 ---
 
 ## 実行 Tier
@@ -71,55 +74,12 @@ text chunk    → ストリーミング表示
 
 ## AI チャット UI の実装形式
 
-AI チャットは **`FloatingAIChat`（`components/layout/FloatingAIChat.tsx`）** として実装されている。
-
-- `EditViewCore` の末尾（JSX の最後）に置かれ、`position: fixed` 相当のフローティングウィジェット
-- ドラッグ可能（右下 offset で初期位置、マウスドラッグで移動）
-- レイアウト幅に影響しない（サイドパネルではない）
-- 開閉状態は内部の `useState` で管理
-
-照会パネル等の新機能を追加するときに AI チャットとレイアウト上の競合は発生しない。
+`FloatingAIChat`（`apps/web/src/components/layout/FloatingAIChat.tsx`）としてフローティングウィジェット実装。
+配置・ドラッグ挙動・レイアウト非干渉の詳細は root `CLAUDE.md` の「EditViewCore スロットパターン」参照。
 
 ---
 
-## 現状との対応関係
+## navigate ツールの設計指針
 
-| 現状のファイル | 役割 | 再設計後 |
-|---|---|---|
-| `agentRunner.ts` | ツール use ループ | Intent Classifier + Tier ルーター に拡張 |
-| `toolRegistry/` | ツール定義・ルーティング | readTools / renderTools / navigateTools / operationTools の4ファイル分割済み |
-| `scenarios/` | mock ベースの文言 | Wizard ステップ定義に転換 |
-| `aiTools/` | ツール実装 | そのまま（`getFieldOptions` 登録を追加） |
-
----
-
-## navigate ツール（UIナビゲーション専用）
-
-`kind: 'navigate'` のツールはドメインデータを変更しない。Fast Path でも安全に実行できる。
-
-### AI → UI コマンドの2パターン
-
-```
-パターン1: Zustand ストアを直接変更（canvasLayoutStore / canvasDisplayStore 等）
-  navigateTools.ts → useCanvasLayoutStore.getState().setCanvasPanelStyle(...)
-  → ストア変更 → React が自動的に再レンダー
-
-パターン2: uiCommandStore dispatch（React local state の制御）
-  navigateTools.ts → useUICommandStore.getState().dispatch({ type: 'setMainViewMode', mode })
-  → EditViewCore の useEffect が購読 → setMainViewMode(mode)
-  例: mainViewMode は EditViewCore の local useState のため直接変更不可
-```
-
-### 現在の navigate ツール一覧
-
-| ツール | 実装パターン | 用途 |
-|---|---|---|
-| `ui_set_main_view` | dispatch（mainViewMode は local state） | 組織図/表形式の切り替え |
-| `ui_set_canvas_display` | 直接 getState() | ツリー/コンパクト・グループ・比較モード制御 |
-| `ui_show_person` | 直接 getState() | 人物検索+フォーカス |
-| `ui_focus_row` | 直接 getState() | rowId フォーカス |
-| `ui_open_operation` | dispatch（操作フォームは PersonOperationPanel local state） | フォームを開く+事前入力 |
-| `ui_get_form_state` | formStateStore 読み取り（kind: read） | フォーム現在値取得 |
-| `ui_suggest_form_field` | formStateStore 書き込み | フォームフィールド設定 |
-
-設計指針（いつツールを追加すべきか）は `specs/G4-ai/03-ai-ui-policy.md` の「navigate ツールの設計指針」参照。
+「AI が実行しなければ達成できない・ドメイン変更を伴わない・自然言語で明確に要求できるアクション」のみ
+`ui_*` ツールとして追加する。判断基準の詳細は `specs/G4-ai/03-ai-ui-policy.md` を参照。

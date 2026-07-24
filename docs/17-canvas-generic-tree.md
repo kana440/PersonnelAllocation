@@ -13,12 +13,12 @@
 
 ```
 apps/web/src/components/canvas/
-  generic/
+  core/
     types.ts           ← アダプタインターフェース・OrgTreeConfig 型
     OrgTreeNode.tsx    ← 汎用再帰ノード（after/before 両対応）
     OrgTreeControls.tsx ← 展開/折りたたみコントロールバー（汎用）
     OrgTreePanel.tsx   ← パネルシェル（ドラッグ・ResizeObserver）
-  tree/
+  after/
     TreeWindow.tsx     ← after 側ラッパー（OrgTreePanel を使用）
     TreeWindowHeader.tsx ← after 側ヘッダー（AddRowDropdown・バンドトグル）
   before/
@@ -26,19 +26,9 @@ apps/web/src/components/canvas/
   treeWindowLayout.ts  ← レイアウト計算（Map 使用・O(1) ルックアップ）
 ```
 
-### 核心: 状態スコープの3層分離
-
-展開/折りたたみに関連する状態は「スコープ」が異なる。これを混同しないことが設計のポイント。
-
-| 状態 | スコープ | 格納場所 |
-|---|---|---|
-| `panelViewMode` (tree/band) | **全パネル共通** | `canvasLayoutStore` の1変数 |
-| `childrenMode` ('windowed'/'inline') | **パネル個別** | `PanelDef.childrenMode` |
-| `collapsedOrgIds` | **パネル個別** | `PanelDef.collapsedOrgIds` |
-| `open` (パネル展開/折りたたみ) | **パネル個別** | `PanelDef.open` |
-
-`panelViewMode` は「ボタン1つで全パネルを一斉切り替え」なので store の1変数で十分。  
-`childrenMode` と `collapsedOrgIds` はパネルごとに独立して切り替えるので `PanelDef` に内包する。
+展開/折りたたみに関連する状態の3層スコープ分離（全パネル共通 / パネル個別のうち store 管理分 / パネル個別のうち
+`PanelDef` 内包分）は root `CLAUDE.md` の「キャンバスのパネル状態には3つのスコープがある」表に一本化されている
+（`canvasPanelStyle` 等の現行名も含め、そちらが正）。ここでは繰り返さない。
 
 ---
 
@@ -123,64 +113,25 @@ interface OrgTreeConfig {
 
 ## パフォーマンス改善
 
-### 改善前: `array.find()` による O(N) 検索
+`organizations.find()` の線形検索を `Map<string, Organization>` / `Map<string, Organization[]>`（childrenByOrgId）による
+O(1) ルックアップに置き換えた設計。ルール自体は root `CLAUDE.md` の「キャンバスの組織 Map ルール」
+「`beforeRowsByOrgId` の構築ルール」に一本化されている。
 
-```typescript
-// 旧: 子組織を取得するたびに全3000件を線形検索
-const childOrgs = organizations.filter(o => o.parentId === orgId)
-const org = orgs.find(o => o.id === panel.orgId)  // 各パネルごとに実行
-```
-
-### 改善後: Map による O(1) ルックアップ
-
-```typescript
-// 新: useMemo で1回だけ構築、以降は O(1)
-const orgById = useMemo(() => new Map(organizations.map(o => [o.id, o])), [organizations])
-const childrenByOrgId = useMemo(() => {
-  const m = new Map<string, Organization[]>()
-  for (const o of organizations) {
-    if (!o.parentId) continue
-    const arr = m.get(o.parentId)
-    if (arr) arr.push(o)
-    else m.set(o.parentId, [o])
-  }
-  return m
-}, [organizations])
-```
-
-### `beforeRowsByOrgId` の改善
-
-旧実装は O(3000 × N)（3000組織 × 全行数で filter）。新実装は O(N + 3000)。
-
-```typescript
-// 旧: for (const org of beforeOrganizations) { allocationList.filter(...) }
-// 新: allocationList を1回だけ走査して Map を構築
-const codeToOrgId = new Map(beforeOrganizations.map(o => [o.externalCode, o.id]))
-for (const row of allocationList) {
-  const orgId = codeToOrgId.get(row.prevDepartmentCode)
-  // map.set(orgId, [...])
-}
-```
-
-### `treeWindowLayout.ts` の改善
-
-`computeLayout`・`isStandaloneWindow`・`buildConnections` の引数を `Organization[]` → `Map<string, Organization>` に変更。
-
-```typescript
-// 旧: orgs.find(o => o.id === panel.orgId)  // O(3000) × パネル数
-// 新: orgById.get(panel.orgId)               // O(1) × パネル数
-```
+このツリー実装固有の適用箇所: `treeWindowLayout.ts` の `computeLayout`・`isStandaloneWindow`・`buildConnections` は
+引数を `Organization[]` ではなく `Map<string, Organization>`（orgById）で受け取る（`orgs.find(o => o.id === panel.orgId)` の
+O(3000)×パネル数を `orgById.get(panel.orgId)` の O(1)×パネル数に変更）。
 
 ---
 
 ## ビューモード拡張方法
 
-現在のビューモードは `'tree' | 'band'`（`PanelViewModeId` 型）。新しいモードを追加する手順:
+現在のビューモードは `'tree' | 'band'`（`CanvasPanelStyle` 型）。新しいモードを追加する手順:
 
-1. `canvasLayoutStore.ts` の `PanelViewModeId` に新しいモード名を追加
+1. `canvasLayoutStore.ts` の `CanvasPanelStyle` に新しいモード名を追加
 2. `VIEW_MODE_WIDTHS` にパネル幅を追加
 3. `OrgTreeConfig.renderFlatItems` にそのモード用の描写を実装（`TreeWindow.tsx` のクロージャ内）
-4. `OrgTreePanel.tsx` の `renderBody()` でモードに応じた描写を呼び分け
+4. 呼び出し側（`TreeWindow.tsx` 等）の `renderBody` クロージャで `canvasPanelStyle === 'band'` のとき
+   `renderItems` を `renderFlatItems` に差し替える
 
 「ツリーモード以外はフラット描写」という設計なので、ツリー以外の新モードは `renderFlatItems` スロットに実装するだけでよい。
 
@@ -198,7 +149,8 @@ for (const row of allocationList) {
 [層3] 解決ロジック         ドロップが成立したら何のフォームを開くか
 ```
 
-**層1・2 はビューモードごとに必然的に異なる**。ツリーモードでは `RowCard` がドラッグ元で org セクションがドロップ先、バンドモードでは `NameChip` がドラッグ元でバンドラベル行がドロップ先になる。これは同じコンポーネントを使えないという冗長性ではなく、ビューが変わると操作対象が変わるという必然的な分離。
+**層1・2 はビューモードごとに必然的に異なる**（ツリーモードは `RowCard` → org セクション、バンドモードは `NameChip` →
+バンドラベル行）。同じコンポーネントを使えないという冗長性ではなく、ビューが変わると操作対象が変わるという必然的な分離。
 
 **層3 は完全に共有**。どの描写モードからドラッグが起きても、最終的に `DropOpState` → `DropOperationModal` / `QuickEditDialog` という同一パイプラインに合流する。
 
@@ -214,7 +166,7 @@ for (const row of allocationList) {
 1. **ドラッグ元**（層1）: 対象コンポーネントに `draggable` + `onDragStart` を追加し、`DataTransfer` に `rowId` と文脈データを格納する
 2. **ドロップ先**（層2）: ドロップゾーンとなる要素に `onDragOver` / `onDragLeave` / `onDrop` を追加する
 3. **解決**（層3）: `onDrop` の末尾で `openDropOp` / `openBandDrop` / `setDropIntentState` のいずれかを呼ぶ。操作の種類が常に一意なら `openDropOp` 直行（インテント選択不要）、複数の操作候補があるなら `setDropIntentState` で `DragIntentPicker` を経由する
-4. **汎用層（`generic/`）は変更しない**。`OrgTreeConfig.renderFlatItems` はクロージャなので、ドラッグ状態の注入は呼び出し側（`TreeWindow` 等）のクロージャで完結する
+4. **汎用層（`core/`）は変更しない**。`OrgTreeConfig.renderFlatItems` はクロージャなので、ドラッグ状態の注入は呼び出し側（`TreeWindow` 等）のクロージャで完結する
 
 ---
 
