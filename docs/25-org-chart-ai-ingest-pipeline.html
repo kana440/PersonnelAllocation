@@ -1,0 +1,807 @@
+<title>組織図取込パイプライン</title>
+<style>
+  :root {
+    --paper: #eef1f4; --paper-raised: #ffffff; --ink: #1b2430; --ink-soft: #4b5768; --ink-faint: #7c8797;
+    --accent: #2f5283; --accent-soft: #e4ebf4; --amber: #b5650f; --amber-soft: #f7e9d6;
+    --teal: #1f7a67; --teal-soft: #dcefe9; --line: #d7dce2; --line-strong: #b9c1cb;
+    --danger: #a83232; --danger-soft: #f6e0e0;
+    --code-bg: #1b2430; --code-ink: #dfe6ee; --code-key: #8fb0de; --code-str: #9bd4c2;
+    --shadow: 0 1px 2px rgba(27,36,48,.04), 0 8px 24px -12px rgba(27,36,48,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #141922; --paper-raised: #1b222d; --ink: #e8ebef; --ink-soft: #b3bcc8; --ink-faint: #7c8797;
+      --accent: #8fb0de; --accent-soft: #22344a; --amber: #e2984e; --amber-soft: #3a2c19;
+      --teal: #5fc9ac; --teal-soft: #163530; --line: #28303b; --line-strong: #384354;
+      --danger: #e08585; --danger-soft: #3a2020; --code-bg: #0e1319; --code-ink: #dfe6ee; --code-key: #8fb0de; --code-str: #9bd4c2;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #141922; --paper-raised: #1b222d; --ink: #e8ebef; --ink-soft: #b3bcc8; --ink-faint: #7c8797;
+    --accent: #8fb0de; --accent-soft: #22344a; --amber: #e2984e; --amber-soft: #3a2c19;
+    --teal: #5fc9ac; --teal-soft: #163530; --line: #28303b; --line-strong: #384354;
+    --danger: #e08585; --danger-soft: #3a2020; --code-bg: #0e1319; --code-ink: #dfe6ee; --code-key: #8fb0de; --code-str: #9bd4c2;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: "Zen Kaku Gothic New", "Noto Sans JP", sans-serif; line-height: 1.75; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent-soft); color: var(--ink); }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-feature-settings: "liga" 0; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; background: var(--accent-soft); color: var(--accent); padding: .1em .4em; border-radius: 4px; white-space: nowrap; }
+  .page { max-width: 940px; margin: 0 auto; padding: 0 24px 120px; }
+
+  header.hero { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .eyebrow::before { content: ""; width: 28px; height: 2px; background: var(--accent); display: inline-block; }
+  h1 { font-size: clamp(28px, 4.4vw, 40px); font-weight: 700; line-height: 1.35; letter-spacing: -.01em; text-wrap: balance; margin: 0 0 18px; }
+  .lede { font-size: 17px; color: var(--ink-soft); max-width: 64ch; margin: 0 0 28px; }
+  .goal-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .goal-chip { font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 999px; background: var(--paper-raised); border: 1px solid var(--line); color: var(--ink-soft); display: flex; align-items: center; gap: 7px; }
+  .goal-chip b { color: var(--ink); font-weight: 700; }
+  .goal-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+
+  section { padding: 56px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+  .section-head { margin-bottom: 30px; }
+  .section-kicker { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 8px; }
+  h2 { font-size: 24px; font-weight: 700; letter-spacing: -.005em; text-wrap: balance; margin: 0; }
+  .section-note { color: var(--ink-soft); font-size: 15px; max-width: 68ch; margin: 12px 0 0; }
+
+  .principles { display: grid; gap: 14px; }
+  .principle { display: grid; grid-template-columns: 40px 1fr; gap: 16px; padding: 18px 20px; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+  .principle .pn { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); }
+  .principle h3 { font-size: 15.5px; font-weight: 700; margin: 0 0 4px; }
+  .principle p { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+
+  .diagram-wrap { margin: 0 -24px; padding: 8px 24px 20px; overflow-x: auto; }
+  .diagram { display: flex; align-items: stretch; gap: 0; min-width: 1780px; }
+  .lane-group { display: flex; align-items: stretch; border: 1.5px dashed var(--line-strong); border-radius: 12px; padding: 14px 10px; gap: 0; position: relative; }
+  .lane-group + .lane-group { margin-left: 18px; }
+  .lane-caption { position: absolute; top: -11px; left: 16px; background: var(--paper); padding: 0 8px; font-family: "Archivo", sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+  .node { width: 134px; flex: none; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; padding: 12px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+  .node.touch { background: var(--accent-soft); border-color: var(--accent); }
+  .node.info { background: var(--teal-soft); border-color: var(--teal); }
+  .node-num { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 11px; color: var(--ink-faint); }
+  .node-title { font-size: 12.5px; font-weight: 700; line-height: 1.35; }
+  .node-badge { align-self: flex-start; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; letter-spacing: .02em; }
+  .node-badge.new { background: var(--amber-soft); color: var(--amber); }
+  .node-badge.reuse { background: var(--teal-soft); color: var(--teal); }
+  .node-badge.mixed { background: var(--accent-soft); color: var(--accent); }
+  .connector { width: 14px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .connector::before { content: ""; width: 100%; height: 1.5px; background: var(--line-strong); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 12.5px; color: var(--ink-soft); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend i.new { background: var(--amber); }
+  .legend i.reuse { background: var(--teal); }
+  .legend i.mixed { background: var(--accent); }
+  .legend i.touch { background: var(--accent-soft); border: 1.5px solid var(--accent); }
+  .legend i.info { background: var(--teal-soft); border: 1.5px solid var(--teal); }
+
+  .why-list { display: grid; gap: 12px; }
+  .why-card { display: grid; grid-template-columns: 30px 1fr; gap: 14px; padding: 16px 20px; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; }
+  .why-card .wn { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 15px; color: var(--teal); }
+  .why-card h3 { font-size: 15px; font-weight: 700; margin: 0 0 4px; }
+  .why-card p { font-size: 14px; color: var(--ink-soft); margin: 0; }
+  .why-card p b { color: var(--ink); }
+
+  .example-map { display: grid; gap: 10px; }
+  .ex-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px; padding: 14px 18px; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; }
+  .ex-row .ex-text { font-size: 14.5px; color: var(--ink); }
+  .ex-row .ex-text small { display: block; color: var(--ink-faint); font-size: 12.5px; margin-top: 2px; }
+  .ex-stage { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 12px; color: var(--accent); background: var(--accent-soft); padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
+
+  .stage-list { display: flex; flex-direction: column; gap: 0; }
+  .stage-card { display: grid; grid-template-columns: 56px 1fr; gap: 20px; padding: 28px 0; border-top: 1px solid var(--line); }
+  .stage-list .stage-card:first-child { border-top: none; }
+  .stage-card.gate { background: var(--amber-soft); margin: 0 -24px; padding: 28px 24px; border-radius: 10px; border-top: none; }
+  .stage-card.declare { background: var(--accent-soft); margin: 0 -24px; padding: 28px 24px; border-radius: 10px; border-top: none; }
+  .stage-card.info { background: var(--teal-soft); margin: 0 -24px; padding: 28px 24px; border-radius: 10px; border-top: none; }
+  .stage-rail { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stage-rail .grp { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 10px; letter-spacing: .05em; color: var(--accent); }
+  .stage-rail .n { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 20px; color: var(--ink-faint); }
+  .stage-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .stage-head h3 { font-size: 17px; font-weight: 700; margin: 0; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; letter-spacing: .02em; white-space: nowrap; }
+  .badge.new { background: var(--amber-soft); color: var(--amber); }
+  .badge.reuse { background: var(--teal-soft); color: var(--teal); }
+  .badge.mixed { background: var(--accent-soft); color: var(--accent); }
+  .badge.touch { background: var(--accent); color: var(--paper-raised); }
+  .stage-desc { color: var(--ink-soft); font-size: 15px; margin: 0 0 14px; max-width: 70ch; }
+  .stage-desc b { color: var(--ink); }
+
+  .schema { display: block; background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 14px 16px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; line-height: 1.65; overflow-x: auto; margin: 10px 0 14px; white-space: pre; }
+  .schema .k { color: var(--code-key); }
+  .schema .s { color: var(--code-str); }
+  .schema .c { color: #8a94a3; }
+
+  .verify-box { margin-top: 10px; padding: 12px 16px; background: var(--paper-raised); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; font-size: 13.5px; color: var(--ink-soft); }
+  .verify-box b { color: var(--ink); font-weight: 700; }
+
+  .rule-table { display: grid; gap: 8px; margin: 10px 0 14px; }
+  .rule-row { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 10px 14px; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; }
+  .rule-row .rn { font-family: "JetBrains Mono", monospace; font-weight: 500; color: var(--accent); }
+  .rule-row .rd { color: var(--ink-soft); }
+
+  .level-table { display: grid; gap: 8px; margin: 10px 0 14px; }
+  .level-row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; padding: 12px 14px; background: var(--paper-raised); border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; }
+  .level-row.must { border-left: 3px solid var(--danger); }
+  .level-row .ln { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 12.5px; color: var(--ink); }
+  .level-row .ln small { display: block; font-family: "Zen Kaku Gothic New", sans-serif; font-weight: 400; color: var(--ink-faint); font-size: 11px; margin-top: 2px; }
+  .level-row .ld { color: var(--ink-soft); }
+  .level-row .ld code { white-space: normal; }
+
+  .must-confirm-box { margin: 14px 0; padding: 16px 18px; background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 10px; }
+  .must-confirm-box h4 { margin: 0 0 8px; font-size: 14px; font-weight: 800; color: var(--danger); display: flex; align-items: center; gap: 8px; }
+  .must-confirm-box p { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-soft); }
+  .must-confirm-box p:last-child { margin-bottom: 0; }
+  .must-confirm-box code { background: rgba(0,0,0,.06); }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 620px; }
+  thead th { text-align: left; font-family: "Archivo", sans-serif; font-weight: 800; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); padding: 0 14px 10px; border-bottom: 1.5px solid var(--line-strong); }
+  tbody td { padding: 13px 14px; border-bottom: 1px solid var(--line); color: var(--ink-soft); vertical-align: top; }
+  tbody td:first-child { color: var(--ink); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .risk-list { display: grid; gap: 16px; }
+  .risk-card { padding: 20px 22px; background: var(--paper-raised); border: 1px solid var(--line); border-left: 3px solid var(--danger); border-radius: 0 10px 10px 0; box-shadow: var(--shadow); }
+  .risk-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .risk-head h3 { font-size: 15.5px; font-weight: 700; margin: 0; }
+  .risk-priority { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .06em; color: var(--danger); background: var(--danger-soft); padding: 3px 9px; border-radius: 999px; }
+  .risk-card p { font-size: 14px; color: var(--ink-soft); margin: 0 0 8px; }
+  .risk-card p:last-child { margin-bottom: 0; }
+  .risk-card b { color: var(--ink); }
+
+  .bug-list { display: grid; gap: 16px; }
+  .bug-card { padding: 22px 24px; background: var(--paper-raised); border: 1.5px solid var(--danger); border-radius: 12px; box-shadow: var(--shadow); }
+  .bug-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+  .bug-head .bn { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 13px; color: var(--danger); background: var(--danger-soft); padding: 3px 10px; border-radius: 999px; }
+  .bug-head h3 { font-size: 16px; font-weight: 700; margin: 0; }
+  .bug-loc { font-size: 12.5px; margin-bottom: 10px; }
+  .bug-field { margin-bottom: 10px; }
+  .bug-field .fl { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 3px; }
+  .bug-field p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+  .bug-field:last-child { margin-bottom: 0; }
+
+  .defense { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .defense-row { display: grid; grid-template-columns: 200px 1fr; gap: 16px; padding: 16px 20px; background: var(--paper-raised); }
+  .defense-row + .defense-row { border-top: 1px solid var(--line); }
+  .defense-row.existing { background: var(--teal-soft); }
+  .defense-tag { font-size: 12px; font-weight: 700; color: var(--ink-soft); display: flex; align-items: center; gap: 8px; }
+  .defense-row.existing .defense-tag { color: var(--teal); }
+  .defense-tag i { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
+  .defense-row.existing .defense-tag i { background: var(--teal); }
+  .defense-body { font-size: 13.5px; color: var(--ink-soft); }
+  .defense-body b { color: var(--ink); }
+
+  .closing { padding: 56px 0 0; }
+  .closing p { font-size: 15.5px; color: var(--ink-soft); max-width: 68ch; }
+  .next-steps { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+  .next-step { display: flex; align-items: center; gap: 10px; padding: 12px 18px; background: var(--accent-soft); border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--accent); }
+  .next-step .rank { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 16px; }
+
+  footer { padding: 40px 0 0; color: var(--ink-faint); font-size: 12.5px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .fade-in { animation: fadeIn .5s ease-out both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  }
+  @media (max-width: 640px) {
+    .stage-card { grid-template-columns: 1fr; }
+    .stage-rail { flex-direction: row; gap: 8px; }
+    .defense-row { grid-template-columns: 1fr; }
+    .rule-row, .level-row { grid-template-columns: 1fr; }
+    .ex-row { grid-template-columns: 1fr; }
+    .why-card { grid-template-columns: 24px 1fr; }
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<div class="page">
+
+  <header class="hero fade-in">
+    <div class="eyebrow">PersonnelAllocation &middot; 開発者向け設計案</div>
+    <h1>組織図取込パイプライン<br>— AIによる組織変更提案の全体設計</h1>
+    <p class="lede">
+      組織図の画像・PPTを読み取り、既存の基本操作（EditOperation）へ落とし込むまでの一連の流れをまとめた。
+      ドメインの構成（基本操作・変更パターン・バリデーション）は一切変更せず、その手前に新しい入力経路を1本足す、という位置づけ。
+    </p>
+    <div class="goal-chips">
+      <div class="goal-chip"><span class="dot"></span><b>ロバスト性</b>&nbsp;— 入力品質に応じて経路が変わる</div>
+      <div class="goal-chip"><span class="dot"></span><b>低ストレス</b>&nbsp;— 確認は少数に絞る</div>
+      <div class="goal-chip"><span class="dot"></span><b>検証可能性</b>&nbsp;— 各段階を単体でテストできる</div>
+      <div class="goal-chip"><span class="dot"></span><b>資産の切り分け</b>&nbsp;— 新規と既存を分けて示す</div>
+    </div>
+  </header>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Design Principles</div>
+      <h2>設計原則</h2>
+      <p class="section-note">検討の過程で誤った方向へ進みかけ、修正した7つのポイント。実装時にこの原則から外れていないか都度立ち返る。</p>
+    </div>
+    <div class="principles">
+      <div class="principle"><div class="pn">1</div><div>
+        <h3>原子的な単位は「基本操作」であり、導出・バリデーション単体ではない</h3>
+        <p><code>deriveFieldUpdates</code>や各バリデーションは、特定のEditOperationの<code>apply()</code>/<code>onFieldChange</code>の内部でのみ意味を持つ。AIの出力を汎用的に「埋めて検証する」層を新設しない。</p>
+      </div></div>
+      <div class="principle"><div class="pn">2</div><div>
+        <h3>変更パターン（<code>EditPattern</code> / <code>detect()</code>）は事後的な表示分類器</h3>
+        <p>1行に対して複数同時に真になる、非排他的な集計・表示用の仕組み。「次にどの操作を実行すべきか」を決める前向きの判定には転用しない。</p>
+      </div></div>
+      <div class="principle"><div class="pn">3</div><div>
+        <h3>AIの出力は常に「操作への入力」</h3>
+        <p>新しいコードのゴールは<code>{operationId, rowId, values}</code>——人がフォームに入力してsubmitするのと同じ形を作ることだけ。実行は既存の<code>executeOperation</code> / <code>executeBatch</code>にそのまま渡す。</p>
+      </div></div>
+      <div class="principle"><div class="pn">4</div><div>
+        <h3>知覚は並列、判定は直列</h3>
+        <p>画像の読み取り（Vision）は互いに独立なので並列化してよい。しかし操作選定は、同一セッション内の前の画像・前の人の提案結果に依存するため、処理順を守って直列に行う。</p>
+      </div></div>
+      <div class="principle"><div class="pn">5</div><div>
+        <h3>曖昧さは「値」ではなく「複数人で共有される事実」として扱う</h3>
+        <p>組織名や役職の読み取りゆれは、人ごとに個別の問題ではなく、多くの場合1つの事実を複数人が参照している。確認の単位もこれに合わせる。</p>
+      </div></div>
+      <div class="principle"><div class="pn">6</div><div>
+        <h3>変わっていない人には、何もしない</h3>
+        <p>読み取った内容が現在の行（<code>prevXxx</code>／現在値のいずれとも）と矛盾しなければ、操作を作らない。全員に何か操作を割り当てようとしない。</p>
+      </div></div>
+      <div class="principle"><div class="pn">7</div><div>
+        <h3>失敗や食い違いは、AIが自動で直さず必ず人に見せる</h3>
+        <p>「自己修復（自動で値を調整して再試行する）」は採用しない。DryRunで検出した問題も、確信度が低い提案も、報酬に関わる提案も、すべて人の確認を経由してから確定する。</p>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Overview</div>
+      <h2>全体パイプライン</h2>
+      <p class="section-note">
+        4つのグループ（<b>準備・抽出・判定・適用</b>）で構成する。確認（人との対話）は2箇所（確認A・確認B）、それとは別に人が事前に行う宣言（準備-1）とアクション不要の事後提示（適用-2）がある。
+        操作選定と確認Bの間には、コミットせず検証だけを行うドライラン（判定-5）を挟む。
+      </p>
+    </div>
+
+    <div class="diagram-wrap">
+      <div class="diagram">
+        <div class="lane-group">
+          <span class="lane-caption">1. 準備</span>
+          <div class="node touch"><span class="node-num">準備-1</span><span class="node-title">読み取り範囲の宣言</span><span class="node-badge new">新規UI</span></div>
+          <div class="connector"></div>
+          <div class="node"><span class="node-num">準備-2</span><span class="node-title">スライド分解</span><span class="node-badge new">新規（機械的）</span></div>
+        </div>
+
+        <div class="lane-group">
+          <span class="lane-caption">2. 抽出（並列可）</span>
+          <div class="node"><span class="node-num">抽出-1</span><span class="node-title">Vision観測抽出</span><span class="node-badge new">新規</span></div>
+          <div class="connector"></div>
+          <div class="node"><span class="node-num">抽出-2</span><span class="node-title">事実クラスタリング</span><span class="node-badge new">新規</span></div>
+          <div class="connector"></div>
+          <div class="node touch"><span class="node-num">抽出-3</span><span class="node-title">確認A（事実の確認）</span><span class="node-badge new">新規UI</span></div>
+        </div>
+
+        <div class="lane-group">
+          <span class="lane-caption">3. 判定（処理順を守り直列）</span>
+          <div class="node"><span class="node-num">判定-1</span><span class="node-title">名寄せ</span><span class="node-badge new">新規・未設計</span></div>
+          <div class="connector"></div>
+          <div class="node"><span class="node-num">判定-2</span><span class="node-title">マスタ正規化</span><span class="node-badge mixed">新規＋既存流用</span></div>
+          <div class="connector"></div>
+          <div class="node"><span class="node-num">判定-3</span><span class="node-title">変更検知</span><span class="node-badge new">新規</span></div>
+          <div class="connector"></div>
+          <div class="node"><span class="node-num">判定-4</span><span class="node-title">操作選定</span><span class="node-badge new">新規・未設計</span></div>
+          <div class="connector"></div>
+          <div class="node"><span class="node-num">判定-5</span><span class="node-title">ドライラン検証</span><span class="node-badge new">新規・薄い</span></div>
+          <div class="connector"></div>
+          <div class="node touch"><span class="node-num">判定-6</span><span class="node-title">確認B（提案の確認）</span><span class="node-badge new">新規UI</span></div>
+        </div>
+
+        <div class="lane-group">
+          <span class="lane-caption">4. 適用</span>
+          <div class="node"><span class="node-num">適用-1</span><span class="node-title">実行・Undo</span><span class="node-badge reuse">既存のまま</span></div>
+          <div class="connector"></div>
+          <div class="node info"><span class="node-num">適用-2</span><span class="node-title">反映結果の提示</span><span class="node-badge reuse">既存を流用</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="new"></i>新規に構築する</span>
+      <span><i class="mixed"></i>新規コード＋既存メタデータを流用</span>
+      <span><i class="reuse"></i>既存コードをそのまま再利用</span>
+      <span><i class="touch"></i>人の判断・入力（対話）</span>
+      <span><i class="info"></i>アクション不要・情報提示のみ</span>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Why this works</div>
+      <h2>なぜこれが効果的か</h2>
+      <p class="section-note">検討の過程で出てきた「効きそうな理由」を、各段階の設計と対応づけて整理する。</p>
+    </div>
+    <div class="why-list">
+      <div class="why-card"><div class="wn">1</div><div>
+        <h3>無理に確定させない設計が、精度の低い入力でも壊れない</h3>
+        <p>抽出-1（Vision観測抽出）は自由記述のまま保持し、Enum強制は判定-2（マスタ正規化）以降に限定する。「M」のような曖昧な略記でも、無理な確定や取りこぼしが起きない。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">2</div><div>
+        <h3>共有される事実としてまとめることで、情報を失わずに効率よく解決できる</h3>
+        <p>生テキストを保持したまま複数人で共有される単位（<code>UnresolvedFact</code>）にまとめる。<b>読み取った根拠が最後まで残る</b>のと、<b>1つの事実の解決が全員に波及する</b>のを同時に得ている。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">3</div><div>
+        <h3>確認を2つの粒度に分けたことで、量と質のバランスが取れる</h3>
+        <p>確認Aは「事実」単位（少数の解決で多くの人に波及）、確認Bは「提案」単位（実際に変わる人だけ）。1つの対話に両方を混ぜると、どちらの効率も活かせない。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">4</div><div>
+        <h3>変わっていない人には何もしないことが、レビュー量そのものを減らす</h3>
+        <p>判定-3（変更検知）のno-opゲートにより、確認Bも実行も「本当に変わった人」だけが対象になる。母数を減らすこと自体が、UXにも安全性にも効く。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">5</div><div>
+        <h3>読み取る範囲を資料ごとに事前宣言できる</h3>
+        <p>宣言されなかったフィールドは、既存の<code>prevXxx</code>や各操作自身の導出ロジックにそのまま委ねられる。実フィールド約40個のうち、画像から読み取ろうとする範囲を人が最初に絞れる。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">6</div><div>
+        <h3>判定の材料が、既存の判定パターンをなぞっている</h3>
+        <p><code>prevXxx</code>と現在値を両方参照する、という判定-3・判定-4の判断材料は、既存の各操作の<code>availableFor()</code>が既にやっていることと同じ形。新しい判断の枠組みを持ち込んでいない。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">7</div><div>
+        <h3>各段階が独立した純粋関数として検証できる</h3>
+        <p><code>FieldState</code>という共通の型を各段階が引き継ぐことで、途中の任意の段階を単体で止めて確認・テストできる。パイプライン全体を通してみないと正しさが分からない、という状態を避けている。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">8</div><div>
+        <h3>上流の誤りは実行を汚さない</h3>
+        <p>適用-1（実行）より手前で何を間違えても、既存の<code>validate()</code>/<code>availableFor()</code>/A〜G/W系バリデーションを必ず通る。新しく作る部分の誤りは「悪い提案」で止まり、データの整合性は既存の防御層が保証する。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">9</div><div>
+        <h3>検証は「自動修復」ではなく「人に見せる」形にする</h3>
+        <p>ドライラン（判定-5）で検出した検証エラーや、導出結果と観測の食い違いを、AIが勝手に直さず必ず確認Bへ上げる。DryRunは既存の<code>validate()</code>/<code>apply()</code>をコミットせず呼ぶだけなので、新しい判断ロジックを持ち込まない。</p>
+      </div></div>
+      <div class="why-card"><div class="wn">10</div><div>
+        <h3>報酬に関わる項目は、確信度に関係なく必ず人が見る</h3>
+        <p><code>band</code>/<code>positionBand</code>/<code>payGrade</code>/<code>employmentType</code>/<code>officialPositionCode</code>は、宣言レベルや自動解決の結果に関わらず確認Bを必ず経由する（<code>MUST_CONFIRM_FIELDS</code>）。</p>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Stage by Stage</div>
+      <h2>各段階の詳細——入出力スキーマ付き</h2>
+      <p class="section-note">
+        抽出-1・抽出-2・判定-2が扱う曖昧なフィールドは、すべて共通の<code>FieldState&lt;T&gt;</code>という型で表現する。生テキスト・根拠・確信度・解決状態を1つの型が持ち回るので、
+        <b>途中の任意の時点で「今どこまで分かっているか」を機械的に読める</b>し、<b>1つのフィールドの解決だけを取り出して単体テストできる</b>。
+      </p>
+<pre class="schema"><span class="c">// 共通の型: FieldState&lt;T&gt; — 抽出〜判定を通じて同じ器を使い回す</span>
+{
+  <span class="k">fieldKey</span>: <span class="s">string</span>,
+  <span class="k">raw</span>: <span class="s">string</span>,                  <span class="c">// 抽出-1が書き込み、以降不変（根拠として保持）</span>
+  <span class="k">evidence</span>: { <span class="k">slideIndex</span>, <span class="k">quote</span>: <span class="s">string</span>, <span class="k">cropRegion</span>?: [x,y,w,h] },
+  <span class="k">status</span>: <span class="s">'raw'|'clustered'|'awaiting_confirmation'|'confirmed'|'auto_resolved'</span>,
+  <span class="k">value</span>?: <span class="s">T</span>,
+  <span class="k">confidence</span>: <span class="s">number</span>,
+  <span class="k">source</span>?: <span class="s">'auto_normalize'|'human_confirm_A'|'domain_derive'</span>
+}</pre>
+    </div>
+
+    <div class="stage-list">
+
+      <div class="stage-card declare">
+        <div class="stage-rail"><span class="grp">準備</span><span class="n">1</span></div>
+        <div>
+          <div class="stage-head"><h3>読み取り範囲の宣言</h3><span class="badge touch">人が事前に宣言</span></div>
+          <p class="stage-desc">
+            処理を始める前に、この資料が実際にどこまで書かれていそうかを、人が1つ選ぶ。<code>AllocationRow</code>の実フィールド（約40個、<span class="mono">prevXxx</span>を除く）を、画像に書かれていそうな度合いで5段階に分けている。
+            Level4・5はそもそも宣言の対象にせず、常に既存の<span class="mono">prevXxx</span>／導出ロジックに委ねる。
+          </p>
+          <div class="level-table">
+            <div class="level-row"><div class="ln">Level 1<small>ほぼ確実に読み取れる</small></div><div class="ld"><code>lastName</code> <code>firstName</code> ／組織名の生テキスト ／役職・肩書の生テキスト ／上司部下関係（位置関係）</div></div>
+            <div class="level-row"><div class="ln">Level 2<small>視覚的な合図があれば</small></div><div class="ld"><code>employmentType</code>/<code>concurrentType</code>の手がかり ／<code>secondmentFromCompany</code>/<code>secondmentToCompany</code>/<code>concurrentReason</code> ／<code>transferReason</code>のニュアンス</div></div>
+            <div class="level-row must"><div class="ln">Level 3<small>資料次第でまれに</small></div><div class="ld"><code>location</code> ／<code>jobFamily</code>/<code>jobType</code> ／<code style="color:var(--danger)">band</code>/<code style="color:var(--danger)">positionBand</code>（要確認）</div></div>
+            <div class="level-row"><div class="ln">Level 4<small>宣言対象外・常に導出</small></div><div class="ld"><code>positionCode</code> <code>userId</code> <code>groupEmployeeId</code> <code>employeeNumber</code> ／<code>costCenter</code>/<code>businessUnit</code>等の組織階層コード ／<code style="color:var(--danger)">payGrade</code>（要確認）</div></div>
+            <div class="level-row"><div class="ln">Level 5<small>宣言対象外・常に現状維持</small></div><div class="ld">各種フラグ・<code>memo</code>・<code>promotionSign</code>等の管理用メタ情報</div></div>
+          </div>
+          <div class="must-confirm-box">
+            <h4>⚠ MUST_CONFIRM_FIELDS — Levelに関わらず必ず確認Bへ</h4>
+            <p><code>band</code> / <code>positionBand</code> / <code>payGrade</code> — 報酬に直結する</p>
+            <p><code>employmentType</code> — 他フィールドの許容値の土台になり、誤ると既存バリデーションで発見できない</p>
+            <p><code>officialPositionCode</code> — 昇降格マトリクスの起点。誤読すると昇格と横異動を取り違える</p>
+            <p>Level・確信度に関わらず固定で確認対象にする、事前定義済みのリスト。</p>
+          </div>
+<pre class="schema"><span class="c">// Output: DocumentScope</span>
+{ <span class="k">sourceId</span>: <span class="s">string</span>, <span class="k">declaredLevel</span>: <span class="s">1|2|3</span> }</pre>
+          <div class="verify-box"><b>検証方法：</b>UIの選択のみ。ロジック側は「宣言Levelを超えるfieldKeyのFieldStateを生成しない」という単純な分岐。</div>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">準備</span><span class="n">2</span></div>
+        <div>
+          <div class="stage-head"><h3>スライド分解</h3><span class="badge new">新規・機械的</span></div>
+          <p class="stage-desc">PPT数十枚を1枚＝1画像に分解する。LLMは使わない。以降すべての処理の基本単位（抽出・実行）をこの「1枚」に揃える。</p>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">抽出</span><span class="n">1</span></div>
+        <div>
+          <div class="stage-head"><h3>Vision観測抽出</h3><span class="badge new">新規</span></div>
+          <p class="stage-desc">
+            1枚＝1呼び出しで並列にファンアウト。<code>DocumentScope.declaredLevel</code>以下のフィールドだけを対象に、正規化・コード化は一切せず生テキスト＋確信度＋根拠だけを出す。
+            上司関係は同一画像内の別の観測人物への参照として、位置関係から抽出する（まだ実在の<code>managerPositionCode</code>ではない）。
+            構造的な差分では読み取れない「休職・退職・移籍」等の明示的な注記は、<code>proceduralNote</code>として別枠で拾う——これはフィールドの変化ではなく宣言そのものなので、他のフィールドと同じ扱いにしない。
+          </p>
+<pre class="schema"><span class="c">// Output: PersonObservation[]</span>
+{
+  <span class="k">obsId</span>: <span class="s">string</span>, <span class="k">slideIndex</span>: <span class="s">number</span>,
+  <span class="k">name</span>: <span class="s">FieldState&lt;string&gt;</span>,
+  <span class="k">org</span>?: <span class="s">FieldState&lt;string&gt;</span>, <span class="k">title</span>?: <span class="s">FieldState&lt;string&gt;</span>,
+  <span class="k">employmentStatus</span>?: <span class="s">FieldState&lt;string&gt;</span>,
+  <span class="k">managerRef</span>?: <span class="s">FieldState&lt;obsId&gt;</span>,
+  <span class="k">proceduralNote</span>?: <span class="s">FieldState&lt;'休職'|'退職'|'移籍'|'雇用延長'&gt;</span>  <span class="c">// 明示的な注記。構造差分とは別の信号源</span>
+}</pre>
+          <div class="verify-box"><b>検証方法：</b>手動でラベル付けしたサンプル画像セットに対する、フィールドごとの抽出精度とconfidenceの較正をオフラインで評価。他段階に依存せず単独で検証できる。</div>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">抽出</span><span class="n">2</span></div>
+        <div>
+          <div class="stage-head"><h3>事実のクラスタリング</h3><span class="badge new">新規</span></div>
+          <p class="stage-desc">複数人が参照する同一の生テキストをグルーピングし、<code>UnresolvedFact</code>に束ねる。「この組織名は12人分で共有されている」という逆引きが、そのまま確認Aの優先度になる。</p>
+<pre class="schema"><span class="c">// Output: UnresolvedFact[]</span>
+{
+  <span class="k">factId</span>: <span class="s">string</span>, <span class="k">fieldKey</span>: <span class="s">string</span>,
+  <span class="k">rawText</span>: <span class="s">string</span>, <span class="k">variants</span>: <span class="s">string</span>[],
+  <span class="k">candidates</span>: { <span class="k">code</span>, <span class="k">label</span>, <span class="k">score</span> }[],
+  <span class="k">linkedFieldStates</span>: { <span class="k">obsId</span>, <span class="k">fieldKey</span> }[]
+}</pre>
+          <div class="verify-box"><b>検証方法：</b>純粋関数。文字列リスト→期待されるグルーピング結果、でユニットテスト可能。LLMに依存しない。</div>
+        </div>
+      </div>
+
+      <div class="stage-card gate">
+        <div class="stage-rail"><span class="grp">抽出</span><span class="n">3</span></div>
+        <div>
+          <div class="stage-head"><h3>確認A — 共有される曖昧さの確認</h3><span class="badge touch">対話あり</span></div>
+          <p class="stage-desc">
+            <code>linkedFieldStates.length</code>の多い順にソートし、上位数件だけを最初に見せ、残りは任意で展開する。自分のペースで片付けられる一覧にする。
+            回答すると、参照している全<code>FieldState</code>が<code>confirmed</code>へ遷移する。
+          </p>
+          <div class="verify-box"><b>検証方法：</b>ユニットテストではなく実利用での反復調整が前提。</div>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">判定</span><span class="n">1</span></div>
+        <div>
+          <div class="stage-head"><h3>名寄せ</h3><span class="badge new">新規・未設計</span></div>
+          <p class="stage-desc">
+            抽出した人物を既存<code>allocationList</code>の行と照合する。<b>誤ると別人の行を書き換えるという、パイプライン全体で最も重い事故</b>につながるため、他のどの段階よりも慎重な設計が必要。
+            上司として参照された人物（<code>managerRef</code>）も同様に名寄せが必要。
+            <b>同一の<code>matchedRowId</code>に複数の<code>obsId</code>が一致することを許容する</b>——同じ人物が画像内の2箇所（本務先と兼務先）に登場するケースの検知に必要（判定-4で兼務系操作の判定材料になる）。
+          </p>
+<pre class="schema"><span class="c">// Output: IdentityResolution[]</span>
+{ <span class="k">obsId</span>: <span class="s">string</span>, <span class="k">matchedRowId</span>?: <span class="s">number</span>,
+  <span class="k">candidates</span>?: { <span class="k">rowId</span>, <span class="k">score</span>, <span class="k">matchedOn</span>: <span class="s">string</span>[] }[],
+  <span class="k">status</span>: <span class="s">'matched'|'ambiguous'|'new_person'|'unresolved'</span> }
+<span class="c">// 同じ matchedRowId を持つ IdentityResolution が2件以上あれば「複数観測」——判定-4が使う</span></pre>
+          <div class="verify-box"><b>検証方法：</b>純粋関数。(観測, 候補行群) → 一致/複数候補/新規、という入出力でユニットテスト可能。<b>現時点で未設計。次に着手すべき最優先項目。</b></div>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">判定</span><span class="n">2</span></div>
+        <div>
+          <div class="stage-head"><h3>マスタ正規化</h3><span class="badge mixed">新規＋既存流用</span></div>
+          <p class="stage-desc">確認Aで<code>confirmed</code>にならなかった、単独で確信度が高いFieldStateを<code>FIELD_CONSTRAINTS</code>のマスタへ解決し<code>auto_resolved</code>にする。条件付き制約フィールドはここでは触らない。</p>
+          <div class="verify-box"><b>検証方法：</b>純粋関数。既存の<code>FIELD_CONSTRAINTS</code>のテスト資産と同じ流儀。</div>
+        </div>
+      </div>
+
+      <div class="stage-card gate">
+        <div class="stage-rail"><span class="grp">判定</span><span class="n">3</span></div>
+        <div>
+          <div class="stage-head"><h3>変更検知（no-opゲート）</h3><span class="badge new">新規</span></div>
+          <p class="stage-desc">現在値と<code>prevXxx</code>の両方に対して、解決済みFieldStateを突き合わせる。一致していれば「変更なし」として判定-4（操作選定）に進まない。宣言外のフィールドは比較対象にならず素通りする。
+            <code>proceduralNote</code>の有無・同一行への複数観測の有無も、フィールド差分とは別の「変化あり」シグナルとして持ち回る（判定-4の層1・層2が使う）。</p>
+<pre class="schema"><span class="c">// Output: ChangeSignal</span>
+{ <span class="k">rowId</span>: <span class="s">number</span>, <span class="k">hasChange</span>: <span class="s">boolean</span>, <span class="k">changedFields</span>: <span class="s">string</span>[],
+  <span class="k">hasProceduralNote</span>: <span class="s">boolean</span>,       <span class="c">// 明示的な注記（休職等）の有無</span>
+  <span class="k">observationCount</span>: <span class="s">number</span> }        <span class="c">// 同一rowIdへの観測件数（2以上なら複数観測）</span></pre>
+          <div class="verify-box"><b>検証方法：</b>純粋関数。(現在行, prevXxx, FieldState[]) → ChangeSignal、で機械的にテストできる。</div>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">判定</span><span class="n">4</span></div>
+        <div>
+          <div class="stage-head"><h3>操作選定</h3><span class="badge new">新規・未設計</span></div>
+          <p class="stage-desc">
+            <b>1人（または1グループ）につき、単一の操作を選ぶのではなく、コマンドの「スタック」を組み立てる。</b>ルールは4層に分かれ、層ごとに「排他（当たったら独占）」か「加算（複数同時に成立してよい）」かが違う。
+          </p>
+          <ul style="margin:0 0 14px;padding-left:20px;font-size:14.5px;color:var(--ink-soft)">
+            <li><b>層1・宣言（排他）</b>：<code>proceduralNote</code>（休職・退職・移籍等の明示的な注記）があれば、フィールド差分は一切見ずに対応する操作へ直行し、他の層を止める</li>
+            <li><b>層2・多重観測（部分排他）</b>：同一<code>matchedRowId</code>に2件以上の観測があれば、片方を本務、もう片方を兼務系操作（<code>ConcurrentAdd</code>等）として扱う。本務側に層4の変化が別途あっても共存可</li>
+            <li><b>層3・構造複合（排他）</b>：後任配置のような、既知の固定順序パターンに一致すれば、その複数行ぶんのコマンド列を採用し、他の層を止める</li>
+            <li><b>層4・構造単純（加算）</b>：<code>changedFields</code>に含まれる各フィールドのうち、独立した意味を持つもの（組織・バンド・雇用ステータス…）ごとにルールがあり、<b>該当するもの全部</b>がコマンドとしてスタックに積まれる。同一行・互いに素なフィールドなので可換——組織とバンドが同時に変わっていれば、<code>OrgTransfer</code>と<code>Promotion</code>の2件がどちらの順でも安全に積まれる</li>
+          </ul>
+<pre class="schema"><span class="c">// 内部構造: OperationRule[]</span>
+{ <span class="k">id</span>: <span class="s">string</span>, <span class="k">tier</span>: <span class="s">'declaration'|'multiObservation'|'composite'|'structural'</span>,
+  <span class="k">exclusive</span>: <span class="s">boolean</span>,          <span class="c">// true=成立したら他ルールを止める（層1・3）</span>
+  <span class="k">appliesTo</span>(ctx): <span class="s">boolean</span>, <span class="k">isMultiRow</span>: <span class="s">boolean</span>,
+  <span class="k">build</span>(ctx): { operationId, rowId, values } | { multiRowDefId, sectionValues } }
+
+<span class="c">// Output: ProposedChange[] — 1人・1グループぶんのスタックを、複数件のエントリで表す</span>
+{ <span class="k">stackId</span>: <span class="s">string</span>,             <span class="c">// 同じ人・同じグループに属するコマンドをまとめる単位</span>
+  <span class="k">order</span>: <span class="s">number</span>,               <span class="c">// スタック内の順序（層4同士は可換なので大小に意味を持たせなくてよい）</span>
+  <span class="k">kind</span>: <span class="s">'single'|'multiRow'</span>, <span class="k">operationId</span>?, <span class="k">multiRowDefId</span>?,
+  <span class="k">rowId</span> / <span class="k">rowIds</span>, <span class="k">values</span> / <span class="k">sectionValues</span>,
+  <span class="k">confidence</span>: <span class="s">number</span>, <span class="k">ruleId</span>: <span class="s">string</span> }</pre>
+          <div class="rule-table">
+            <div class="rule-row"><div class="rn">LeaveOfAbsenceDeclared<br><small style="color:var(--ink-faint)">層1・排他</small></div><div class="rd"><code>proceduralNote='休職'</code> → <code>LeaveOfAbsence</code>単独。フィールド差分は見ない</div></div>
+            <div class="rule-row"><div class="rn">ResignationDeclared<br><small style="color:var(--ink-faint)">層1・排他</small></div><div class="rd"><code>proceduralNote='退職'</code> → <code>Resignation</code>単独</div></div>
+            <div class="rule-row"><div class="rn">ConcurrentAssignment<br><small style="color:var(--ink-faint)">層2・部分排他</small></div><div class="rd">同一人物が2箇所で観測 → 本務側はそのまま、もう1件を<code>ConcurrentAdd</code>（sourceRowId=本務行、values=もう1件の観測）</div></div>
+            <div class="rule-row"><div class="rn">SuccessorSwap<br><small style="color:var(--ink-faint)">層3・排他</small></div><div class="rd">同一ポジションに前任者の離脱と後任者の着任が同時に観測される → 固定順序の複数行コマンド列</div></div>
+            <div class="rule-row"><div class="rn">OrgChanged<br><small style="color:var(--ink-faint)">層4・加算</small></div><div class="rd"><code>changedFields</code>に<code>departmentCode</code> → <code>OrgTransfer</code>を積む</div></div>
+            <div class="rule-row"><div class="rn">BandChanged<br><small style="color:var(--ink-faint)">層4・加算</small></div><div class="rd"><code>changedFields</code>にband系 → <code>Promotion</code>/<code>Demotion</code>を積む。同時にバンド上昇なら<code>transferReason</code>は分掌異動で確定</div></div>
+            <div class="rule-row"><div class="rn">EmploymentStatusChanged<br><small style="color:var(--ink-faint)">層4・加算</small></div><div class="rd">雇用ステータスの手がかりが出向系 → 出向系操作を積む</div></div>
+          </div>
+          <p class="stage-desc" style="margin-top:14px">
+            各ルールは、実装コードの直前に決まった見出し構成のコメントを書く形で定義する。別のMarkdown定義書は作らない——コードと離れた場所にある仕様書はドリフトするため（今回のドキュメント整理でも痛感した）。
+          </p>
+<pre class="schema"><span class="c">/**
+ * OperationRule: BandChanged
+ * ─────────────────────────────────────────
+ * 層: structural（層4・加算）　対象操作: Promotion / Demotion
+ *
+ * 信号: ChangeSignal.changedFields に band/positionBand を含む
+ * 判定根拠: masters.jobLevels の promotionDemotionWarningLevel で比較
+ * values構築: positionBand=判定-2の解決値／バンド上昇なら transferReason を分掌異動で確定
+ * 検証（同値クラス）: ①上昇→成立(Promotion) ②下降→成立(Demotion) ③未観測/不変→不成立
+ */</span>
+
+<span class="c">/**
+ * OperationRule: SuccessorSwap
+ * ─────────────────────────────────────────
+ * 層: composite（層3・排他）　対象操作: vacatePosition + assignPersonToVacant + (必要なら)ManagerChange
+ *
+ * 信号: ①Aのポジションが観測されなくなった ②BがAの元positionCodeに新規観測される
+ * 固定手順: 1.vacatePosition(A) 2.assignPersonToVacant(B, 手順1の空席) 3.他の部下のmanagerPositionCodeを個別更新
+ * 未解決になるケース: Aの行き先が不明 → 成立させず確認Bへ
+ * 検証（同値クラス）: ①両方確認できる→成立 ②行き先不明→不成立 ③Bが既存いずれとも不一致→対象外
+ */</span></pre>
+          <p class="stage-desc">
+            集約は既存の<code>ALL_EDIT_OPERATIONS</code>と同じ発想で、<code>ALL_OPERATION_RULES</code>という配列にまとめる（新しいルールが見つかるたびに育てていく）。判定-4は排他層（層1→層2→層3）を順に見て、成立すればそこで確定、どれも成立しなければ層4に該当するもの全部を集める、という走査をするだけ。
+          </p>
+          <div class="must-confirm-box" style="background:var(--accent-soft);border-color:var(--accent);">
+            <h4 style="color:var(--accent);">🔒 層4の可換性は前提ではなく、テストで保証する</h4>
+            <p>「層4は互いに素なフィールドしか触らないから可換」というのは、新しいルールを足すたびに<b>機械的に検証する</b>——各ルールの対象操作が実際に書き込むフィールドを把握し、<b>層4のどの2ルールも書き込み先が重ならないこと</b>をテストで確認する。重なりが検出されたら、それは層4に置いてはいけないサイン——層3へ個別の固定順序ルールとして持ち上げる。<b>非可換な組み合わせへの一般的な自動解決は、意図的に持たせない</b>（層3で人が個別に順序を決める、という前々回の結論のまま）。</p>
+          </div>
+          <div class="verify-box"><b>検証方法：</b>純粋関数。既存の<code>tests/helpers/operationRunner.ts</code>と同じ流儀でシナリオテストできる。層4は各ルールを個別にテストできる。<b>層3（複数行）のルールが現時点で薄く、拡充が本体作業になる。</b></div>
+        </div>
+      </div>
+
+      <div class="stage-card gate">
+        <div class="stage-rail"><span class="grp">判定</span><span class="n">5</span></div>
+        <div>
+          <div class="stage-head"><h3>ドライラン検証</h3><span class="badge new">新規・薄い</span></div>
+          <p class="stage-desc">
+            <code>ProposedChange</code>を<b>コミットせずに</b>検証する。使うのは既存の<code>validate()</code>/<code>apply()</code>そのもの——<code>executeOperation</code>を呼ばず、結果を破棄するだけ。
+            同じ<code>stackId</code>のエントリは<code>order</code>順に連続してドライラン（層4同士は可換なので実質どの順でも良いが、層3の複合スタックは決め打ちの順で1回通す）。
+          </p>
+          <ul style="margin:0 0 14px;padding-left:20px;font-size:14.5px;color:var(--ink-soft)">
+            <li><code>validate()</code>が失敗 → 「検証エラー」として確認Bへ強制的に上がる（黙って落とさない）</li>
+            <li><code>validate()</code>は通るが、導出後の最終値が元のFieldStateの観測と食い違う → 同様に確認Bへ</li>
+          </ul>
+          <p class="stage-desc"><b>「自己修復」（AIが自動で値を調整して再試行する）は採用しない</b>。原則7と矛盾するため。<code>executeBatch</code>が最初の失敗コマンドで全体を中断する仕様（<a href="#bugs">後述のバグ2</a>）を踏まえると、ここで事前に弾いておくのは実質必須の前段になる。</p>
+          <div class="verify-box"><b>検証方法：</b>既存の<code>validate()</code>/<code>apply()</code>をそのまま呼ぶだけなので、新規テストはごく薄い。</div>
+        </div>
+      </div>
+
+      <div class="stage-card gate">
+        <div class="stage-rail"><span class="grp">判定</span><span class="n">6</span></div>
+        <div>
+          <div class="stage-head"><h3>確認B — 提案そのものの確認</h3><span class="badge touch">対話あり</span></div>
+          <p class="stage-desc">
+            <code>ProposedChange</code>のうち、①confidenceが閾値未満、②複数の<code>OperationRule</code>が競合、③ドライランで検証エラー・食い違いを検出、④<code>MUST_CONFIRM_FIELDS</code>に触れる——のいずれかに該当するものを見せる。同じ<code>stackId</code>のエントリはまとめて1件として提示する（スタック全体を人に見せる）。
+            対象は「変更のある人」だけ（判定-3で絞り込み済み）。対応しなかった項目は既存のレビュー画面にそのまま残る。
+          </p>
+        </div>
+      </div>
+
+      <div class="stage-card">
+        <div class="stage-rail"><span class="grp">適用</span><span class="n">1</span></div>
+        <div>
+          <div class="stage-head"><h3>実行・Undo</h3><span class="badge reuse">既存のまま・無改変</span></div>
+          <p class="stage-desc">
+            確認Bを終えた<code>ProposedChange</code>を<code>bindOperation(op, rowId, values)</code>にかけ、<code>executeOperation()</code> / <code>executeBatch()</code>へそのまま渡す。1スライド＝1バッチ＝1Undo単位。
+            新しいコードは足さない。<code>validate()</code>・<code>apply()</code>・A〜G/W系バリデーション・UndoStackはこれまで通り。
+          </p>
+          <div class="verify-box"><b>検証方法：</b>新規テスト不要。既存の実行パスのテストでカバー済み。</div>
+        </div>
+      </div>
+
+      <div class="stage-card info">
+        <div class="stage-rail"><span class="grp">適用</span><span class="n">2</span></div>
+        <div>
+          <div class="stage-head"><h3>反映結果の提示</h3><span class="badge reuse">既存を流用</span></div>
+          <p class="stage-desc">
+            実行後、何が反映されたかを見せるだけの、<b>アクション不要</b>な軽い一覧。新しいロジックは作らず、既存の<code>EditPattern</code>バッジ・レビュー画面をそのまま使う（人が普通のExcelインポート後に確認するのと同じ画面）。
+            おかしいと気づいた場合の対処も、パイプラインの自動リトライは作らず、<b>普通の手動編集・Undo</b>に委ねる——ここでループは作らない。
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">In Practice</div>
+      <h2>個別の論点が対応する段階</h2>
+      <p class="section-note">これまでの検討で挙がった具体例が、上で見た各段階のどこに当たるかを振り返る。</p>
+    </div>
+    <div class="example-map">
+      <div class="ex-row"><div class="ex-text">「M」と書いてあったらマネージャーの略、という解釈<small>自由記述のまま保持し、確定はさせない</small></div><div class="ex-stage">抽出-1 → 抽出-2 → 判定-2</div></div>
+      <div class="ex-row"><div class="ex-text">組織名は書いてあるが組織コードがない<small>統制語彙（マスタ）への正規化</small></div><div class="ex-stage">判定-2</div></div>
+      <div class="ex-row"><div class="ex-text">位置関係から上司・部下を判断<small>画像内の別の観測人物への参照として抽出</small></div><div class="ex-stage">抽出-1 → 判定-1</div></div>
+      <div class="ex-row"><div class="ex-text">氏名だけで既存の人物IDを特定する<small>別人の行を誤って書き換える、最重要リスク</small></div><div class="ex-stage">判定-1</div></div>
+      <div class="ex-row"><div class="ex-text">現在値・prevと矛盾しなければ変更しなくてよい<small>全員に操作を割り当てようとしない</small></div><div class="ex-stage">判定-3</div></div>
+      <div class="ex-row"><div class="ex-text">ポジションコードや組織コードが書かれていない資料もある<small>読み取れないものを無理に読み取らせない</small></div><div class="ex-stage">準備-1</div></div>
+      <div class="ex-row"><div class="ex-text">band等、報酬に関わる項目は常に確認したい<small>Levelに関係ない固定リスト</small></div><div class="ex-stage">準備-1・判定-6（MUST_CONFIRM_FIELDS）</div></div>
+      <div class="ex-row"><div class="ex-text">情報の充足度で確認方法を変える、簡単/複雑パス<small>1つの軸ではなく2つの軸に分解された</small></div><div class="ex-stage">判定-4（isMultiRow）＋ 確信度ルーティング（確認A/B）</div></div>
+      <div class="ex-row"><div class="ex-text">導出結果が意図とズレる／エラーで反映されない<small>自己修復はせず、必ず人に見せる</small></div><div class="ex-stage">判定-5 → 判定-6</div></div>
+      <div class="ex-row"><div class="ex-text">休職・退職等はフィールド差分ではなく明示的な注記で判定<small>異動事由は他のフィールドと扱いが違う</small></div><div class="ex-stage">抽出-1（proceduralNote）→ 判定-4・層1</div></div>
+      <div class="ex-row"><div class="ex-text">分掌異動と分掌異動（組改）の使い分け<small>本人都合か組織改編かは画像から分からない</small></div><div class="ex-stage">判定-4・層4（バンド上昇は自動確定）／確認A（組織改編か否かは共有事実として1回確認）</div></div>
+      <div class="ex-row"><div class="ex-text">兼務追加（既存の本務行をコピーして新規行を作る）<small>ドメイン変更もコード重複も不要</small></div><div class="ex-stage">判定-1（同一人物の複数観測を許容）→ 判定-4・層2</div></div>
+      <div class="ex-row"><div class="ex-text">移動かつ昇進のような、同じ人の複数フィールドが同時に変化<small>1操作では表現できないが、可換なので安全に積める</small></div><div class="ex-stage">判定-4・層4（複数ルールが同時発火してスタックを作る）</div></div>
+      <div class="ex-row"><div class="ex-text">後任配置（玉突き人事）：前任者を動かしてから後任を座らせる<small>順序依存・複数行にまたがる。探索ではなく固定順序を手作り</small></div><div class="ex-stage">判定-4・層3（SuccessorSwap、既知パターンのカタログ）</div></div>
+      <div class="ex-row"><div class="ex-text">複数ルールを積み上げてよいか（可換か）の判断<small>前提ではなく、書き込み先フィールドの重複チェックで保証する</small></div><div class="ex-stage">判定-4・層4の設計原則（重複検出時は層3へ個別に持ち上げる）</div></div>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Build vs Reuse</div>
+      <h2>新規構築 vs 既存資産の再利用</h2>
+      <p class="section-note">「今の作りから何を追加するか」を段階ごとに一覧化。既存コードは1文字も変更しない前提。</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>資産</th><th>状態</th><th>備考</th></tr></thead>
+        <tbody>
+          <tr><td>EditOperation定義群</td><td>既存のまま</td><td>inputs・availableFor・validate・applyを含め無改変</td></tr>
+          <tr><td><span class="mono">executeOperation / executeBatch</span></td><td>既存のまま</td><td>状態を正しくチェーンする実装済みの実行パス</td></tr>
+          <tr><td>UndoStack</td><td>既存のまま</td><td>追加作業なし</td></tr>
+          <tr><td><span class="mono">FIELD_CONSTRAINTS</span></td><td>既存を流用</td><td>判定-2の候補ソースとしてそのまま使う</td></tr>
+          <tr><td>A〜G/W系バリデーション</td><td>既存のまま</td><td>各Defのvalidate()内で従来通り動作</td></tr>
+          <tr><td>既存レビュー画面（ReviewPane等）</td><td>既存を流用</td><td>確認Bの受け皿・適用-2の実体</td></tr>
+          <tr><td>読み取り範囲の宣言UI（準備-1）</td><td class="mono">新規UI</td><td>Level 1〜3の選択のみ。<span class="mono">DocumentScope</span>を生成</td></tr>
+          <tr><td>Level定義・<span class="mono">MUST_CONFIRM_FIELDS</span></td><td class="mono">新規・事前定義</td><td>固定リストとしてドキュメント化。実行時に動的計算しない</td></tr>
+          <tr><td>Vision抽出（抽出-1）</td><td class="mono">新規</td><td><span class="mono">PersonObservation</span> / <span class="mono">FieldState</span>スキーマ・並列呼び出し</td></tr>
+          <tr><td>事実クラスタリング（抽出-2）</td><td class="mono">新規</td><td>正規化＋グルーピング。LLM不使用の純粋関数</td></tr>
+          <tr><td>確認A UI（抽出-3）</td><td class="mono">新規UI</td><td>影響人数順ソート＋段階的開示</td></tr>
+          <tr><td>名寄せ（判定-1）</td><td class="mono">新規・未設計</td><td>最優先の検討事項。同一人物の複数観測（本務＋兼務）も扱う</td></tr>
+          <tr><td>マスタ正規化ロジック（判定-2）</td><td class="mono">新規</td><td>既存FIELD_CONSTRAINTSに候補絞り込みを足す薄い層</td></tr>
+          <tr><td>変更検知（判定-3）</td><td class="mono">新規</td><td>現在値・prevXxxとの突き合わせのみ。純粋関数</td></tr>
+          <tr><td>操作選定ロジック（判定-4）</td><td class="mono">新規・未設計</td><td>4層（宣言/多重観測/複合/構造）のOperationRuleテーブル。層4はスタックとして加算的に組み立てる</td></tr>
+          <tr><td>ドライラン検証（判定-5）</td><td class="mono">新規・薄い</td><td>既存のvalidate()/apply()を非コミットで呼ぶだけ</td></tr>
+          <tr><td>確認B UI（判定-6）</td><td class="mono">新規UI</td><td>低confidence・競合・検証エラー・MUST_CONFIRM該当を集約</td></tr>
+          <tr><td>反映結果の提示（適用-2）</td><td class="mono">既存流用</td><td>新規ロジックなし。既存レビュー画面をそのまま出すだけ</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Robustness</div>
+      <h2>ガードレールの根拠</h2>
+      <p class="section-note">新しく作る部分は、すべて既存の防御層の手前に位置する。AIの推測が誤っても、人がUIで操作する場合と同じ検証を必ず通る。</p>
+    </div>
+    <div class="defense">
+      <div class="defense-row">
+        <div class="defense-tag"><i></i>新規（上流）</div>
+        <div class="defense-body">宣言・Vision抽出・事実クラスタリング・名寄せ・マスタ正規化・変更検知・操作選定・ドライラン・2箇所の確認 —— <b>ここでの誤りは「悪い候補」を作るだけ</b>で、まだ何も確定していない。</div>
+      </div>
+      <div class="defense-row existing">
+        <div class="defense-tag"><i></i>既存（下流・無改変）</div>
+        <div class="defense-body">各EditOperationの<code>validate()</code> / <code>availableFor()</code>、A〜G/W系バリデーション、operationRoleの排他制御 —— <b>ここを通らない限り何も実行されない。</b>人がUIから操作する場合と全く同じ関門。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Open Items</div>
+      <h2>未解決の設計課題</h2>
+      <p class="section-note">誠実に書くと、以下は方向性のみ確定していて、詳細設計はまだ済んでいない。</p>
+    </div>
+    <div class="risk-list">
+      <div class="risk-card">
+        <div class="risk-head"><h3>名寄せ（判定-1）の具体的な照合方法</h3><span class="risk-priority">最優先</span></div>
+        <p>パイプライン全体で<b>最も危険な失敗モード</b>（別人の行を誤って書き換える）を持つ段階。次に着手すべき項目。</p>
+      </div>
+      <div class="risk-card">
+        <div class="risk-head"><h3>操作選定（判定-4）のルール表</h3><span class="risk-priority">優先</span></div>
+        <p>内部構造（4層・排他/加算）は決まったが、実際のルール、特に後任配置のような層3（複数行）のルールが現状ほぼ空。名寄せの設計と合わせて拡充が必要。</p>
+      </div>
+      <div class="risk-card">
+        <div class="risk-head"><h3>層4の可換性保証テストの構築</h3><span class="risk-priority">優先</span></div>
+        <p>「層4のどの2ルールも書き込みフィールドが重ならない」ことを機械的に検証する仕組みが未実装。各ルールの対象操作が実際に書き込むフィールドをどう把握するか（<span class="mono">FIELD_METADATA</span>参照か、ドライラン差分からの取得か）も未決定。</p>
+      </div>
+      <div class="risk-card">
+        <div class="risk-head"><h3>確認Aの「共有される事実」がYes/No型の問いにも対応できるか</h3><span class="risk-priority">要検討</span></div>
+        <p><span class="mono">UnresolvedFact</span>は元々「候補の中から選ぶ」形（組織名の正規化等）を想定している。「この一連の異動は組織改編に伴うものか」はYes/No型の問いで、同じ器にそのまま乗せられるかは未検証。</p>
+      </div>
+      <div class="risk-card">
+        <div class="risk-head"><h3><span class="mono">executeBatch</span>のロック排他制御の欠落</h3><span class="risk-priority">既存バグ・別対応</span></div>
+        <p>UIのメニュー描画時にしか働かない排他制御が、AIバッチ経路では素通りされる。詳細は文末「既存コードの修正点」を参照。</p>
+      </div>
+      <div class="risk-card">
+        <div class="risk-head"><h3>確認A・Bの閾値の最終調整</h3><span class="risk-priority">反復調整</span></div>
+        <p>「上位何件を最初に見せるか」「confidenceの閾値」は実データでの較正が要る。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing fade-in">
+    <div class="section-head">
+      <div class="section-kicker">Confidence</div>
+      <h2>現時点の確信度</h2>
+    </div>
+    <p>
+      パイプラインの<b>形</b>については、検討の過程で「detect()の転用」「基本操作を直接AIに呼ばせる」「導出・バリデーションを単体で叩く」
+      「1問ずつの対話」「確認を1箇所にまとめる」「解決状態を複数の型に分散して持つ」「AIによる自己修復」といった案を一通り試し、
+      いずれもドメインの原則、既知のUX失敗パターン、あるいは透明性・安全性の欠如のいずれかに抵触することを確認した上で退けている。
+      残った形は消去法的にも、既存資産の再利用という観点でも筋が良いと判断している。
+    </p>
+    <p>
+      一方で、名寄せ（判定-1）と操作選定のルール表（判定-4）という<b>2つの中核部分が未設計</b>のままでは、全体が動くという確信までは持てない。
+      この2つを具体化して初めて、フィージビリティの検証に進める段階だと考える。逆に言えば、変更検知（判定-3）は比較的シンプルな突き合わせロジックで、設計上の不確定要素は少ない。
+    </p>
+    <div class="next-steps">
+      <div class="next-step"><span class="rank">1</span>名寄せ（判定-1）の照合ロジックを設計する</div>
+      <div class="next-step"><span class="rank">2</span>操作選定（判定-4）のOperationRuleを洗い出す</div>
+    </div>
+  </section>
+
+  <section class="fade-in" id="bugs" style="border-bottom:none;">
+    <div class="section-head">
+      <div class="section-kicker">Appendix &middot; must fix</div>
+      <h2>既存コードの修正点（総まとめ）</h2>
+      <p class="section-note">
+        このパイプラインを設計する過程で見つかった、既存コードの実際の不具合・ドキュメントとの乖離。上のOpen Itemsと内容が重複するが、見落とし防止のためここに集約する。
+        いずれも<b>このパイプラインの設計そのものとは独立した、既存コードの問題</b>であり、今回のドキュメント作成中にコードへの変更は行っていない。
+      </p>
+    </div>
+    <div class="bug-list">
+      <div class="bug-card">
+        <div class="bug-head"><span class="bn">BUG 1</span><h3>ロック排他制御が実行時に効いていない</h3></div>
+        <div class="bug-loc mono" style="color:var(--ink-faint)">apps/web/src/application/HRApplicationService.ts — executeOperation() / executeBatch()</div>
+        <div class="bug-field"><div class="fl">問題</div><p><code>operationRole</code>（lock/softLock）の排他制御は<code>resolveAvailability()</code>（packages/domain/src/commands/defs/index.ts）にしか実装されておらず、実行系の<code>executeOperation</code>/<code>executeBatch</code>自体はこれを呼んでいない。</p></div>
+        <div class="bug-field"><div class="fl">影響</div><p>人はUIメニュー経由で必ず1操作ずつ実行するため今まで顕在化しなかった。プログラムから複数コマンドを直接<code>executeBatch</code>に積む経路（本パイプライン含む）では、本来矛盾するはずの操作（例：退職ロック中の昇格）が両方成立してしまう。</p></div>
+        <div class="bug-field"><div class="fl">修正の方向性</div><p><code>executeBatch</code>のループ内で、各コマンド適用前にその時点のチェーン済み行状態に対して<code>resolveAvailability()</code>相当のチェックを通す。</p></div>
+      </div>
+      <div class="bug-card">
+        <div class="bug-head"><span class="bn">BUG 2</span><h3><span class="mono">executeBatch</span>が全体を巻き込んで中断する</h3></div>
+        <div class="bug-loc mono" style="color:var(--ink-faint)">apps/web/src/application/HRApplicationService.ts — executeBatch()（<span class="mono">if (!vr.ok) return vr</span>）</div>
+        <div class="bug-field"><div class="fl">問題</div><p>ループ内で1つでも<code>validate()</code>が失敗すると、その時点でバッチ全体を中断する（all-or-nothing）。</p></div>
+        <div class="bug-field"><div class="fl">影響</div><p>1スライド分（数十人）を1バッチにまとめて実行する設計だと、1人のエラーで全員分の反映が止まる。本パイプラインでは判定-5（ドライラン）で事前に弾くことで実質的に回避しているが、<code>executeBatch</code>自体の性質としては残ったまま。</p></div>
+        <div class="bug-field"><div class="fl">修正の方向性</div><p>今回は回避策（ドライラン）で対応。<code>executeBatch</code>自体を部分成功対応にするかは、他の利用箇所への影響も含めて別途判断が必要。</p></div>
+      </div>
+      <div class="bug-card">
+        <div class="bug-head"><span class="bn">BUG 3</span><h3>ドキュメントが存在しないメソッドを記載している</h3></div>
+        <div class="bug-loc mono" style="color:var(--ink-faint)">apps/web/CLAUDE.md — 「操作の呼び出し方（UIから）」セクション</div>
+        <div class="bug-field"><div class="fl">問題</div><p><code>appService.executeScenario({ label, commands })</code>という記載があるが、実装は<code>executeBatch(label: string, commands: EditCommand[])</code>という別シグネチャ（位置引数）。<code>EditScenario</code>という型自体、メインツリーのソースコードに存在しない。</p></div>
+        <div class="bug-field"><div class="fl">修正の方向性</div><p>ドキュメントを実装に合わせて修正するだけ。軽微。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>PersonnelAllocation &middot; 開発者向け設計案 &middot; 実装コードへの変更は含まない</footer>
+
+</div>

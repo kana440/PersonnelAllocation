@@ -48,6 +48,12 @@
 | [23-org-view-edit-requirements.md](./23-org-view-edit-requirements.md) | 企画・エンジニア | STEP1組織図view/edit機能の業務要件（他ツールへの移植判断用） |
 | [24-org-view-edit-known-issues.md](./24-org-view-edit-known-issues.md) | エンジニア | 23の既知課題・保留中の設計判断 |
 
+### 検討中の設計案（未実装）
+
+| ファイル | 対象読者 | 内容 |
+|---|---|---|
+| [25-org-chart-ai-ingest-pipeline.html](./25-org-chart-ai-ingest-pipeline.html) | エンジニア | 組織図画像・PPTをAIで読み取り、基本操作へ変換するパイプラインの設計案（HTML形式）。名寄せ・操作選定ルールが未設計のため未着手 |
+
 ## 読む順番
 
 ### STEP1（Excel ローカル運用）を触るなら
