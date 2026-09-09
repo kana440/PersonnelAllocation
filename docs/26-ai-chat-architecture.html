@@ -1,0 +1,1693 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIチャット構成と改善の手引き</title>
+<meta name="description" content="人事異動管理ツールのAIチャット：弱いLLMをハーネスで囲む設計の全体像と、精度を上げるための着手点。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@300;400;500;600;700&display=swap">
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  img { max-width: 100%; height: auto; }
+  [hidden] { display: none !important; }
+  :root {
+    --bg: #f4f5f6;
+    --surface: #ffffff;
+    --surface-2: #eceef0;
+    --ink: #1b2127;
+    --ink-muted: #58626d;
+    --ink-faint: #8a939d;
+    --hair: #d9dde1;
+    --hair-strong: #c3c9cf;
+    --accent: #2f6f7e;
+    --accent-ink: #204f5a;
+    --accent-bg: #e4eff0;
+    --led-code: #356b4a;
+    --led-code-bg: #e6f0e9;
+    --led-llm: #8a5a24;
+    --led-llm-bg: #f3eadc;
+    --gap: #a5443a;
+    --gap-bg: #f3e2e0;
+    --shadow: 0 1px 2px rgba(20,26,32,.05), 0 6px 20px -12px rgba(20,26,32,.18);
+    --measure: 40rem;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131619;
+      --surface: #1b1f23;
+      --surface-2: #23282d;
+      --ink: #e4e7ea;
+      --ink-muted: #9aa4ae;
+      --ink-faint: #6b757f;
+      --hair: #2b3238;
+      --hair-strong: #3a424a;
+      --accent: #63a8b5;
+      --accent-ink: #8ecdd7;
+      --accent-bg: #1e3238;
+      --led-code: #6cc08b;
+      --led-code-bg: #172420;
+      --led-llm: #d3a469;
+      --led-llm-bg: #2a2113;
+      --gap: #db7d70;
+      --gap-bg: #2d1a17;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -14px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131619;
+    --surface: #1b1f23;
+    --surface-2: #23282d;
+    --ink: #e4e7ea;
+    --ink-muted: #9aa4ae;
+    --ink-faint: #6b757f;
+    --hair: #2b3238;
+    --hair-strong: #3a424a;
+    --accent: #63a8b5;
+    --accent-ink: #8ecdd7;
+    --accent-bg: #1e3238;
+    --led-code: #6cc08b;
+    --led-code-bg: #172420;
+    --led-llm: #d3a469;
+    --led-llm-bg: #2a2113;
+    --gap: #db7d70;
+    --gap-bg: #2d1a17;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -14px rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.78;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  code, kbd, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: .84em;
+  }
+  code {
+    background: var(--surface-2);
+    padding: .08em .38em;
+    border-radius: 4px;
+    border: 1px solid var(--hair);
+    word-break: break-word;
+  }
+  .promptbox {
+    background: var(--surface-2);
+    border: 1px solid var(--hair);
+    border-left: 3px solid var(--hair-strong);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .76rem;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    color: var(--ink-muted);
+    max-width: none;
+    margin: 1rem 0 1.6rem;
+  }
+  .promptbox b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- shell ---------- */
+  .shell {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 0 clamp(1.1rem, 4vw, 3rem);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  @media (min-width: 1040px) {
+    .shell {
+      grid-template-columns: 15rem minmax(0, 1fr);
+      gap: 3.5rem;
+      align-items: start;
+    }
+  }
+
+  /* ---------- nav ---------- */
+  .toc {
+    display: none;
+  }
+  @media (min-width: 1040px) {
+    .toc {
+      display: block;
+      position: sticky;
+      top: 0;
+      max-height: 100vh;
+      overflow-y: auto;
+      padding: 2.6rem 0;
+      font-size: .82rem;
+      line-height: 1.5;
+    }
+    .toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+    .toc > ol > li { counter-increment: toc; margin: .1rem 0; }
+    .toc > ol > li > a::before {
+      content: counter(toc);
+      font-family: "IBM Plex Mono", monospace;
+      color: var(--ink-faint);
+      margin-right: .6em;
+      font-size: .9em;
+    }
+    .toc a {
+      display: block;
+      padding: .28rem .5rem;
+      border-radius: 5px;
+      color: var(--ink-muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+    }
+    .toc a:hover { color: var(--ink); background: var(--surface-2); }
+    .toc a.active { color: var(--accent-ink); border-left-color: var(--accent); background: var(--accent-bg); }
+    .toc .toc-appendix { margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--hair); }
+    .toc .toc-appendix a::before { content: none; }
+  }
+
+  main {
+    padding: 2.4rem 0 6rem;
+    min-width: 0;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead { margin-bottom: 3.2rem; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .74rem;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 1rem;
+  }
+  h1 {
+    font-size: clamp(1.9rem, 1.3rem + 2.4vw, 2.7rem);
+    line-height: 1.18;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 1.12rem;
+    line-height: 1.7;
+    color: var(--ink-muted);
+    max-width: var(--measure);
+    margin: 0 0 1.8rem;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.6rem;
+    font-size: .82rem;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--hair);
+    padding-top: 1.1rem;
+  }
+  .meta b { color: var(--ink-muted); font-weight: 500; }
+
+  /* ---------- sections ---------- */
+  section { margin: 3.6rem 0; scroll-margin-top: 1.5rem; }
+  section > h2 {
+    font-size: 1.42rem;
+    font-weight: 600;
+    letter-spacing: -.005em;
+    margin: 0 0 .3rem;
+    padding-bottom: .55rem;
+    border-bottom: 2px solid var(--hair-strong);
+    display: flex;
+    align-items: baseline;
+    gap: .7rem;
+    text-wrap: balance;
+  }
+  section > h2 .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .78rem;
+    color: var(--accent);
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+  .section-lede {
+    color: var(--ink-muted);
+    max-width: var(--measure);
+    margin: 1.1rem 0 1.6rem;
+  }
+  h3 {
+    font-size: 1.06rem;
+    font-weight: 600;
+    margin: 2.2rem 0 .7rem;
+    color: var(--ink);
+  }
+  h3 .altname {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .74rem;
+    font-weight: 400;
+    color: var(--ink-faint);
+    margin-left: .6rem;
+    letter-spacing: .02em;
+  }
+  p { max-width: var(--measure); margin: .9rem 0; }
+  main a {
+    color: var(--accent-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--hair-strong);
+    text-underline-offset: 2px;
+  }
+  main a:hover { text-decoration-color: var(--accent); }
+
+  ul, ol { max-width: var(--measure); padding-left: 1.3rem; margin: .9rem 0; }
+  li { margin: .35rem 0; }
+  li::marker { color: var(--ink-faint); }
+
+  .cite {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .68em;
+    vertical-align: .35em;
+    text-decoration: none;
+    color: var(--accent);
+    padding: 0 .1em;
+    font-weight: 500;
+  }
+  .cite:hover { text-decoration: underline; }
+
+  /* ---------- wide blocks ---------- */
+  .wide { max-width: none; }
+  @media (min-width: 1240px) {
+    .wide { width: calc(100% + 8rem); margin-left: -4rem; }
+  }
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ---------- tables ---------- */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .87rem;
+    line-height: 1.55;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: .8rem;
+    color: var(--ink-faint);
+    margin-bottom: .5rem;
+    font-family: "IBM Plex Mono", monospace;
+  }
+  th, td {
+    text-align: left;
+    padding: .62rem .8rem;
+    border-bottom: 1px solid var(--hair);
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--surface-2);
+    font-weight: 600;
+    font-size: .78rem;
+    letter-spacing: .02em;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { font-size: .82em; white-space: nowrap; }
+  .num-cell { font-family: "IBM Plex Mono", monospace; color: var(--accent); font-weight: 500; white-space: nowrap; }
+
+  /* ---------- tags / pills ---------- */
+  .tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .68rem;
+    letter-spacing: .02em;
+    padding: .12em .5em;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .tag.code { background: var(--led-code-bg); color: var(--led-code); border-color: color-mix(in srgb, var(--led-code) 30%, transparent); }
+  .tag.llm  { background: var(--led-llm-bg); color: var(--led-llm); border-color: color-mix(in srgb, var(--led-llm) 30%, transparent); }
+  .tag.plain { background: var(--surface-2); color: var(--ink-muted); border-color: var(--hair); }
+  .tag.verify { background: var(--gap-bg); color: var(--gap); border-color: color-mix(in srgb, var(--gap) 30%, transparent); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 1.1rem 1.3rem;
+    margin: 1.6rem 0;
+    max-width: var(--measure);
+    font-size: .92rem;
+  }
+  .callout .k {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .72rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    display: block;
+    margin-bottom: .5rem;
+  }
+  .callout p:first-of-type { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.warn { border-left-color: var(--gap); }
+  .callout.warn .k { color: var(--gap); }
+
+  /* ---------- ladder (primitives) ---------- */
+  .ladder {
+    list-style: none;
+    padding: 0;
+    margin: 1.4rem 0;
+    max-width: var(--measure);
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+  .ladder li {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: .9rem;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 8px;
+    padding: .8rem 1rem;
+    margin: 0;
+  }
+  .ladder .rung {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-radius: 5px;
+    text-align: center;
+    line-height: 2rem;
+    font-size: .9rem;
+  }
+  .ladder .name { font-weight: 600; }
+  .ladder .desc { color: var(--ink-muted); font-size: .9rem; display: block; margin-top: .1rem; }
+  .ladder .rail { display: flex; gap: .4rem; margin-top: .45rem; flex-wrap: wrap; }
+
+  /* ---------- figure ---------- */
+  figure {
+    margin: 2rem 0;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    padding: 1.6rem 1.4rem 1.1rem;
+  }
+  figure svg { display: block; width: 100%; height: auto; color: var(--ink); }
+  figcaption {
+    font-size: .82rem;
+    color: var(--ink-faint);
+    margin-top: 1rem;
+    padding-top: .8rem;
+    border-top: 1px solid var(--hair);
+    line-height: 1.6;
+  }
+  .svg-box { fill: var(--surface); stroke: var(--hair-strong); stroke-width: 1.5; }
+  .svg-box-accent { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.75; }
+  .svg-box-2 { fill: var(--surface-2); stroke: var(--hair-strong); stroke-width: 1.5; }
+  .svg-lane { fill: none; stroke: var(--hair-strong); stroke-width: 1.25; stroke-dasharray: 5 4; }
+  .svg-t { fill: var(--ink); font-family: "IBM Plex Sans JP", sans-serif; font-size: 13px; }
+  .svg-t-sm { fill: var(--ink-muted); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+  .svg-t-lane { fill: var(--ink-faint); font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .04em; }
+  .svg-flow { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
+  .svg-flow-accent { fill: none; stroke: var(--accent); stroke-width: 1.75; }
+
+  /* ---------- footer / sources ---------- */
+  .sources { font-size: .85rem; }
+  .sources ol { max-width: none; }
+  .sources li { margin: .5rem 0; color: var(--ink-muted); }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--hair);
+    margin: 3.2rem 0;
+  }
+
+  .filelist { font-size: .86rem; }
+  .filelist dt { font-family: "IBM Plex Mono", monospace; font-size: .82rem; color: var(--accent-ink); margin-top: .8rem; }
+  .filelist dd { margin: .1rem 0 0; color: var(--ink-muted); }
+
+  /* ---------- theme toggle ---------- */
+  .theme-toggle {
+    position: fixed;
+    top: .9rem;
+    right: .9rem;
+    z-index: 20;
+    background: var(--surface);
+    border: 1px solid var(--hair-strong);
+    color: var(--ink-muted);
+    border-radius: 999px;
+    padding: .35rem .8rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: .72rem;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-toggle:hover { color: var(--ink); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; transition: none !important; }
+  }
+  @media (min-width: 1040px) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" aria-label="配色を切り替え">◐ theme</button>
+
+<div class="shell">
+  <nav class="toc" aria-label="目次">
+    <ol>
+      <li><a href="#s1">何を作るか</a></li>
+      <li><a href="#s2">考え方 — LLM にルールと道具を与える</a></li>
+      <li><a href="#s3">三つの接点</a></li>
+      <li><a href="#s4">エージェントループ</a></li>
+      <li><a href="#s5">七つの判断</a></li>
+      <li><a href="#s6">チューニングマップ</a></li>
+      <li><a href="#s7">これから</a></li>
+      <li><a href="#current">参考：現行の設計</a></li>
+      <li><a href="#s9">抜本案：状態を持つハーネス</a></li>
+    </ol>
+    <div class="toc-appendix">
+      <a href="#appendix">付録・用語対応</a>
+      <a href="#sources">参考文献</a>
+    </div>
+  </nav>
+
+  <main>
+    <header class="masthead">
+      <p class="eyebrow">PersonnelAllocation ／ AI チャット</p>
+      <h1>AIチャットの構成と改善の手引き</h1>
+      <p class="standfirst">
+        AIチャットは業務ツールで、<strong>LLM の応答が遅いぶん、そのまま操作の待ち時間になる</strong>。
+        だから設計の主眼は、少ない往復で安全に答えへたどり着くこと ──
+        LLM の周りに <strong>ルール（プロンプト）・道具（ツール）・安全な経路（Operation モデル）</strong> を用意する。
+        この足場を <strong>ハーネス</strong> と呼ぶ。応答の速さも答えの正しさも、このハーネスの質で決まる。
+        この文書は、そのハーネスをほどいて改善の勘所を示す。
+      </p>
+      <div class="meta">
+        <span><b>対象読者</b> AIチャットをチューニング・改修する開発者</span>
+        <span><b>前提</b> <code>specs/G4-ai/</code> ・ <code>docs/08,16</code> を既読</span>
+        <span><b>実装</b> <code>apps/web/src/infrastructure/ai/</code> ／ <code>application/aiTools/</code></span>
+      </div>
+    </header>
+
+    <!-- ================= 1 ================= -->
+    <section id="s1">
+      <h2><span class="num">01</span>何を作るか</h2>
+      <p class="section-lede">
+        AIチャットは、ユーザーの言葉を受け取って、UI と同じ操作の仕組み（<b>Operation モデル</b>）を動かす。
+        UI との役割分担ははっきりしている ── UI は「確実で速いこと」、AI は「言葉にしないと伝わらないこと」を受け持つ。
+      </p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th></th><th>受け持つこと</th></tr></thead>
+          <tbody>
+            <tr><td><b>UI</b></td><td>自分の部門の表示、入力できる項目の制限、その場のエラー表示、画面で選んだ行のまとめ操作</td></tr>
+            <tr><td><b>AI</b></td><td>あいまいな指示、ルールの説明、条件を指定したまとめ処理、探す・下書きするといった手間の代行</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>できることは4つ</h3>
+      <p>この4つには順番がある。<b>1（探して、見せる）で対象を特定してからでないと、教える・手伝う・変更するはできない。</b> 2〜4 は 1 のあとに続く。</p>
+      <ol class="ladder">
+        <li>
+          <span class="rung">1</span>
+          <span>
+            <span class="name">探して、見せる</span>
+            <span class="desc">名前や組織から対象の行を見つける。必要なら組織ツリーや一覧をチャットの中に表示する</span>
+            <span class="rail"><span class="tag plain">何も変えない</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="rung">2</span>
+          <span>
+            <span class="name">教える</span>
+            <span class="desc">「この項目に何を書くか」「選べる値は」「なぜエラーか」を、ルールに沿って説明する</span>
+            <span class="rail"><span class="tag plain">何も変えない</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="rung">3</span>
+          <span>
+            <span class="name">画面を動かす・下書きする</span>
+            <span class="desc">対象を組織図で表示する、表示を切り替える、操作フォームを開いて値を下書きする（送信はユーザー）</span>
+            <span class="rail"><span class="tag plain">画面だけ動かす</span></span>
+          </span>
+        </li>
+        <li>
+          <span class="rung">4</span>
+          <span>
+            <span class="name">変更する</span>
+            <span class="desc">実際にデータを書き換える。AI が対象と値を用意し、確認用のプレビューを出し、ユーザーが承認してから実行する</span>
+            <span class="rail"><span class="tag plain">データを変える・確認を挟む</span></span>
+          </span>
+        </li>
+      </ol>
+      <div class="callout">
+        <span class="k">3 と 4 に共通する形</span>
+        <p>
+          面倒な部分 ── 対象を探す、値を計算する ── は <b>AI が代行し、最終確認はユーザーがする</b>。
+          結果や確認内容は、チャットの中に小さな UI（組織ツリー、確認フォーム、差分プレビュー）として出る。これを <b>ウィジェット</b> と呼ぶ。
+        </p>
+      </div>
+      <p class="section-lede">
+        対応するツールの種類 ── ① <code>read</code> / <code>render</code>、② <code>read</code>（<code>getFieldOptions</code> ほか）、③ <code>navigate</code>（<code>ui_*</code>）、④ <code>execute</code> / <code>confirm</code>。
+        チャット内のウィジェットは <code>render</code> と <code>confirm</code> の戻り値。
+      </p>
+
+      <h3>組み合わせでできること</h3>
+      <p>上の4つを順番に組み合わせると、大きな作業になる。新しい「機能」に見えるものも、たいていはこの組み合わせで、専用のツールは足していない（<b>スキル</b>か<b>固定手順のプロンプト</b>で表す）。</p>
+      <ul>
+        <li><b>エラーの解消</b> ── 探す①→ 理由を教える②→ 直す④</li>
+        <li><b>体制図どおりに一括編集</b> ── 指示文を読み取り、①→④ を繰り返す（概要確認／要確認のレビュー／一括実行、の3段階）</li>
+        <li><b>玉突き人事</b> ── ①→④ を、順番を守って実行する</li>
+      </ul>
+    </section>
+
+    <!-- ================= 2 ================= -->
+    <section id="s2">
+      <h2><span class="num">02</span>考え方 — LLM にルールと道具を与える</h2>
+
+      <h3>これは業務ツールである</h3>
+      <p>
+        人事異動の記入は締め切りのある実務で、ユーザーは作業を早く終わらせたくてチャットを使う。
+        LLM は1往復ごとに数秒かかり、それがそのまま操作の待ち時間になる。
+        <b>だから設計の主眼は、1回のやり取りでできるだけ処理を進め、少ない往復で答えにたどり着くこと。</b>
+      </p>
+      <p>
+        もう一つ。この業務は、担当者が未知の状況を推論して値を決めるのではなく、決まったルールに沿って記入する作業がほとんど。
+        AI に期待するのは「言いたいことを汲み取って、正しい操作に振り分ける」こと。
+        往復を減らす設計にしても、答えの質は落ちない。
+      </p>
+
+      <h3>帰結 ── LLM に足りないものをハーネスで補う</h3>
+      <p>
+        LLM 単体は、この業務のルールを知らないし、データを安全に書き換える手段も持たない。
+        そこを埋めるのが<b>ハーネス</b> ── LLM を「仕事ができる状態」にするための足場。LLM の周りに3つのものを用意する。
+      </p>
+      <ul>
+        <li><b>ルール</b> ── 業務知識・禁止事項・手順をシステムプロンプトで渡す</li>
+        <li><b>道具</b> ── 事前に定義した安全な操作をツールとして渡す（生のデータ書き換えはさせない）</li>
+        <li><b>安全な経路</b> ── 不可逆な操作は確認を挟み、ループの往復を最小に保つ（オーケストレーター）</li>
+      </ul>
+      <p>
+        Anthropic は「効果的なエージェントは複雑なものではなく、良いツールを備えた単純なループ。知能はモデルの能力・ツール記述の質・タスクの枠組みから来る」と言う<a class="cite" href="#src1">[1]</a>。
+        モデルの能力に賭けられない分、後ろの2つ ── ツール記述の質とタスクの枠組み ── をしっかり作る。
+        1つのツールが1つの業務操作をまるごと担い、必要な文脈は最初にまとめて渡す。
+      </p>
+      <div class="callout">
+        <span class="k">この文書の主題</span>
+        <p>
+          LLM を囲むもの ── システムプロンプト・ツール・オーケストレーション・Operation モデル ── をまとめて <b>ハーネス</b> と呼ぶ。
+          <b>答えの速さも正しさも、このハーネスの質で決まる。</b>
+          モデルを新しくするのを待つ話ではない。以降は、そのハーネスをほどいて着手点を示す。
+        </p>
+      </div>
+
+      <div class="callout">
+        <span class="k">外部の位置づけ</span>
+        <p>「ハーネス」はこのプロジェクトの呼び方だが、中身は広く知られた枠組みそのもの。</p>
+        <ul>
+          <li>OpenAI ── 「エージェント ＝ <b>Model ＋ Tools ＋ Instructions</b>、加えて <b>Guardrails</b> と <b>Orchestration</b>」<a class="cite" href="#src4">[4]</a></li>
+          <li>Anthropic ── 「augmented LLM ＝ model ＋ retrieval ＋ tools ＋ memory」<a class="cite" href="#src1">[1]</a>（本システムは <b>retrieval と memory を持たない</b> ── §9 で扱う）</li>
+        </ul>
+        <p>次章の「3つの接点」は、この Instructions ／ Tools ／（Guardrails＋Orchestration）を LLM の周りに並べ直したもの。</p>
+      </div>
+    </section>
+
+    <!-- ================= 3 ================= -->
+    <section id="s3">
+      <h2><span class="num">03</span>三つの接点</h2>
+      <p class="section-lede">
+        §2 の3つ ── <b>ルール（指示）</b>、<b>道具（ツール）</b>、<b>安全な経路（制御）</b> ── が、LLM に触れる3つの接点になる。
+        改善の手を入れられるのも、突きつめればこの3か所しかない。まず全体図で位置関係を掴む。
+      </p>
+
+      <figure class="wide">
+        <svg viewBox="0 0 820 660" role="img" aria-label="上に人（担当者）。その下は左が AI チャットの領域、右が Web UI 編集の領域。AIチャットの領域にはチャット欄（プロンプト入力・ウィジェット）、① 指示（システムプロンプト）、LLM、② ツール（参照系・Web UI 系・ドメイン操作系・スキル読込系の4系統）、それらを ③ 制御（オーケストレーター）が囲む。ツールの行き先は系統ごとに違い、参照系はドメインデータを読み、Web UI 系は画面 UI を操作し、ドメイン操作系は Operation モデルへ、スキル読込系は手順を LLM へ返す。ウィジェットは人と表示・承認をやり取りし、画面 UI は人が直接操作・送信する。Operation モデルは emit でドメインデータを更新し、snapshot が両領域へ反映される。">
+          <defs>
+            <marker id="d3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="var(--ink-muted)"/>
+            </marker>
+          </defs>
+
+          <rect x="330" y="16" width="160" height="40" rx="8" class="svg-box-2"/>
+          <text x="410" y="41" text-anchor="middle" class="svg-t" style="font-weight:600">人（担当者）</text>
+
+          <rect x="16" y="86" width="496" height="430" rx="12" class="svg-lane"/>
+          <text x="28" y="80" class="svg-t-lane">AI チャットの領域</text>
+          <rect x="528" y="86" width="276" height="282" rx="12" class="svg-lane"/>
+          <text x="540" y="80" class="svg-t-lane">Web UI 編集の領域</text>
+
+          <!-- チャット欄 -->
+          <rect x="30" y="134" width="152" height="246" rx="8" class="svg-box"/>
+          <text x="106" y="153" text-anchor="middle" class="svg-t">チャット欄</text>
+          <rect x="40" y="162" width="132" height="32" rx="5" class="svg-box-2"/>
+          <text x="106" y="183" text-anchor="middle" class="svg-t-sm">プロンプト入力</text>
+          <rect x="40" y="204" width="132" height="166" rx="5" class="svg-box-2"/>
+          <text x="106" y="224" text-anchor="middle" class="svg-t-sm">ウィジェット（数種）</text>
+          <text x="106" y="244" text-anchor="middle" class="svg-t-sm">確認フォーム / 一覧</text>
+          <text x="106" y="260" text-anchor="middle" class="svg-t-sm">組織ツリー / 差分</text>
+
+          <!-- ③ bracket -->
+          <rect x="200" y="186" width="304" height="284" rx="10" class="svg-lane"/>
+          <text x="208" y="182" class="svg-t-lane">③ 制御：オーケストレーター（ループ管理・確認ゲート）</text>
+
+          <!-- ① system prompt -->
+          <rect x="216" y="116" width="188" height="46" rx="8" class="svg-box-2"/>
+          <text x="310" y="136" text-anchor="middle" class="svg-t">① 指示（システムプロンプト）</text>
+          <text x="310" y="152" text-anchor="middle" class="svg-t-sm">8層・毎ターン再構築</text>
+
+          <!-- LLM -->
+          <rect x="250" y="196" width="120" height="44" rx="9" class="svg-box-accent"/>
+          <text x="310" y="223" text-anchor="middle" class="svg-t" style="font-weight:600">LLM</text>
+
+          <!-- ② tools -->
+          <rect x="206" y="262" width="292" height="200" rx="8" class="svg-box"/>
+          <text x="352" y="281" text-anchor="middle" class="svg-t">② 行動範囲：ツール（4系統）</text>
+          <rect x="218" y="292" width="128" height="34" rx="5" class="svg-box-2"/>
+          <text x="282" y="313" text-anchor="middle" class="svg-t-sm">参照系</text>
+          <rect x="352" y="292" width="128" height="34" rx="5" class="svg-box-2"/>
+          <text x="416" y="313" text-anchor="middle" class="svg-t-sm">Web UI 系</text>
+          <rect x="218" y="332" width="128" height="34" rx="5" class="svg-box-2"/>
+          <text x="282" y="353" text-anchor="middle" class="svg-t-sm">ドメイン操作系</text>
+          <rect x="352" y="332" width="128" height="34" rx="5" class="svg-box-2"/>
+          <text x="416" y="353" text-anchor="middle" class="svg-t-sm">スキル読込系</text>
+          <line x1="218" y1="380" x2="486" y2="380" stroke="var(--hair-strong)" stroke-width="1"/>
+          <text x="222" y="398" class="svg-t-sm">副作用で5種別: read / render /</text>
+          <text x="222" y="412" class="svg-t-sm">navigate / execute / confirm</text>
+
+          <!-- 画面 UI -->
+          <rect x="544" y="124" width="244" height="60" rx="8" class="svg-box"/>
+          <text x="666" y="146" text-anchor="middle" class="svg-t">画面 UI</text>
+          <text x="666" y="164" text-anchor="middle" class="svg-t-sm">組織図・操作フォーム・レビュー表</text>
+
+          <!-- Operation + data -->
+          <rect x="260" y="532" width="320" height="46" rx="9" class="svg-box-2"/>
+          <text x="420" y="553" text-anchor="middle" class="svg-t">Operation モデル（ドメイン）</text>
+          <text x="420" y="569" text-anchor="middle" class="svg-t-sm">validate → Undo → apply → emit</text>
+          <rect x="260" y="590" width="320" height="34" rx="8" class="svg-box"/>
+          <text x="420" y="611" text-anchor="middle" class="svg-t-sm">ドメインデータ（allocationList・snapshot）</text>
+
+          <!-- arrows -->
+          <path d="M360 56 C260 72 106 100 106 160" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="146" y="110" class="svg-t-sm">指示を入力</text>
+          <path d="M448 56 C560 72 666 96 666 122" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="558" y="108" class="svg-t-sm">画面を操作・送信</text>
+
+          <path d="M172 176 C200 172 206 150 214 142" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="176" y="160" class="svg-t-sm">→ ①</text>
+          <line x1="310" y1="162" x2="310" y2="194" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="316" y="184" class="svg-t-sm">毎ターン注入</text>
+
+          <line x1="300" y1="240" x2="300" y2="262" class="svg-flow" marker-end="url(#d3)"/>
+          <line x1="322" y1="262" x2="322" y2="242" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="328" y="256" class="svg-t-sm">tool_call ／ 結果</text>
+
+          <!-- widget <-> human -->
+          <path d="M172 232 C210 186 224 88 324 50" class="svg-flow" marker-start="url(#d3)" marker-end="url(#d3)"/>
+          <text x="196" y="146" class="svg-t-sm">結果を表示</text>
+          <text x="196" y="160" class="svg-t-sm">／ 承認・入力</text>
+
+          <!-- tool destinations -->
+          <path d="M346 308 C540 312 646 420 646 540 C646 574 626 586 584 592" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="500" y="350" class="svg-t-sm">現在の状態を読む</text>
+          <path d="M480 300 C522 282 540 210 560 184" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="486" y="238" class="svg-t-sm">navigate（ui_*）</text>
+          <text x="486" y="252" class="svg-t-sm">フォームを開く・下書き</text>
+          <path d="M268 366 C268 460 320 500 358 532" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="212" y="446" class="svg-t-sm">EditCommand 経由</text>
+          <path d="M420 332 C452 300 424 258 372 232" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="426" y="294" class="svg-t-sm">手順本文を返す</text>
+
+          <!-- widget -> operation -->
+          <path d="M106 370 L106 452" class="svg-flow"/>
+          <rect x="60" y="452" width="92" height="24" rx="5" class="svg-box"/>
+          <text x="106" y="468" text-anchor="middle" class="svg-t-sm">確認ゲート</text>
+          <path d="M106 476 C106 512 180 532 258 536" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="112" y="506" class="svg-t-sm">人が承認 → executeOnApprove</text>
+
+          <!-- 画面UI -> operation -->
+          <path d="M700 184 C792 260 792 500 582 534" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="750" y="360" class="svg-t-sm">送信</text>
+
+          <!-- operation -> data -->
+          <line x1="420" y1="578" x2="420" y2="589" class="svg-flow" marker-end="url(#d3)"/>
+          <text x="428" y="588" class="svg-t-sm">emit</text>
+
+          <!-- data -> both regions (snapshot) -->
+          <path d="M300 592 C170 568 106 470 106 374" class="svg-flow" marker-end="url(#d3)" style="stroke-dasharray:5 4"/>
+          <text x="128" y="466" class="svg-t-sm">反映</text>
+          <path d="M556 592 C702 560 722 300 700 186" class="svg-flow" marker-end="url(#d3)" style="stroke-dasharray:5 4"/>
+          <text x="672" y="410" class="svg-t-sm">反映（snapshot）</text>
+        </svg>
+        <figcaption>
+          左が <b>AI チャットの領域</b>、右が <b>Web UI 編集の領域</b>。人は両方を操作する。
+          <b>① 指示</b>と一緒に <b>LLM</b> が動き、<b>② ツール</b> を呼ぶ。ツールは目的で4系統に分かれ、行き先が違う。
+          変更は <b>③ 制御</b>（確認ゲート・Operation モデル）を通り、結果（snapshot）が両領域へ返る。
+        </figcaption>
+      </figure>
+
+      <h3>図の読み方（①→②→③）</h3>
+      <ol>
+        <li>
+          <b>① 指示</b> ── 人がチャット欄に入力した内容は、LLM が知らない業務ルール・手順・禁止事項（システムプロンプト8層）と一緒に LLM へ渡る。
+        </li>
+        <li>
+          <b>② 行動範囲</b> ── LLM はツールを呼んで動く。ツールは目的で4系統に分かれ、<b>行き先が違う</b> ──
+          <b>参照系</b>はドメインのデータを直接読み（<code>getSnapshot()</code>）、
+          <b>Web UI 系</b>は画面 UI を操作し、
+          <b>ドメイン操作系</b>は Operation モデルを通じてデータを変え、
+          <b>スキル読込系</b>は手順本文を LLM に返す。
+          AI 内で完結するときは<b>ウィジェット</b>が人との接点（表示・承認・入力）。
+        </li>
+        <li>
+          <b>③ 制御</b> ── オーケストレーターがこのループを回す。変更操作は確認ゲート（ウィジェット、または画面 UI で人が承認・送信）を通り、
+          Operation 収束（<code>validate → Undo → apply → emit</code>）を経て、結果が<b>両領域に反映</b>される。
+          AI ↔ 画面 UI の受け渡しは <code>uiCommandStore</code>（AI → 画面）と <code>formStateStore</code>（画面 ⇄ AI）が担う。
+        </li>
+      </ol>
+
+      <h3>① 指示 ── システムプロンプト<span class="altname">≈ Instructions / Context Engineering</span></h3>
+      <ul>
+        <li><b>役割</b> ── LLM が知らないこと（業務ルール・ツールの使い分け・禁止事項・固定手順）を毎ターン注入する。</li>
+        <li><b>構造</b> ── 8層。固定核（<code>BASE_SYSTEM_PROMPT</code> 約90行）＋ 動的文脈 ＋ 学習ルール ＋ スキルヒント ＋ パス別末尾。</li>
+        <li><b>要点</b> ── <code>buildCurrentSystemPrompt</code> が毎ターン組み立て直す。「1回書くプロンプト」ではなく「毎回 curate する文脈」。3000行のデータは入れず、件数だけ入れて詳細はツールで取らせる ── 大きな文脈はモデルの注意を薄める<a class="cite" href="#src2">[2]</a>。</li>
+      </ul>
+      <div class="wide scroll-x">
+        <table>
+          <caption>8 層（上から順に積む）</caption>
+          <thead><tr><th>#</th><th>層</th><th>中身</th><th>実装</th></tr></thead>
+          <tbody>
+            <tr><td class="num-cell">1</td><td><code>BASE_SYSTEM_PROMPT</code></td><td>ツールルーティング／UIナビ／業務ルール／出向／不在／分断上司／禁止事項／体制図3フェーズ</td><td><code>chatSession.ts</code></td></tr>
+            <tr><td class="num-cell">2</td><td>セッション状態</td><td>変更・エラー・警告の件数のみ</td><td><code>buildSystemPrompt()</code></td></tr>
+            <tr><td class="num-cell">3–4</td><td>スコープ組織／フォーカス組織</td><td>操作対象・「この組織を」の解決先</td><td>同上</td></tr>
+            <tr><td class="num-cell">5</td><td>ピン留め参照情報</td><td>rowId / userId / keyFields / issues / availableOps</td><td>同上</td></tr>
+            <tr><td class="num-cell">6</td><td>学習済みルール</td><td>Teach AI で登録した業務ルール</td><td><code>useChatHandlers</code></td></tr>
+            <tr><td class="num-cell">7</td><td>スキルヒント</td><td>有効なスキル名と <code>skill_*</code> ツール名</td><td>同上</td></tr>
+            <tr><td class="num-cell">8</td><td><code>FAST_PATH_SYSTEM_SUFFIX</code></td><td>Fast Path のみ末尾追加。navigate ツール案内・エスカレーション条件</td><td><code>fastPathTool.ts</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="section-lede" style="margin-top:1.2rem">
+        どこに何を書くか ── ツール1個の意味は <b>description</b> に。ツールの使い分けは<b>プロンプト</b>に（description だけでは LLM が選びきれない）。いま何件・どの組織といった状況は<b>動的層</b>に。スキルの手順は <b>SKILL.md</b> に。
+      </p>
+
+      <h3>② 行動範囲 ── ツールとスキル<span class="altname">≈ Tools</span></h3>
+      <p>ツールは LLM が世界に触る唯一の方法。<b>1ツール＝1能力</b>。分類には2つの軸がある。</p>
+      <ul>
+        <li><b>目的で4系統</b> ── ツールを「何のために呼ぶか」で分ける。改修時にどのファイルを触るかがこれで決まる。</li>
+        <li><b>副作用で5種別（kind）</b> ── 「実行して安全か」で分ける。オーケストレーターはこの kind で処理を振り分ける。</li>
+      </ul>
+      <div class="wide scroll-x">
+        <table>
+          <caption>目的による4系統 × 副作用による kind</caption>
+          <thead><tr><th>系統</th><th>kind</th><th>行き先</th><th>Fast Path</th><th>本数</th><th>実装</th></tr></thead>
+          <tbody>
+            <tr><td>参照系（<code>find*</code>/<code>get*</code>）</td><td><code>read</code> / <code>render</code></td><td>LLM ／ チャット欄ウィジェット</td><td>可</td><td>約17</td><td><code>readTools</code> / <code>renderTools</code> → <code>aiTools</code></td></tr>
+            <tr><td>Web UI 系（<code>ui_*</code>）</td><td><code>navigate</code></td><td>画面 UI（<code>uiCommandStore</code> / <code>formStateStore</code>）</td><td>可</td><td>6</td><td><code>navigateTools</code></td></tr>
+            <tr><td>ドメイン操作系（<code>propose_*</code>）</td><td><code>execute</code> / <code>confirm</code></td><td>Operation モデル（<code>executeScenario</code>）</td><td>不可</td><td>約22</td><td><code>operationTools</code> → <code>aiTools</code> → <code>service</code></td></tr>
+            <tr><td>スキル読込系（<code>skill_*</code>）</td><td>擬似ツール</td><td>LLM に手順本文を返す</td><td>不可</td><td>4</td><td><code>SKILL.md</code> ＋ <code>useChatHandlers</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="section-lede" style="margin-top:1rem">
+        kind の意味 ── <code>read</code>＝見る（副作用なし）／<code>render</code>＝見せる（ウィジェット）／<code>navigate</code>＝画面を動かす（UI 状態のみ）／<code>execute</code>＝即時にデータを変える／<code>confirm</code>＝確認してからデータを変える。全リストは <a href="#current">§8</a>。
+      </p>
+      <ul>
+        <li><b>2層構造</b> ── プロトコル層（<code>toolRegistry</code>：名前・引数スキーマ・種別）／実装層（<code>aiTools</code>：実ロジック ＝ AI BFF）。<code>toolRegistry</code> でドメイン操作を直接書かない<a class="cite" href="#src3">[3]</a>。</li>
+        <li><b>露出制御（progressive disclosure）</b> ── Fast Path は参照系＋Web UI 系のみ（<code>getSafeDefinitions</code>）／スキル起動後は <code>allowed-tools</code> に列挙されたものだけ。</li>
+        <li><b>スキル</b> ── 決まった順序があるタスクの手順書（<code>SKILL.md</code>）。該当時だけ LLM に渡り、呼ぶと手順本文が返り、以降ツールが絞られる。現在4つ ── <code>cascading-transfer</code> ／ <code>mark-absence</code> ／ <code>promotion-workflow</code> ／ <code>query-validation</code>。</li>
+      </ul>
+
+      <h3>③ 制御枠 ── オーケストレーターと Operation 収束<span class="altname">≈ Orchestration + Guardrails</span></h3>
+      <ul>
+        <li><b>オーケストレーター</b>（<code>agentRunner</code> ＋ <code>useChatHandlers</code>）── ループの管理、Fast / Structured の切替、確認の割り込み、毎ターンのログ記録。</li>
+        <li><b>Operation 収束</b> ── <code>aiTools.executeXxx() → service.executeOperation(new XxxOperation()) → executeScenario → validate → UndoStack → apply → emit</code>。AI が不正な値を直接書けない。</li>
+        <li><b>確認ゲート</b> ── <code>buildProposal</code>（DryRun）→ <code>onConfirm</code>（ループ停止・ユーザー待ち）→ <code>executeOnApprove</code>。</li>
+        <li>バリデーションはドメイン層で UI と共有 ── <b>ツールを強化すれば AI も同じ制約で動く</b>正のループ。</li>
+      </ul>
+    </section>
+
+    <!-- ================= 4 ================= -->
+    <section id="s4">
+      <h2><span class="num">04</span>エージェントループ</h2>
+      <p class="section-lede">
+        ユーザーが1回何か言うと、処理は一直線には進まない。
+        LLM がツールを呼ぶ → 結果を見てまた呼ぶ、を必要なだけ繰り返し（ReAct と呼ばれるやり方<a class="cite" href="#src5">[5]</a>）、
+        次の3つのいずれかで<b>そのターンが終わる</b>。
+      </p>
+      <ul>
+        <li><b>答えを返して終わり</b> ── 検索・説明の結果を、文章かウィジェットで返す</li>
+        <li><b>Web UI に渡して終わり</b> ── フォームを開く・下書きする。あとは人が画面で進める（AI のターンはここで終了）</li>
+        <li><b>確認ゲートを通して書き込む</b> ── 変更操作。重い経路（Structured Path）と、チャット内の承認を経て Operation モデルへ</li>
+      </ul>
+      <p>軽い経路（Fast Path）でできるのは最初の2つ。3つ目だけが重い経路に切り替わる。</p>
+
+      <figure class="wide">
+        <svg viewBox="0 0 760 660" role="img" aria-label="入力とプロンプト組立のあとFast Pathのループに入り、答えかウィジェットで終了するか、navigateでWeb UIに渡して終了する。書き込みが必要なときだけrequest_structured_planningでStructured Pathへエスカレーションし、スキル選択、Structured Pathのループ、確認ゲート、Operation収束、snapshotへ進む流れ図">
+          <defs>
+            <marker id="fah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="var(--ink-muted)"/>
+            </marker>
+            <marker id="faha" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="var(--accent)"/>
+            </marker>
+          </defs>
+
+          <!-- input -->
+          <rect x="60" y="20" width="280" height="46" rx="8" class="svg-box-2"/>
+          <text x="200" y="48" text-anchor="middle" class="svg-t">入力 ＋ UI 文脈（ピン留め・フォーカス組織）</text>
+          <line x1="200" y1="66" x2="200" y2="92" class="svg-flow" marker-end="url(#fah)"/>
+
+          <!-- prompt build -->
+          <rect x="60" y="92" width="280" height="46" rx="8" class="svg-box-2"/>
+          <text x="200" y="120" text-anchor="middle" class="svg-t">プロンプト組立（8層・毎ターン）</text>
+          <line x1="200" y1="138" x2="200" y2="164" class="svg-flow" marker-end="url(#fah)"/>
+
+          <!-- Fast Path lane -->
+          <rect x="30" y="164" width="410" height="150" rx="12" class="svg-lane"/>
+          <text x="44" y="184" class="svg-t-lane">FAST PATH — 安全ツールのみ（read / render / navigate）</text>
+          <rect x="58" y="200" width="150" height="58" rx="8" class="svg-box-accent"/>
+          <text x="133" y="234" text-anchor="middle" class="svg-t" style="font-weight:600">LLM</text>
+          <rect x="262" y="200" width="150" height="58" rx="8" class="svg-box"/>
+          <text x="337" y="226" text-anchor="middle" class="svg-t">ツール</text>
+          <text x="337" y="243" text-anchor="middle" class="svg-t-sm">read / render / navigate</text>
+          <line x1="208" y1="220" x2="260" y2="220" class="svg-flow" marker-end="url(#fah)"/>
+          <line x1="260" y1="240" x2="210" y2="240" class="svg-flow" marker-end="url(#fah)"/>
+          <path d="M133 258 C133 292 337 292 337 260" class="svg-flow" marker-end="url(#fah)"/>
+          <text x="235" y="305" text-anchor="middle" class="svg-t-sm">応答が出るまで反復 · 最大 10 往復</text>
+
+          <!-- exit right: two terminal outcomes -->
+          <line x1="440" y1="216" x2="558" y2="216" class="svg-flow" marker-end="url(#fah)"/>
+          <text x="499" y="209" text-anchor="middle" class="svg-t-sm">検索・説明</text>
+          <rect x="558" y="196" width="184" height="40" rx="8" class="svg-box"/>
+          <text x="650" y="220" text-anchor="middle" class="svg-t">答え／ウィジェットで終了</text>
+
+          <line x1="440" y1="252" x2="558" y2="252" class="svg-flow" marker-end="url(#fah)"/>
+          <text x="499" y="245" text-anchor="middle" class="svg-t-sm">navigate（ui_*）</text>
+          <rect x="558" y="242" width="184" height="44" rx="8" class="svg-box"/>
+          <text x="650" y="261" text-anchor="middle" class="svg-t">Web UI に渡して終了</text>
+          <text x="650" y="277" text-anchor="middle" class="svg-t-sm">以降は人が画面で操作</text>
+
+          <!-- escalation down -->
+          <path d="M235 314 L235 342" class="svg-flow-accent" marker-end="url(#faha)"/>
+          <text x="250" y="333" class="svg-t-sm" style="fill:var(--accent)">変更・複数手順が必要 → request_structured_planning</text>
+
+          <!-- skill select -->
+          <rect x="90" y="342" width="300" height="44" rx="8" class="svg-box-2"/>
+          <text x="240" y="362" text-anchor="middle" class="svg-t">スキル選択（オーケストレーター）</text>
+          <text x="240" y="378" text-anchor="middle" class="svg-t-sm">ActionFrame.skillCandidates ∩ 有効スキル</text>
+          <line x1="240" y1="386" x2="240" y2="410" class="svg-flow" marker-end="url(#fah)"/>
+
+          <!-- Structured lane -->
+          <rect x="30" y="410" width="410" height="140" rx="12" class="svg-lane"/>
+          <text x="44" y="430" class="svg-t-lane">STRUCTURED PATH — 全ツール ＋ スキル（allowed-tools で絞る）</text>
+          <rect x="58" y="446" width="150" height="56" rx="8" class="svg-box-accent"/>
+          <text x="133" y="479" text-anchor="middle" class="svg-t" style="font-weight:600">LLM</text>
+          <rect x="262" y="446" width="150" height="56" rx="8" class="svg-box"/>
+          <text x="337" y="472" text-anchor="middle" class="svg-t">ツール／スキル</text>
+          <text x="337" y="489" text-anchor="middle" class="svg-t-sm">execute / confirm</text>
+          <line x1="208" y1="466" x2="260" y2="466" class="svg-flow" marker-end="url(#fah)"/>
+          <line x1="260" y1="484" x2="210" y2="484" class="svg-flow" marker-end="url(#fah)"/>
+          <text x="235" y="538" text-anchor="middle" class="svg-t-sm">反復 · 最大 10 往復</text>
+
+          <!-- confirm gate -->
+          <path d="M440 474 L470 474" class="svg-flow" marker-end="url(#fah)"/>
+          <rect x="470" y="430" width="260" height="60" rx="8" class="svg-box"/>
+          <text x="600" y="456" text-anchor="middle" class="svg-t">確認ゲート → ユーザー承認</text>
+          <text x="600" y="475" text-anchor="middle" class="svg-t-sm">DryRun プレビュー ／ 変更操作は停止</text>
+          <line x1="600" y1="490" x2="600" y2="516" class="svg-flow" marker-end="url(#fah)"/>
+
+          <!-- operation converge -->
+          <rect x="430" y="516" width="300" height="46" rx="8" class="svg-box-2"/>
+          <text x="580" y="537" text-anchor="middle" class="svg-t">Operation 収束</text>
+          <text x="580" y="553" text-anchor="middle" class="svg-t-sm">validate → Undo → apply → emit</text>
+          <line x1="580" y1="562" x2="580" y2="588" class="svg-flow" marker-end="url(#fah)"/>
+
+          <!-- snapshot -->
+          <rect x="470" y="588" width="220" height="44" rx="8" class="svg-box"/>
+          <text x="580" y="609" text-anchor="middle" class="svg-t">snapshot（終了）</text>
+          <text x="580" y="624" text-anchor="middle" class="svg-t-sm">UI と共有</text>
+        </svg>
+        <figcaption>
+          Fast Path で終わるのは「答え／ウィジェットで返す」「Web UI に渡す」の2つ。
+          「書き込む」だけが擬似ツール <code>request_structured_planning</code> で Structured Path に切り替わり、確認ゲート → Operation 収束 → snapshot を通る。
+          擬似ツールは実行されず、意図の構造化（<code>ActionFrame</code>：理由／想定操作／不足情報／スキル候補）だけを返す。
+        </figcaption>
+      </figure>
+
+      <ul>
+        <li><b>Fast Path</b> ── 露出するのは安全ツールだけ（<code>getSafeDefinitions()</code>）。各ターン最大10往復（<code>MAX_ROUNDS</code>）。</li>
+        <li><b>エスカレーション</b> ── LLM が「変更・複数手順が必要」と判断したら <code>request_structured_planning</code> を呼ぶ。実行はされず、<code>ActionFrame</code> を返してオーケストレーターが Structured Path を起動する。<span class="tag plain"><code>missingInformation</code> / <code>suspectedOperation</code> は現状未使用</span></li>
+        <li><b>Structured Path</b> ── 全ツール＋スキル。スキルを呼ぶと手順本文が返り、以降 <code>allowed-tools</code> でツールが絞られる。</li>
+        <li><b>履歴の扱い</b> ── 次ターンへ渡す履歴から tool 呼び出しと結果が除かれ、最終テキストだけが残る。複数ターンの作業では文脈が薄れる（§7）。</li>
+      </ul>
+      <div class="callout">
+        <span class="k">外部の位置づけ</span>
+        <p>「Fast / Structured の2段」は Anthropic の「まず最も単純な解、必要なときだけ複雑さを足す」<a class="cite" href="#src1">[1]</a> の一実装。前段に意図分類器を置いて <code>guide</code> / <code>simple</code> / <code>wizard</code> に精密ルーティングする案（Tier）は <b>未実装</b> ── 構造化出力の対応確認待ち。</p>
+      </div>
+    </section>
+
+    <!-- ================= 5 ================= -->
+    <section id="s5">
+      <h2><span class="num">05</span>七つの判断（分析軸）</h2>
+      <p class="section-lede">
+        これは一般的な用語ではなく、<b>この仕組みを調整するために独自に切り分けたもの</b>。
+        ループのどこで、誰が（コードか LLM か）、何をもとに決めているかを並べる。
+        <span class="tag code">コードが決める</span> ものは確実に直せる。<span class="tag llm">LLM が決める</span> ものはプロンプトとツール定義で誘導するしかない ── この違いが改修の難しさを決める。
+      </p>
+      <div class="wide scroll-x">
+        <table>
+          <thead>
+            <tr><th>#</th><th>判断</th><th>主導</th><th>根拠にする情報</th><th>設定・改修箇所</th><th>外すとどうなる</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="num-cell">1</td><td>Fast か Structured か</td>
+              <td><span class="tag code">コード</span></td>
+              <td><code>FAST_PATH_SUFFIX</code> ／ 擬似ツール description</td>
+              <td><code>fastPathTool.ts</code></td>
+              <td>変更なのに read で終了／軽い照会が重パスへ</td>
+            </tr>
+            <tr>
+              <td class="num-cell">2</td><td>どのツールを呼ぶか</td>
+              <td><span class="tag llm">LLM</span></td>
+              <td>ツール description ＋ プロンプトのルーティング規則 ＋ 露出ツール集合</td>
+              <td><code>chatSession.ts</code> ／ <code>*Tools.ts</code> ／ <code>getSafeDefinitions</code></td>
+              <td>似たツールの取り違え</td>
+            </tr>
+            <tr>
+              <td class="num-cell">3</td><td>どんな引数で</td>
+              <td><span class="tag llm">LLM</span></td>
+              <td>ツール parameters ＋ 動的層（ピン留め行の rowId 等）</td>
+              <td>パラメータ定義 ／ プロンプト動的層</td>
+              <td>rowId 取り違え・必須欠落</td>
+            </tr>
+            <tr>
+              <td class="num-cell">4</td><td>どのスキルを起動するか</td>
+              <td><span class="tag code">コード</span></td>
+              <td>SKILL.md の <code>description</code>（＝トリガー文）</td>
+              <td>SKILL.md frontmatter</td>
+              <td>スキル不発火・無関係スキル起動</td>
+            </tr>
+            <tr>
+              <td class="num-cell">5</td><td>結果をどう解釈し次に何をするか</td>
+              <td><span class="tag llm">LLM</span></td>
+              <td>tool メッセージ（JSON）＋ プロンプトの後処理ルール（例：操作後は必ず <code>getValidationDiagnosis</code>）</td>
+              <td>プロンプト業務ルール節</td>
+              <td>診断せず完了報告・堂々巡り</td>
+            </tr>
+            <tr>
+              <td class="num-cell">6</td><td>確認を挟むか</td>
+              <td><span class="tag code">コード</span></td>
+              <td>ツールの <code>kind</code> 分類（confirm / execute）</td>
+              <td><code>*Tools.ts</code> の kind</td>
+              <td>確認過多・無確認で実行</td>
+            </tr>
+            <tr>
+              <td class="num-cell">7</td><td>最終回答に何を書くか</td>
+              <td><span class="tag llm">LLM</span></td>
+              <td>会話履歴（tool 呼出は除去済）＋ 表現ルール（内部フィールド名を見せない等）</td>
+              <td>プロンプト</td>
+              <td>内部語の漏れ・要約不足</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        判断 <b>1・4・6 はコードが決める</b>（＝ハーネス側で確実に直せる）。<b>2・3・5・7 は LLM が決める</b>（＝プロンプトとツール定義で誘導するしかない）。
+        OpenAI の言う「入力の検査からツールの利用、人による承認まで、すべての段階で歯止めをかける」<a class="cite" href="#src4">[4]</a> を、判断ごとに割り当てたもの。
+      </p>
+    </section>
+
+    <!-- ================= 6 ================= -->
+    <section id="s6">
+      <h2><span class="num">06</span>チューニングマップ</h2>
+      <p class="section-lede">
+        観測される症状 → 外れた判断 → その根拠 → 触る場所。
+      </p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>症状</th><th>判断</th><th>根拠</th><th>触る場所</th></tr></thead>
+          <tbody>
+            <tr><td>ツール A と B を取り違える</td><td class="num-cell">2</td><td>description 単独では使い分けを判断できない</td><td><code>chatSession.ts</code> に両者セットのルーティング規則。暫定は Teach AI</td></tr>
+            <tr><td>変更操作なのに Fast Path で止まる／軽い照会が重パスに落ちる</td><td class="num-cell">1</td><td>エスカレーション条件が曖昧</td><td><code>FAST_PATH_SUFFIX</code> ＋ 擬似ツール description（<code>fastPathTool.ts</code>）</td></tr>
+            <tr><td>スキルが起動しない</td><td class="num-cell">4</td><td>SKILL.md の <code>description</code>（トリガー文）が抽象的</td><td>SKILL.md frontmatter</td></tr>
+            <tr><td>スキル起動後に無関係なツールを呼ぶ</td><td class="num-cell">4 / 2</td><td><code>allowed-tools</code> が広すぎる</td><td>SKILL.md の <code>allowed-tools</code></td></tr>
+            <tr><td>操作後に診断しない／完了報告が雑</td><td class="num-cell">5 / 7</td><td>後処理ルール・表現ルールが弱い</td><td><code>chatSession.ts</code> 業務ルール節</td></tr>
+            <tr><td>確認が多すぎる／逆に無確認で実行</td><td class="num-cell">6</td><td><code>kind</code> の誤り、または過剰な <code>confirm</code></td><td><code>*Tools.ts</code> ／ <code>03-ai-ui-policy</code> の指針</td></tr>
+            <tr><td>引数エラー（rowId 取り違え）</td><td class="num-cell">3</td><td>ピン留め文脈が動的層に乗っていない</td><td><code>useChatHandlers</code> ／ <code>aiTools.getRowContext()</code></td></tr>
+            <tr><td>内部フィールド名がユーザーに漏れる</td><td class="num-cell">7</td><td>表現ルール未整備</td><td><code>chatSession.ts</code></td></tr>
+            <tr><td>ツールが返すデータが不正確</td><td>判断の外</td><td>ツール実装のバグ</td><td><code>aiTools/</code> ── Code Fix 対応</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <span class="k">進める順序</span>
+        <p>
+          <b>① 計測を先に。</b> どの判断が弱いかを数える手段（評価ハーネス／<code>feedbackStore</code> の <code>runLog</code> ＋ <code>feedbackLabel</code>）を用意する。<br>
+          <b>② コードが決める判断（1・4・6）から締める。</b> 確実に直せる。<br>
+          <b>③ LLM が決める判断（2・3・5・7）を誘導する。</b> プロンプト・ツール定義・few-shot で反復的に。
+        </p>
+      </div>
+      <p>
+        <code>feedbackLabel</code> の分類軸はすでにコードにある ──
+        <code>intent_misread</code> ／ <code>wrong_mode</code> ／ <code>wrong_skill</code> ／ <code>missing_skill</code> ／ <code>wrong_tool</code> ／
+        <code>over_confirmation</code> ／ <code>under_confirmation</code> ／ <code>bad_plan</code> ／ <code>bad_response</code> ／ <code>tool_args_error</code>。
+        これらは §5 の7つの判断とほぼ対応する。
+      </p>
+    </section>
+
+    <!-- ================= 7 ================= -->
+    <section id="s7">
+      <h2><span class="num">07</span>これから</h2>
+
+      <h3>学習ループ（Teach AI）── 今回は非リリース</h3>
+      <p>
+        <b>発想</b> ── HR 専門家の訂正そのものが業務ルールの根拠（統計的確信度は不要）。
+        AI を使いながら「これは違う」「こういう場合はこうする」と訂正していく行為が、そのままルール構築のプロセスになる。
+      </p>
+      <p>
+        <b>仕組み</b> ── 訂正 → LLM 1回で5分類（ツール説明ミス／ルール欠如／手順欠如／ロジックバグ／ツール不足）。
+        上3種は localStorage で即日適用（ツール説明の上書き・学習ルールのプロンプト注入・スキル生成）、下2種は Claude Code 向けタスクとして蓄積。
+      </p>
+      <div class="callout">
+        <span class="k">なぜ筋が良さそうか</span>
+        <p>
+          既存資産（<code>applyDescriptionOverrides</code> ／ スキル機構 ／ プロンプト注入層 ＝ §3 の3接点そのもの）に<b>そのまま乗る</b> ── 追加実装が小さい。
+          毎ターンの <code>runLog</code> と <code>feedbackLabel</code> が精度計測の下地になっている。
+          STEP2（不特定多数）では「1人の訂正を即ルール化」は危険なので、複数人シグナルの統計集約に発展させる道筋も設計済み（構想のみ）。
+        </p>
+      </div>
+
+      <h3>要検証レバー</h3>
+      <p>精度を大きく動かしうる。<span class="tag code">ハーネスのみ</span> は今すぐ着手でき、<span class="tag verify">要モデル確認</span> は社内 LLM／ゲートウェイの対応調査が要る。</p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>レバー</th><th>現状</th><th>効けば</th><th>種別</th></tr></thead>
+          <tbody>
+            <tr><td>評価ハーネス（メタレバー）</td><td><code>G4-09</code> は手動 QA 台帳のみ</td><td>20〜50 ケースでツール呼び出しを assert → 以降の全改善が計測可能に</td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td>few-shot 実例の注入</td><td>1ターン完結の実例集はゼロ</td><td>この規模のモデルでの、意図の読み取りと振り分けに最も効きやすい定番</td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td><code>temperature</code> を下げる</td><td>routing タスクなのに 0.7 固定</td><td>0〜0.2 で振り分けの決定性が上がる（1行変更）</td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td>ツール履歴の保持</td><td><code>buildAPIMessages</code> が tool 呼出・結果を除去</td><td>複数ターン操作で「さっき何を調べたか」を失わない（＝ augmented LLM の memory<a class="cite" href="#src1">[1]</a>）</td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td><code>ActionFrame</code> を使い切る</td><td><code>skillCandidates</code> しか使っていない</td><td>Structured に落とす前に、不足情報だけピンポイントで聞き返せる</td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td>Fast Path のツール数削減</td><td>安全ツール約27個を毎回提示</td><td>事前の軽い意図分類で候補を数個に絞ればミスと遅延が減る</td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td>モデル使い分け</td><td>ユーザーが1モデル選択（複数モデル配線は既存）</td><td>Fast＝安い高速モデル／Structured＝強いモデル<a class="cite" href="#src4">[4]</a></td><td><span class="tag code">ハーネスのみ</span></td></tr>
+            <tr><td>構造化出力（<code>response_format: json_schema</code>）</td><td>コードで未使用・未検証</td><td>Intent 分類・ActionFrame 抽出・訂正分類器（現状は正規表現で JSON 抜き出し）が一気に安定。Tier 設計の前提</td><td><span class="tag verify">要モデル確認</span></td></tr>
+            <tr><td>プロンプトキャッシュ</td><td>未使用</td><td>静的な <code>BASE_SYSTEM_PROMPT</code> のキャッシュでレイテンシ減 → ラウンド数・文脈量に余裕</td><td><span class="tag verify">要モデル確認</span></td></tr>
+            <tr><td>streaming</td><td>非ストリーミング fetch 1発（進捗はツール名表示で代替）</td><td>体感速度・tool_call の進捗表示</td><td><span class="tag verify">要モデル確認</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= 8 : current design snapshot ================= -->
+    <section id="current">
+      <h2><span class="num">08</span>参考：現行の設計（スナップショット）</h2>
+      <div class="callout warn">
+        <span class="k">注記</span>
+        <p>
+          この節は執筆時点（2026-09）のコードから起こした一覧で、<b>最新のコードが常に正</b>。
+          追加・改名・削除で食い違う可能性がある。数える対象や境界の取り方でも件数は前後する。
+          迷ったら <code>toolRegistry/</code>・<code>chatSession.ts</code>・<code>aiTypes.ts</code> を直接見ること。
+        </p>
+      </div>
+
+      <h3>8.1 システムプロンプトの原文</h3>
+
+      <p><b>第1層：<code>BASE_SYSTEM_PROMPT</code></b>（<code>chatSession.ts</code>。文字列連結を展開したもの）</p>
+      <pre class="promptbox">あなたは人事異動管理システムのAIアシスタントです。組織異動・出向・兼務追加・昇降格など、人事異動に関する操作をサポートします。要員配置リストのデータに基づいて、簡潔・丁寧に回答してください。
+
+## ツール利用ガイドライン
+- ピン留め行（システムプロンプトの「ピン留め参照情報」セクション）の userId・rowId・orgCode はすでに提供済みのため、findPersons/getPersonsDetail を呼ばずに直接使ってよい。
+- ピン留めされていない従業員を探すときは findPersons を使う。名前が曖昧な場合は候補を列挙してユーザーに確認する。
+- 役職変更（「課長にして」等）は propose_change_position を使う。propose_field_edit は補足情報の編集のみ。
+- 組織コードが必要なときは findOrgs で取得する。
+- propose_* (confirm 系ツール) は name / subtreeOrgCode / rowId 等のフィルタパラメータを自身で持つ。対象を特定する目的だけで findPersons/findOrgs を先に呼ぶ必要はない。
+- confirm ツール（propose_*）は必ずユーザーの確認を得てから executeOnApprove が呼ばれる。承認前に「実行した」と言わない。
+- 「変更を教えて」「変更の概要は？」→ getReviewSummary でサマリーを取得してから回答する（件数が多くても安全）。詳細一覧が必要なら getChangedRows を続けて呼ぶ（limit/offset でページ案内、truncated で続きの有無を確認）。
+- 「組織図を見せて」「全体像を見せて」には getOrgTree を使う。
+- フィールドに設定できる値を確認するときは getFieldOptions を使う。
+- スコープ（作業対象組織）が設定されている場合、操作対象はそのスコープ内に限定される。
+- 操作完了後は必ず getValidationDiagnosis を呼んで問題を確認し、自動修正可能なものから提案する。
+- getValidationIssues / getValidationDiagnosis の結果にある `field`（camelCase の変数名）はユーザーに見せない。代わりに `fieldLabel`（日本語ラベル）を使って説明する。
+
+## UIナビゲーションツール（データ変更なし・Fast Pathで使用可）
+- 「〇〇さんを見せて」「〇〇さんの場所を教えて」→ ui_show_person（名前で検索してキャンバス上にフォーカス。findPersons + 画面移動を1ステップで行う）。
+- rowId が既に分かっている場合は ui_focus_row で直接フォーカスできる。
+- 「〇〇さんの昇格フォームを開いて」「異動の画面を出して」→ ui_open_operation（操作フォームを開き、prefill で値を事前入力する）。
+  findPersons で rowId を確認し、getFieldOptions で有効な選択肢を確認してから呼ぶこと。
+  フォームはユーザーが確認・送信する（AIは送信しない）。
+- 「今フォームに何を入れればいい？」「選択肢を教えて」→ ui_get_form_state を呼ぶ。
+  Promotion/Demotion フォームの場合は bandRecommendations（UIのデフォルト推奨バンド）が付いてくる。
+  positionBand に何を設定すべきか聞かれたときは必ず ui_get_form_state を呼んで bandRecommendations.oneStep を確認する。
+- フォームの特定フィールドを設定したい場合 → ui_suggest_form_field（onFieldChange の連動導出も正しく走る）。
+
+## 業務ルール
+- 昇格は propose_promotion に rowId と newPositionBand を渡すだけでよい。band / payGrade は自動導出され確認UIに表示される（DryRun）。
+- payGrade（給与等級）が変わる場合は必ず新しいポジションを作成する。バンドが変わらなくても jobType 変更で payGrade が変わる場合も対象。
+- 部下を持つ人（ピープルマネージャー）が異動してもポジションはクローズしない。後任者が同じポジションを引き継ぐことで部下の managerPositionCode 更新を防ぐ。
+- positionCode が "_pos_" で始まる場合は内部採番コード。Excel 出力時は空欄になる。
+- prevXxx フィールド（発令前の状態）は変更しない。
+- managerPositionCode を変更するときは propose_set_manager_position を使う（saveRow で直接変更すると managerName が更新されない）。
+- 兼務を示す申請区分（transferReason）が選択されている場合、leaveOfAbsenceSign は設定できない（バリデーションで検出される）。
+
+## 出向操作
+### SF統合先 / SF外の区別
+- SF統合先: 自社と同一 SuccessFactors に統合されている会社。masters.companies[].isSFIntegrated = true で判定。
+- SF外: SF に統合されていない会社（グループ内でも別システム）。レコードを手動管理する必要がある。
+### 出向させる（自社 → 他社）
+- 本務出向（SF統合先）: ui_open_operation operationId="SecondmentOutSF"（1行操作）
+- 本務出向（SF外）: ui_open_operation operationId="NonSFSecondmentOut"（出向箱更新＋受入行新規の2行セット）
+  → SF外の場合、出向元担当が受入側レコードも代理作成する。フォームに従って2行を同時確認する。
+- 兼務出向（SF外のみ）: ui_open_operation operationId="ConcurrentSecondmentOutNonSF"
+- 兼務出向（SF統合先）: SF側が管理するため本ツール操作不要。
+### 受け入れる（他社 → 自社）
+- 本務出向受入: ui_open_operation operationId="SecondmentInReleaseSF"（SF統合先）または "SecondmentInReleaseNonSF"（SF外）
+- 兼務出向受入: 組織パネルの追加ボタンから操作（AI直接操作不可）
+### 解除・取消
+- 本務出向解除（SF統合先帰任）: ui_open_operation operationId="SecondmentOutReleaseSF"
+- 本務出向解除（SF外帰任）: ui_open_operation operationId="NonSFSecondmentRelease"（出向箱更新＋受入行削除の2行セット）
+- 「出向先に転籍させたい」→ propose_secondment_transfer（出向解除→転籍の2ステップを1操作で提案）
+### 出向箱
+- 本務出向時、出向元の行は「出向箱」(concurrentType="出向箱") として残る。SF上では席として存在するが発令先は出向先。
+- 出向箱行を findPersons で検索すると concurrentType="出向箱" で識別できる。
+
+## 4/1 不在（退職・移籍）操作
+- 「退職させて」「移籍させて」「4/1 不在に登録して」→ propose_mark_absent を使う
+  - absenceType="退職": 3月末退職・解任済みとして登録（transferReason 自動設定）
+  - absenceType="移籍": 4/1付移籍として登録（transferReason 自動設定）
+- 不在登録後、部下がいる場合は W系警告「退職予定者の部下が存在する」が出る
+  → getValidationDiagnosis で確認し、部下の上司を propose_set_manager_position で変更するよう提案する
+- 「不在を取り消して」「誤登録を戻して」→ undo または propose_field_edit で transferReason をクリアする
+
+## 分断された上司ポジション（別ファイルの上司）
+- Excel が組織単位に分割配布された場合、上司行が別ファイルにあるため managerPositionCode が解決できないことがある
+- バリデーション警告「上司ポジションコードがこのファイルに存在しません（別組織の可能性あり）」はこの状況を示す
+  → **この警告は自動修正しない**。マージ後に解決されるため、クリアや変更を行わないこと
+- ユーザーから「↑ 別組織 と表示されているのは何？」と聞かれたら:
+  「上司が別のファイル（別組織の担当者が管理している Excel）にいるため、現時点では表示できない状態です。
+   全ファイルのマージ後に正しい階層で表示されます」と説明する
+- `(上司不明⚠)` と表示されている場合（全ファイルにも上司行がない）は、
+  上司が廃止・削除された可能性がある。propose_set_manager_position で別の上司に変更するよう提案する
+
+## 禁止事項
+- prevXxx フィールドを直接変更すること
+- positionCode を "_pos_" prefix なしで自己採番すること
+- managerPositionCode を propose_set_manager_position 以外の方法で変更すること
+- 「上司ポジションコードがこのファイルに存在しません」警告を自動修正すること
+
+## 体制図インポートフロー
+「以下の体制図変更指示を処理してください」や「## 異動」「## 昇格」等の見出しを含む変更指示テキストを受け取ったとき、以下の3フェーズで処理する。
+
+Phase 1 — サマリー確認:
+  変更種別ごとの件数をまとめ、確定できるものと要確認のものを分けて提示する。
+  ユーザーが「合っている」と確認してから次へ進む。不一致があれば差異を特定して確認する。
+
+Phase 2 — 要確認項目レビュー（バンド未確定の昇格→❓要確認 の順）:
+  - getFieldOptions でバンド・役職の選択肢を取得してユーザーに提示する
+  - 役職名から典型バンドを推測してよいが「推測です」と明示する
+  - ユーザーが「わからない」「スキップ」→ propose_field_edit で memo に「要確認: {内容}」を記入して次へ進む
+  - 全件確認が終わったら Phase 3 に進む
+
+Phase 3 — 一括実行:
+  - 同じ行先への異動は propose_bulk_transfer でまとめる
+  - 全実行後に getReviewSummary で変更件数を確認してユーザーに報告する</pre>
+
+      <p><b>第2〜7層：動的セクション</b>（<code>buildSystemPrompt()</code> ＋ <code>useChatHandlers.buildCurrentSystemPrompt()</code>。値があるときだけ、この順で <code>BASE</code> の後ろに連結される）</p>
+      <pre class="promptbox">## 現在のセッション状態            ← changedCount &gt; 0 または errorCount &gt; 0 のとき
+- 変更行: {changedCount} 件
+- バリデーションエラー: {errorCount} 件（getValidationDiagnosis で詳細確認可能）
+- バリデーション警告: {warningCount} 件
+
+## 現在の作業スコープ              ← スコープ組織が設定されているとき
+作業対象組織: {scopeOrgName}（コード: {scopeOrgCode}）
+この組織とその配下が主な操作対象です。
+
+## 現在フォーカスしている組織      ← 組織図で組織を選択しているとき
+ユーザーが組織図でフォーカス中の組織: {selectedOrgName}（コード: {selectedOrgCode}）
+「この組織を」「ここの」など組織を指している場合はこの組織を操作対象にしてください。
+
+## ピン留め参照情報（{N}件）        ← チャットに行をピン留めしているとき
+ユーザーがチャットにピン留めした行の情報です。「エラーを直して」「この人を異動させて」のように
+ピン留め行を指していると推察できる場合はこの情報を使ってください。「全員の〇〇を確認して」
+「前の操作を取り消して」など明らかに全体・別の対象を向いている場合は、ピン留め行を前提にしないでください。
+
+- {氏名}（rowId: {rowId}, userId: {userId}） | {組織名}（orgCode: {orgCode}） | 変更種別: {…}
+  フィールド: employmentType: {…}, band: {…}, payGrade: {…}, officialPositionCode: {…}, …
+  利用可能な操作: {availableOps を「、」で連結}
+  バリデーション問題:
+    - [{level}] {field}: {message}
+
+【学習済み業務ルール】                ← feedbackStore に learned_rule があるとき
+- {ルール文}
+
+# 利用可能なスキル                    ← アクティブなスキルがあるとき（Structured Path のみ）
+以下のスキルに該当するタスクが来た場合は、テキストで回答する前に必ずスキルツールを
+呼び出してから作業を開始してください。
+
+- **{スキル名}** (`skill_{slug}`): {description}</pre>
+
+      <p><b>第8層：<code>FAST_PATH_SYSTEM_SUFFIX</code></b>（<code>fastPathTool.ts</code>。Fast Path の <code>runFastPath()</code> でのみ末尾に付加）</p>
+      <pre class="promptbox">## 実行モード: Fast Path
+
+現在は以下の操作が実行できます:
+- **情報の読み取り・検索・表示**（findPersons, getReviewSummary, getFieldOptions 等）
+- **UIナビゲーション**（ui_* プレフィックスのツール。画面フォーカス・フォームを開く・フォーム値を入力補助）
+
+UIナビゲーションツールの用途:
+- ui_show_person: 「〇〇さんを見せて」→ 画面上で人物にフォーカス（検索+表示を1ステップ）
+- ui_focus_row: rowId が既知のときにキャンバス上でフォーカス
+- ui_open_operation: 「昇格フォームを開いて」→ 操作フォームを開いて値を事前入力
+- ui_get_form_state: 現在開いているフォームの入力状態を読む
+- ui_suggest_form_field: 開いているフォームのフィールドに値を設定
+
+以下の場合は必ず request_structured_planning を呼んでください:
+- 従業員・組織の情報を変更・更新・削除する（異動・昇格・兼務・出向・休職 等）
+- 複数の手順を順番に実行する必要がある
+- 意図が曖昧で確認が必要
+
+情報の参照・検索・表示・UIナビゲーションだけで答えられる場合は、そのままツールを使って回答してください。</pre>
+
+      <h3>8.2 ツール一覧</h3>
+      <p><b>参照系</b>（<code>read</code> / <code>render</code>・副作用なし・Fast Path 可）</p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>名前</th><th>kind</th><th>何をする</th></tr></thead>
+          <tbody>
+            <tr><td><code>findPersons</code></td><td>read</td><td>従業員検索（氏名・各種 ID・<code>subtreeOrgCode</code>・filter）。各人のポジション（現在＋変更前）を返す</td></tr>
+            <tr><td><code>findOrgs</code></td><td>read</td><td>組織検索。配下 <code>descendantOrgCodes[]</code> 付き</td></tr>
+            <tr><td><code>getPersonsDetail</code></td><td>read</td><td><code>rowId[]</code> 指定で全フィールド取得（before/after）</td></tr>
+            <tr><td><code>getReviewSummary</code></td><td>read</td><td>変更件数サマリー（<code>byKind</code>・エラー／警告数）。件数が多くても安全</td></tr>
+            <tr><td><code>getChangedRows</code></td><td>read</td><td>変更行の一覧（種別・氏名・組織で絞り込み、<code>limit</code>/<code>offset</code>）</td></tr>
+            <tr><td><code>getValidationIssues</code></td><td>read</td><td>バリデーション問題を1件ずつ（rowId・field・message・currentValue）</td></tr>
+            <tr><td><code>getValidationDiagnosis</code></td><td>read</td><td>問題をフィールド別集計＋修正方法（<code>suggestedTool</code>）＋対象 <code>rowIds</code>。操作後に優先</td></tr>
+            <tr><td><code>findVacantPositions</code></td><td>read</td><td>空席ポジション（positionCode あり・userId なし）一覧</td></tr>
+            <tr><td><code>getUnassignedPositions</code></td><td>read</td><td>内部採番（<code>_pos_…</code>）のままのポジション一覧</td></tr>
+            <tr><td><code>getOperationStatus</code></td><td>read</td><td>指定行で可能／不可能な操作と不可理由（<code>availableFor</code> の文字列）</td></tr>
+            <tr><td><code>getFieldOptions</code></td><td>read</td><td>指定行・フィールドの有効な選択肢。フォームの入力中の値も考慮</td></tr>
+            <tr><td><code>getPromotionBandInfo</code></td><td>read</td><td>昇格／降格の候補バンドをステップ数別に</td></tr>
+            <tr><td><code>computePromotionStepDiff</code></td><td>read</td><td>現バンドと指定バンドのステップ差（正＝昇格）</td></tr>
+            <tr><td><code>diagnose_person_changes</code></td><td>read</td><td>検出パターンと EditOperation の <code>availableFor</code>/<code>onValidate</code> を照合（開発者向け診断）</td></tr>
+            <tr><td><code>getOrgTree</code></td><td>render</td><td>組織階層ツリーをウィジェット表示</td></tr>
+            <tr><td><code>show_org_members</code></td><td>render</td><td>メンバー一覧をウィジェット表示</td></tr>
+            <tr><td><code>ui_get_form_state</code></td><td>read</td><td>開いているフォームの操作種別・入力中の値（UI 読み取り）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><b>Web UI 系</b>（<code>navigate</code>・UI 状態のみ・Fast Path 可）</p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>名前</th><th>何をする</th></tr></thead>
+          <tbody>
+            <tr><td><code>ui_open_operation</code></td><td>指定行の操作フォームを開き <code>prefill</code> で事前入力。送信はユーザー。<code>operationId</code> は <code>ALL_EDIT_OPERATIONS</code> から</td></tr>
+            <tr><td><code>ui_suggest_form_field</code></td><td>開いているフォームの1フィールドに値を設定。<code>onFieldChange</code> の連動導出も走る</td></tr>
+            <tr><td><code>ui_show_person</code></td><td>氏名等で検索してキャンバス上にフォーカス（検索＋表示を1ステップ）</td></tr>
+            <tr><td><code>ui_focus_row</code></td><td><code>rowId</code> 指定でカードにフォーカス</td></tr>
+            <tr><td><code>ui_set_main_view</code></td><td>主画面を組織図（canvas）／表形式（review）に切替</td></tr>
+            <tr><td><code>ui_set_canvas_display</code></td><td>組織図の表示設定（ツリー／コンパクト・グループ単位・旧体制比較）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><b>ドメイン操作系</b>（<code>execute</code>＝即時／<code>confirm</code>＝確認付き・Fast Path 不可・すべて Operation モデル経由）</p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>名前</th><th>kind</th><th>何をする</th></tr></thead>
+          <tbody>
+            <tr><td><code>undo</code></td><td>execute</td><td>直前の操作を取り消す</td></tr>
+            <tr><td><code>propose_field_edit</code></td><td>execute</td><td>指定行の1フィールドを変更（補足情報の編集向け）</td></tr>
+            <tr><td><code>propose_create_position</code></td><td>execute</td><td>空席ポジションを新規作成</td></tr>
+            <tr><td><code>propose_assign_person</code></td><td>execute</td><td>空席ポジションに従業員を配属</td></tr>
+            <tr><td><code>propose_change_position</code></td><td>execute</td><td>役職名を変更（新ポジション作成＋旧削除、1 Undo）</td></tr>
+            <tr><td><code>propose_set_manager_position</code></td><td>execute</td><td>上司ポジションコードを設定（<code>managerName</code> も自動入力）</td></tr>
+            <tr><td><code>propose_assign_position_codes</code></td><td>execute</td><td>内部採番に外部コード（P＋8桁）を割当。参照行も連動更新</td></tr>
+            <tr><td><code>propose_mark_absent</code></td><td>execute</td><td>「4/1 不在」（退職／移籍）として登録し組織ツリーから除外</td></tr>
+            <tr><td><code>propose_leave_of_absence</code></td><td>execute</td><td>休職させる（<code>leaveOfAbsenceSign="1"</code>）</td></tr>
+            <tr><td><code>propose_return_from_leave</code></td><td>execute</td><td>復職させる（<code>leaveOfAbsenceSign</code> クリア）</td></tr>
+            <tr><td><code>propose_concurrent_add</code></td><td>execute</td><td>社内兼務を追加（兼務行を新規作成）</td></tr>
+            <tr><td><code>propose_concurrent_release</code></td><td>execute</td><td>兼務行を解除（削除）。出向兼務は対象外</td></tr>
+            <tr><td><code>propose_org_restructure</code></td><td>execute</td><td>組織コード変更（組改）を適用。勤務場所・コストセンターは引き継ぐ</td></tr>
+            <tr><td><code>propose_job_type_change</code></td><td>execute</td><td>職種変更。<code>jobType × band → payGrade</code> の自動導出が走る</td></tr>
+            <tr><td><code>propose_transfer</code></td><td>confirm</td><td>指定人物を別組織へ異動。確認 UI で <code>transferReason</code> 入力</td></tr>
+            <tr><td><code>propose_bulk_transfer</code></td><td>confirm</td><td>組織の全メンバーを別組織へ一括異動（統廃合・改編）</td></tr>
+            <tr><td><code>propose_bulk_set_field</code></td><td>confirm</td><td>複数行の同一フィールドを一括設定（<code>getValidationDiagnosis</code> の rowIds をそのまま使える）</td></tr>
+            <tr><td><code>propose_promotion</code></td><td>confirm</td><td>昇格。<code>positionBand</code> 指定で band/payGrade を自動導出（DryRun 表示）</td></tr>
+            <tr><td><code>propose_demotion</code></td><td>confirm</td><td>降格。降格理由が必須</td></tr>
+            <tr><td><code>propose_secondment_transfer</code></td><td>confirm</td><td>本務出向者を出向先へ転籍（出向解除→転籍の2ステップをウィザードで）</td></tr>
+            <tr><td><code>propose_re_derive_manager_names</code></td><td>confirm</td><td>全行の <code>managerName</code> を在席者の姓名に合わせて一括更新</td></tr>
+            <tr><td><code>propose_re_derive_org_sub_fields</code></td><td>confirm</td><td>全行の <code>businessUnit</code>/<code>division</code>/… を組織マスタから一括再導出</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><b>スキル読込系 ＋ 制御</b></p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>名前</th><th>何をする</th></tr></thead>
+          <tbody>
+            <tr><td><code>skill_&lt;slug&gt;</code></td><td>スキルツール。呼ぶと SKILL.md 本文（手順）を tool 結果として返し、以降 <code>allowed-tools</code> でツール定義を絞る。Structured Path のみ</td></tr>
+            <tr><td><code>request_structured_planning</code></td><td>擬似ツール。Fast Path で「変更・複数手順が必要」なときに呼ぶ。実行されず <code>ActionFrame</code>（reason / suspectedOperation / missingInformation / skillCandidates）を返す</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>8.3 ウィジェット一覧（<code>ChatWidget</code>）</h3>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th><code>type</code></th><th>出どころ</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>org-tree</code></td><td>render: <code>getOrgTree</code></td><td>組織階層ツリー</td></tr>
+            <tr><td><code>org-members</code></td><td>render: <code>show_org_members</code></td><td>メンバー一覧</td></tr>
+            <tr><td><code>diff-preview</code></td><td>confirm 汎用</td><td>変更差分プレビュー（PersonDiff）</td></tr>
+            <tr><td><code>org-transfer-confirm</code></td><td>confirm: <code>propose_transfer</code> / <code>propose_bulk_transfer</code></td><td>対象者一覧＋異動事由入力</td></tr>
+            <tr><td><code>promotion-confirm</code></td><td>confirm: <code>propose_promotion</code></td><td>対話型バンド選択・連鎖導出・DryRun</td></tr>
+            <tr><td><code>demotion-confirm</code></td><td>confirm: <code>propose_demotion</code></td><td>昇格と同構成＋降格理由必須</td></tr>
+            <tr><td><code>secondment-in-confirm</code></td><td>confirm（本務出向受入）</td><td>SF 統合先／SF 外 variant</td></tr>
+            <tr><td><code>concurrent-secondment-in-confirm</code></td><td>confirm（兼務出向受入）</td><td>SF 統合先／SF 外 variant</td></tr>
+            <tr><td><code>wizard-steps</code></td><td>ウィザード操作（<code>propose_secondment_transfer</code> 等）</td><td>手順一覧の表示</td></tr>
+            <tr><td><code>file-picker</code></td><td>Excel インポート導線（UI 起点）</td><td>ファイル選択</td></tr>
+            <tr><td><code>excel-help</code></td><td>メニュー（UI 起点）</td><td>対応 Excel 形式の説明</td></tr>
+            <tr><td><code>export-confirm</code></td><td>Excel エクスポート導線（UI 起点）</td><td>出力内容の確認</td></tr>
+            <tr><td><code>teach-ai-input</code></td><td>「AIに教える」ボタン（UI 起点）</td><td>訂正内容の入力</td></tr>
+            <tr><td><code>classification-result</code></td><td>Teach AI 分類後</td><td>分類結果と適用／却下</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>8.4 スキル一覧（<code>infrastructure/ai/skills/</code>）</h3>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>slug</th><th>用途</th><th><code>allowed-tools</code>（抜粋）</th></tr></thead>
+          <tbody>
+            <tr><td><code>cascading-transfer</code></td><td>空きポジション経由の連鎖異動（玉突き人事）</td><td>findPersons / findOrgs / propose_transfer / getReviewSummary / undo</td></tr>
+            <tr><td><code>mark-absence</code></td><td>退職・移籍を「4/1 不在」として登録</td><td>findPersons / propose_mark_absent / getValidationDiagnosis / undo</td></tr>
+            <tr><td><code>promotion-workflow</code></td><td>昇格（バンド確認→ステップ差確認→<code>propose_promotion</code>）</td><td>findPersons / getPromotionBandInfo / computePromotionStepDiff / propose_promotion / getValidationDiagnosis / undo</td></tr>
+            <tr><td><code>query-validation</code></td><td>バリデーション問題の確認・診断</td><td>getValidationDiagnosis / getValidationIssues / getFieldOptions / findPersons / getPersonsDetail</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>8.5 LLM 呼び出しと定数</h3>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>項目</th><th>現行値</th><th>場所</th></tr></thead>
+          <tbody>
+            <tr><td>エンドポイント</td><td>OpenAI 互換 <code>/chat/completions</code>。<code>VITE_AI_BASE_URL</code> 未設定ならモック</td><td><code>chatServiceFactory.ts</code></td></tr>
+            <tr><td>リクエスト</td><td><code>temperature: 0.7</code> / <code>max_tokens: 4096</code> / <code>timeout: 30s</code> / <code>tool_choice: 'auto'</code> / 非ストリーミング</td><td><code>openAICompatibleAdapter.ts</code></td></tr>
+            <tr><td>ループ上限</td><td><code>MAX_ROUNDS = 10</code>（Fast / Structured 各パス）</td><td><code>agentRunner.ts</code></td></tr>
+            <tr><td>履歴</td><td><code>buildAPIMessages</code> が tool_call / tool_result を除去し、role＋最終テキストのみ次ターンへ</td><td><code>chatSession.ts</code></td></tr>
+            <tr><td><code>feedbackLabel</code></td><td>intent_misread / wrong_mode / wrong_skill / missing_skill / wrong_tool / over_confirmation / under_confirmation / bad_plan / bad_response / tool_args_error</td><td><code>feedback/correctionClassifier.ts</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= 9 : radical proposal ================= -->
+    <section id="s9">
+      <h2><span class="num">09</span>抜本案：状態を持つハーネス</h2>
+      <p class="section-lede">
+        いまの設計は毎ターン完全にステートレス（§4）。1万行のリストも3千件の組織もプロンプトに載せられないので、
+        AI は必要な情報をそのつどツールで探す。しかも次ターンには結果が履歴から消える。
+        ここを変えると構成そのものが変わる ── そして、その変え方には <b>名前の付いた定石</b> がある。
+      </p>
+
+      <h3>いまの非効率</h3>
+      <ul>
+        <li><b>1ターン内の三角測量</b> ── 「田中さん」→ <code>findPersons</code> → 複数ヒット → <code>getPersonsDetail</code> → <code>getValidationIssues</code> …と何度も往復して対象と文脈を組み立てる。</li>
+        <li><b>ターンをまたいだ再取得</b> ── 前ターンで調べたことをもう一度調べる（体制図一括編集・玉突き人事で顕著）。</li>
+        <li><b>entity resolution が弱い</b> ── LLM が検索語を組み立てて絞り込むため、同名・表記ゆれで rowId を取り違える（判断3）。</li>
+      </ul>
+
+      <h3>これは既知の問題で、定石がある</h3>
+      <p>「大きな構造データ ＋ ステートレスなエージェント」は広く議論されてきた。関連する枠組み：</p>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>枠組み</th><th>要点</th><th>この案での使いどころ</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>CoALA</b>（Cognitive Architectures for Language Agents）<a class="cite" href="#src6">[6]</a></td>
+              <td>エージェントを「メモリ（<b>ワーキングメモリ</b>＝当面の文脈 ＋ 長期：意味／エピソード／手続き）」「行動空間（内部＝推論・検索／外部＝ツール）」「決定ループ」で整理する標準の参照枠。</td>
+              <td>新設する層＝CoALA の <b>ワーキングメモリ</b>。ドメインのデータは長期（意味）メモリにあたる。</td>
+            </tr>
+            <tr>
+              <td><b>LangGraph の永続化（checkpointer）</b><a class="cite" href="#src7">[7]</a></td>
+              <td>グラフの状態を各ステップ後にスナップショットし、同じ thread ID で再開すると前回の続きから走る。ターンをまたいだ状態を「作り直す」のではなく「持つ」。</td>
+              <td>「毎ターン履歴を捨てる」の直接の対策。まず打つ最小の一手。</td>
+            </tr>
+            <tr>
+              <td><b>Context Engineering：Write / Select / Compress / Isolate</b><a class="cite" href="#src8">[8]</a></td>
+              <td>文脈の作り方を4種に分類 ── Write＝スクラッチパッドに書き出す／Select＝関連情報を検索で選ぶ／Compress＝要約して縮める／Isolate＝別エージェント・別ストアに分ける。</td>
+              <td>下の打ち手 A〜E がこの4分類にそのまま乗る（＝案が場当たりでない証拠）。</td>
+            </tr>
+            <tr>
+              <td><b>MemGPT ／ Letta</b>（LLM as OS）<a class="cite" href="#src9">[9]</a></td>
+              <td>OS のページングに倣い、限られた文脈窓と外部ストレージの間でデータを出し入れして「大きなメモリがあるように見せる」。<b>ただしメモリ管理を LLM 自身に任せる</b>。</td>
+              <td>「10,000 行が載らない」への解答の骨格は採る。<b>LLM に自己管理させる部分は採らない</b>（下記）。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>打ち手（Write / Select / Compress / Isolate に対応）</h3>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th></th><th>打ち手</th><th>分類</th><th>何をする</th><th>効く非効率</th></tr></thead>
+          <tbody>
+            <tr><td class="num-cell">A</td><td>ツール結果ログの保持</td><td>Write</td><td>履歴から捨てず、圧縮した「これまで調べたこと」を毎ターン注入</td><td>ターンまたぎの再取得</td></tr>
+            <tr><td class="num-cell">B</td><td>セッションダイジェスト層</td><td>Compress</td><td>件数・上位の問題・変更のあった組織・保留中の操作を常に最新で1ブロック注入</td><td><code>getReviewSummary</code> 等の往復</td></tr>
+            <tr><td class="num-cell">C</td><td>決定的リゾルバ</td><td>Select</td><td><code>resolvePerson("田中")</code> が rowId＋確信度＋候補を1発で返す（曖昧さは UI で解消）</td><td>三角測量・rowId 取り違え</td></tr>
+            <tr><td class="num-cell">D</td><td>永続ワーキングセット＋プラン</td><td>Write ＋ 永続化</td><td>触れた行の主要フィールドと「手順とその進捗」をターンをまたいで保持</td><td>玉突き・体制図の全工程</td></tr>
+            <tr><td class="num-cell">E</td><td>探索のサブエージェント</td><td>Isolate</td><td>「50名を rowId に解決」のような重い探索を別エージェントに投げ、きれいな表だけ本ループへ返す</td><td>大量解決のノイズ</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A・B は §7 の「ハーネスのみ」レバーそのもの。<b>C〜E が構成を変える。</b></p>
+
+      <h3>抜本案 ── CoALA のワーキングメモリ ＋ LangGraph の永続化</h3>
+      <p>オーケストレーターと LLM の間に <b>セッションコンテキストサービス</b>（＝ CoALA の<b>ワーキングメモリ</b>）を置く。</p>
+      <ul>
+        <li><b>ワーキングセット</b> ── いま扱っている行・組織の主要フィールド、解決済みの entity、手順とその進捗。<code>HRApplicationService</code> の snapshot から <code>emit</code> のたびに主要フィールドだけ作り直す（真実は1つ、これは派生キャッシュ）。</li>
+        <li><b>リトリーバル</b>（Select）── entity 解決と近傍検索。3千組織・1万行なら素朴な索引で足りる（ブラウザ内）。</li>
+        <li><b>注入</b>（Compress）── 上限つきの「いま何を扱っているか」ブロックを毎ターン組む。</li>
+        <li><b>永続化</b> ── この層を会話（thread）に紐づけて持つ（LangGraph の checkpointer に相当）。</li>
+      </ul>
+      <div class="callout">
+        <span class="k">MemGPT から採るもの／採らないもの</span>
+        <p>
+          <b>採る</b>：階層メモリの発想（限られた文脈窓 ＋ 外部ストア、必要な分だけ載せる）。<br>
+          <b>採らない</b>：メモリ管理を LLM 自身に任せる部分。この規模のモデル ＋ 人事データの安全性では、
+          <b>何をワーキングセットに載せるかはハーネスが決める</b>（snapshot から決定的に再構築）。LLM はその上で意図→操作をやるだけ。
+        </p>
+      </div>
+      <p>
+        これで <b>LLM のツールが「探す」から「ワーキングセットを操作する」に縮む</b>。
+        ステートレス LLM ＋ 再取得 → 状態を持つハーネス ＋ 薄い LLM。§2 のハーネスをもう一段厚くした形。
+      </p>
+
+      <figure class="wide">
+        <svg viewBox="0 0 720 360" role="img" aria-label="人／チャット欄からオーケストレーターへ。オーケストレーターは新設のセッションコンテキストサービス（ワーキングセット・リトリーバル・ダイジェスト）と問い合わせ／更新でやり取りし、毎ターン注入ブロックを組んでLLMに渡す。LLMは縮小したツールと往復し、ツールはOperation経由でHRApplicationServiceを更新、emitのたびにワーキングセットが派生キャッシュとして作り直される。">
+          <defs>
+            <marker id="d9" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="var(--ink-muted)"/>
+            </marker>
+          </defs>
+
+          <rect x="30" y="20" width="150" height="38" rx="8" class="svg-box-2"/>
+          <text x="105" y="43" text-anchor="middle" class="svg-t">人 ／ チャット欄</text>
+
+          <rect x="30" y="88" width="150" height="38" rx="8" class="svg-box-2"/>
+          <text x="105" y="111" text-anchor="middle" class="svg-t">オーケストレーター</text>
+
+          <rect x="30" y="152" width="150" height="36" rx="8" class="svg-box-2"/>
+          <text x="105" y="174" text-anchor="middle" class="svg-t-sm">注入ブロック（上限つき）</text>
+
+          <rect x="30" y="222" width="132" height="46" rx="9" class="svg-box-accent"/>
+          <text x="96" y="250" text-anchor="middle" class="svg-t" style="font-weight:600">LLM</text>
+
+          <rect x="196" y="222" width="214" height="46" rx="8" class="svg-box"/>
+          <text x="303" y="243" text-anchor="middle" class="svg-t">ツール（縮小）</text>
+          <text x="303" y="259" text-anchor="middle" class="svg-t-sm">ワーキングセット操作 ＋ Operation</text>
+
+          <rect x="240" y="30" width="450" height="150" rx="10" class="svg-lane"/>
+          <text x="252" y="52" class="svg-t-lane">セッションコンテキストサービス（新設）</text>
+          <text x="256" y="78" class="svg-t-sm">・ワーキングセット ── 触れた行・組織の主要フィールド、手順と進捗</text>
+          <text x="256" y="100" class="svg-t-sm">・リトリーバル ── entity 解決・近傍検索（3千組織・1万行の索引）</text>
+          <text x="256" y="122" class="svg-t-sm">・ダイジェスト ── 件数・上位の問題・変更のあった組織・保留中の操作</text>
+          <text x="256" y="152" class="svg-t-sm">真実は HRApplicationService。これは派生キャッシュ（emit ごとに作り直す）。</text>
+
+          <rect x="440" y="292" width="250" height="44" rx="9" class="svg-box-2"/>
+          <text x="565" y="313" text-anchor="middle" class="svg-t">HRApplicationService</text>
+          <text x="565" y="329" text-anchor="middle" class="svg-t-sm">snapshot（唯一の真実）</text>
+
+          <line x1="105" y1="58" x2="105" y2="87" class="svg-flow" marker-end="url(#d9)"/>
+          <line x1="180" y1="100" x2="238" y2="100" class="svg-flow" marker-end="url(#d9)"/>
+          <line x1="238" y1="114" x2="182" y2="114" class="svg-flow" marker-end="url(#d9)"/>
+          <text x="184" y="93" class="svg-t-sm">問い合わせ ／ 更新</text>
+          <line x1="105" y1="126" x2="105" y2="151" class="svg-flow" marker-end="url(#d9)"/>
+          <text x="112" y="144" class="svg-t-sm">毎ターン curate</text>
+          <line x1="96" y1="188" x2="96" y2="222" class="svg-flow" marker-end="url(#d9)"/>
+          <line x1="162" y1="238" x2="194" y2="238" class="svg-flow" marker-end="url(#d9)"/>
+          <line x1="194" y1="252" x2="164" y2="252" class="svg-flow" marker-end="url(#d9)"/>
+          <path d="M410 256 C500 270 540 282 552 292" class="svg-flow" marker-end="url(#d9)"/>
+          <text x="440" y="278" class="svg-t-sm">Operation</text>
+          <path d="M540 292 C540 230 520 190 500 182" class="svg-flow" marker-end="url(#d9)" style="stroke-dasharray:5 4"/>
+          <text x="470" y="246" class="svg-t-sm">emit ごとに再構築</text>
+        </svg>
+        <figcaption>
+          新設の <b>セッションコンテキストサービス</b> が、ワーキングセット・リトリーバル・ダイジェストを持ち、毎ターン上限つきの文脈を組んで LLM に渡す。
+          ワーキングセットは <code>HRApplicationService</code> の snapshot から <code>emit</code> のたびに作り直す<b>派生キャッシュ</b>で、独自に書き込まない。
+        </figcaption>
+      </figure>
+
+      <h3>段階的に</h3>
+      <ol>
+        <li><b>A（ログ保持）</b> ── 履歴の圧縮ログ。1〜2日。すぐ効く。</li>
+        <li><b>B（ダイジェスト）</b> ── 第2層の拡張。1〜2日。</li>
+        <li><b>C（リゾルバ）</b> ── <code>resolvePerson</code>／<code>resolveOrg</code> ツール＋UI 曖昧性解消。1週間程度。</li>
+        <li><b>D（ワーキングセット＋プラン）</b> ── 新しい状態層。数週間。ここから「抜本」。</li>
+        <li><b>E（サブエージェント）</b> ── 体制図一括編集のみ先行導入。</li>
+      </ol>
+
+      <h3>リスク</h3>
+      <ul>
+        <li><b>一貫性</b> ── ワーキングセットが snapshot とずれる。→ 派生に徹する（<code>emit</code> で作り直し、独自に書かない）。</li>
+        <li><b>複雑性</b> ── 新しいステートフル層。テスト・デバッグの面が増える。→ D の前に評価ハーネス（§7）が必須。</li>
+        <li><b>セッション横断メモリは別問題</b> ── <code>rowId</code> はセッション内連番。localStorage に持ち越すと壊れる。ワーキングセットはセッション限定にする。</li>
+        <li><b>リトリーバル品質</b> ── 素朴な索引で足りなければ埋め込みが要る（モデル呼び出し or ローカルライブラリ）。まず決定的 fuzzy から。</li>
+      </ul>
+    </section>
+
+    <hr>
+
+    <!-- ================= appendix ================= -->
+    <section id="appendix">
+      <h2><span class="num">＊</span>付録</h2>
+
+      <h3>用語対応表</h3>
+      <div class="wide scroll-x">
+        <table>
+          <thead><tr><th>このプロジェクト</th><th>業界標準の対応概念</th><th>出典</th></tr></thead>
+          <tbody>
+            <tr><td>ハーネス／ハーネス工学</td><td>agent harness ／ agentic scaffolding</td><td>OpenAI<a class="cite" href="#src4">[4]</a></td></tr>
+            <tr><td>接点① 指示（8層プロンプト・毎ターン再構築）</td><td>Instructions ／ Context Engineering</td><td>OpenAI<a class="cite" href="#src4">[4]</a> ／ Anthropic<a class="cite" href="#src2">[2]</a></td></tr>
+            <tr><td>接点② 行動範囲</td><td>Tools（augmented LLM の一要素）</td><td>Anthropic<a class="cite" href="#src1">[1]</a><a class="cite" href="#src3">[3]</a></td></tr>
+            <tr><td>接点③ 制御枠</td><td>Orchestration ＋ Guardrails</td><td>OpenAI<a class="cite" href="#src4">[4]</a></td></tr>
+            <tr><td>Fast Path / Structured Path</td><td>Workflow ⊂ Agent ／ 段階的複雑化</td><td>Anthropic<a class="cite" href="#src1">[1]</a></td></tr>
+            <tr><td>エージェントループ（反復して解へ）</td><td>ReAct（reason → act → observe）</td><td>Yao et al.<a class="cite" href="#src5">[5]</a></td></tr>
+            <tr><td>七つの判断</td><td>（このプロジェクト独自の分析軸）</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>主要ファイル</h3>
+      <dl class="filelist">
+        <dt>infrastructure/ai/agentRunner.ts</dt><dd>Fast / Structured のループ本体</dd>
+        <dt>infrastructure/ai/fastPathTool.ts</dt><dd><code>request_structured_planning</code> ＋ <code>FAST_PATH_SYSTEM_SUFFIX</code></dd>
+        <dt>infrastructure/ai/openAICompatibleAdapter.ts</dt><dd>LLM への HTTP（ステートレス・非ストリーミング・temp 0.7）</dd>
+        <dt>application/chatSession.ts</dt><dd><code>BASE_SYSTEM_PROMPT</code> ／ <code>buildSystemPrompt()</code></dd>
+        <dt>components/ai/useChatHandlers.ts</dt><dd>オーケストレーション・プロンプト組立の起点・確認フロー</dd>
+        <dt>infrastructure/ai/toolRegistry/</dt><dd>ツール定義（プロトコル層）。<code>readTools</code> / <code>renderTools</code> / <code>navigateTools</code> / <code>operationTools</code></dd>
+        <dt>application/aiTools/</dt><dd>ツール実装（AI BFF）。<code>read</code> / <code>write</code> / <code>review</code> / <code>diagnose</code></dd>
+        <dt>infrastructure/ai/proposalBuilders.ts</dt><dd>confirm ウィジェットの組み立て（DryRun プレビュー）</dd>
+        <dt>infrastructure/ai/skills/*/SKILL.md</dt><dd>スキル定義（frontmatter ＋ 手順）</dd>
+        <dt>infrastructure/ai/feedback/feedbackStore.ts</dt><dd><code>runLog</code> ／ Teach AI の訂正キャプチャ ／ 適用済みルール</dd>
+        <dt>infrastructure/ai/aiTrace.ts</dt><dd>request / tool_call / tool_result / skill_call / response を記録 → <code>AITracePanel</code></dd>
+      </dl>
+
+      <h3>未実装・デッドコードのメモ</h3>
+      <ul>
+        <li><code>policyGate.ts</code> ── どこからも import されていない。可否判定は <code>agentRunner</code> ＋ <code>getSafeDefinitions</code> に散在。</li>
+        <li><code>skillLoader.buildSkillSystemPrompt</code> ／ <code>correctionDetector</code> ── 未使用。スキルは <code>useSkillStore</code> 経由、訂正は「AIに教える」ボタンのみ。</li>
+        <li>streaming ／ Intent Classifier（Tier）／ <code>response_format</code> ── 未実装。<code>docs/08</code> の記述は将来案。</li>
+        <li>自動評価スイート ── なし。<code>G4-09</code> は手動 QA 台帳。</li>
+      </ul>
+    </section>
+
+    <section id="sources" class="sources">
+      <h2><span class="num">＊</span>参考文献</h2>
+      <ol>
+        <li id="src1">Anthropic ── <a href="https://www.anthropic.com/research/building-effective-agents">Building Effective AI Agents</a>（augmented LLM、Workflow と Agent、「単純なループ＋良いツール」）</li>
+        <li id="src2">Anthropic ── <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a>（毎ターンの文脈 curation、大きな文脈と注意）</li>
+        <li id="src3">Anthropic ── <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing tools for AI agents</a>（ツール記述・統合・高シグナルな戻り値）</li>
+        <li id="src4">OpenAI ── <a href="https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf">A Practical Guide to Building Agents</a>（Model＋Tools＋Instructions、Guardrails、モデル使い分け）</li>
+        <li id="src5">Yao et al. ── <a href="https://arxiv.org/abs/2210.03629">ReAct: Synergizing Reasoning and Acting in Language Models</a>（reason→act→observe のループ）</li>
+        <li id="src6">Sumers, Yao, Narasimhan, Griffiths ── <a href="https://arxiv.org/abs/2309.02427">Cognitive Architectures for Language Agents (CoALA)</a>（ワーキングメモリ ＋ 長期メモリ ＋ 決定ループ）</li>
+        <li id="src7">LangChain ── <a href="https://docs.langchain.com/oss/python/langgraph/add-memory">LangGraph: Add memory / persistence（checkpointer）</a>（ステップごとに状態をスナップショットし thread ID で再開）</li>
+        <li id="src8">LangChain（Lance Martin）── <a href="https://rlancemartin.github.io/2025/06/23/context_engineering/">Context Engineering for Agents</a>（Write / Select / Compress / Isolate）</li>
+        <li id="src9">Packer et al. ── <a href="https://arxiv.org/abs/2310.08560">MemGPT: Towards LLMs as Operating Systems</a>（仮想文脈管理・階層メモリ／現 Letta）</li>
+      </ol>
+    </section>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('themeToggle');
+    function current() {
+      var explicit = root.getAttribute('data-theme');
+      if (explicit) return explicit;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    btn.addEventListener('click', function () {
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('aichat-doc-theme', next); } catch (e) {}
+    });
+    try {
+      var saved = localStorage.getItem('aichat-doc-theme');
+      if (saved) root.setAttribute('data-theme', saved);
+    } catch (e) {}
+
+    // TOC active-section highlight
+    var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+    var map = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if (el) map[id] = a;
+    });
+    if ('IntersectionObserver' in window) {
+      var obs = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) {
+            links.forEach(function (l) { l.classList.remove('active'); });
+            var a = map[en.target.id];
+            if (a) a.classList.add('active');
+          }
+        });
+      }, { rootMargin: '-10% 0px -80% 0px' });
+      Object.keys(map).forEach(function (id) {
+        obs.observe(document.getElementById(id));
+      });
+    }
+  })();
+</script>
+
+</body>
+</html>
